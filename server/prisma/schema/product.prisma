@@ -1,0 +1,132 @@
+enum ProductType {
+  MEDICINE
+  SYRUP
+  EQUIPMENT
+  SALINE
+  OTHER
+}
+
+model Category {
+  id          String      @id @default(uuid())
+  tenantId    String
+  name        String
+  parentId    String?
+  productType ProductType? @default(MEDICINE)
+  defaultUnit String?     // e.g. "mg", "ml", "pcs", "bottle", "bag", "tablet"
+  description String?
+  isActive    Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  tenant        Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  parent        Category?   @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  subcategories Category[]  @relation("CategoryHierarchy")
+  products      Product[]   @relation("ProductCategory")
+  subProducts   Product[]   @relation("ProductSubcategory")
+
+  @@index([tenantId])
+  @@index([parentId])
+}
+
+model Brand {
+  id          String    @id @default(uuid())
+  tenantId    String
+  name        String
+  description String?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  products    Product[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+}
+
+model Unit {
+  id          String       @id @default(uuid())
+  tenantId    String
+  name        String       // e.g. "Milligram", "Milliliter", "Piece", "Tablet", "Strip", "Box"
+  symbol      String       // e.g. "mg", "ml", "pcs", "tab", "strip", "box"
+  productType ProductType? @default(MEDICINE)
+  isActive    Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  products    Product[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+}
+
+model Product {
+  id                   String          @id @default(uuid())
+  tenantId             String
+  name                 String
+  genericName          String?         // e.g. "Paracetamol", "Cefixime", "Omeprazole"
+  sku                  String
+  barcode              String?
+  basePrice            Decimal         @db.Decimal(10, 2)
+  category             String?         // Main category name e.g. "Medicine"
+  categoryId           String?         // Main category ID
+  subcategory          String?         // Subcategory name e.g. "Antibiotics"
+  subcategoryId        String?         // Subcategory ID
+  brandId              String?
+  unitId               String?
+  productType          ProductType?    @default(MEDICINE)
+  brandName            String?
+  manufacturer         String?
+  unit                 String          @default("piece")
+  size                 String?         // e.g. "500mg", "100ml", "1000ml", "Standard"
+  defaultPackType      String?         @default("PIECE") // e.g. "BOX", "STRIP", "TABLET", "BOTTLE", "PIECE"
+  stripsPerBox         Int?            @default(10)
+  tabletsPerStrip      Int?            @default(10)
+  shelfLocation        String?
+  minStockAlert        Int             @default(10)
+  description          String?
+  imageUrl             String?
+  imagePublicId        String?
+  isControlled         Boolean         @default(false)
+  requiresPrescription Boolean         @default(false)
+  isActive             Boolean         @default(true)
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+
+  tenant               Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  categoryRef          Category?       @relation("ProductCategory", fields: [categoryId], references: [id], onDelete: SetNull)
+  subcategoryRef       Category?       @relation("ProductSubcategory", fields: [subcategoryId], references: [id], onDelete: SetNull)
+  brandRef             Brand?          @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  unitRef              Unit?           @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  inventories          Inventory[]
+  saleItems            SaleItem[]
+  branchOverrides      BranchProduct[]
+  purchaseItems        PurchaseItem[]
+
+  @@unique([tenantId, sku])
+  @@index([tenantId])
+  @@index([genericName])
+  @@index([barcode])
+  @@index([category])
+  @@index([categoryId])
+  @@index([subcategoryId])
+  @@index([brandId])
+  @@index([isActive])
+}
+
+model BranchProduct {
+  id          String    @id @default(uuid())
+  branchId    String
+  productId   String
+  price       Decimal   @db.Decimal(10, 2)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  branch      Branch    @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  product     Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([branchId, productId])
+  @@index([branchId])
+  @@index([productId])
+}

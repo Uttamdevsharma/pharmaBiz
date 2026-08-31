@@ -1,0 +1,16 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.tenantRoutes = void 0;
+const express_1 = require("express");
+const tenant_controller_1 = require("./tenant.controller");
+const authenticate_1 = require("../../middleware/authenticate");
+const authorize_1 = require("../../middleware/authorize");
+const validate_1 = require("../../middleware/validate");
+const tenant_validation_1 = require("./tenant.validation");
+const router = (0, express_1.Router)();
+exports.tenantRoutes = router;
+router.use(authenticate_1.authenticate);
+router.get("/profile", tenant_controller_1.TenantController.getProfile);
+router.patch("/profile", (0, authorize_1.authorize)(["COMPANY_OWNER", "SUPER_ADMIN"]), (0, validate_1.validateRequest)({ body: tenant_validation_1.updateTenantProfileSchema }), tenant_controller_1.TenantController.updateProfile);
+router.get("/subscription", tenant_controller_1.TenantController.getSubscription);
+router.get("/usage", tenant_controller_1.TenantController.getUsage);

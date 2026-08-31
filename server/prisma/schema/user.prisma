@@ -1,0 +1,41 @@
+enum RoleName {
+  SUPER_ADMIN
+  COMPANY_OWNER
+  REGIONAL_ADMIN
+  BRANCH_MANAGER
+  CASHIER
+  AUDITOR
+}
+
+model User {
+  id           String    @id @default(uuid())
+  tenantId     String
+  branchId     String?
+  role         RoleName
+  username     String    @unique
+  passwordHash String
+  name         String?
+  email        String?
+  phone        String?
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch       Branch?   @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  sales        Sale[]
+
+  @@index([tenantId])
+  @@index([branchId])
+  @@index([role])
+  @@index([isActive])
+}
+
+model RolePermission {
+  id         String   @id @default(uuid())
+  role       RoleName
+  permission String   // e.g., "sales:refund", "inventory:transfer"
+  createdAt  DateTime @default(now())
+
+  @@unique([role, permission])
+}

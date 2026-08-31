@@ -1,0 +1,115 @@
+model Inventory {
+  id                String          @id @default(uuid())
+  branchId          String
+  productId         String
+  supplierId        String?
+  quantity          Int             @default(0) // Total quantity in lowest sellable unit (e.g. tablets, ml, units)
+  initialQuantity   Int             @default(0)
+  batchNumber       String?
+  barcode           String?
+  mfgDate           DateTime?
+  expiryDate        DateTime?
+  packageType       String?         @default("PIECE")
+  boxQuantity       Int?
+  stripsPerBox      Int?
+  tabletsPerStrip   Int?
+  purchasePrice     Decimal?        @db.Decimal(10, 2)
+  sellingPrice      Decimal?        @db.Decimal(10, 2)
+  shelfLocation     String?
+  minStockLevel     Int             @default(10)
+  lowStockThreshold Int             @default(5)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  branch            Branch          @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  product           Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  supplier          Supplier?       @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  stockMovements    StockMovement[]
+
+  @@index([branchId])
+  @@index([productId])
+  @@index([supplierId])
+  @@index([batchNumber])
+  @@index([barcode])
+  @@index([expiryDate])
+  @@index([quantity])
+}
+
+enum TransferStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  COMPLETED
+  CANCELLED
+}
+
+model StockTransfer {
+  id              String         @id @default(uuid())
+  fromBranchId    String
+  toBranchId      String
+  status          TransferStatus @default(PENDING)
+  requestedBy     String         // User ID
+  approvedBy      String?        // User ID
+  receivedBy      String?        // User ID
+  totalValue      Decimal        @default(0) @db.Decimal(12, 2)
+  notes           String?
+  rejectionReason String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  fromBranch      Branch         @relation("TransferFrom", fields: [fromBranchId], references: [id], onDelete: Cascade)
+  toBranch        Branch         @relation("TransferTo", fields: [toBranchId], references: [id], onDelete: Cascade)
+  items           TransferItem[]
+
+  @@index([fromBranchId])
+  @@index([toBranchId])
+  @@index([status])
+}
+
+model TransferItem {
+  id          String        @id @default(uuid())
+  transferId  String
+  productId   String
+  inventoryId String?
+  batchNumber String?
+  expiryDate  DateTime?
+  quantity    Int           // Lowest unit count
+  unitPrice   Decimal?      @db.Decimal(10, 2)
+  totalAmount Decimal?      @db.Decimal(10, 2)
+
+  transfer    StockTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+}
+
+enum MovementType {
+  PURCHASE
+  SALE
+  ADJUSTMENT
+  TRANSFER_IN
+  TRANSFER_OUT
+  DAMAGE
+  RETURN
+}
+
+model StockMovement {
+  id                String       @id @default(uuid())
+  branchId          String
+  productId         String
+  inventoryId       String?
+  batchNumber       String?
+  type              MovementType
+  quantity          Int          // Positive for additions, negative for reductions
+  remainingQuantity Int?
+  unitPrice         Decimal?     @db.Decimal(10, 2)
+  reason            String?
+  performedBy       String?      // User ID
+  referenceId       String?      // Sale ID, Purchase ID, Transfer ID, etc.
+  createdAt         DateTime     @default(now())
+
+  inventory         Inventory?   @relation(fields: [inventoryId], references: [id], onDelete: SetNull)
+
+  @@index([branchId])
+  @@index([productId])
+  @@index([inventoryId])
+  @@index([type])
+  @@index([createdAt])
+}

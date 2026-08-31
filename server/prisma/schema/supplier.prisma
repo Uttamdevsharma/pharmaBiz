@@ -1,0 +1,86 @@
+enum PurchasePaymentStatus {
+  PAID
+  PARTIAL
+  DUE
+}
+
+model Supplier {
+  id             String     @id @default(uuid())
+  tenantId       String
+  name           String
+  phone          String
+  email          String?
+  address        String?
+  company        String?
+  contactPerson  String?
+  totalPurchased Decimal    @default(0) @db.Decimal(12, 2)
+  totalPaid      Decimal    @default(0) @db.Decimal(12, 2)
+  totalDue       Decimal    @default(0) @db.Decimal(12, 2)
+  isActive       Boolean    @default(true)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  tenant         Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  purchases      Purchase[]
+  inventories    Inventory[]
+
+  @@index([tenantId])
+  @@index([name])
+  @@index([phone])
+}
+
+model Purchase {
+  id             String                @id @default(uuid())
+  tenantId       String
+  branchId       String
+  supplierId     String?
+  invoiceNo      String?
+  purchaseDate   DateTime              @default(now())
+  totalAmount    Decimal               @db.Decimal(12, 2)
+  paidAmount     Decimal               @default(0) @db.Decimal(12, 2)
+  dueAmount      Decimal               @default(0) @db.Decimal(12, 2)
+  paymentStatus  PurchasePaymentStatus @default(PAID)
+  paymentMethod  String?               @default("CASH")
+  notes          String?
+  receivedBy     String                // User ID
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  tenant         Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch         Branch                @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  supplier       Supplier?             @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  items          PurchaseItem[]
+
+  @@index([tenantId])
+  @@index([branchId])
+  @@index([supplierId])
+  @@index([purchaseDate])
+}
+
+model PurchaseItem {
+  id                String    @id @default(uuid())
+  purchaseId        String
+  productId         String
+  inventoryId       String?
+  batchNumber       String?
+  barcode           String?
+  mfgDate           DateTime?
+  expiryDate        DateTime?
+  packageType       String?   // "MEDICINE", "SYRUP", "EQUIPMENT", "SALINE"
+  cartonQuantity    Int?
+  boxQuantity       Int?
+  stripsPerBox      Int?
+  tabletsPerStrip   Int?
+  quantity          Int       // Lowest sellable unit count
+  unitPurchasePrice Decimal   @db.Decimal(10, 2)
+  unitSellingPrice  Decimal   @db.Decimal(10, 2)
+  totalAmount       Decimal   @db.Decimal(12, 2)
+  shelfLocation     String?
+  createdAt         DateTime  @default(now())
+
+  purchase          Purchase  @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  product           Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([purchaseId])
+  @@index([productId])
+}

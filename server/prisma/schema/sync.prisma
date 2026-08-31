@@ -1,0 +1,27 @@
+enum SyncStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+enum SyncDirection {
+  CLOUD_TO_BRANCH
+  BRANCH_TO_CLOUD
+}
+
+model SyncLog {
+  id          String        @id @default(uuid())
+  branchId    String
+  direction   SyncDirection
+  status      SyncStatus    @default(PENDING)
+  payloadType String        // e.g. "SALE", "INVENTORY", "STOCK_MOVEMENT"
+  payload     Json          // The offline payload data
+  error       String?
+  createdAt   DateTime      @default(now())
+  processedAt DateTime?
+
+  branch      Branch        @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@index([branchId, status])
+  @@index([createdAt])
+}

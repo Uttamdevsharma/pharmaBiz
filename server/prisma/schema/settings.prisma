@@ -1,0 +1,8 @@
+model PlatformSetting {
+  id        String   @id @default(uuid())
+  key       String   @unique // e.g. "landing_page_content", "theme_config", "general_settings"
+  value     Json     // Dynamic JSON containing hero, features, contact, primaryColor, etc.
+  updatedAt DateTime @updatedAt
+
+  @@index([key])
+}

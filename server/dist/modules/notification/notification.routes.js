@@ -1,0 +1,18 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.notificationRoutes = void 0;
+const express_1 = require("express");
+const notification_controller_1 = require("./notification.controller");
+const authenticate_1 = require("../../middleware/authenticate");
+const validate_1 = require("../../middleware/validate");
+const planLimiter_1 = require("../../middleware/planLimiter");
+const notification_validation_1 = require("./notification.validation");
+const router = (0, express_1.Router)();
+exports.notificationRoutes = router;
+router.use(authenticate_1.authenticate, planLimiter_1.requireActiveSubscription);
+router.get("/", (0, validate_1.validateRequest)({ query: notification_validation_1.listNotificationsQuerySchema }), notification_controller_1.NotificationController.listNotifications);
+router.get("/low-stock", notification_controller_1.NotificationController.getLowStockAlerts);
+router.get("/expiry", notification_controller_1.NotificationController.getExpiryAlerts);
+router.get("/sync-failures", notification_controller_1.NotificationController.getSyncFailureAlerts);
+router.patch("/read-all", notification_controller_1.NotificationController.markAllAsRead);
+router.patch("/:id/read", notification_controller_1.NotificationController.markAsRead);

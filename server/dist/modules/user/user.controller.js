@@ -1,0 +1,89 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.UserController = void 0;
+const user_service_1 = require("./user.service");
+class UserController {
+    static async createUser(req, res) {
+        try {
+            const tenantId = req.user.tenantId;
+            const creatorId = req.user.id;
+            const creatorRole = req.user.role;
+            const user = await user_service_1.UserService.createUser(tenantId, creatorId, creatorRole, req.body);
+            res.status(201).json({
+                success: true,
+                message: "Staff member created successfully",
+                data: user,
+            });
+        }
+        catch (error) {
+            res.status(400).json({ success: false, message: error.message });
+        }
+    }
+    static async listUsers(req, res) {
+        try {
+            const tenantId = req.user.tenantId;
+            const userRole = req.user.role;
+            const userBranchId = req.user.branchId;
+            const query = req.query;
+            const result = await user_service_1.UserService.listUsers(tenantId, query, userRole, userBranchId);
+            res.status(200).json({ success: true, ...result });
+        }
+        catch (error) {
+            res.status(500).json({ success: false, message: error.message });
+        }
+    }
+    static async getUserDetails(req, res) {
+        try {
+            const { id } = req.params;
+            const tenantId = req.user.tenantId;
+            const user = await user_service_1.UserService.getUserDetails(id, tenantId);
+            res.status(200).json({ success: true, data: user });
+        }
+        catch (error) {
+            res.status(404).json({ success: false, message: error.message });
+        }
+    }
+    static async updateUser(req, res) {
+        try {
+            const { id } = req.params;
+            const tenantId = req.user.tenantId;
+            const updaterId = req.user.id;
+            const updated = await user_service_1.UserService.updateUser(id, tenantId, updaterId, req.body);
+            res.status(200).json({
+                success: true,
+                message: "Staff member updated successfully",
+                data: updated,
+            });
+        }
+        catch (error) {
+            res.status(400).json({ success: false, message: error.message });
+        }
+    }
+    static async updateUserStatus(req, res) {
+        try {
+            const { id } = req.params;
+            const { isActive } = req.body;
+            const tenantId = req.user.tenantId;
+            const updaterId = req.user.id;
+            const updated = await user_service_1.UserService.updateUserStatus(id, tenantId, updaterId, isActive);
+            res.status(200).json({
+                success: true,
+                message: `Staff member ${isActive ? "activated" : "deactivated"} successfully`,
+                data: updated,
+            });
+        }
+        catch (error) {
+            res.status(400).json({ success: false, message: error.message });
+        }
+    }
+    static async getPermissionsHierarchy(req, res) {
+        try {
+            const permissions = await user_service_1.UserService.getPermissionsHierarchy();
+            res.status(200).json({ success: true, data: permissions });
+        }
+        catch (error) {
+            res.status(500).json({ success: false, message: error.message });
+        }
+    }
+}
+exports.UserController = UserController;

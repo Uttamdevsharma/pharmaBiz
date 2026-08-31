@@ -1,0 +1,20 @@
+model AuditLog {
+  id        String   @id @default(uuid())
+  tenantId  String
+  branchId  String?
+  userId    String?
+  action    String   // e.g. "SALE_CREATE", "PRICE_OVERRIDE", "REFUND_APPROVED"
+  details   Json?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch    Branch?  @relation(fields: [branchId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([branchId])
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+}

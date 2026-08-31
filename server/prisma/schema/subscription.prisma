@@ -1,0 +1,41 @@
+enum SubscriptionStatus {
+  PENDING
+  ACTIVE
+  EXPIRED
+  CANCELLED
+}
+
+model SubscriptionPlan {
+  id           String        @id @default(uuid())
+  name         String
+  tier         PricingTier   @unique
+  price        Decimal       @db.Decimal(10, 2)
+  billingCycle String        @default("MONTHLY") // MONTHLY, YEARLY
+  maxBranches  Int           @default(3)
+  features     Json?         // Custom feature flags
+  isActive     Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  subscriptions Subscription[]
+}
+
+model Subscription {
+  id         String             @id @default(uuid())
+  tenantId   String
+  planId     String
+  status     SubscriptionStatus @default(PENDING)
+  startDate  DateTime           @default(now())
+  endDate    DateTime
+  autoRenew  Boolean            @default(false)
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+
+  tenant     Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  plan       SubscriptionPlan   @relation(fields: [planId], references: [id])
+  payments   Payment[]
+
+  @@index([tenantId])
+  @@index([planId])
+  @@index([status])
+}

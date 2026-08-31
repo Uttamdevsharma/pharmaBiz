@@ -1,0 +1,77 @@
+enum PaymentMethod {
+  CASH
+  CARD
+  MOBILE
+}
+
+enum SaleStatus {
+  COMPLETED
+  REFUNDED
+  VOIDED
+}
+
+model Sale {
+  id                String        @id @default(uuid())
+  tenantId          String
+  branchId          String
+  userId            String
+  customerName      String?
+  customerPhone     String?
+  customerEmail     String?
+  subTotal          Decimal       @default(0) @db.Decimal(12, 2)
+  discount          Decimal       @default(0) @db.Decimal(12, 2)
+  discountType      String?       @default("FIXED") // "FIXED" | "PERCENT"
+  tax               Decimal       @default(0) @db.Decimal(12, 2)
+  totalAmount       Decimal       @db.Decimal(12, 2)
+  paidAmount        Decimal       @default(0) @db.Decimal(12, 2)
+  dueAmount         Decimal       @default(0) @db.Decimal(12, 2)
+  changeAmount      Decimal       @default(0) @db.Decimal(12, 2)
+  paymentMethod     PaymentMethod @default(CASH)
+  status            SaleStatus    @default(COMPLETED)
+  receiptNo         String        @unique
+  invoicePdfUrl     String?
+  notes             String?
+  managerApprovedBy String?       // Required if controlled or prescription medicine included
+  prescriptionRef   String?
+  refundReason      String?
+  voidReason        String?
+  localCreatedAt    DateTime      // Captured offline from edge device or online
+  syncedAt          DateTime      @default(now())
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  branch            Branch        @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  user              User          @relation(fields: [userId], references: [id])
+  items             SaleItem[]
+
+  @@index([tenantId])
+  @@index([branchId])
+  @@index([userId])
+  @@index([status])
+  @@index([customerPhone])
+  @@index([createdAt])
+  @@index([localCreatedAt])
+}
+
+model SaleItem {
+  id                 String    @id @default(uuid())
+  saleId             String
+  productId          String
+  inventoryId        String?
+  batchNumber        String?
+  expiryDate         DateTime?
+  unitType           String?   @default("PIECE") // e.g. "TABLET", "STRIP", "BOX", "BOTTLE", "PIECE"
+  unitMultiplier     Int       @default(1)       // e.g. 10 tablets per strip, 100 per box
+  quantity           Int       // Quantity of selected unit
+  lowestUnitQuantity Int       @default(1)       // Total lowest units deducted (quantity * unitMultiplier)
+  unitPrice          Decimal   @db.Decimal(10, 2)
+  purchasePrice      Decimal?  @db.Decimal(10, 2)
+  subTotal           Decimal   @db.Decimal(10, 2)
+
+  sale               Sale      @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  product            Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([saleId])
+  @@index([productId])
+  @@index([inventoryId])
+}
