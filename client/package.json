@@ -3,10 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "clean": "node -e \"const fs=require('fs'); try{fs.rmSync('.next', {recursive: true, force: true})}catch(e){}\"",
-    "predev": "npm run clean",
+    "clean": "node -e \"const fs=require('fs'); try{fs.rmSync('.next', {recursive: true, force: true}); fs.rmSync('.next_dev', {recursive: true, force: true})}catch(e){}\"",
+    "clean:dev": "node -e \"const fs=require('fs'); try{fs.rmSync('.next_dev', {recursive: true, force: true})}catch(e){}\"",
+    "clean:build": "node -e \"const fs=require('fs'); try{fs.rmSync('.next', {recursive: true, force: true})}catch(e){}\"",
+    "predev": "npm run clean:dev",
     "dev": "next dev -p 3001",
-    "prebuild": "npm run clean",
+    "prebuild": "npm run clean:build",
     "build": "next build",
     "start": "next start -p 3001",
     "lint": "next lint"
