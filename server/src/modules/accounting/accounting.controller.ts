@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { AccountingService } from "./accounting.service";
+import { ReportService } from "../report/report.service";
 
 export class AccountingController {
   static async listAccounts(req: Request, res: Response): Promise<void> {
@@ -68,10 +69,29 @@ export class AccountingController {
     try {
       const tenantId = req.user!.tenantId;
       const branchId = req.query.branchId as string | undefined;
-      const overview = await AccountingService.getFinancialOverview(tenantId, branchId);
+      const options = {
+        startDate: req.query.startDate as string | undefined,
+        endDate: req.query.endDate as string | undefined,
+        period: req.query.period as string | undefined,
+      };
+      const overview = await AccountingService.getFinancialOverview(tenantId, branchId, options);
       res.json({ success: true, data: overview });
     } catch (err: any) {
       res.status(400).json({ success: false, message: err.message });
+    }
+  }
+
+  static async getDailySales(req: Request, res: Response): Promise<void> {
+    try {
+      const tenantId = req.user!.tenantId;
+      const userRole = req.user!.role;
+      const userBranchId = req.user!.branchId;
+      const query = req.query as any;
+
+      const report = await ReportService.getDailySales(tenantId, query, userRole, userBranchId);
+      res.status(200).json({ success: true, data: report });
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error.message });
     }
   }
 }

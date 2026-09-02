@@ -13,6 +13,7 @@ exports.userRoutes = router;
 router.use(authenticate_1.authenticate, planLimiter_1.requireActiveSubscription);
 // RBAC Permissions Info
 router.get("/roles/permissions", user_controller_1.UserController.getPermissionsHierarchy);
+router.post("/roles/permissions", (0, authorize_1.authorize)(["COMPANY_OWNER", "SUPER_ADMIN"]), user_controller_1.UserController.updateRolePermissions);
 // Staff Listing & Details
 router.get("/", (0, validate_1.validateRequest)({ query: user_validation_1.listUsersQuerySchema }), user_controller_1.UserController.listUsers);
 router.get("/:id", user_controller_1.UserController.getUserDetails);

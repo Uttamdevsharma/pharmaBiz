@@ -28,14 +28,14 @@ export function AboutContact() {
         {/* About Section Highlights */}
         <div className="text-center max-w-3xl mx-auto space-y-4 mb-16">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider brand-subtle-bg text-brand-primary border brand-subtle-border">
-            About PharmaFlow
+            About PharmaBiz
           </div>
           <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 dark:text-white tracking-tight">
             {about.headline || "Built for Modern Pharmacy Enterprises"}
           </h2>
           <p className="text-base sm:text-lg text-slate-600 dark:text-slate-400">
             {about.description ||
-              "PharmaFlow provides a complete operating system for retail pharmacies and hospital chains, offering bulletproof reliability and multi-tenant data isolation."}
+              "PharmaBiz provides a complete operating system for retail pharmacies and hospital chains, offering bulletproof reliability and multi-tenant data isolation."}
           </p>
         </div>
 
@@ -77,8 +77,8 @@ export function AboutContact() {
                 </div>
                 <div>
                   <div className="text-xs text-slate-500 font-semibold uppercase">Email Us</div>
-                  <a href={`mailto:${contact.email || "support@pharmaflow.com"}`} className="text-sm font-bold text-slate-900 dark:text-white hover:text-brand-primary">
-                    {contact.email || "support@pharmaflow.com"}
+                  <a href={`mailto:${contact.email || "support@pharmabiz.com"}`} className="text-sm font-bold text-slate-900 dark:text-white hover:text-brand-primary">
+                    {contact.email || "support@pharmabiz.com"}
                   </a>
                 </div>
               </div>

@@ -51,7 +51,7 @@ export interface SiteSettings {
 }
 
 const DEFAULT_SETTINGS: SiteSettings = {
-  siteName: "PharmaFlow SaaS",
+  siteName: "PharmaBiz SaaS",
   logoUrl: "",
   primaryColor: "#059669",
   hero: {
@@ -118,14 +118,14 @@ const DEFAULT_SETTINGS: SiteSettings = {
     },
   ],
   contact: {
-    email: "support@pharmaflow.com",
+    email: "support@pharmabiz.com",
     phone: "+880 1700-000000",
     address: "Gulshan-2, Dhaka-1212, Bangladesh",
     supportHours: "24/7 Dedicated Support",
   },
   about: {
     headline: "Built for Modern Pharmacy Enterprises",
-    description: "PharmaFlow provides a complete operating system for retail pharmacies and hospital chains.",
+    description: "PharmaBiz provides a complete operating system for retail pharmacies and hospital chains.",
     stats: [
       { label: "Uptime Guaranteed", value: "99.99%" },
       { label: "Offline Resilience", value: "72+ Hours" },

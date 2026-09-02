@@ -332,7 +332,11 @@ export class AccountingService {
     };
   }
 
-  static async getFinancialOverview(tenantId: string, branchId?: string) {
+  static async getFinancialOverview(
+    tenantId: string,
+    branchId?: string,
+    options?: { startDate?: string; endDate?: string; period?: string }
+  ) {
     if (branchId) {
       await this.ensureDefaultAccounts(tenantId, branchId);
     } else {
@@ -394,15 +398,165 @@ export class AccountingService {
     });
     const totalSupplierDues = suppliers.reduce((sum: number, s: any) => sum + Number(s.dueBalance || 0), 0);
 
+    // Compute period date bounds
+    const now = new Date();
+    let periodStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+    let periodEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+
+    if (options?.startDate) {
+      const parts = options.startDate.split("-").map(Number);
+      if (parts.length === 3) periodStart = new Date(parts[0], parts[1] - 1, parts[2], 0, 0, 0, 0);
+      else periodStart = new Date(options.startDate);
+    }
+    if (options?.endDate) {
+      const parts = options.endDate.split("-").map(Number);
+      if (parts.length === 3) periodEnd = new Date(parts[0], parts[1] - 1, parts[2], 23, 59, 59, 999);
+      else {
+        const d = new Date(options.endDate);
+        d.setHours(23, 59, 59, 999);
+        periodEnd = d;
+      }
+    } else if (options?.period === "lastMonth") {
+      periodStart = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
+      periodEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+    } else if (options?.period === "last6Months") {
+      periodStart = new Date(now.getFullYear(), now.getMonth() - 5, 1, 0, 0, 0, 0);
+      periodEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    } else if (options?.period === "thisYear") {
+      periodStart = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
+      periodEnd = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
+    }
+
+    // Query sales for selected period
+    const periodSalesWhere: any = {
+      tenantId,
+      status: "COMPLETED",
+      createdAt: { gte: periodStart, lte: periodEnd },
+    };
+    if (branchId) periodSalesWhere.branchId = branchId;
+
+    const periodSales = await (prisma as any).sale.findMany({
+      where: periodSalesWhere,
+      select: {
+        id: true,
+        totalAmount: true,
+        paymentMethod: true,
+        notes: true,
+        createdAt: true,
+      },
+    });
+
+    let periodTotalSales = 0;
+    let periodCashSales = 0;
+    let periodBkashSales = 0;
+    let periodNagadSales = 0;
+    let periodCardSales = 0;
+    let periodOtherSales = 0;
+
+    for (const s of periodSales) {
+      const amt = Number(s.totalAmount || 0);
+      periodTotalSales += amt;
+      const notesLower = (s.notes || "").toLowerCase();
+
+      if (s.paymentMethod === "CASH") {
+        periodCashSales += amt;
+      } else if (s.paymentMethod === "CARD") {
+        periodCardSales += amt;
+      } else if (s.paymentMethod === "MOBILE") {
+        if (notesLower.includes("nagad")) {
+          periodNagadSales += amt;
+        } else {
+          periodBkashSales += amt;
+        }
+      } else {
+        periodOtherSales += amt;
+      }
+    }
+
+    const periodMobileSales = periodBkashSales + periodNagadSales;
+    const periodBankCardSales = periodCardSales;
+
+    // Build 6-Month Sales Trend
+    const monthlyTrend = [];
+    for (let i = 5; i >= 0; i--) {
+      const mDate = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const mStart = new Date(mDate.getFullYear(), mDate.getMonth(), 1, 0, 0, 0, 0);
+      const mEnd = new Date(mDate.getFullYear(), mDate.getMonth() + 1, 0, 23, 59, 59, 999);
+
+      const mSales = await (prisma as any).sale.findMany({
+        where: {
+          tenantId,
+          status: "COMPLETED",
+          ...(branchId ? { branchId } : {}),
+          createdAt: { gte: mStart, lte: mEnd },
+        },
+        select: {
+          totalAmount: true,
+          paymentMethod: true,
+        },
+      });
+
+      let mRevenue = 0;
+      let mCash = 0;
+      let mDigital = 0;
+
+      for (const s of mSales) {
+        const amt = Number(s.totalAmount || 0);
+        mRevenue += amt;
+        if (s.paymentMethod === "CASH") mCash += amt;
+        else mDigital += amt;
+      }
+
+      monthlyTrend.push({
+        month: mStart.toLocaleDateString("en-US", { month: "short", year: "numeric" }),
+        monthShort: mStart.toLocaleDateString("en-US", { month: "short" }),
+        monthKey: `${mStart.getFullYear()}-${String(mStart.getMonth() + 1).padStart(2, "0")}`,
+        revenue: mRevenue,
+        salesCount: mSales.length,
+        cashAmount: mCash,
+        digitalAmount: mDigital,
+      });
+    }
+
+    // Recent Financial Ledger (Audit Trail)
+    const recentLedger = await (prisma as any).financialTransaction.findMany({
+      where: { tenantId, ...(branchId ? { branchId } : {}) },
+      take: 8,
+      orderBy: { createdAt: "desc" },
+      include: {
+        sourceAccount: { select: { id: true, name: true, type: true } },
+        destinationAccount: { select: { id: true, name: true, type: true } },
+        user: { select: { id: true, name: true, username: true } },
+      },
+    });
+
     return {
-      totalLiquidity,
-      totalCash,
-      totalBank,
-      totalMobile,
-      totalCardSettlement,
-      totalOther,
-      totalSupplierDues,
-      accountsCount: accounts.length,
+      summary: {
+        totalSales: periodTotalSales,
+        cashSales: periodCashSales,
+        bankCardSales: periodBankCardSales,
+        mobileSales: periodMobileSales,
+        bkashSales: periodBkashSales,
+        nagadSales: periodNagadSales,
+        cardSales: periodCardSales,
+        otherSales: periodOtherSales,
+        totalTransactions: periodSales.length,
+        totalSupplierDues,
+        currentCashBalance: totalCash,
+        currentBankBalance: totalBank,
+        currentMobileBalance: totalMobile,
+        totalLiquidity,
+      },
+      paymentBreakdown: {
+        cash: periodCashSales,
+        bkash: periodBkashSales,
+        nagad: periodNagadSales,
+        card: periodCardSales,
+        other: periodOtherSales,
+        grandTotal: periodTotalSales,
+      },
+      monthlyTrend,
+      recentLedger,
       accounts: accounts.map((a: any) => ({
         id: a.id,
         name: a.name,

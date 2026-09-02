@@ -29,7 +29,7 @@ export function Footer() {
                 </div>
               )}
               <span className="text-xl font-bold tracking-tight text-white">
-                {settings.siteName || "PharmaFlow"}
+                {settings.siteName || "PharmaBiz"}
               </span>
             </Link>
             <p className="text-sm text-slate-400 max-w-md leading-relaxed">
@@ -66,7 +66,7 @@ export function Footer() {
 
         <div className="pt-8 border-t border-slate-800 text-xs flex flex-col sm:flex-row items-center justify-between gap-4 text-slate-500">
           <div>
-            © {new Date().getFullYear()} {settings.siteName || "PharmaFlow"}. All rights reserved.
+            © {new Date().getFullYear()} {settings.siteName || "PharmaBiz"}. All rights reserved.
           </div>
           <div className="flex items-center gap-1">
             <span>Built with precision for healthcare reliability</span>

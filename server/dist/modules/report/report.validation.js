@@ -3,7 +3,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.vatMisReportSchema = exports.reportDateRangeSchema = void 0;
 const zod_1 = require("zod");
 exports.reportDateRangeSchema = zod_1.z.object({
-    branchId: zod_1.z.string().uuid().optional(),
+    branchId: zod_1.z.string().optional().transform(v => (v === "" || v === "null" || v === "undefined" || v === "all" ? undefined : v)),
+    userId: zod_1.z.string().optional().transform(v => (v === "" || v === "null" || v === "undefined" || v === "all" ? undefined : v)),
+    paymentMethod: zod_1.z.enum(["CASH", "CARD", "MOBILE", "ALL"]).optional().transform(v => (v === "ALL" ? undefined : v)),
     startDate: zod_1.z.string().optional(),
     endDate: zod_1.z.string().optional(),
 });

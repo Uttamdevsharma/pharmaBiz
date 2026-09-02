@@ -212,6 +212,82 @@ class SalesService {
                     },
                 });
             }
+            // Record Financial Transaction in accounting ledger and update account balance
+            const actualPaid = Math.min(paidAmount, totalAmount);
+            if (actualPaid > 0) {
+                let targetAccountType = "CASH";
+                let targetAccountNameSearch = null;
+                if (data.paymentMethod === "CARD") {
+                    targetAccountType = "CARD_SETTLEMENT";
+                }
+                else if (data.paymentMethod === "MOBILE") {
+                    targetAccountType = "MOBILE";
+                    const notesLower = (data.notes || "").toLowerCase();
+                    if (notesLower.includes("nagad")) {
+                        targetAccountNameSearch = "nagad";
+                    }
+                    else {
+                        targetAccountNameSearch = "bkash";
+                    }
+                }
+                let financialAccount = await tx.financialAccount.findFirst({
+                    where: {
+                        tenantId,
+                        branchId: data.branchId,
+                        type: targetAccountType,
+                        isActive: true,
+                        ...(targetAccountNameSearch
+                            ? { name: { contains: targetAccountNameSearch, mode: "insensitive" } }
+                            : {}),
+                    },
+                });
+                if (!financialAccount) {
+                    financialAccount = await tx.financialAccount.findFirst({
+                        where: { tenantId, branchId: data.branchId, type: targetAccountType, isActive: true },
+                    });
+                }
+                if (!financialAccount) {
+                    financialAccount = await tx.financialAccount.findFirst({
+                        where: { tenantId, branchId: data.branchId, isActive: true },
+                    });
+                }
+                if (!financialAccount) {
+                    financialAccount = await tx.financialAccount.create({
+                        data: {
+                            tenantId,
+                            branchId: data.branchId,
+                            name: data.paymentMethod === "CARD"
+                                ? "Card / POS Settlement"
+                                : data.paymentMethod === "MOBILE"
+                                    ? targetAccountNameSearch === "nagad"
+                                        ? "Nagad Merchant Account"
+                                        : "bKash Merchant Account"
+                                    : "Main Cash Drawer",
+                            type: targetAccountType,
+                            balance: 0,
+                            isActive: true,
+                        },
+                    });
+                }
+                if (financialAccount) {
+                    await tx.financialAccount.update({
+                        where: { id: financialAccount.id },
+                        data: { balance: { increment: actualPaid } },
+                    });
+                    await tx.financialTransaction.create({
+                        data: {
+                            tenantId,
+                            branchId: data.branchId,
+                            destinationAccountId: financialAccount.id,
+                            amount: actualPaid,
+                            type: "SALE_PAYMENT",
+                            reference: receiptNo,
+                            note: `POS Sale Receipt #${receiptNo} (${data.paymentMethod}${data.notes ? ` - ${data.notes}` : ""})`,
+                            userId,
+                        },
+                    });
+                }
+            }
             return createdSale;
         });
         await audit_1.AuditService.log({
@@ -434,6 +510,36 @@ class SalesService {
                         referenceId: sale.id,
                     },
                 });
+            }
+            // Adjust accounting ledger on refund
+            const refundAmount = Number(sale.paidAmount || sale.totalAmount);
+            if (refundAmount > 0) {
+                const accountType = sale.paymentMethod === "CARD"
+                    ? "CARD_SETTLEMENT"
+                    : sale.paymentMethod === "MOBILE"
+                        ? "MOBILE"
+                        : "CASH";
+                const financialAccount = await tx.financialAccount.findFirst({
+                    where: { tenantId, branchId: sale.branchId, type: accountType, isActive: true },
+                });
+                if (financialAccount) {
+                    await tx.financialAccount.update({
+                        where: { id: financialAccount.id },
+                        data: { balance: { decrement: refundAmount } },
+                    });
+                    await tx.financialTransaction.create({
+                        data: {
+                            tenantId,
+                            branchId: sale.branchId,
+                            sourceAccountId: financialAccount.id,
+                            amount: refundAmount,
+                            type: "REFUND",
+                            reference: `REFUND-${sale.receiptNo}`,
+                            note: `Refund for POS Receipt #${sale.receiptNo}: ${data.reason}`,
+                            userId,
+                        },
+                    });
+                }
             }
             return updatedSale;
         });

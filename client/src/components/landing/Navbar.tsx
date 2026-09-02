@@ -32,7 +32,7 @@ export function Navbar() {
             )}
             <div className="flex flex-col">
               <span className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">
-                {settings.siteName || "PharmaFlow"}
+                {settings.siteName || "PharmaBiz"}
               </span>
               <span className="text-[10px] uppercase tracking-wider font-semibold text-brand-primary">
                 Multi-Tenant SaaS

@@ -5,34 +5,41 @@ export class ReportService {
   /**
    * Comprehensive Daily & Filterable Sales Report
    */
+  /**
+   * Helper to parse date string safely in local calendar bounds
+   */
+  private static parseBoundaryDate(dateStr?: string, isEnd = false): Date {
+    if (!dateStr) {
+      const now = new Date();
+      if (isEnd) return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+      return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    }
+    const parts = dateStr.split("-").map(Number);
+    if (parts.length === 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
+      if (isEnd) return new Date(parts[0], parts[1] - 1, parts[2], 23, 59, 59, 999);
+      return new Date(parts[0], parts[1] - 1, parts[2], 0, 0, 0, 0);
+    }
+    const d = new Date(dateStr);
+    if (isEnd) d.setHours(23, 59, 59, 999);
+    else d.setHours(0, 0, 0, 0);
+    return d;
+  }
+
+  /**
+   * Comprehensive Daily & Filterable Sales Report
+   */
   static async getDailySales(
     tenantId: string,
     query: ReportDateRangeQuery,
     userRole: string,
     userBranchId?: string | null
   ) {
-    let startDate: Date;
-    let endDate: Date;
-
-    if (query.startDate) {
-      startDate = new Date(query.startDate);
-      startDate.setHours(0, 0, 0, 0);
-    } else {
-      const today = new Date();
-      startDate = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
-    }
-
-    if (query.endDate) {
-      endDate = new Date(query.endDate);
-      endDate.setHours(23, 59, 59, 999);
-    } else if (query.startDate) {
-      // If only single startDate provided, set endDate to end of that same day
-      endDate = new Date(startDate);
-      endDate.setHours(23, 59, 59, 999);
-    } else {
-      const today = new Date();
-      endDate = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
-    }
+    const startDate = this.parseBoundaryDate(query.startDate, false);
+    const endDate = query.endDate
+      ? this.parseBoundaryDate(query.endDate, true)
+      : query.startDate
+      ? this.parseBoundaryDate(query.startDate, true)
+      : this.parseBoundaryDate(undefined, true);
 
     const where: any = {
       tenantId,
@@ -44,6 +51,14 @@ export class ReportService {
       where.branchId = userBranchId;
     } else if (query.branchId) {
       where.branchId = query.branchId;
+    }
+
+    if (query.userId) {
+      where.userId = query.userId;
+    }
+
+    if (query.paymentMethod) {
+      where.paymentMethod = query.paymentMethod;
     }
 
     const [sales, tenant, targetBranch] = await Promise.all([

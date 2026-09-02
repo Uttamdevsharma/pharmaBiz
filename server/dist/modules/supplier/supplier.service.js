@@ -426,6 +426,41 @@ class SupplierService {
                 totalDue: newDue,
             },
         });
+        // Synchronize with Financial Accounts ledger
+        try {
+            const targetType = data.paymentMethod === "BANK"
+                ? "BANK"
+                : data.paymentMethod === "CARD"
+                    ? "CARD_SETTLEMENT"
+                    : data.paymentMethod === "MOBILE"
+                        ? "MOBILE"
+                        : "CASH";
+            const financialAcc = await prisma_1.prisma.financialAccount.findFirst({
+                where: { tenantId, type: targetType, isActive: true },
+                orderBy: { createdAt: "asc" },
+            });
+            if (financialAcc) {
+                await prisma_1.prisma.financialAccount.update({
+                    where: { id: financialAcc.id },
+                    data: { balance: { decrement: payAmount } },
+                });
+                await prisma_1.prisma.financialTransaction.create({
+                    data: {
+                        tenantId,
+                        branchId: financialAcc.branchId,
+                        sourceAccountId: financialAcc.id,
+                        amount: payAmount,
+                        type: "PURCHASE_PAYMENT",
+                        reference: `PAY-${supplier.name.slice(0, 15)}`,
+                        note: data.notes || `Supplier payment for ${supplier.name}`,
+                        userId,
+                    },
+                });
+            }
+        }
+        catch (finErr) {
+            console.error("Failed to sync supplier payment with financial account", finErr);
+        }
         await audit_1.AuditService.log({
             tenantId,
             userId,

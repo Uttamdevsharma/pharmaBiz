@@ -47,7 +47,6 @@ exports.createProductSchema = zod_1.z.object({
     defaultPackType: zod_1.z.string().default("PIECE"),
     stripsPerBox: zod_1.z.number().int().positive().optional().nullable(),
     tabletsPerStrip: zod_1.z.number().int().positive().optional().nullable(),
-    shelfLocation: zod_1.z.string().optional().nullable(),
     minStockAlert: zod_1.z.number().int().nonnegative().default(10),
     description: zod_1.z.string().optional().nullable(),
     imageUrl: zod_1.z.string().optional().nullable(),

@@ -4,7 +4,7 @@ import { UpdatePlatformSettingsInput } from "./settings.validation";
 const SETTINGS_KEY = "landing_page_config";
 
 export const DEFAULT_SETTINGS = {
-  siteName: "PharmaFlow SaaS",
+  siteName: "PharmaBiz SaaS",
   logoUrl: "",
   logoPublicId: "",
   primaryColor: "#059669", // Emerald Green default
@@ -72,14 +72,14 @@ export const DEFAULT_SETTINGS = {
     },
   ],
   contact: {
-    email: "support@pharmaflow.com",
+    email: "support@pharmabiz.com",
     phone: "+880 1700-000000",
     address: "Gulshan-2, Dhaka-1212, Bangladesh",
     supportHours: "24/7 Dedicated Support",
   },
   about: {
     headline: "Built for Modern Pharmacy Enterprises",
-    description: "PharmaFlow provides a complete operating system for retail pharmacies and hospital chains, offering bulletproof reliability and multi-tenant data isolation.",
+    description: "PharmaBiz provides a complete operating system for retail pharmacies and hospital chains, offering bulletproof reliability and multi-tenant data isolation.",
     stats: [
       { label: "Uptime Guaranteed", value: "99.99%" },
       { label: "Offline Resilience", value: "72+ Hours" },

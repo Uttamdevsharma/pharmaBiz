@@ -60,4 +60,11 @@ router.get(
   AccountingController.listTransactions
 );
 
+// Daily sales register audit
+router.get(
+  "/daily-sales",
+  requirePermission("accounts.view"),
+  AccountingController.getDailySales
+);
+
 export const accountingRoutes = router;

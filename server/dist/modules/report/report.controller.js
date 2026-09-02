@@ -99,5 +99,18 @@ class ReportController {
             res.status(500).json({ success: false, message: error.message });
         }
     }
+    static async getDashboardMetrics(req, res) {
+        try {
+            const tenantId = req.user.tenantId;
+            const userRole = req.user.role;
+            const userBranchId = req.user.branchId;
+            const branchId = req.query.branchId;
+            const dashboard = await report_service_1.ReportService.getDashboardMetrics(tenantId, branchId, userRole, userBranchId);
+            res.status(200).json({ success: true, data: dashboard });
+        }
+        catch (error) {
+            res.status(500).json({ success: false, message: error.message });
+        }
+    }
 }
 exports.ReportController = ReportController;

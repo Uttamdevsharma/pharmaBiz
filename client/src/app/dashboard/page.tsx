@@ -32,6 +32,8 @@ import { StockReceiveView } from "@/components/dashboard/StockReceiveView";
 import { SuppliersView } from "@/components/dashboard/SuppliersView";
 import { PurchaseHistoryView } from "@/components/dashboard/PurchaseHistoryView";
 import { PaymentsDueView } from "@/components/dashboard/PaymentsDueView";
+import { PaymentMethodSalesView } from "@/components/dashboard/PaymentMethodSalesView";
+import { ProductWiseSalesView } from "@/components/dashboard/ProductWiseSalesView";
 import { Product } from "@/types";
 import {
   CreditCard,
@@ -343,7 +345,11 @@ export default function RoleBasedDashboard() {
           {/* Core Hubs */}
           {activeModule === "overview" && <OverviewModule onNavigate={setActiveModule} />}
           {activeModule === "pos" && <PosModule />}
-          {activeModule === "accounts" && <AccountsModule />}
+          {activeModule === "accounts" && <AccountsModule onNavigate={setActiveModule} />}
+
+          {/* 💳 Dedicated Accounts & Sales Analysis Subpages */}
+          {activeModule === "acc_payment_sales" && <PaymentMethodSalesView onNavigate={setActiveModule} />}
+          {activeModule === "acc_product_sales" && <ProductWiseSalesView onNavigate={setActiveModule} />}
 
           {/* 📦 Dedicated Inventory Subpages */}
           {activeModule === "inv_add_product" && (

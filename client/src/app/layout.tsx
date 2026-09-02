@@ -3,7 +3,7 @@ import "./globals.css";
 import { Providers } from "./providers";
 
 export const metadata: Metadata = {
-  title: "PharmaFlow - Multi-Tenant Pharmacy Management SaaS",
+  title: "PharmaBiz - Multi-Tenant Pharmacy Management SaaS",
   description: "Next-gen offline-first pharmacy management platform for single and multi-branch pharmacy chains.",
 };
 

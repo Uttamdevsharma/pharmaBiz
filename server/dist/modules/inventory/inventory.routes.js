@@ -4,24 +4,24 @@ exports.inventoryRoutes = void 0;
 const express_1 = require("express");
 const inventory_controller_1 = require("./inventory.controller");
 const authenticate_1 = require("../../middleware/authenticate");
-const authorize_1 = require("../../middleware/authorize");
+const requirePermission_1 = require("../../middleware/requirePermission");
 const validate_1 = require("../../middleware/validate");
 const planLimiter_1 = require("../../middleware/planLimiter");
 const inventory_validation_1 = require("./inventory.validation");
 const router = (0, express_1.Router)();
 router.use(authenticate_1.authenticate, planLimiter_1.requireActiveSubscription);
 // Inward / Add Stock Batch
-router.post("/inward", (0, authorize_1.authorize)(["COMPANY_OWNER", "REGIONAL_ADMIN", "BRANCH_MANAGER"]), (0, validate_1.validateRequest)({ body: inventory_validation_1.inwardStockSchema }), inventory_controller_1.InventoryController.inwardStock);
+router.post("/inward", (0, requirePermission_1.requirePermission)("inventory.add_stock"), (0, validate_1.validateRequest)({ body: inventory_validation_1.inwardStockSchema }), inventory_controller_1.InventoryController.inwardStock);
 // Manual Stock Adjustment
-router.post("/adjust", (0, authorize_1.authorize)(["COMPANY_OWNER", "REGIONAL_ADMIN", "BRANCH_MANAGER"]), (0, validate_1.validateRequest)({ body: inventory_validation_1.adjustStockSchema }), inventory_controller_1.InventoryController.adjustStock);
+router.post("/adjust", (0, requirePermission_1.requirePermission)("inventory.adjust"), (0, validate_1.validateRequest)({ body: inventory_validation_1.adjustStockSchema }), inventory_controller_1.InventoryController.adjustStock);
 // Update Inventory item metadata
-router.patch("/:id", (0, authorize_1.authorize)(["COMPANY_OWNER", "BRANCH_MANAGER"]), (0, validate_1.validateRequest)({ body: inventory_validation_1.updateInventoryItemSchema }), inventory_controller_1.InventoryController.updateInventoryItem);
+router.patch("/:id", (0, requirePermission_1.requirePermission)("inventory.adjust"), (0, validate_1.validateRequest)({ body: inventory_validation_1.updateInventoryItemSchema }), inventory_controller_1.InventoryController.updateInventoryItem);
 // List Movements / Stock History Ledger
-router.get("/movements", (0, authorize_1.authorize)(["COMPANY_OWNER", "REGIONAL_ADMIN", "BRANCH_MANAGER", "AUDITOR"]), (0, validate_1.validateRequest)({ query: inventory_validation_1.listMovementsQuerySchema }), inventory_controller_1.InventoryController.listMovements);
+router.get("/movements", (0, requirePermission_1.requirePermission)("inventory.view"), (0, validate_1.validateRequest)({ query: inventory_validation_1.listMovementsQuerySchema }), inventory_controller_1.InventoryController.listMovements);
 // Alerts: Low stock
-router.get("/low-stock", (0, authorize_1.authorize)(["COMPANY_OWNER", "REGIONAL_ADMIN", "BRANCH_MANAGER", "CASHIER", "AUDITOR"]), (0, validate_1.validateRequest)({ query: inventory_validation_1.inventoryAlertsQuerySchema }), inventory_controller_1.InventoryController.getLowStock);
+router.get("/low-stock", (0, requirePermission_1.requirePermission)("inventory.view"), (0, validate_1.validateRequest)({ query: inventory_validation_1.inventoryAlertsQuerySchema }), inventory_controller_1.InventoryController.getLowStock);
 // Alerts: Near expiry & expired
-router.get("/near-expiry", (0, authorize_1.authorize)(["COMPANY_OWNER", "REGIONAL_ADMIN", "BRANCH_MANAGER", "CASHIER", "AUDITOR"]), (0, validate_1.validateRequest)({ query: inventory_validation_1.inventoryAlertsQuerySchema }), inventory_controller_1.InventoryController.getNearExpiry);
+router.get("/near-expiry", (0, requirePermission_1.requirePermission)("inventory.view"), (0, validate_1.validateRequest)({ query: inventory_validation_1.inventoryAlertsQuerySchema }), inventory_controller_1.InventoryController.getNearExpiry);
 // Get branch inventory list
-router.get("/branch/:branchId", (0, authorize_1.authorize)(["COMPANY_OWNER", "REGIONAL_ADMIN", "BRANCH_MANAGER", "CASHIER", "AUDITOR"]), inventory_controller_1.InventoryController.getBranchInventory);
+router.get("/branch/:branchId", (0, requirePermission_1.requirePermission)("inventory.view"), inventory_controller_1.InventoryController.getBranchInventory);
 exports.inventoryRoutes = router;

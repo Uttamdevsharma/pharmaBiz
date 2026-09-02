@@ -166,7 +166,7 @@ function RegisterContent() {
               <Pill className="h-4 w-4 transform -rotate-45" />
             </div>
             <span className="font-bold text-slate-900 dark:text-white">
-              {settings.siteName || "PharmaFlow"}
+              {settings.siteName || "PharmaBiz"}
             </span>
           </Link>
         </div>

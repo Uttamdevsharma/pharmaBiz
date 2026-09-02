@@ -145,5 +145,98 @@ class SuperAdminController {
             res.status(500).json({ success: false, message: error.message });
         }
     }
+    // ==================== PLATFORM STAFF (CTO / PROJECT MANAGER) ====================
+    static async listPlatformStaff(req, res) {
+        try {
+            const staff = await super_admin_service_1.SuperAdminService.listPlatformStaff();
+            res.status(200).json({ success: true, data: staff });
+        }
+        catch (error) {
+            res.status(500).json({ success: false, message: error.message });
+        }
+    }
+    static async createPlatformStaff(req, res) {
+        try {
+            const creatorId = req.user.id;
+            const creatorRole = req.user.role;
+            const staff = await super_admin_service_1.SuperAdminService.createPlatformStaff(creatorId, creatorRole, req.body);
+            res.status(201).json({
+                success: true,
+                message: `Platform staff member (${staff.role}) created successfully`,
+                data: staff,
+            });
+        }
+        catch (error) {
+            res.status(400).json({ success: false, message: error.message });
+        }
+    }
+    static async updatePlatformStaff(req, res) {
+        try {
+            const id = req.params.id;
+            const updaterId = req.user.id;
+            const updaterRole = req.user.role;
+            const updated = await super_admin_service_1.SuperAdminService.updatePlatformStaff(id, updaterId, updaterRole, req.body);
+            res.status(200).json({
+                success: true,
+                message: "Platform staff member updated successfully",
+                data: updated,
+            });
+        }
+        catch (error) {
+            res.status(400).json({ success: false, message: error.message });
+        }
+    }
+    static async updatePlatformStaffStatus(req, res) {
+        try {
+            const id = req.params.id;
+            const updaterId = req.user.id;
+            const updaterRole = req.user.role;
+            const { isActive } = req.body;
+            const updated = await super_admin_service_1.SuperAdminService.updatePlatformStaffStatus(id, updaterId, updaterRole, isActive);
+            res.status(200).json({
+                success: true,
+                message: `Platform staff member ${isActive ? "activated" : "deactivated"} successfully`,
+                data: updated,
+            });
+        }
+        catch (error) {
+            res.status(400).json({ success: false, message: error.message });
+        }
+    }
+    static async deletePlatformStaff(req, res) {
+        try {
+            const id = req.params.id;
+            const updaterId = req.user.id;
+            const updaterRole = req.user.role;
+            const result = await super_admin_service_1.SuperAdminService.deletePlatformStaff(id, updaterId, updaterRole);
+            res.status(200).json(result);
+        }
+        catch (error) {
+            res.status(400).json({ success: false, message: error.message });
+        }
+    }
+    static async getPlatformPermissions(req, res) {
+        try {
+            const hierarchy = await super_admin_service_1.SuperAdminService.getPlatformPermissionsHierarchy();
+            res.status(200).json({ success: true, data: hierarchy });
+        }
+        catch (error) {
+            res.status(500).json({ success: false, message: error.message });
+        }
+    }
+    static async updatePlatformPermissions(req, res) {
+        try {
+            const { role, permissions } = req.body;
+            const result = await super_admin_service_1.SuperAdminService.updatePlatformRolePermissions(role, permissions);
+            res.status(200).json({
+                success: true,
+                message: `Platform permissions for ${role} updated successfully`,
+                data: result,
+            });
+        }
+        catch (error) {
+            res.status(400).json({ success: false, message: error.message });
+        }
+    }
 }
 exports.SuperAdminController = SuperAdminController;

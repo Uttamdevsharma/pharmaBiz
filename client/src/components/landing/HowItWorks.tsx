@@ -16,7 +16,7 @@ export function HowItWorks() {
             Fast Onboarding
           </div>
           <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 dark:text-white tracking-tight">
-            How PharmaFlow Works
+            How PharmaBiz Works
           </h2>
           <p className="text-base sm:text-lg text-slate-600 dark:text-slate-400">
             Set up your pharmacy in minutes and operate offline without complicated IT infrastructure.

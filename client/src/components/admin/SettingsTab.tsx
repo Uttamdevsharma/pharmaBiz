@@ -33,7 +33,7 @@ export function SettingsTab() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   // Local state initialized with current settings
-  const [siteName, setSiteName] = useState(settings.siteName || "PharmaFlow SaaS");
+  const [siteName, setSiteName] = useState(settings.siteName || "PharmaBiz SaaS");
   const [logoUrl, setLogoUrl] = useState(settings.logoUrl || "");
   const [logoPublicId, setLogoPublicId] = useState((settings as any).logoPublicId || "");
   const [primaryColor, setPrimaryColor] = useState(settings.primaryColor || "#059669");
@@ -49,7 +49,7 @@ export function SettingsTab() {
   const [ctaPrimaryText, setCtaPrimaryText] = useState(settings.hero?.ctaPrimaryText || "Get Started Now");
   const [ctaSecondaryText, setCtaSecondaryText] = useState(settings.hero?.ctaSecondaryText || "Explore Plans");
 
-  const [contactEmail, setContactEmail] = useState(settings.contact?.email || "support@pharmaflow.com");
+  const [contactEmail, setContactEmail] = useState(settings.contact?.email || "support@pharmabiz.com");
   const [contactPhone, setContactPhone] = useState(settings.contact?.phone || "+880 1700-000000");
   const [contactAddress, setContactAddress] = useState(
     settings.contact?.address || "Gulshan-2, Dhaka-1212, Bangladesh"

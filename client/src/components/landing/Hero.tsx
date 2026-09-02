@@ -84,7 +84,7 @@ export function Hero() {
                 <div className="h-3 w-3 rounded-full bg-red-400" />
                 <div className="h-3 w-3 rounded-full bg-amber-400" />
                 <div className="h-3 w-3 rounded-full bg-emerald-400" />
-                <span className="ml-2 text-xs font-mono text-slate-400">pharmaflow-hq.cloud/dashboard</span>
+                <span className="ml-2 text-xs font-mono text-slate-400">pharmabiz-hq.cloud/dashboard</span>
               </div>
               <div className="flex items-center gap-3">
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">

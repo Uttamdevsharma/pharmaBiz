@@ -209,6 +209,9 @@ class SuperAdminService {
         if (!tenant) {
             throw new Error("Tenant not found");
         }
+        if (tenant.name === "Platform HQ") {
+            throw new Error("Platform HQ system tenant status cannot be modified or suspended.");
+        }
         return await prisma_1.prisma.tenant.update({
             where: { id },
             data: { isActive },
@@ -366,6 +369,230 @@ class SuperAdminService {
                 userCount: t._count?.users || 0,
             })),
         };
+    }
+    /**
+     * ==================== PLATFORM STAFF (CTO / PROJECT MANAGER) MANAGEMENT ====================
+     */
+    static async listPlatformStaff() {
+        return await prisma_1.prisma.user.findMany({
+            where: {
+                role: { in: ["SUPER_ADMIN", "CTO", "PROJECT_MANAGER"] },
+            },
+            orderBy: { createdAt: "asc" },
+            select: {
+                id: true,
+                name: true,
+                email: true,
+                username: true,
+                phone: true,
+                role: true,
+                isActive: true,
+                createdAt: true,
+                updatedAt: true,
+            },
+        });
+    }
+    static async createPlatformStaff(creatorId, creatorRole, data) {
+        if (creatorRole !== "SUPER_ADMIN" && data.role === "SUPER_ADMIN") {
+            throw new Error("Delegated platform staff cannot create a Super Admin account.");
+        }
+        if (!["CTO", "PROJECT_MANAGER"].includes(data.role)) {
+            throw new Error("Can only create CTO or Project Manager platform staff accounts.");
+        }
+        // Find or create Platform HQ System Tenant
+        let systemTenant = await prisma_1.prisma.tenant.findFirst({
+            where: { name: "Platform HQ" },
+        });
+        if (!systemTenant) {
+            systemTenant = await prisma_1.prisma.tenant.create({
+                data: {
+                    name: "Platform HQ",
+                    tier: "ENTERPRISE",
+                    email: "admin@platform.system",
+                    phone: "01700000000",
+                    address: "Dhaka, Bangladesh",
+                    isActive: true,
+                },
+            });
+        }
+        const existing = await prisma_1.prisma.user.findUnique({
+            where: { username: data.username },
+        });
+        if (existing) {
+            throw new Error("Username is already taken");
+        }
+        const bcrypt = require("bcryptjs");
+        const passwordHash = await bcrypt.hash(data.password, 10);
+        const staff = await prisma_1.prisma.user.create({
+            data: {
+                tenantId: systemTenant.id,
+                name: data.name,
+                email: data.email,
+                username: data.username,
+                phone: data.phone || null,
+                passwordHash,
+                role: data.role, // "CTO" or "PROJECT_MANAGER"
+                isActive: true,
+            },
+            select: {
+                id: true,
+                name: true,
+                email: true,
+                username: true,
+                phone: true,
+                role: true,
+                isActive: true,
+                createdAt: true,
+            },
+        });
+        return staff;
+    }
+    static async updatePlatformStaff(id, updaterId, updaterRole, data) {
+        const targetUser = await prisma_1.prisma.user.findUnique({ where: { id } });
+        if (!targetUser) {
+            throw new Error("Platform staff member not found");
+        }
+        // Security Invariant: Super Admin cannot be modified, replaced, or degraded by delegates
+        if (targetUser.role === "SUPER_ADMIN") {
+            if (updaterRole !== "SUPER_ADMIN" || updaterId !== targetUser.id) {
+                throw new Error("CTO / Project Manager cannot modify, reassign, or alter the Super Admin master account.");
+            }
+            if (data.role && data.role !== "SUPER_ADMIN") {
+                throw new Error("Cannot change Super Admin role.");
+            }
+            if (data.isActive === false) {
+                throw new Error("Super Admin account cannot be disabled.");
+            }
+        }
+        // Delegates cannot elevate any account to Super Admin
+        if (updaterRole !== "SUPER_ADMIN" && data.role === "SUPER_ADMIN") {
+            throw new Error("Delegated platform staff cannot promote accounts to Super Admin.");
+        }
+        const updateData = {
+            ...(data.name !== undefined && { name: data.name }),
+            ...(data.email !== undefined && { email: data.email }),
+            ...(data.phone !== undefined && { phone: data.phone }),
+            ...(data.role !== undefined && { role: data.role }),
+            ...(data.isActive !== undefined && { isActive: data.isActive }),
+        };
+        if (data.password) {
+            const bcrypt = require("bcryptjs");
+            updateData.passwordHash = await bcrypt.hash(data.password, 10);
+        }
+        return await prisma_1.prisma.user.update({
+            where: { id },
+            data: updateData,
+            select: {
+                id: true,
+                name: true,
+                email: true,
+                username: true,
+                phone: true,
+                role: true,
+                isActive: true,
+                updatedAt: true,
+            },
+        });
+    }
+    static async updatePlatformStaffStatus(id, updaterId, updaterRole, isActive) {
+        const targetUser = await prisma_1.prisma.user.findUnique({ where: { id } });
+        if (!targetUser) {
+            throw new Error("Platform staff member not found");
+        }
+        if (targetUser.role === "SUPER_ADMIN") {
+            throw new Error("Super Admin account cannot be deactivated or disabled.");
+        }
+        if (targetUser.id === updaterId && !isActive) {
+            throw new Error("You cannot deactivate your own platform staff account.");
+        }
+        return await prisma_1.prisma.user.update({
+            where: { id },
+            data: { isActive },
+            select: {
+                id: true,
+                username: true,
+                role: true,
+                isActive: true,
+            },
+        });
+    }
+    static async deletePlatformStaff(id, updaterId, updaterRole) {
+        const targetUser = await prisma_1.prisma.user.findUnique({ where: { id } });
+        if (!targetUser) {
+            throw new Error("Platform staff member not found");
+        }
+        if (targetUser.role === "SUPER_ADMIN") {
+            throw new Error("Super Admin account cannot be deleted or removed under any circumstance.");
+        }
+        if (targetUser.id === updaterId) {
+            throw new Error("You cannot delete your own platform staff account.");
+        }
+        await prisma_1.prisma.user.delete({ where: { id } });
+        return { success: true, message: `Platform staff account ${targetUser.username} removed.` };
+    }
+    static async getPlatformPermissionsHierarchy() {
+        const roles = [
+            {
+                role: "CTO",
+                name: "Chief Technology Officer (Platform CTO)",
+                description: "Technical administration, platform telemetry, system logs, plans, tenants, and delegated platform management.",
+            },
+            {
+                role: "PROJECT_MANAGER",
+                name: "Platform Project Manager",
+                description: "Tenant onboarding assistance, support analytics, payment logs, plans, and platform operations oversight.",
+            },
+        ];
+        const dbPermissions = await prisma_1.prisma.rolePermission.findMany({
+            where: {
+                role: { in: ["CTO", "PROJECT_MANAGER"] },
+            },
+        });
+        const permissionMap = {};
+        dbPermissions.forEach((p) => {
+            if (!permissionMap[p.role])
+                permissionMap[p.role] = [];
+            permissionMap[p.role].push(p.permission);
+        });
+        const availablePermissions = [
+            { id: "platform.view", label: "View Platform Console & Overview", category: "Platform Core" },
+            { id: "platform.analytics", label: "View Platform Revenue & MRR Analytics", category: "Analytics" },
+            { id: "platform.tenants", label: "Manage Pharmacies & Tenant Statuses", category: "Operations" },
+            { id: "platform.plans", label: "Manage Subscription Plans & Tiers", category: "Operations" },
+            { id: "platform.support", label: "View Subscriptions & Tenant History", category: "Operations" },
+            { id: "platform.payments", label: "View Payment Transactions & Invoices", category: "Operations" },
+            { id: "platform.staff", label: "Manage CTO & PM Platform Delegates", category: "Platform Core" },
+            { id: "platform.logs", label: "View System Telemetry & Audit Logs", category: "Technical" },
+            { id: "platform.tech_settings", label: "Configure Platform Theme & Branding", category: "Technical" },
+        ];
+        return {
+            roles,
+            activePermissions: permissionMap,
+            availablePermissions,
+        };
+    }
+    static async updatePlatformRolePermissions(role, permissions) {
+        if (!["CTO", "PROJECT_MANAGER"].includes(role)) {
+            throw new Error("Can only customize permissions for CTO and Project Manager roles.");
+        }
+        // Filter out forbidden / root destructive permissions
+        const sanitizedPermissions = permissions.filter((p) => !p.startsWith("platform.destroy") &&
+            !p.startsWith("platform.owner") &&
+            !p.startsWith("platform.super_admin"));
+        await prisma_1.prisma.$transaction(async (tx) => {
+            await tx.rolePermission.deleteMany({
+                where: { role: role },
+            });
+            if (sanitizedPermissions.length > 0) {
+                await tx.rolePermission.createMany({
+                    data: sanitizedPermissions.map((p) => ({
+                        role: role,
+                        permission: p,
+                    })),
+                });
+            }
+        });
+        return { success: true, role, permissions: sanitizedPermissions };
     }
 }
 exports.SuperAdminService = SuperAdminService;

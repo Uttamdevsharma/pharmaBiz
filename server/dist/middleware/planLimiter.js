@@ -15,8 +15,8 @@ const requireActiveSubscription = async (req, res, next) => {
             res.status(401).json({ success: false, message: "Unauthorized" });
             return;
         }
-        // Super Admin bypasses tenant subscription checks
-        if (req.user.role === "SUPER_ADMIN") {
+        // Platform roles bypass tenant subscription checks
+        if (["SUPER_ADMIN", "CTO", "PROJECT_MANAGER"].includes(req.user.role)) {
             next();
             return;
         }
@@ -87,7 +87,7 @@ const requireTier = (minTier) => {
                 res.status(401).json({ success: false, message: "Unauthorized" });
                 return;
             }
-            if (req.user.role === "SUPER_ADMIN") {
+            if (["SUPER_ADMIN", "CTO", "PROJECT_MANAGER"].includes(req.user.role)) {
                 next();
                 return;
             }
@@ -123,7 +123,7 @@ const checkBranchLimit = async (req, res, next) => {
             res.status(401).json({ success: false, message: "Unauthorized" });
             return;
         }
-        if (req.user.role === "SUPER_ADMIN") {
+        if (["SUPER_ADMIN", "CTO", "PROJECT_MANAGER"].includes(req.user.role)) {
             next();
             return;
         }
@@ -150,7 +150,7 @@ const checkStaffLimit = async (req, res, next) => {
             res.status(401).json({ success: false, message: "Unauthorized" });
             return;
         }
-        if (req.user.role === "SUPER_ADMIN") {
+        if (["SUPER_ADMIN", "CTO", "PROJECT_MANAGER"].includes(req.user.role)) {
             next();
             return;
         }
