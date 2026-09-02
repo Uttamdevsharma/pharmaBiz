@@ -3,7 +3,7 @@ import { ReportDateRangeQuery, VatMisReportQuery } from "./report.validation";
 
 export class ReportService {
   /**
-   * Daily Sales Report
+   * Comprehensive Daily & Filterable Sales Report
    */
   static async getDailySales(
     tenantId: string,
@@ -11,13 +11,28 @@ export class ReportService {
     userRole: string,
     userBranchId?: string | null
   ) {
-    const today = new Date();
-    const startDate = query.startDate
-      ? new Date(query.startDate)
-      : new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0);
-    const endDate = query.endDate
-      ? new Date(query.endDate)
-      : new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
+    let startDate: Date;
+    let endDate: Date;
+
+    if (query.startDate) {
+      startDate = new Date(query.startDate);
+      startDate.setHours(0, 0, 0, 0);
+    } else {
+      const today = new Date();
+      startDate = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
+    }
+
+    if (query.endDate) {
+      endDate = new Date(query.endDate);
+      endDate.setHours(23, 59, 59, 999);
+    } else if (query.startDate) {
+      // If only single startDate provided, set endDate to end of that same day
+      endDate = new Date(startDate);
+      endDate.setHours(23, 59, 59, 999);
+    } else {
+      const today = new Date();
+      endDate = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
+    }
 
     const where: any = {
       tenantId,
@@ -31,45 +46,242 @@ export class ReportService {
       where.branchId = query.branchId;
     }
 
-    const sales = await (prisma as any).sale.findMany({
-      where,
-      include: {
-        branch: { select: { id: true, name: true } },
-        items: true,
-      },
-    });
+    const [sales, tenant, targetBranch] = await Promise.all([
+      (prisma as any).sale.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        include: {
+          branch: { select: { id: true, name: true, location: true, phone: true } },
+          user: { select: { id: true, name: true, username: true } },
+          items: {
+            include: {
+              product: {
+                select: {
+                  id: true,
+                  name: true,
+                  sku: true,
+                  genericName: true,
+                  unit: true,
+                  size: true,
+                  brandName: true,
+                  categoryRef: { select: { id: true, name: true } },
+                },
+              },
+            },
+          },
+        },
+      }),
+      (prisma as any).tenant.findUnique({
+        where: { id: tenantId },
+        select: { id: true, name: true, phone: true, email: true, address: true, logoUrl: true },
+      }),
+      where.branchId
+        ? (prisma as any).branch.findUnique({
+            where: { id: where.branchId },
+            select: { id: true, name: true, location: true, phone: true, email: true },
+          })
+        : null,
+    ]);
 
-    const totalRevenue = sales.reduce((sum: number, s: any) => sum + Number(s.totalAmount), 0);
-    const totalDiscounts = sales.reduce((sum: number, s: any) => sum + Number(s.discount), 0);
-    const totalTaxes = sales.reduce((sum: number, s: any) => sum + Number(s.tax), 0);
-    const totalTransactions = sales.length;
+    let totalSubTotal = 0;
+    let totalDiscounts = 0;
+    let totalTaxes = 0;
+    let totalRevenue = 0;
+    let totalPaid = 0;
+    let totalDue = 0;
 
-    const paymentMethods = {
-      CASH: sales.filter((s: any) => s.paymentMethod === "CASH").reduce((sum: number, s: any) => sum + Number(s.totalAmount), 0),
-      CARD: sales.filter((s: any) => s.paymentMethod === "CARD").reduce((sum: number, s: any) => sum + Number(s.totalAmount), 0),
-      MOBILE: sales.filter((s: any) => s.paymentMethod === "MOBILE").reduce((sum: number, s: any) => sum + Number(s.totalAmount), 0),
+    const paymentBreakdown = {
+      cash: 0,
+      bkash: 0,
+      nagad: 0,
+      card: 0,
+      other: 0,
+      grandTotal: 0,
     };
+
+    const productMap = new Map<
+      string,
+      {
+        productId: string;
+        productName: string;
+        sku: string;
+        genericName: string | null;
+        category: string;
+        unitType: string;
+        quantitySold: number;
+        lowestUnitQuantitySold: number;
+        totalAmount: number;
+        averageUnitPrice: number;
+        transactionsCount: number;
+      }
+    >();
+
+    let totalUnitsSold = 0;
 
     // Hourly distribution
     const hourlyMap: Record<number, { count: number; revenue: number }> = {};
     for (let i = 0; i < 24; i++) hourlyMap[i] = { count: 0, revenue: 0 };
 
     sales.forEach((s: any) => {
+      const saleSubTotal = Number(s.subTotal || 0);
+      const saleDiscount = Number(s.discount || 0);
+      const saleTax = Number(s.tax || 0);
+      const saleTotal = Number(s.totalAmount || 0);
+      const salePaid = Number(s.paidAmount !== undefined ? s.paidAmount : saleTotal);
+      const saleDue = Number(s.dueAmount || 0);
+
+      totalSubTotal += saleSubTotal;
+      totalDiscounts += saleDiscount;
+      totalTaxes += saleTax;
+      totalRevenue += saleTotal;
+      totalPaid += salePaid;
+      totalDue += saleDue;
+
+      // Payment Method categorization
+      const method = s.paymentMethod;
+      const note = (s.notes || "").toLowerCase();
+
+      paymentBreakdown.grandTotal += saleTotal;
+
+      if (method === "CASH") {
+        paymentBreakdown.cash += saleTotal;
+      } else if (method === "CARD") {
+        paymentBreakdown.card += saleTotal;
+      } else if (method === "MOBILE") {
+        if (note.includes("nagad")) {
+          paymentBreakdown.nagad += saleTotal;
+        } else {
+          // Default mobile payment to bKash if not specifically Nagad
+          paymentBreakdown.bkash += saleTotal;
+        }
+      } else {
+        paymentBreakdown.other += saleTotal;
+      }
+
+      // Hourly metric
       const hour = new Date(s.createdAt).getHours();
       hourlyMap[hour].count += 1;
-      hourlyMap[hour].revenue += Number(s.totalAmount);
+      hourlyMap[hour].revenue += saleTotal;
+
+      // Aggregate Product Sales
+      (s.items || []).forEach((item: any) => {
+        const prod = item.product;
+        const pId = item.productId;
+        const qty = Number(item.quantity || 0);
+        const itemAmount = Number(item.subTotal || Number(item.unitPrice || 0) * qty);
+
+        totalUnitsSold += qty;
+
+        if (!productMap.has(pId)) {
+          productMap.set(pId, {
+            productId: pId,
+            productName: prod?.name || "Unknown Product",
+            sku: prod?.sku || "—",
+            genericName: prod?.genericName || null,
+            category: prod?.categoryRef?.name || prod?.brandName || "General Medicine",
+            unitType: item.unitType || prod?.unit || "Piece",
+            quantitySold: 0,
+            lowestUnitQuantitySold: 0,
+            totalAmount: 0,
+            averageUnitPrice: 0,
+            transactionsCount: 0,
+          });
+        }
+
+        const entry = productMap.get(pId)!;
+        entry.quantitySold += qty;
+        entry.lowestUnitQuantitySold += Number(item.lowestUnitQuantity || qty);
+        entry.totalAmount += itemAmount;
+        entry.transactionsCount += 1;
+      });
     });
+
+    const productSalesList = Array.from(productMap.values())
+      .map((p) => ({
+        ...p,
+        totalAmount: Math.round(p.totalAmount * 100) / 100,
+        averageUnitPrice:
+          p.quantitySold > 0 ? Math.round((p.totalAmount / p.quantitySold) * 100) / 100 : 0,
+      }))
+      .sort((a, b) => b.totalAmount - a.totalAmount);
+
+    const transactionList = sales.map((s: any) => {
+      const note = (s.notes || "").toLowerCase();
+      let paymentDetail = s.paymentMethod;
+      if (s.paymentMethod === "MOBILE") {
+        paymentDetail = note.includes("nagad") ? "Nagad" : "bKash";
+      } else if (s.paymentMethod === "CASH") {
+        paymentDetail = "Cash";
+      } else if (s.paymentMethod === "CARD") {
+        paymentDetail = "Card / POS";
+      }
+
+      return {
+        id: s.id,
+        receiptNo: s.receiptNo,
+        customerName: s.customerName || "Walk-in Customer",
+        customerPhone: s.customerPhone || null,
+        paymentMethod: s.paymentMethod,
+        paymentDetail,
+        subTotal: Number(s.subTotal),
+        discount: Number(s.discount),
+        tax: Number(s.tax),
+        totalAmount: Number(s.totalAmount),
+        paidAmount: Number(s.paidAmount),
+        dueAmount: Number(s.dueAmount),
+        status: s.status,
+        notes: s.notes,
+        createdAt: s.createdAt,
+        cashier: s.user ? { name: s.user.name, username: s.user.username } : null,
+        branch: s.branch ? { id: s.branch.id, name: s.branch.name } : null,
+        itemsCount: (s.items || []).length,
+        items: (s.items || []).map((i: any) => ({
+          name: i.product?.name || "Product",
+          quantity: i.quantity,
+          unitType: i.unitType,
+          unitPrice: Number(i.unitPrice),
+          subTotal: Number(i.subTotal),
+          batchNumber: i.batchNumber,
+        })),
+      };
+    });
+
+    const totalTransactions = sales.length;
 
     return {
       period: "Daily",
       startDate,
       endDate,
-      totalTransactions,
-      totalRevenue: Math.round(totalRevenue * 100) / 100,
-      totalDiscounts: Math.round(totalDiscounts * 100) / 100,
-      totalTaxes: Math.round(totalTaxes * 100) / 100,
-      averageOrderValue: totalTransactions > 0 ? Math.round((totalRevenue / totalTransactions) * 100) / 100 : 0,
-      paymentMethods,
+      pharmacy: {
+        name: tenant?.name || "Pharmacy Store",
+        address: targetBranch?.location || tenant?.address || "Main Branch",
+        phone: targetBranch?.phone || tenant?.phone || "—",
+        email: targetBranch?.email || tenant?.email || "—",
+        logoUrl: tenant?.logoUrl || null,
+      },
+      branch: targetBranch,
+      summary: {
+        totalSales: Math.round(totalRevenue * 100) / 100,
+        totalSubTotal: Math.round(totalSubTotal * 100) / 100,
+        totalDiscounts: Math.round(totalDiscounts * 100) / 100,
+        totalTaxes: Math.round(totalTaxes * 100) / 100,
+        totalPaid: Math.round(totalPaid * 100) / 100,
+        totalDue: Math.round(totalDue * 100) / 100,
+        transactionCount: totalTransactions,
+        totalUnitsSold,
+        averageOrderValue:
+          totalTransactions > 0 ? Math.round((totalRevenue / totalTransactions) * 100) / 100 : 0,
+      },
+      paymentBreakdown: {
+        cash: Math.round(paymentBreakdown.cash * 100) / 100,
+        bkash: Math.round(paymentBreakdown.bkash * 100) / 100,
+        nagad: Math.round(paymentBreakdown.nagad * 100) / 100,
+        card: Math.round(paymentBreakdown.card * 100) / 100,
+        other: Math.round(paymentBreakdown.other * 100) / 100,
+        grandTotal: Math.round(paymentBreakdown.grandTotal * 100) / 100,
+      },
+      productSales: productSalesList,
+      transactions: transactionList,
       hourlyBreakdown: hourlyMap,
     };
   }
@@ -398,6 +610,261 @@ export class ReportService {
       totalVatCollected: Math.round(totalVatCollected * 100) / 100,
       controlledSubstanceSales: controlledSalesCount,
       prescriptionSales: prescriptionSalesCount,
+    };
+  }
+
+  /**
+   * Comprehensive Owner/Manager Dashboard Analytics
+   */
+  static async getDashboardMetrics(
+    tenantId: string,
+    branchId?: string,
+    userRole?: string,
+    userBranchId?: string | null
+  ) {
+    const effectiveBranchId = ["BRANCH_MANAGER", "CASHIER"].includes(userRole || "") && userBranchId
+      ? userBranchId
+      : branchId;
+
+    const saleWhere: any = {
+      tenantId,
+      status: "COMPLETED",
+    };
+    if (effectiveBranchId) saleWhere.branchId = effectiveBranchId;
+
+    const inventoryWhere: any = {
+      product: { tenantId, isActive: true },
+      branch: { tenantId, isActive: true },
+    };
+    if (effectiveBranchId) inventoryWhere.branchId = effectiveBranchId;
+
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const ninetyDaysFuture = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
+
+    const [sales, inventories, accounts, suppliers] = await Promise.all([
+      (prisma as any).sale.findMany({
+        where: saleWhere,
+        include: {
+          items: {
+            include: {
+              product: {
+                select: { id: true, name: true, categoryId: true, category: { select: { name: true } } },
+              },
+            },
+          },
+        },
+        orderBy: { createdAt: "asc" },
+      }),
+      (prisma as any).inventory.findMany({
+        where: inventoryWhere,
+        include: {
+          product: {
+            include: {
+              category: { select: { name: true } },
+            },
+          },
+        },
+      }),
+      (prisma as any).financialAccount.findMany({
+        where: { tenantId, isActive: true, ...(effectiveBranchId ? { branchId: effectiveBranchId } : {}) },
+      }),
+      (prisma as any).supplier.findMany({
+        where: { tenantId, isActive: true },
+        select: { dueBalance: true },
+      }),
+    ]);
+
+    // Financial calculations
+    let totalRevenue = 0;
+    let totalCost = 0;
+    let todaySales = 0;
+    let todayTransactions = 0;
+    let weeklySales = 0;
+    let monthlySales = 0;
+
+    const paymentBreakdown = {
+      CASH: 0,
+      CARD: 0,
+      MOBILE: 0,
+      OTHER: 0,
+    };
+
+    const categoryMap: Record<string, { name: string; revenue: number; count: number }> = {};
+    const productSalesMap: Record<string, { id: string; name: string; quantity: number; revenue: number }> = {};
+    const dailyTrendMap: Record<string, { date: string; sales: number; revenue: number; profit: number }> = {};
+
+    // Initialize last 7 days trend
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+      const dateStr = d.toISOString().split("T")[0];
+      dailyTrendMap[dateStr] = { date: dateStr, sales: 0, revenue: 0, profit: 0 };
+    }
+
+    sales.forEach((s: any) => {
+      const saleAmount = Number(s.totalAmount);
+      totalRevenue += saleAmount;
+
+      const saleDate = new Date(s.createdAt);
+      if (saleDate >= todayStart) {
+        todaySales += saleAmount;
+        todayTransactions += 1;
+      }
+      if (saleDate >= new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)) {
+        weeklySales += saleAmount;
+      }
+      if (saleDate >= thirtyDaysAgo) {
+        monthlySales += saleAmount;
+      }
+
+      // Payment method
+      const method = s.paymentMethod as keyof typeof paymentBreakdown;
+      if (paymentBreakdown[method] !== undefined) {
+        paymentBreakdown[method] += saleAmount;
+      } else {
+        paymentBreakdown.OTHER += saleAmount;
+      }
+
+      // Items calculation for profit, categories, top products
+      let saleCost = 0;
+      s.items.forEach((item: any) => {
+        const itemSub = Number(item.subTotal);
+        const itemQty = item.quantity;
+        const purchaseP = Number(item.purchasePrice || 0);
+        saleCost += purchaseP * itemQty;
+
+        // Category
+        const catName = item.product?.category?.name || "General / Uncategorized";
+        if (!categoryMap[catName]) {
+          categoryMap[catName] = { name: catName, revenue: 0, count: 0 };
+        }
+        categoryMap[catName].revenue += itemSub;
+        categoryMap[catName].count += itemQty;
+
+        // Top products
+        const pId = item.productId;
+        const pName = item.product?.name || "Product";
+        if (!productSalesMap[pId]) {
+          productSalesMap[pId] = { id: pId, name: pName, quantity: 0, revenue: 0 };
+        }
+        productSalesMap[pId].quantity += itemQty;
+        productSalesMap[pId].revenue += itemSub;
+      });
+
+      totalCost += saleCost;
+
+      // Trend mapping
+      const dateKey = saleDate.toISOString().split("T")[0];
+      if (dailyTrendMap[dateKey]) {
+        dailyTrendMap[dateKey].sales += 1;
+        dailyTrendMap[dateKey].revenue += saleAmount;
+        dailyTrendMap[dateKey].profit += Math.max(0, saleAmount - saleCost);
+      }
+    });
+
+    const totalProfit = Math.max(0, totalRevenue - totalCost);
+
+    // Inventory calculations
+    let totalStockUnits = 0;
+    let totalInventoryValue = 0;
+    let lowStockCount = 0;
+    let nearExpiryCount = 0;
+    let expiredCount = 0;
+
+    const lowStockItems: any[] = [];
+    const nearExpiryItems: any[] = [];
+
+    inventories.forEach((inv: any) => {
+      totalStockUnits += inv.quantity;
+      const unitVal = Number(inv.purchasePrice || inv.product?.basePrice || 0);
+      totalInventoryValue += inv.quantity * unitVal;
+
+      const threshold = inv.lowStockThreshold || 10;
+      if (inv.quantity <= threshold) {
+        lowStockCount += 1;
+        if (lowStockItems.length < 5) {
+          lowStockItems.push({
+            id: inv.id,
+            productName: inv.product?.name,
+            batchNumber: inv.batchNumber,
+            quantity: inv.quantity,
+            threshold,
+            rackLocation: inv.rackLocation || "N/A",
+          });
+        }
+      }
+
+      if (inv.expiryDate) {
+        const expDate = new Date(inv.expiryDate);
+        if (expDate < now) {
+          expiredCount += 1;
+        } else if (expDate <= ninetyDaysFuture) {
+          nearExpiryCount += 1;
+          if (nearExpiryItems.length < 5) {
+            nearExpiryItems.push({
+              id: inv.id,
+              productName: inv.product?.name,
+              batchNumber: inv.batchNumber,
+              expiryDate: inv.expiryDate,
+              quantity: inv.quantity,
+              rackLocation: inv.rackLocation || "N/A",
+            });
+          }
+        }
+      }
+    });
+
+    // Balances
+    let cashBalance = 0;
+    let bankBalance = 0;
+    let digitalWalletBalance = 0;
+
+    accounts.forEach((acc: any) => {
+      const bal = Number(acc.balance || 0);
+      if (acc.type === "CASH") cashBalance += bal;
+      else if (acc.type === "BANK" || acc.type === "CARD_SETTLEMENT") bankBalance += bal;
+      else if (acc.type === "MOBILE") digitalWalletBalance += bal;
+    });
+
+    const totalSupplierDues = suppliers.reduce((sum: number, s: any) => sum + Number(s.dueBalance || 0), 0);
+
+    const topSellingProducts = Object.values(productSalesMap)
+      .sort((a, b) => b.quantity - a.quantity)
+      .slice(0, 5);
+
+    const categoryDistribution = Object.values(categoryMap)
+      .sort((a, b) => b.revenue - a.revenue);
+
+    return {
+      summary: {
+        totalSales: sales.length,
+        totalRevenue: Math.round(totalRevenue * 100) / 100,
+        todaySales: Math.round(todaySales * 100) / 100,
+        todayTransactions,
+        weeklySales: Math.round(weeklySales * 100) / 100,
+        monthlySales: Math.round(monthlySales * 100) / 100,
+        totalProfit: Math.round(totalProfit * 100) / 100,
+        totalInventoryValue: Math.round(totalInventoryValue * 100) / 100,
+        totalStockUnits,
+        lowStockCount,
+        nearExpiryCount,
+        expiredCount,
+        supplierDues: Math.round(totalSupplierDues * 100) / 100,
+        cashBalance: Math.round(cashBalance * 100) / 100,
+        bankBalance: Math.round(bankBalance * 100) / 100,
+        digitalWalletBalance: Math.round(digitalWalletBalance * 100) / 100,
+      },
+      charts: {
+        dailySalesTrend: Object.values(dailyTrendMap),
+        paymentBreakdown,
+        categoryDistribution,
+        topSellingProducts,
+      },
+      alerts: {
+        lowStockItems,
+        nearExpiryItems,
+      },
     };
   }
 }

@@ -4,7 +4,7 @@ import React from "react";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { useSettings } from "@/context/SettingsContext";
-import { Pill, LogOut, Shield, ExternalLink } from "lucide-react";
+import { Pill, LogOut, Shield, ExternalLink, Cpu, FolderKanban, Lock } from "lucide-react";
 
 interface AdminHeaderProps {
   activeTab: string;
@@ -13,6 +13,10 @@ interface AdminHeaderProps {
 export function AdminHeader({ activeTab }: AdminHeaderProps) {
   const { user, logout } = useAuth();
   const { settings } = useSettings();
+
+  const isSuperAdmin = user?.role === "SUPER_ADMIN";
+  const isCTO = user?.role === "CTO";
+  const isPM = user?.role === "PROJECT_MANAGER";
 
   return (
     <header className="h-16 border-b border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md px-6 flex items-center justify-between sticky top-0 z-40">
@@ -36,10 +40,28 @@ export function AdminHeader({ activeTab }: AdminHeaderProps) {
           </span>
         </Link>
         <span className="text-slate-300 dark:text-slate-700 hidden sm:inline">/</span>
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
-          <Shield className="h-3 w-3" />
-          Super Admin
-        </span>
+        
+        {isSuperAdmin ? (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
+            <Lock className="h-3 w-3" />
+            Super Admin (Root)
+          </span>
+        ) : isCTO ? (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+            <Cpu className="h-3 w-3" />
+            Platform CTO (Delegated Admin)
+          </span>
+        ) : isPM ? (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
+            <FolderKanban className="h-3 w-3" />
+            Project Manager (Delegated Admin)
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-slate-500/10 text-slate-600 dark:text-slate-400 border border-slate-500/20">
+            <Shield className="h-3 w-3" />
+            Platform Console
+          </span>
+        )}
       </div>
 
       <div className="flex items-center gap-4">
@@ -56,8 +78,12 @@ export function AdminHeader({ activeTab }: AdminHeaderProps) {
 
         <div className="flex items-center gap-3">
           <div className="text-right hidden sm:block">
-            <div className="text-xs font-bold text-slate-900 dark:text-white">{user?.username || "Super Admin"}</div>
-            <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">Platform HQ</div>
+            <div className="text-xs font-bold text-slate-900 dark:text-white">
+              {user?.name || user?.username || "Platform Staff"}
+            </div>
+            <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
+              Platform HQ • {user?.role || "Staff"}
+            </div>
           </div>
 
           <button

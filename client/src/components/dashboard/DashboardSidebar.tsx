@@ -28,11 +28,13 @@ import {
   PackagePlus,
   PackageCheck,
   CalendarX2,
+  Wallet,
 } from "lucide-react";
 
 export type OwnerModule =
   | "overview"
   | "pos"
+  | "accounts"
   | "inv_add_product"
   | "inv_product_list"
   | "inv_variants"
@@ -81,8 +83,10 @@ export function DashboardSidebar({
 }: DashboardSidebarProps) {
   const isOwner = userRole === "COMPANY_OWNER";
   const isRegional = userRole === "REGIONAL_ADMIN";
-  const isManager = userRole === "BRANCH_MANAGER";
+  const isManager = userRole === "BRANCH_MANAGER" || userRole === "MANAGER";
+  const isInventory = userRole === "INVENTORY_EXECUTIVE";
   const isCashier = userRole === "CASHIER";
+  const isAccounts = userRole === "ACCOUNTS";
   const isAuditor = userRole === "AUDITOR";
 
   // Collapsible state for parent groups: "inventory", "stock", "supplier"
@@ -110,29 +114,12 @@ export function DashboardSidebar({
     }));
   };
 
-  // Exact Requested Structure with Dedicated Route IDs:
-  // 📦 Inventory
-  //   ├─ Add Product (inv_add_product)
-  //   ├─ Product List (inv_product_list)
-  //   ├─ Variants (inv_variants)
-  //   └─ Expired Products (inv_expired_products)
-  // 🔄 Stock Management
-  //   ├─ Add Stock (stock_add_stock)
-  //   ├─ Stock List (stock_stock_list)
-  //   ├─ Stock History (stock_stock_history)
-  //   ├─ Transfer Stock (stock_transfer_stock)
-  //   ├─ Transfer History (stock_transfer_history)
-  //   └─ Stock Receive (stock_stock_receive)
-  // 🏭 Supplier Management
-  //   ├─ Suppliers (sup_suppliers)
-  //   ├─ Purchase History (sup_purchase_history)
-  //   └─ Payments / Due (sup_payments_due)
   const collapsibleSections: ParentMenuItem[] = [
     {
       id: "inventory",
       label: "Inventory",
       icon: Package,
-      visible: isOwner || isRegional || isManager || isCashier || isAuditor,
+      visible: isOwner || isRegional || isManager || isInventory || isAuditor,
       children: [
         {
           id: "inv_add_product",
@@ -160,7 +147,7 @@ export function DashboardSidebar({
       id: "stock",
       label: "Stock Management",
       icon: RefreshCw,
-      visible: isOwner || isRegional || isManager || isAuditor,
+      visible: isOwner || isRegional || isManager || isInventory || isAuditor,
       children: [
         {
           id: "stock_add_stock",
@@ -198,7 +185,7 @@ export function DashboardSidebar({
       id: "supplier",
       label: "Supplier Management",
       icon: Factory,
-      visible: isOwner || isRegional || isManager || isAuditor,
+      visible: isOwner || isRegional || isManager || isInventory || isAccounts || isAuditor,
       children: [
         {
           id: "sup_suppliers",
@@ -223,15 +210,21 @@ export function DashboardSidebar({
   const coreItems = [
     {
       id: "overview" as OwnerModule,
-      label: isManager ? "Branch Overview" : isCashier ? "Cashier Hub" : "Dashboard",
+      label: isManager ? "Branch Overview" : isAccounts ? "Financial Overview" : isCashier ? "Cashier Hub" : "Dashboard",
       icon: LayoutDashboard,
-      visible: !isCashier,
+      visible: !isCashier && !isInventory,
     },
     {
       id: "pos" as OwnerModule,
       label: isCashier ? "Counter POS (Active)" : "Sales / Counter POS",
       icon: ShoppingCart,
       visible: isOwner || isRegional || isManager || isCashier,
+    },
+    {
+      id: "accounts" as OwnerModule,
+      label: "Accounts & Ledger",
+      icon: Wallet,
+      visible: isOwner || isAccounts || isManager,
     },
   ];
 
@@ -250,7 +243,7 @@ export function DashboardSidebar({
     },
     {
       id: "roles" as OwnerModule,
-      label: "Roles & Security",
+      label: "Roles & Permissions",
       icon: Shield,
       visible: isOwner || isAuditor,
     },
@@ -261,7 +254,7 @@ export function DashboardSidebar({
       id: "reports" as OwnerModule,
       label: isCashier ? "Daily Shift Sales" : "Sales & MIS Reports",
       icon: BarChart3,
-      visible: true,
+      visible: !isInventory,
     },
     {
       id: "profile" as OwnerModule,
@@ -286,10 +279,10 @@ export function DashboardSidebar({
   return (
     <aside className="w-64 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col shrink-0 min-h-[calc(100vh-4rem)]">
       <div className="p-3.5 space-y-5 flex-1 overflow-y-auto">
-        {/* Core Operations (Dashboard, POS) */}
+        {/* Core Operations (Dashboard, POS, Accounts) */}
         <div className="space-y-1">
           <div className="px-3 text-[10px] font-black uppercase tracking-wider text-slate-400">
-            Overview & Sales
+            Overview & Counter
           </div>
           {coreItems
             .filter((item) => item.visible)
@@ -302,7 +295,7 @@ export function DashboardSidebar({
                   onClick={() => onModuleChange(item.id)}
                   className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
                     isActive
-                      ? "bg-brand-primary text-white shadow-sm"
+                      ? "bg-emerald-600 text-white shadow-sm"
                       : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white"
                   }`}
                 >
@@ -324,20 +317,17 @@ export function DashboardSidebar({
             .map((section) => {
               const ParentIcon = section.icon;
               const isOpen = !!openParents[section.id];
-              
-              // Check if any child in this section is currently active
               const isParentActive = section.children.some(
                 (child) => activeModule === child.id
               );
 
               return (
                 <div key={section.id} className="rounded-xl overflow-hidden">
-                  {/* Parent Collapsible Header */}
                   <button
                     onClick={() => toggleParent(section.id)}
                     className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-black transition-all ${
                       isParentActive && !isOpen
-                        ? "bg-brand-primary/10 text-brand-primary dark:bg-brand-primary/20"
+                        ? "bg-emerald-600/10 text-emerald-600 dark:bg-emerald-600/20"
                         : isParentActive && isOpen
                         ? "bg-slate-100 dark:bg-slate-800/60 text-slate-900 dark:text-white"
                         : "text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/50"
@@ -346,38 +336,35 @@ export function DashboardSidebar({
                     <div className="flex items-center gap-2.5">
                       <ParentIcon
                         className={`h-4 w-4 shrink-0 ${
-                          isParentActive ? "text-brand-primary" : "text-slate-500 dark:text-slate-400"
+                          isParentActive ? "text-emerald-600" : "text-slate-500 dark:text-slate-400"
                         }`}
                       />
                       <span>{section.label}</span>
                     </div>
-                    <div className="p-0.5 text-slate-400">
-                      {isOpen ? (
-                        <ChevronDown className="h-3.5 w-3.5 transition-transform duration-200" />
-                      ) : (
-                        <ChevronRight className="h-3.5 w-3.5 transition-transform duration-200" />
-                      )}
-                    </div>
+                    {isOpen ? (
+                      <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+                    ) : (
+                      <ChevronRight className="h-3.5 w-3.5 text-slate-400" />
+                    )}
                   </button>
 
-                  {/* Submenu Children */}
+                  {/* Sub-items */}
                   {isOpen && (
-                    <div className="mt-1 ml-3.5 pl-2.5 border-l-2 border-slate-150 dark:border-slate-800 space-y-1 animate-in fade-in duration-150">
+                    <div className="pl-4 pr-1 py-1 space-y-0.5 border-l-2 border-slate-100 dark:border-slate-800 ml-3.5 mt-1">
                       {section.children.map((child) => {
                         const ChildIcon = child.icon;
                         const isChildActive = activeModule === child.id;
-
                         return (
                           <button
                             key={child.id}
                             onClick={() => onModuleChange(child.id)}
-                            className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all text-left ${
+                            className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all ${
                               isChildActive
-                                ? "bg-brand-primary text-white shadow-xs font-black"
-                                : "text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
+                                ? "bg-emerald-600 text-white shadow-xs"
+                                : "text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white"
                             }`}
                           >
-                            <ChildIcon className="h-3.5 w-3.5 shrink-0 opacity-85" />
+                            <ChildIcon className="h-3.5 w-3.5 shrink-0" />
                             <span className="truncate">{child.label}</span>
                           </button>
                         );
@@ -389,10 +376,10 @@ export function DashboardSidebar({
             })}
         </div>
 
-        {/* Organization Network */}
+        {/* Organization / Staff */}
         <div className="space-y-1">
           <div className="px-3 text-[10px] font-black uppercase tracking-wider text-slate-400">
-            Organization
+            Administration
           </div>
           {orgItems
             .filter((item) => item.visible)
@@ -405,7 +392,7 @@ export function DashboardSidebar({
                   onClick={() => onModuleChange(item.id)}
                   className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
                     isActive
-                      ? "bg-brand-primary text-white shadow-sm"
+                      ? "bg-emerald-600 text-white shadow-sm"
                       : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white"
                   }`}
                 >
@@ -416,10 +403,10 @@ export function DashboardSidebar({
             })}
         </div>
 
-        {/* Enterprise & Finance */}
+        {/* System / Reports */}
         <div className="space-y-1">
           <div className="px-3 text-[10px] font-black uppercase tracking-wider text-slate-400">
-            Enterprise & Finance
+            System & Analytics
           </div>
           {enterpriseItems
             .filter((item) => item.visible)
@@ -432,7 +419,7 @@ export function DashboardSidebar({
                   onClick={() => onModuleChange(item.id)}
                   className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
                     isActive
-                      ? "bg-brand-primary text-white shadow-sm"
+                      ? "bg-emerald-600 text-white shadow-sm"
                       : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white"
                   }`}
                 >

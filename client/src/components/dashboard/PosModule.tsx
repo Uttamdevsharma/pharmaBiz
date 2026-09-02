@@ -23,6 +23,8 @@ import {
   CheckCircle2,
   X,
   Tag,
+  Boxes,
+  MapPin,
 } from "lucide-react";
 
 interface CartItem {
@@ -42,6 +44,8 @@ interface CartItem {
   availableBaseStock: number;
   batchNumber?: string | null;
   expiryDate?: string | null;
+  inventoryId?: string | null;
+  shelfLocation?: string | null;
   isControlled: boolean;
   requiresPrescription: boolean;
 }
@@ -62,6 +66,8 @@ export function PosModule() {
   const [discountValue, setDiscountValue] = useState<number>(0);
   const [taxPercent, setTaxPercent] = useState<number>(0);
   const [paymentMethod, setPaymentMethod] = useState<"CASH" | "CARD" | "MOBILE">("CASH");
+  const [mobileProvider, setMobileProvider] = useState<"bKash" | "Nagad">("bKash");
+  const [mobileTrxId, setMobileTrxId] = useState<string>("");
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [paidInput, setPaidInput] = useState<string>("");
@@ -70,6 +76,9 @@ export function PosModule() {
 
   const [checkingOut, setCheckingOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Batch Selection Modal
+  const [batchSelectProduct, setBatchSelectProduct] = useState<any>(null);
 
   // Professional Invoice Modal
   const [receiptModalOpen, setReceiptModalOpen] = useState(false);
@@ -145,7 +154,8 @@ export function PosModule() {
   };
 
   // Add Product to Cart with default packaging unit
-  const addToCart = (p: Product) => {
+  const addToCart = (p: any, selectedBatch?: any) => {
+    const batches = p.batches || [];
     const availableStock = p.currentStock || 0;
     if (availableStock <= 0) {
       alert(`"${p.name}" has 0 stock available in this branch.`);
@@ -176,7 +186,12 @@ export function PosModule() {
       const unitPrice = basePrice * multiplier;
 
       // Find nearest batch expiry if available
-      const nearestBatch = (p as any).batches && (p as any).batches[0];
+      const nearestBatch = selectedBatch || (batches.length > 0 ? batches[0] : null);
+
+      if (!selectedBatch && batches.length > 1) {
+        setBatchSelectProduct(p);
+        return;
+      }
 
       setCart([
         ...cart,
@@ -194,9 +209,11 @@ export function PosModule() {
           basePrice,
           stripsPerBox: strips,
           tabletsPerStrip: tabsPerStrip,
-          availableBaseStock: availableStock,
+          availableBaseStock: nearestBatch ? nearestBatch.quantity : availableStock,
           batchNumber: nearestBatch?.batchNumber || null,
           expiryDate: nearestBatch?.expiryDate || null,
+          inventoryId: nearestBatch?.id || null,
+          shelfLocation: nearestBatch?.shelfLocation || null,
           isControlled: p.isControlled,
           requiresPrescription: p.requiresPrescription,
         },
@@ -303,11 +320,17 @@ export function PosModule() {
       setCheckingOut(true);
       setError(null);
 
+      let paymentNote: string | null = null;
+      if (paymentMethod === "MOBILE") {
+        paymentNote = `${mobileProvider}${mobileTrxId.trim() ? ` (Trx: ${mobileTrxId.trim()})` : ""}`;
+      }
+
       const payload = {
         branchId: selectedBranchId,
         customerName: customerName.trim() || "Walk-in Customer",
         customerPhone: customerPhone.trim() || null,
         paymentMethod,
+        notes: paymentNote,
         discount: discountValue,
         discountType,
         tax: taxAmount,
@@ -316,6 +339,7 @@ export function PosModule() {
         managerApprovedBy: managerPin.trim() || null,
         items: cart.map((item) => ({
           productId: item.productId,
+          inventoryId: item.inventoryId || null,
           unitType: item.unitType,
           unitMultiplier: item.unitMultiplier,
           quantity: item.quantity,
@@ -348,6 +372,7 @@ export function PosModule() {
       setDiscountValue(0);
       setManagerPin("");
       setPrescriptionRef("");
+      setMobileTrxId("");
       loadPosProducts();
     } catch (err: any) {
       setError(err.message);
@@ -601,6 +626,11 @@ export function PosModule() {
                           <div className="text-[10px] text-slate-400">
                             {item.genericName ? `${item.genericName} • ` : ""}Base: ৳{item.basePrice.toFixed(2)} • Stock: {item.availableBaseStock}
                           </div>
+                          {item.batchNumber && (
+                            <div className="text-[9px] font-bold text-brand-primary mt-0.5 bg-brand-primary/10 px-1.5 py-0.5 rounded inline-block">
+                              Batch: {item.batchNumber} • Loc: {item.shelfLocation || "N/A"}
+                            </div>
+                          )}
                         </div>
                         <button
                           onClick={() => updateQuantity(item.productId, 0)}
@@ -757,6 +787,42 @@ export function PosModule() {
                       );
                     })}
                   </div>
+
+                  {paymentMethod === "MOBILE" && (
+                    <div className="mt-2 p-2.5 bg-pink-50/50 dark:bg-pink-950/20 border border-pink-200 dark:border-pink-900 rounded-xl space-y-2">
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setMobileProvider("bKash")}
+                          className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition ${
+                            mobileProvider === "bKash"
+                              ? "bg-pink-600 text-white shadow-sm"
+                              : "bg-white dark:bg-slate-800 text-slate-600 border border-slate-200 dark:border-slate-700"
+                          }`}
+                        >
+                          bKash
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setMobileProvider("Nagad")}
+                          className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition ${
+                            mobileProvider === "Nagad"
+                              ? "bg-orange-600 text-white shadow-sm"
+                              : "bg-white dark:bg-slate-800 text-slate-600 border border-slate-200 dark:border-slate-700"
+                          }`}
+                        >
+                          Nagad
+                        </button>
+                      </div>
+                      <input
+                        type="text"
+                        placeholder={`${mobileProvider} Transaction ID / Phone (optional)`}
+                        value={mobileTrxId}
+                        onChange={(e) => setMobileTrxId(e.target.value)}
+                        className="w-full px-2.5 py-1 bg-white dark:bg-slate-800 border border-pink-200 dark:border-pink-900 rounded-lg text-xs outline-none"
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {/* Paid & Due / Change Calculation */}
@@ -1098,6 +1164,73 @@ export function PosModule() {
                 <Printer className="h-4 w-4" />
                 Print Invoice Receipt
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Batch Select Modal */}
+      {batchSelectProduct && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-2xl shadow-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
+                <Boxes className="h-5 w-5 text-brand-primary" />
+                Select Batch for {batchSelectProduct.name}
+              </h3>
+              <button
+                onClick={() => setBatchSelectProduct(null)}
+                className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            
+            <div className="grid gap-3 max-h-[60vh] overflow-y-auto pr-1">
+              {(batchSelectProduct.batches || []).map((batch: any) => {
+                const isExpired = batch.expiryDate && new Date(batch.expiryDate) < new Date();
+                return (
+                  <div
+                    key={batch.id}
+                    onClick={() => {
+                      if (!isExpired) {
+                        addToCart(batchSelectProduct, batch);
+                        setBatchSelectProduct(null);
+                      }
+                    }}
+                    className={`p-4 rounded-xl border flex items-center justify-between transition ${
+                      isExpired
+                        ? "bg-rose-50/50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900/50 opacity-60 cursor-not-allowed"
+                        : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-brand-primary cursor-pointer"
+                    }`}
+                  >
+                    <div>
+                      <div className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                        Batch: {batch.batchNumber || "Unassigned"}
+                        {isExpired && (
+                          <span className="text-[10px] bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded font-bold uppercase tracking-wide">Expired</span>
+                        )}
+                        {!isExpired && batch.quantity <= 0 && (
+                          <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-bold uppercase tracking-wide">Empty</span>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-slate-500 mt-1 flex items-center gap-3">
+                        <span className="flex items-center gap-1">
+                          <span className="font-semibold text-slate-600 dark:text-slate-400">Expiry:</span> 
+                          {batch.expiryDate ? new Date(batch.expiryDate).toLocaleDateString() : "N/A"}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <MapPin className="h-3 w-3 text-slate-400" />
+                          <span className="font-semibold text-slate-600 dark:text-slate-400">Loc:</span> 
+                          {batch.shelfLocation || "Rack unassigned"}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-black text-slate-900 dark:text-white">{batch.quantity} Units</div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>

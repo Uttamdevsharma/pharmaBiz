@@ -3,8 +3,13 @@ enum RoleName {
   COMPANY_OWNER
   REGIONAL_ADMIN
   BRANCH_MANAGER
+  MANAGER
+  INVENTORY_EXECUTIVE
   CASHIER
+  ACCOUNTS
   AUDITOR
+  CTO
+  PROJECT_MANAGER
 }
 
 model User {
@@ -24,6 +29,7 @@ model User {
   tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   branch       Branch?   @relation(fields: [branchId], references: [id], onDelete: SetNull)
   sales        Sale[]
+  financialTransactions FinancialTransaction[]
 
   @@index([tenantId])
   @@index([branchId])

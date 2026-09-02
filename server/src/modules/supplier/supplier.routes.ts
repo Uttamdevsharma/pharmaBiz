@@ -2,6 +2,7 @@ import { Router } from "express";
 import { SupplierController } from "./supplier.controller";
 import { authenticate } from "../../middleware/authenticate";
 import { authorize } from "../../middleware/authorize";
+import { requirePermission } from "../../middleware/requirePermission";
 import { validateRequest } from "../../middleware/validate";
 import { requireActiveSubscription } from "../../middleware/planLimiter";
 import {
@@ -20,48 +21,48 @@ router.use(authenticate, requireActiveSubscription);
 // Supplier CRUD
 router.get(
   "/",
-  authorize(["COMPANY_OWNER", "REGIONAL_ADMIN", "BRANCH_MANAGER", "AUDITOR"]),
+  requirePermission("supplier.view"),
   validateRequest({ query: listSuppliersQuerySchema }),
   SupplierController.listSuppliers
 );
 
 router.get(
   "/:id",
-  authorize(["COMPANY_OWNER", "REGIONAL_ADMIN", "BRANCH_MANAGER", "AUDITOR"]),
+  requirePermission("supplier.view"),
   SupplierController.getSupplierById
 );
 
 router.post(
   "/",
-  authorize(["COMPANY_OWNER", "REGIONAL_ADMIN", "BRANCH_MANAGER"]),
+  requirePermission("supplier.manage"),
   validateRequest({ body: createSupplierSchema }),
   SupplierController.createSupplier
 );
 
 router.patch(
   "/:id",
-  authorize(["COMPANY_OWNER", "REGIONAL_ADMIN", "BRANCH_MANAGER"]),
+  requirePermission("supplier.manage"),
   validateRequest({ body: updateSupplierSchema }),
   SupplierController.updateSupplier
 );
 
 router.delete(
   "/:id",
-  authorize(["COMPANY_OWNER"]),
+  authorize(["COMPANY_OWNER", "SUPER_ADMIN"]),
   SupplierController.deleteSupplier
 );
 
 // Purchases / Stock Inward
 router.post(
   "/purchases",
-  authorize(["COMPANY_OWNER", "REGIONAL_ADMIN", "BRANCH_MANAGER"]),
+  requirePermission("inventory.add_stock"),
   validateRequest({ body: createPurchaseSchema }),
   SupplierController.recordPurchase
 );
 
 router.get(
   "/purchases/list",
-  authorize(["COMPANY_OWNER", "REGIONAL_ADMIN", "BRANCH_MANAGER", "AUDITOR"]),
+  requirePermission("supplier.view"),
   validateRequest({ query: listPurchasesQuerySchema }),
   SupplierController.listPurchases
 );
@@ -69,7 +70,7 @@ router.get(
 // Settle due payment to supplier
 router.post(
   "/:id/payments",
-  authorize(["COMPANY_OWNER", "BRANCH_MANAGER"]),
+  requirePermission("accounts.manage"),
   validateRequest({ body: recordSupplierPaymentSchema }),
   SupplierController.recordSupplierPayment
 );

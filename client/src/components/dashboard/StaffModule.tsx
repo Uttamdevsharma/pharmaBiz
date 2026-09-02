@@ -368,12 +368,10 @@ export function StaffModule() {
                     onChange={(e) => setFormData({ ...formData, role: e.target.value })}
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none text-xs font-bold"
                   >
-                    <option value="CASHIER">Cashier (POS Sales)</option>
-                    {!isManager && <option value="BRANCH_MANAGER">Branch Manager (Stock/Voids)</option>}
-                    {allowsRegionalAdmin && (
-                      <option value="REGIONAL_ADMIN">Regional Admin (Transfers)</option>
-                    )}
-                    {allowsAuditor && <option value="AUDITOR">Auditor (Read-Only)</option>}
+                    {!isManager && <option value="BRANCH_MANAGER">Branch Manager (Branch Operations & Staff)</option>}
+                    <option value="INVENTORY_EXECUTIVE">Inventory Executive (Products, Batches & Stock)</option>
+                    <option value="CASHIER">Cashier (POS Counter Sales & FEFO)</option>
+                    <option value="ACCOUNTS">Accounts (Financial Ledgers & Wallets)</option>
                   </select>
                 </div>
 

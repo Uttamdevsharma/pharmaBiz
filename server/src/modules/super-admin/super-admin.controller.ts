@@ -144,4 +144,97 @@ export class SuperAdminController {
       res.status(500).json({ success: false, message: error.message });
     }
   }
+
+  // ==================== PLATFORM STAFF (CTO / PROJECT MANAGER) ====================
+  static async listPlatformStaff(req: Request, res: Response): Promise<void> {
+    try {
+      const staff = await SuperAdminService.listPlatformStaff();
+      res.status(200).json({ success: true, data: staff });
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
+
+  static async createPlatformStaff(req: Request, res: Response): Promise<void> {
+    try {
+      const creatorId = req.user!.id;
+      const creatorRole = req.user!.role;
+      const staff = await SuperAdminService.createPlatformStaff(creatorId, creatorRole, req.body);
+      res.status(201).json({
+        success: true,
+        message: `Platform staff member (${staff.role}) created successfully`,
+        data: staff,
+      });
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  }
+
+  static async updatePlatformStaff(req: Request, res: Response): Promise<void> {
+    try {
+      const id = req.params.id as string;
+      const updaterId = req.user!.id;
+      const updaterRole = req.user!.role;
+      const updated = await SuperAdminService.updatePlatformStaff(id, updaterId, updaterRole, req.body);
+      res.status(200).json({
+        success: true,
+        message: "Platform staff member updated successfully",
+        data: updated,
+      });
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  }
+
+  static async updatePlatformStaffStatus(req: Request, res: Response): Promise<void> {
+    try {
+      const id = req.params.id as string;
+      const updaterId = req.user!.id;
+      const updaterRole = req.user!.role;
+      const { isActive } = req.body;
+      const updated = await SuperAdminService.updatePlatformStaffStatus(id, updaterId, updaterRole, isActive);
+      res.status(200).json({
+        success: true,
+        message: `Platform staff member ${isActive ? "activated" : "deactivated"} successfully`,
+        data: updated,
+      });
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  }
+
+  static async deletePlatformStaff(req: Request, res: Response): Promise<void> {
+    try {
+      const id = req.params.id as string;
+      const updaterId = req.user!.id;
+      const updaterRole = req.user!.role;
+      const result = await SuperAdminService.deletePlatformStaff(id, updaterId, updaterRole);
+      res.status(200).json(result);
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  }
+
+  static async getPlatformPermissions(req: Request, res: Response): Promise<void> {
+    try {
+      const hierarchy = await SuperAdminService.getPlatformPermissionsHierarchy();
+      res.status(200).json({ success: true, data: hierarchy });
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
+
+  static async updatePlatformPermissions(req: Request, res: Response): Promise<void> {
+    try {
+      const { role, permissions } = req.body;
+      const result = await SuperAdminService.updatePlatformRolePermissions(role, permissions);
+      res.status(200).json({
+        success: true,
+        message: `Platform permissions for ${role} updated successfully`,
+        data: result,
+      });
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  }
 }

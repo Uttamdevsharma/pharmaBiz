@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const reportDateRangeSchema = z.object({
-  branchId: z.string().uuid().optional(),
+  branchId: z.string().optional().transform(v => (v === "" || v === "null" || v === "undefined" || v === "all" ? undefined : v)),
   startDate: z.string().optional(),
   endDate: z.string().optional(),
 });

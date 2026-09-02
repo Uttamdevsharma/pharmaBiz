@@ -13,6 +13,7 @@ import { BranchModule } from "@/components/dashboard/BranchModule";
 import { StaffModule } from "@/components/dashboard/StaffModule";
 import { RolesModule } from "@/components/dashboard/RolesModule";
 import { PosModule } from "@/components/dashboard/PosModule";
+import { AccountsModule } from "@/components/dashboard/AccountsModule";
 import { ReportsModule } from "@/components/dashboard/ReportsModule";
 import { SubscriptionModule } from "@/components/dashboard/SubscriptionModule";
 import { SettingsModule } from "@/components/dashboard/SettingsModule";
@@ -43,12 +44,29 @@ import {
   Users,
 } from "lucide-react";
 
+function getDefaultModuleForRole(role?: string): OwnerModule {
+  switch (role) {
+    case "ACCOUNTS":
+      return "accounts";
+    case "CASHIER":
+      return "pos";
+    case "INVENTORY_EXECUTIVE":
+      return "stock_stock_list";
+    case "BRANCH_MANAGER":
+    case "MANAGER":
+    case "COMPANY_OWNER":
+    case "REGIONAL_ADMIN":
+    case "AUDITOR":
+    default:
+      return "overview";
+  }
+}
+
 export default function RoleBasedDashboard() {
   const router = useRouter();
-  const { user, isAuthenticated, isSuperAdmin, loading: authLoading } = useAuth();
+  const { user, isAuthenticated, isSuperAdmin, isPlatformStaff, loading: authLoading } = useAuth();
 
-  const isCashier = user?.role === "CASHIER";
-  const [activeModule, setActiveModule] = useState<OwnerModule>(isCashier ? "pos" : "overview");
+  const [activeModule, setActiveModule] = useState<OwnerModule>(getDefaultModuleForRole(user?.role));
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [tenantProfile, setTenantProfile] = useState<any>(null);
   const [currentSub, setCurrentSub] = useState<any>(null);
@@ -68,13 +86,13 @@ export default function RoleBasedDashboard() {
       return;
     }
 
-    if (isSuperAdmin) {
+    if (isPlatformStaff) {
       router.push("/admin");
       return;
     }
 
-    if (user?.role === "CASHIER") {
-      setActiveModule("pos");
+    if (user?.role) {
+      setActiveModule(getDefaultModuleForRole(user.role));
     }
 
     async function loadTenantData() {
@@ -113,7 +131,7 @@ export default function RoleBasedDashboard() {
     }
 
     loadTenantData();
-  }, [isAuthenticated, isSuperAdmin, authLoading, user?.role, user?.branchId, router]);
+  }, [isAuthenticated, isSuperAdmin, isPlatformStaff, authLoading, user?.role, user?.branchId, router]);
 
   const handleInitiateUpgrade = async (targetPlanId: string) => {
     try {
@@ -325,6 +343,7 @@ export default function RoleBasedDashboard() {
           {/* Core Hubs */}
           {activeModule === "overview" && <OverviewModule onNavigate={setActiveModule} />}
           {activeModule === "pos" && <PosModule />}
+          {activeModule === "accounts" && <AccountsModule />}
 
           {/* 📦 Dedicated Inventory Subpages */}
           {activeModule === "inv_add_product" && (

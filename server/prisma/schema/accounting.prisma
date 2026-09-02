@@ -1,0 +1,65 @@
+enum AccountType {
+  CASH
+  BANK
+  MOBILE
+  CARD_SETTLEMENT
+  OTHER
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+  TRANSFER
+  SALE_PAYMENT
+  PURCHASE_PAYMENT
+  REFUND
+}
+
+model FinancialAccount {
+  id          String      @id @default(uuid())
+  tenantId    String
+  branchId    String
+  name        String
+  type        AccountType @default(CASH)
+  balance     Decimal     @default(0) @db.Decimal(15, 2)
+  isActive    Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch      Branch      @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  transactionsOut FinancialTransaction[] @relation("SourceAccount")
+  transactionsIn  FinancialTransaction[] @relation("DestinationAccount")
+
+  @@index([tenantId])
+  @@index([branchId])
+}
+
+model FinancialTransaction {
+  id                   String          @id @default(uuid())
+  tenantId             String
+  branchId             String
+  sourceAccountId      String?
+  destinationAccountId String?
+  amount               Decimal         @db.Decimal(15, 2)
+  type                 TransactionType
+  reference            String?
+  note                 String?
+  userId               String?         // Who performed this
+
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+
+  tenant               Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch               Branch            @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  sourceAccount        FinancialAccount? @relation("SourceAccount", fields: [sourceAccountId], references: [id])
+  destinationAccount   FinancialAccount? @relation("DestinationAccount", fields: [destinationAccountId], references: [id])
+  user                 User?             @relation(fields: [userId], references: [id])
+
+  @@index([tenantId])
+  @@index([branchId])
+  @@index([sourceAccountId])
+  @@index([destinationAccountId])
+  @@index([createdAt])
+}

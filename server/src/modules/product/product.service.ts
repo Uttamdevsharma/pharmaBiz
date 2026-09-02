@@ -692,7 +692,7 @@ export class ProductService {
         defaultPackType: data.defaultPackType || (isMed ? "BOX" : "PIECE"),
         stripsPerBox: isMed ? (data.stripsPerBox || 10) : null,
         tabletsPerStrip: isMed ? (data.tabletsPerStrip || 10) : null,
-        shelfLocation: data.shelfLocation || null,
+
         minStockAlert: data.minStockAlert !== undefined ? data.minStockAlert : 10,
         description: data.description || null,
         imageUrl: data.imageUrl || null,
@@ -1001,7 +1001,6 @@ export class ProductService {
         ...(data.defaultPackType !== undefined && { defaultPackType: data.defaultPackType }),
         stripsPerBox: isMed ? (data.stripsPerBox !== undefined ? data.stripsPerBox : product.stripsPerBox) : null,
         tabletsPerStrip: isMed ? (data.tabletsPerStrip !== undefined ? data.tabletsPerStrip : product.tabletsPerStrip) : null,
-        ...(data.shelfLocation !== undefined && { shelfLocation: data.shelfLocation }),
         ...(data.minStockAlert !== undefined && { minStockAlert: data.minStockAlert }),
         ...(data.description !== undefined && { description: data.description }),
         ...(data.imageUrl !== undefined && { imageUrl: data.imageUrl }),

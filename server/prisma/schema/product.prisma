@@ -83,7 +83,7 @@ model Product {
   defaultPackType      String?         @default("PIECE") // e.g. "BOX", "STRIP", "TABLET", "BOTTLE", "PIECE"
   stripsPerBox         Int?            @default(10)
   tabletsPerStrip      Int?            @default(10)
-  shelfLocation        String?
+
   minStockAlert        Int             @default(10)
   description          String?
   imageUrl             String?

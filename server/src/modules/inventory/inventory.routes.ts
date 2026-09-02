@@ -2,6 +2,7 @@ import { Router } from "express";
 import { InventoryController } from "./inventory.controller";
 import { authenticate } from "../../middleware/authenticate";
 import { authorize } from "../../middleware/authorize";
+import { requirePermission } from "../../middleware/requirePermission";
 import { validateRequest } from "../../middleware/validate";
 import { requireActiveSubscription } from "../../middleware/planLimiter";
 import {
@@ -19,7 +20,7 @@ router.use(authenticate, requireActiveSubscription);
 // Inward / Add Stock Batch
 router.post(
   "/inward",
-  authorize(["COMPANY_OWNER", "REGIONAL_ADMIN", "BRANCH_MANAGER"]),
+  requirePermission("inventory.add_stock"),
   validateRequest({ body: inwardStockSchema }),
   InventoryController.inwardStock
 );
@@ -27,7 +28,7 @@ router.post(
 // Manual Stock Adjustment
 router.post(
   "/adjust",
-  authorize(["COMPANY_OWNER", "REGIONAL_ADMIN", "BRANCH_MANAGER"]),
+  requirePermission("inventory.adjust"),
   validateRequest({ body: adjustStockSchema }),
   InventoryController.adjustStock
 );
@@ -35,7 +36,7 @@ router.post(
 // Update Inventory item metadata
 router.patch(
   "/:id",
-  authorize(["COMPANY_OWNER", "BRANCH_MANAGER"]),
+  requirePermission("inventory.adjust"),
   validateRequest({ body: updateInventoryItemSchema }),
   InventoryController.updateInventoryItem
 );
@@ -43,7 +44,7 @@ router.patch(
 // List Movements / Stock History Ledger
 router.get(
   "/movements",
-  authorize(["COMPANY_OWNER", "REGIONAL_ADMIN", "BRANCH_MANAGER", "AUDITOR"]),
+  requirePermission("inventory.view"),
   validateRequest({ query: listMovementsQuerySchema }),
   InventoryController.listMovements
 );
@@ -51,7 +52,7 @@ router.get(
 // Alerts: Low stock
 router.get(
   "/low-stock",
-  authorize(["COMPANY_OWNER", "REGIONAL_ADMIN", "BRANCH_MANAGER", "CASHIER", "AUDITOR"]),
+  requirePermission("inventory.view"),
   validateRequest({ query: inventoryAlertsQuerySchema }),
   InventoryController.getLowStock
 );
@@ -59,7 +60,7 @@ router.get(
 // Alerts: Near expiry & expired
 router.get(
   "/near-expiry",
-  authorize(["COMPANY_OWNER", "REGIONAL_ADMIN", "BRANCH_MANAGER", "CASHIER", "AUDITOR"]),
+  requirePermission("inventory.view"),
   validateRequest({ query: inventoryAlertsQuerySchema }),
   InventoryController.getNearExpiry
 );
@@ -67,7 +68,7 @@ router.get(
 // Get branch inventory list
 router.get(
   "/branch/:branchId",
-  authorize(["COMPANY_OWNER", "REGIONAL_ADMIN", "BRANCH_MANAGER", "CASHIER", "AUDITOR"]),
+  requirePermission("inventory.view"),
   InventoryController.getBranchInventory
 );
 

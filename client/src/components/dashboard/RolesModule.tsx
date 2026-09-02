@@ -1,119 +1,277 @@
 "use client";
 
-import React from "react";
-import { ShieldCheck, Check, X } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { fetchApi } from "@/lib/api";
+import {
+  ShieldCheck,
+  Check,
+  X,
+  Lock,
+  Save,
+  Loader2,
+  AlertCircle,
+  CheckCircle2,
+  Users,
+  Settings,
+  Package,
+  ShoppingCart,
+  Wallet,
+  BarChart3,
+  RefreshCw,
+} from "lucide-react";
+
+interface RoleDef {
+  role: string;
+  name: string;
+  level: string;
+  description: string;
+}
+
+interface PermissionDef {
+  id: string;
+  label: string;
+  category: string;
+}
 
 export function RolesModule() {
-  const roles = [
-    {
-      role: "Company Owner",
-      code: "COMPANY_OWNER",
-      scope: "Tenant HQ (Full Platform Control)",
-      description: "Controls billing, subscription, branches, staff hiring, and company-wide financial reports.",
-    },
-    {
-      role: "Regional Admin",
-      code: "REGIONAL_ADMIN",
-      scope: "Assigned Region / Multi-Branch",
-      description: "Approves inter-branch stock transfers and monitors regional store performance (Growth+ Plan).",
-    },
-    {
-      role: "Branch Manager",
-      code: "BRANCH_MANAGER",
-      scope: "Single Assigned Branch",
-      description: "Authorizes refunds/voids, controlled drug prescriptions, and manages local stock adjustments.",
-    },
-    {
-      role: "Cashier",
-      code: "CASHIER",
-      scope: "Counter POS (Online & Offline)",
-      description: "Executes POS checkout, barcode scans, accepts payments, and queues offline sales.",
-    },
-    {
-      role: "Auditor",
-      code: "AUDITOR",
-      scope: "Read-Only Compliance",
-      description: "Accesses audit trails, VAT records, and compliance reports without editing privileges.",
-    },
-  ];
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [roles, setRoles] = useState<RoleDef[]>([]);
+  const [allPermissions, setAllPermissions] = useState<PermissionDef[]>([]);
+  const [selectedRole, setSelectedRole] = useState<string>("BRANCH_MANAGER");
+  const [rolePermissions, setRolePermissions] = useState<Record<string, string[]>>({});
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const permissions = [
-    { name: "Execute POS Checkout", owner: true, regional: false, manager: true, cashier: true, auditor: false },
-    { name: "Authorize Controlled Drugs", owner: true, regional: false, manager: true, cashier: false, auditor: false },
-    { name: "Authorize Voids & Refunds", owner: true, regional: false, manager: true, cashier: false, auditor: false },
-    { name: "Adjust Branch Stock", owner: true, regional: false, manager: true, cashier: false, auditor: false },
-    { name: "Approve Inter-Branch Transfers", owner: true, regional: true, manager: false, cashier: false, auditor: false },
-    { name: "Branch Price Overrides", owner: true, regional: true, manager: false, cashier: false, auditor: false },
-    { name: "Add / Edit Staff & Assign Branches", owner: true, regional: false, manager: false, cashier: false, auditor: false },
-    { name: "Manage Subscriptions & Invoicing", owner: true, regional: false, manager: false, cashier: false, auditor: false },
-    { name: "View Audit Trails & VAT Reports", owner: true, regional: true, manager: true, cashier: false, auditor: true },
-  ];
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      setErrorMsg(null);
+      const res = await fetchApi<any>("/users/roles/permissions");
+      if (res.success && res.data) {
+        setRoles(res.data.roles || []);
+        setAllPermissions(res.data.allPermissions || []);
+        setRolePermissions(res.data.activePermissions || {});
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message || "Failed to load role permissions hierarchy");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const handleTogglePermission = (permissionId: string) => {
+    if (selectedRole === "COMPANY_OWNER" || selectedRole === "SUPER_ADMIN") return;
+
+    const currentPerms = rolePermissions[selectedRole] || [];
+    const exists = currentPerms.includes(permissionId);
+
+    const updated = exists
+      ? currentPerms.filter((p) => p !== permissionId)
+      : [...currentPerms, permissionId];
+
+    setRolePermissions({
+      ...rolePermissions,
+      [selectedRole]: updated,
+    });
+  };
+
+  const handleSavePermissions = async () => {
+    if (selectedRole === "COMPANY_OWNER" || selectedRole === "SUPER_ADMIN") return;
+
+    try {
+      setSaving(true);
+      setErrorMsg(null);
+      setSuccessMsg(null);
+
+      const res = await fetchApi<any>("/users/roles/permissions", {
+        method: "POST",
+        body: JSON.stringify({
+          role: selectedRole,
+          permissions: rolePermissions[selectedRole] || [],
+        }),
+      });
+
+      if (res.success) {
+        setSuccessMsg(`Permissions successfully saved for ${selectedRole}!`);
+      } else {
+        setErrorMsg(res.message || "Failed to save permissions");
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message || "Error saving permissions");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20 text-slate-500 gap-2">
+        <Loader2 className="h-6 w-6 animate-spin text-emerald-600" />
+        <span>Loading role security hierarchy...</span>
+      </div>
+    );
+  }
+
+  const selectedRoleObj = roles.find((r) => r.role === selectedRole) || roles[0];
+  const activePermsForSelected = rolePermissions[selectedRole] || [];
+
+  // Group permissions by category
+  const categories = Array.from(new Set(allPermissions.map((p) => p.category)));
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h2 className="text-2xl font-extrabold text-slate-900 dark:text-white">Role-Based Access Control (RBAC)</h2>
-        <p className="text-xs text-slate-500">Security boundaries and permission matrix across operational roles</p>
+    <div className="space-y-8 max-w-7xl mx-auto">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
+        <div>
+          <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white flex items-center gap-2.5">
+            <ShieldCheck className="h-7 w-7 text-emerald-600" />
+            Roles & Granular Permissions (RBAC)
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-500 mt-1">
+            Configure backend permissions per operational role for strict authorization and staff segregation.
+          </p>
+        </div>
+
+        <button
+          onClick={loadData}
+          className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 self-start sm:self-auto"
+        >
+          <RefreshCw className="h-4 w-4" />
+        </button>
       </div>
 
-      {/* Role Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-        {roles.map((r) => (
-          <div
-            key={r.code}
-            className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-2"
-          >
-            <div className="flex items-center justify-between">
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-brand-subtle-bg text-brand-primary">
-                {r.code}
-              </span>
-              <ShieldCheck className="h-4 w-4 text-emerald-500" />
-            </div>
-            <h3 className="text-base font-bold text-slate-900 dark:text-white">{r.role}</h3>
-            <div className="text-xs font-semibold text-slate-500">Scope: {r.scope}</div>
-            <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">{r.description}</p>
+      {/* Notifications */}
+      {successMsg && (
+        <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-sm flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+            <span>{successMsg}</span>
           </div>
-        ))}
+          <button onClick={() => setSuccessMsg(null)}>
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
+      {errorMsg && (
+        <div className="p-4 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-300 text-sm flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-5 w-5 text-red-500" />
+            <span>{errorMsg}</span>
+          </div>
+          <button onClick={() => setErrorMsg(null)}>
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Roles Selector Pills */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-thin">
+        {roles.map((r) => {
+          const isSelected = selectedRole === r.role;
+          return (
+            <button
+              key={r.role}
+              onClick={() => setSelectedRole(r.role)}
+              className={`px-4 py-2.5 rounded-2xl text-xs font-bold whitespace-nowrap transition-all shadow-xs ${
+                isSelected
+                  ? "bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 ring-2 ring-emerald-500"
+                  : "bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+              }`}
+            >
+              {r.name}
+            </button>
+          );
+        })}
       </div>
 
-      {/* Permission Matrix Table */}
-      <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden p-6 space-y-4">
-        <h3 className="text-base font-bold text-slate-900 dark:text-white">System Permission Matrix</h3>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="text-xs uppercase bg-slate-50 dark:bg-slate-800/50 text-slate-500 border-b border-slate-200 dark:border-slate-800">
-              <tr>
-                <th className="px-4 py-3 font-semibold">Capability</th>
-                <th className="px-4 py-3 font-semibold text-center">Owner</th>
-                <th className="px-4 py-3 font-semibold text-center">Regional Admin</th>
-                <th className="px-4 py-3 font-semibold text-center">Branch Manager</th>
-                <th className="px-4 py-3 font-semibold text-center">Cashier</th>
-                <th className="px-4 py-3 font-semibold text-center">Auditor</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
-              {permissions.map((p, idx) => (
-                <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
-                  <td className="px-4 py-3 font-medium">{p.name}</td>
-                  <td className="px-4 py-3 text-center">
-                    {p.owner ? <Check className="h-4 w-4 text-emerald-500 mx-auto" /> : <X className="h-4 w-4 text-slate-300 mx-auto" />}
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    {p.regional ? <Check className="h-4 w-4 text-emerald-500 mx-auto" /> : <X className="h-4 w-4 text-slate-300 mx-auto" />}
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    {p.manager ? <Check className="h-4 w-4 text-emerald-500 mx-auto" /> : <X className="h-4 w-4 text-slate-300 mx-auto" />}
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    {p.cashier ? <Check className="h-4 w-4 text-emerald-500 mx-auto" /> : <X className="h-4 w-4 text-slate-300 mx-auto" />}
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    {p.auditor ? <Check className="h-4 w-4 text-emerald-500 mx-auto" /> : <X className="h-4 w-4 text-slate-300 mx-auto" />}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {/* Selected Role Detail & Permissions Matrix */}
+      <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
+          <div>
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
+              Role: {selectedRoleObj.role}
+            </div>
+            <h2 className="text-xl font-black text-slate-900 dark:text-slate-100 mt-1">
+              {selectedRoleObj.name} Permissions
+            </h2>
+            <p className="text-xs text-slate-400 mt-0.5">{selectedRoleObj.description}</p>
+          </div>
+
+          {selectedRole !== "COMPANY_OWNER" && selectedRole !== "SUPER_ADMIN" ? (
+            <button
+              onClick={handleSavePermissions}
+              disabled={saving}
+              className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-bold shadow-md transition flex items-center gap-2 disabled:opacity-50"
+            >
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              Save Role Permissions
+            </button>
+          ) : (
+            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 text-xs font-bold">
+              <Lock className="h-4 w-4" />
+              Full System Access (Bypass)
+            </div>
+          )}
+        </div>
+
+        {/* Permissions Groups */}
+        <div className="space-y-6">
+          {categories.map((cat) => {
+            const catPerms = allPermissions.filter((p) => p.category === cat);
+            return (
+              <div key={cat} className="space-y-3">
+                <h3 className="text-xs font-black uppercase tracking-wider text-slate-400">
+                  {cat} Capabilities
+                </h3>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {catPerms.map((perm) => {
+                    const isGranted =
+                      selectedRole === "COMPANY_OWNER" ||
+                      selectedRole === "SUPER_ADMIN" ||
+                      activePermsForSelected.includes(perm.id);
+
+                    const isLocked = selectedRole === "COMPANY_OWNER" || selectedRole === "SUPER_ADMIN";
+
+                    return (
+                      <div
+                        key={perm.id}
+                        onClick={() => !isLocked && handleTogglePermission(perm.id)}
+                        className={`p-3.5 rounded-2xl border transition flex items-center justify-between gap-3 ${
+                          isLocked ? "cursor-not-allowed opacity-90" : "cursor-pointer hover:border-slate-400"
+                        } ${
+                          isGranted
+                            ? "bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-300 dark:border-emerald-800/80"
+                            : "bg-slate-50/50 dark:bg-slate-800/30 border-slate-200 dark:border-slate-800"
+                        }`}
+                      >
+                        <div>
+                          <div className="text-xs font-bold text-slate-800 dark:text-slate-200">{perm.label}</div>
+                          <div className="text-[10px] text-slate-400 font-mono">{perm.id}</div>
+                        </div>
+
+                        <div
+                          className={`h-6 w-6 rounded-full flex items-center justify-center transition shrink-0 ${
+                            isGranted
+                              ? "bg-emerald-600 text-white"
+                              : "bg-slate-200 dark:bg-slate-700 text-slate-400"
+                          }`}
+                        >
+                          {isGranted ? <Check className="h-3.5 w-3.5" /> : <X className="h-3.5 w-3.5" />}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

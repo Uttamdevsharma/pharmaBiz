@@ -326,8 +326,11 @@ export function StockListView({ onNavigate }: StockListViewProps) {
                       </td>
 
                       <td className="py-3.5 px-4">
-                        <div className="font-black text-slate-900 dark:text-white">
+                        <div className="font-black text-slate-900 dark:text-white flex items-center gap-1.5">
                           {inv.quantity} {inv.unit}s
+                          {inv.quantity <= 0 && (
+                            <span className="text-[10px] bg-rose-100 dark:bg-rose-900/50 text-rose-600 px-1.5 py-0.5 rounded font-bold uppercase tracking-wide">Empty</span>
+                          )}
                         </div>
                         <div className="text-[10px] text-slate-400 font-medium">{readableStock}</div>
                       </td>

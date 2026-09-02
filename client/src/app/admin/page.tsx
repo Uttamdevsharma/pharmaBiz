@@ -7,6 +7,7 @@ import { AdminHeader } from "@/components/admin/AdminHeader";
 import { AdminSidebar, AdminTab } from "@/components/admin/AdminSidebar";
 import { OverviewTab } from "@/components/admin/OverviewTab";
 import { TenantsTab } from "@/components/admin/TenantsTab";
+import { PlatformStaffTab } from "@/components/admin/PlatformStaffTab";
 import { PlansTab } from "@/components/admin/PlansTab";
 import { SubscriptionsTab } from "@/components/admin/SubscriptionsTab";
 import { PaymentsTab } from "@/components/admin/PaymentsTab";
@@ -17,33 +18,33 @@ import { Loader2, ShieldAlert } from "lucide-react";
 
 export default function AdminDashboardPage() {
   const router = useRouter();
-  const { user, loading, isAuthenticated, isSuperAdmin } = useAuth();
+  const { user, loading, isAuthenticated, isSuperAdmin, isPlatformStaff } = useAuth();
   const [activeTab, setActiveTab] = useState<AdminTab>("overview");
 
   useEffect(() => {
     if (!loading) {
-      if (!isAuthenticated || !isSuperAdmin) {
+      if (!isAuthenticated || !isPlatformStaff) {
         router.push("/login");
       }
     }
-  }, [loading, isAuthenticated, isSuperAdmin, router]);
+  }, [loading, isAuthenticated, isPlatformStaff, router]);
 
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-100 dark:bg-slate-950 text-slate-500 gap-3">
         <Loader2 className="h-6 w-6 animate-spin text-brand-primary" />
-        <span className="font-semibold text-sm">Verifying Super Admin Authorization...</span>
+        <span className="font-semibold text-sm">Verifying Platform Authorization...</span>
       </div>
     );
   }
 
-  if (!isAuthenticated || !isSuperAdmin) {
+  if (!isAuthenticated || !isPlatformStaff) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center bg-slate-100 dark:bg-slate-950 space-y-4">
         <ShieldAlert className="h-12 w-12 text-red-500" />
         <h1 className="text-xl font-bold text-slate-900 dark:text-white">Access Denied</h1>
         <p className="text-xs text-slate-500 max-w-sm">
-          You do not have Super Admin privileges to view this platform console.
+          You do not have platform privileges to view this management console.
         </p>
       </div>
     );
@@ -63,6 +64,7 @@ export default function AdminDashboardPage() {
         <main className="flex-1 p-6 md:p-8 max-w-7xl mx-auto w-full">
           {activeTab === "overview" && <OverviewTab />}
           {activeTab === "tenants" && <TenantsTab />}
+          {activeTab === "staff" && <PlatformStaffTab />}
           {activeTab === "plans" && <PlansTab />}
           {activeTab === "subscriptions" && <SubscriptionsTab />}
           {activeTab === "payments" && <PaymentsTab />}

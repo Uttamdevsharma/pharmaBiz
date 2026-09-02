@@ -27,8 +27,8 @@ export const requireActiveSubscription = async (
       return;
     }
 
-    // Super Admin bypasses tenant subscription checks
-    if (req.user.role === "SUPER_ADMIN") {
+    // Platform roles bypass tenant subscription checks
+    if (["SUPER_ADMIN", "CTO", "PROJECT_MANAGER"].includes(req.user.role)) {
       next();
       return;
     }
@@ -108,7 +108,7 @@ export const requireTier = (minTier: "TRIAL" | "STARTER" | "GROWTH" | "ENTERPRIS
         return;
       }
 
-      if (req.user.role === "SUPER_ADMIN") {
+      if (["SUPER_ADMIN", "CTO", "PROJECT_MANAGER"].includes(req.user.role)) {
         next();
         return;
       }
@@ -153,7 +153,7 @@ export const checkBranchLimit = async (
       return;
     }
 
-    if (req.user.role === "SUPER_ADMIN") {
+    if (["SUPER_ADMIN", "CTO", "PROJECT_MANAGER"].includes(req.user.role)) {
       next();
       return;
     }
@@ -186,7 +186,7 @@ export const checkStaffLimit = async (
       return;
     }
 
-    if (req.user.role === "SUPER_ADMIN") {
+    if (["SUPER_ADMIN", "CTO", "PROJECT_MANAGER"].includes(req.user.role)) {
       next();
       return;
     }

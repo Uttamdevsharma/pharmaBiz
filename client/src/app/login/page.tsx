@@ -29,7 +29,7 @@ export default function LoginPage() {
         const stored = localStorage.getItem("user");
         const userObj = stored ? JSON.parse(stored) : null;
 
-        if (userObj?.role === "SUPER_ADMIN") {
+        if (["SUPER_ADMIN", "CTO", "PROJECT_MANAGER"].includes(userObj?.role)) {
           router.push("/admin");
         } else {
           router.push("/dashboard");

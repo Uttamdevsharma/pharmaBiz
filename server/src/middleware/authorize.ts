@@ -5,8 +5,13 @@ export type AllowedRole =
   | "COMPANY_OWNER"
   | "REGIONAL_ADMIN"
   | "BRANCH_MANAGER"
+  | "MANAGER"
+  | "INVENTORY_EXECUTIVE"
   | "CASHIER"
-  | "AUDITOR";
+  | "ACCOUNTS"
+  | "AUDITOR"
+  | "CTO"
+  | "PROJECT_MANAGER";
 
 export const authorize = (allowedRoles: AllowedRole[]) => {
   return (req: Request, res: Response, next: NextFunction): void => {

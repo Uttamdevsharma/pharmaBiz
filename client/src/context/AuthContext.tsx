@@ -4,11 +4,23 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 import { fetchApi } from "@/lib/api";
 import { useRouter } from "next/navigation";
 
+export type UserRole =
+  | "SUPER_ADMIN"
+  | "CTO"
+  | "PROJECT_MANAGER"
+  | "COMPANY_OWNER"
+  | "BRANCH_MANAGER"
+  | "INVENTORY_EXECUTIVE"
+  | "CASHIER"
+  | "ACCOUNTS"
+  | "REGIONAL_ADMIN"
+  | "AUDITOR";
+
 export interface User {
   id: string;
   tenantId: string;
   branchId: string | null;
-  role: "SUPER_ADMIN" | "COMPANY_OWNER" | "REGIONAL_ADMIN" | "BRANCH_MANAGER" | "CASHIER" | "AUDITOR";
+  role: UserRole;
   name?: string;
   username?: string;
   email?: string;
@@ -20,6 +32,7 @@ interface AuthContextType {
   loading: boolean;
   isAuthenticated: boolean;
   isSuperAdmin: boolean;
+  isPlatformStaff: boolean;
   login: (identifier: string, password: string) => Promise<{ success: boolean; message?: string }>;
   logout: () => void;
 }
@@ -30,6 +43,7 @@ const AuthContext = createContext<AuthContextType>({
   loading: true,
   isAuthenticated: false,
   isSuperAdmin: false,
+  isPlatformStaff: false,
   login: async () => ({ success: false }),
   logout: () => {},
 });
@@ -99,6 +113,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     router.push("/login");
   };
 
+  const isSuperAdmin = user?.role === "SUPER_ADMIN";
+  const isPlatformStaff = ["SUPER_ADMIN", "CTO", "PROJECT_MANAGER"].includes(user?.role || "");
+
   return (
     <AuthContext.Provider
       value={{
@@ -106,7 +123,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         token,
         loading,
         isAuthenticated: !!user && !!token,
-        isSuperAdmin: user?.role === "SUPER_ADMIN",
+        isSuperAdmin,
+        isPlatformStaff,
         login,
         logout,
       }}

@@ -32,7 +32,33 @@ export const listTenantsQuerySchema = z.object({
   isActive: z.string().optional().transform(v => (v === "true" ? true : v === "false" ? false : undefined)),
 });
 
+export const createPlatformStaffSchema = z.object({
+  name: z.string().min(2, "Name must be at least 2 characters"),
+  email: z.string().email("Invalid email format"),
+  username: z.string().min(3, "Username must be at least 3 characters"),
+  phone: z.string().optional(),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+  role: z.enum(["CTO", "PROJECT_MANAGER"]),
+});
+
+export const updatePlatformStaffSchema = z.object({
+  name: z.string().min(2).optional(),
+  email: z.string().email().optional(),
+  phone: z.string().optional(),
+  password: z.string().min(6).optional(),
+  role: z.enum(["CTO", "PROJECT_MANAGER"]).optional(),
+  isActive: z.boolean().optional(),
+});
+
+export const updatePlatformRolePermissionsSchema = z.object({
+  role: z.enum(["CTO", "PROJECT_MANAGER"]),
+  permissions: z.array(z.string()),
+});
+
 export type CreatePlanInput = z.infer<typeof createPlanSchema>;
 export type UpdatePlanInput = z.infer<typeof updatePlanSchema>;
 export type UpdateTenantStatusInput = z.infer<typeof updateTenantStatusSchema>;
 export type ListTenantsQuery = z.infer<typeof listTenantsQuerySchema>;
+export type CreatePlatformStaffInput = z.infer<typeof createPlatformStaffSchema>;
+export type UpdatePlatformStaffInput = z.infer<typeof updatePlatformStaffSchema>;
+export type UpdatePlatformRolePermissionsInput = z.infer<typeof updatePlatformRolePermissionsSchema>;

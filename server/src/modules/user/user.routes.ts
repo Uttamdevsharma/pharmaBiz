@@ -16,6 +16,11 @@ router.use(authenticate, requireActiveSubscription);
 
 // RBAC Permissions Info
 router.get("/roles/permissions", UserController.getPermissionsHierarchy);
+router.post(
+  "/roles/permissions",
+  authorize(["COMPANY_OWNER", "SUPER_ADMIN"]),
+  UserController.updateRolePermissions
+);
 
 // Staff Listing & Details
 router.get("/", validateRequest({ query: listUsersQuerySchema }), UserController.listUsers);

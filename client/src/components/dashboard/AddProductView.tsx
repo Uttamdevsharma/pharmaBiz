@@ -67,7 +67,6 @@ export function AddProductView({
     defaultPackType: editingProduct?.defaultPackType || "BOX",
     stripsPerBox: editingProduct?.stripsPerBox || 10,
     tabletsPerStrip: editingProduct?.tabletsPerStrip || 10,
-    shelfLocation: editingProduct?.shelfLocation || "Rack A-1",
     minStockAlert: editingProduct?.minStockAlert || 20,
     description: editingProduct?.description || "",
     imageUrl: editingProduct?.imageUrl || "",
@@ -250,7 +249,6 @@ export function AddProductView({
         defaultPackType: formData.defaultPackType,
         stripsPerBox: isMedicineCategory ? Number(formData.stripsPerBox) : null,
         tabletsPerStrip: isMedicineCategory ? Number(formData.tabletsPerStrip) : null,
-        shelfLocation: formData.shelfLocation || null,
         minStockAlert: Number(formData.minStockAlert),
         description: formData.description || null,
         imageUrl: formData.imageUrl || null,
@@ -304,7 +302,6 @@ export function AddProductView({
       defaultPackType: "BOX",
       stripsPerBox: 10,
       tabletsPerStrip: 10,
-      shelfLocation: "Rack A-1",
       minStockAlert: 20,
       description: "",
       imageUrl: "",
@@ -695,19 +692,6 @@ export function AddProductView({
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                Shelf / Rack Location
-              </label>
-              <input
-                type="text"
-                placeholder="e.g. Rack A-1, Cold Storage, Drawer B-3"
-                value={formData.shelfLocation}
-                onChange={(e) => setFormData({ ...formData, shelfLocation: e.target.value })}
-                className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-brand-primary/20"
-              />
-            </div>
-
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                 Low Stock Alert Threshold ({formData.unit}s)

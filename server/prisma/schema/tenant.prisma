@@ -28,8 +28,10 @@ model Tenant {
   purchases     Purchase[]
   subscriptions Subscription[]
   payments      Payment[]
-  auditLogs     AuditLog[]
-  notifications Notification[]
+  auditLogs              AuditLog[]
+  notifications          Notification[]
+  financialAccounts      FinancialAccount[]
+  financialTransactions  FinancialTransaction[]
 }
 
 model Branch {
@@ -50,8 +52,10 @@ model Branch {
   sales          Sale[]
   syncLogs       SyncLog[]
   branchProducts BranchProduct[]
-  auditLogs      AuditLog[]
-  notifications  Notification[]
+  auditLogs              AuditLog[]
+  notifications          Notification[]
+  financialAccounts      FinancialAccount[]
+  financialTransactions  FinancialTransaction[]
   
   stockTransfersFrom StockTransfer[] @relation("TransferFrom")
   stockTransfersTo   StockTransfer[] @relation("TransferTo")

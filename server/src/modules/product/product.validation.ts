@@ -51,7 +51,7 @@ export const createProductSchema = z.object({
   defaultPackType: z.string().default("PIECE"),
   stripsPerBox: z.number().int().positive().optional().nullable(),
   tabletsPerStrip: z.number().int().positive().optional().nullable(),
-  shelfLocation: z.string().optional().nullable(),
+
   minStockAlert: z.number().int().nonnegative().default(10),
   description: z.string().optional().nullable(),
   imageUrl: z.string().optional().nullable(),

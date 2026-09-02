@@ -50,8 +50,9 @@ export class UserController {
       const { id } = req.params;
       const tenantId = req.user!.tenantId;
       const updaterId = req.user!.id;
+      const updaterRole = req.user!.role;
 
-      const updated = await UserService.updateUser(id, tenantId, updaterId, req.body);
+      const updated = await UserService.updateUser(id, tenantId, updaterId, updaterRole, req.body);
       res.status(200).json({
         success: true,
         message: "Staff member updated successfully",
@@ -68,8 +69,9 @@ export class UserController {
       const { isActive } = req.body;
       const tenantId = req.user!.tenantId;
       const updaterId = req.user!.id;
+      const updaterRole = req.user!.role;
 
-      const updated = await UserService.updateUserStatus(id, tenantId, updaterId, isActive);
+      const updated = await UserService.updateUserStatus(id, tenantId, updaterId, updaterRole, isActive);
       res.status(200).json({
         success: true,
         message: `Staff member ${isActive ? "activated" : "deactivated"} successfully`,
@@ -86,6 +88,19 @@ export class UserController {
       res.status(200).json({ success: true, data: permissions });
     } catch (error: any) {
       res.status(500).json({ success: false, message: error.message });
+    }
+  }
+
+  static async updateRolePermissions(req: Request, res: Response): Promise<void> {
+    try {
+      const tenantId = req.user!.tenantId;
+      const updaterId = req.user!.id;
+      const { role, permissions } = req.body;
+
+      const result = await UserService.updateRolePermissions(tenantId, updaterId, role, permissions);
+      res.status(200).json({ success: true, message: `Permissions updated for role ${role}`, data: result });
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message });
     }
   }
 }

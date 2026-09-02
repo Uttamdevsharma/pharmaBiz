@@ -1,9 +1,14 @@
 export type Role =
   | "SUPER_ADMIN"
+  | "CTO"
+  | "PROJECT_MANAGER"
   | "COMPANY_OWNER"
   | "REGIONAL_ADMIN"
   | "BRANCH_MANAGER"
+  | "MANAGER"
+  | "INVENTORY_EXECUTIVE"
   | "CASHIER"
+  | "ACCOUNTS"
   | "AUDITOR";
 
 export type Tier = "TRIAL" | "STARTER" | "GROWTH" | "ENTERPRISE";

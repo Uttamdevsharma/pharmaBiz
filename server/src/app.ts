@@ -21,6 +21,7 @@ import { syncRoutes } from "./modules/sync/sync.routes";
 import { settingsRoutes } from "./modules/settings/settings.routes";
 import { uploadRoutes } from "./modules/upload/upload.routes";
 import { supplierRoutes } from "./modules/supplier/supplier.routes";
+import { accountingRoutes } from "./modules/accounting/accounting.routes";
 import { PaymentController } from "./modules/payment/payment.controller";
 
 const app = express();
@@ -77,6 +78,7 @@ app.use("/api/sync", syncRoutes);
 app.use("/api/settings", settingsRoutes);
 app.use("/api/upload", uploadRoutes);
 app.use("/api/suppliers", supplierRoutes);
+app.use("/api/accounting", accountingRoutes);
 
 // Fallback & direct gateway callbacks on root /payment/* (Supports both GET and POST)
 app.all("/payment/success", PaymentController.handleSuccess);
