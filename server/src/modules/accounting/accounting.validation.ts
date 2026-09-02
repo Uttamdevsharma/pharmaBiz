@@ -3,12 +3,24 @@ import { z } from "zod";
 export const createAccountSchema = z.object({
   branchId: z.string().uuid("Invalid branch ID"),
   name: z.string().min(2, "Account name must be at least 2 characters"),
-  type: z.enum(["CASH", "BANK", "MOBILE", "CARD_SETTLEMENT", "OTHER"]),
+  type: z.enum(["CASH", "BANK", "BKASH", "NAGAD", "MOBILE", "CARD_SETTLEMENT", "OTHER"]),
+  accountNumber: z.string().optional().nullable(),
+  bankName: z.string().optional().nullable(),
+  branchName: z.string().optional().nullable(),
+  routingNumber: z.string().optional().nullable(),
+  isDefault: z.boolean().optional().default(false),
+  description: z.string().optional().nullable(),
   initialBalance: z.number().nonnegative().optional().default(0),
 });
 
 export const updateAccountSchema = z.object({
   name: z.string().min(2).optional(),
+  accountNumber: z.string().optional().nullable(),
+  bankName: z.string().optional().nullable(),
+  branchName: z.string().optional().nullable(),
+  routingNumber: z.string().optional().nullable(),
+  isDefault: z.boolean().optional(),
+  description: z.string().optional().nullable(),
   isActive: z.boolean().optional(),
 });
 

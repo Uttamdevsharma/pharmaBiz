@@ -9,9 +9,6 @@ import {
   Filter,
   Loader2,
   Store,
-  DollarSign,
-  TrendingUp,
-  Boxes,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
@@ -98,13 +95,6 @@ export function ProductWiseSalesView({ onNavigate: _onNavigate }: ProductWiseSal
     }
   };
 
-  const summary = dailyData?.summary || {
-    totalSales: 0,
-    transactionCount: 0,
-    totalUnitsSold: 0,
-    averageOrderValue: 0,
-  };
-
   const productList: any[] = dailyData?.productSales || [];
 
   // Extract unique categories
@@ -129,8 +119,6 @@ export function ProductWiseSalesView({ onNavigate: _onNavigate }: ProductWiseSal
       return b.totalAmount - a.totalAmount;
     });
 
-  const topProduct = filteredProducts.length > 0 ? filteredProducts[0] : null;
-
   const totalPages = Math.ceil(filteredProducts.length / itemsPerPage) || 1;
   const paginatedProducts = filteredProducts.slice(
     (currentPage - 1) * itemsPerPage,
@@ -138,20 +126,20 @@ export function ProductWiseSalesView({ onNavigate: _onNavigate }: ProductWiseSal
   );
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
+    <div className="space-y-6 2xl:space-y-8 w-full max-w-[1920px] 2xl:max-w-[2560px] mx-auto">
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
         <div>
-          <div className="flex items-center gap-2 text-xs text-slate-400 mb-1">
-            <span>Accounts Management</span>
+          <div className="flex items-center gap-2 text-xs xl:text-sm text-slate-400 mb-1">
+            <span>Accounts & Finance</span>
             <span>/</span>
-            <span className="text-slate-700 dark:text-slate-300 font-bold">Product-Wise Sales</span>
+            <span className="text-slate-700 dark:text-slate-300 font-bold">Product Velocity</span>
           </div>
-          <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-slate-100 flex items-center gap-2.5">
-            <Package className="h-7 w-7 text-emerald-600 dark:text-emerald-400" />
+          <h1 className="text-2xl xl:text-3xl font-black tracking-tight text-slate-900 dark:text-slate-100 flex items-center gap-2.5">
+            <Package className="h-7 w-7 xl:h-8 xl:w-8 text-emerald-600 dark:text-emerald-400" />
             Product-Wise Sales
           </h1>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
+          <p className="text-xs sm:text-sm xl:text-base text-slate-500 dark:text-slate-400 mt-1">
             Track medicine movement velocity, sold unit quantities, average selling rates, and revenue contributions.
           </p>
         </div>
@@ -160,7 +148,7 @@ export function ProductWiseSalesView({ onNavigate: _onNavigate }: ProductWiseSal
           <button
             onClick={() => loadProductSales(true)}
             disabled={refreshing}
-            className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold transition flex items-center gap-1.5"
+            className="px-3.5 py-2 xl:px-4 xl:py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs xl:text-sm font-bold transition flex items-center gap-1.5"
           >
             {refreshing ? <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-600" /> : <Filter className="h-3.5 w-3.5" />}
             <span>Refresh</span>
@@ -254,63 +242,6 @@ export function ProductWiseSalesView({ onNavigate: _onNavigate }: ProductWiseSal
         </div>
       ) : (
         <>
-          {/* PRODUCT VELOCITY SUMMARY CARDS */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Units Sold</span>
-                <span className="p-2 rounded-xl bg-purple-50 text-purple-600 dark:bg-purple-950/40 dark:text-purple-400">
-                  <Package className="h-4 w-4" />
-                </span>
-              </div>
-              <div className="text-2xl font-black text-slate-900 dark:text-white mt-2 font-mono">
-                {summary.totalUnitsSold}
-              </div>
-              <div className="text-[11px] text-slate-400 mt-1 font-medium">Selected period volume</div>
-            </div>
-
-            <div className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Unique Catalog SKUs</span>
-                <span className="p-2 rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400">
-                  <Boxes className="h-4 w-4" />
-                </span>
-              </div>
-              <div className="text-2xl font-black text-slate-900 dark:text-white mt-2 font-mono">
-                {productList.length}
-              </div>
-              <div className="text-[11px] text-slate-400 mt-1 font-medium">Distinct products moved</div>
-            </div>
-
-            <div className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Product Sales</span>
-                <span className="p-2 rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400">
-                  <DollarSign className="h-4 w-4" />
-                </span>
-              </div>
-              <div className="text-2xl font-black text-slate-900 dark:text-white mt-2 font-mono">
-                ৳{summary.totalSales.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </div>
-              <div className="text-[11px] text-slate-400 mt-1 font-medium">Combined medicine sales</div>
-            </div>
-
-            <div className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Top Velocity Item</span>
-                <span className="p-2 rounded-xl bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400">
-                  <TrendingUp className="h-4 w-4" />
-                </span>
-              </div>
-              <div className="text-base font-black text-slate-900 dark:text-white mt-2 truncate">
-                {topProduct ? topProduct.productName : "None"}
-              </div>
-              <div className="text-[11px] text-slate-400 mt-1 font-mono font-bold">
-                {topProduct ? `৳${topProduct.totalAmount.toFixed(2)} (${topProduct.quantitySold} units)` : "—"}
-              </div>
-            </div>
-          </div>
-
           {/* PRODUCT-WISE SALES TABLE */}
           <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -321,6 +252,11 @@ export function ProductWiseSalesView({ onNavigate: _onNavigate }: ProductWiseSal
                 </h3>
                 <p className="text-xs text-slate-400">
                   Itemized units sold, packaging types, average unit rates, and revenue contributions.
+                  {filteredProducts.length > 0 && (
+                    <span className="ml-2 font-bold text-slate-600 dark:text-slate-300">
+                      {filteredProducts.length} product{filteredProducts.length !== 1 ? "s" : ""}
+                    </span>
+                  )}
                 </p>
               </div>
 
@@ -391,8 +327,10 @@ export function ProductWiseSalesView({ onNavigate: _onNavigate }: ProductWiseSal
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300 font-medium">
                   {paginatedProducts.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="py-8 text-center text-slate-400">
-                        No product sales recorded for this date period.
+                      <td colSpan={9} className="py-12 text-center">
+                        <Package className="h-10 w-10 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
+                        <div className="text-slate-400 font-semibold">No product sales recorded for this date period.</div>
+                        <div className="text-slate-300 dark:text-slate-600 text-[11px] mt-1">Try selecting a different date range.</div>
                       </td>
                     </tr>
                   ) : (

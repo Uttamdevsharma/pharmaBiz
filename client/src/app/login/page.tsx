@@ -81,13 +81,19 @@ export default function LoginPage() {
         </Link>
 
         <span className="text-xs font-bold text-slate-400">
-          PharmaBiz Cloud v2.0
+          {/* PharmaBiz Cloud v2.0 */}
         </span>
       </div>
 
-      {/* MAIN CENTERED CARD MATCHING REFERENCE DESIGN */}
-      <div className="w-full max-w-5xl bg-white dark:bg-slate-900 rounded-[32px] sm:rounded-[36px] shadow-2xl shadow-blue-900/10 dark:shadow-black/50 border border-white/60 dark:border-slate-800 overflow-hidden grid grid-cols-1 lg:grid-cols-12 min-h-[560px] relative z-10">
-        {/* LEFT COLUMN: LOGIN FORM */}
+      {/* MAIN CENTERED CARD WITH SUBTLE ELEVATION ON SUBMIT */}
+      <div
+        className={`w-full max-w-5xl bg-white dark:bg-slate-900 rounded-[32px] sm:rounded-[36px] border border-white/80 dark:border-slate-800 overflow-hidden grid grid-cols-1 lg:grid-cols-12 min-h-[560px] relative z-10 transition-all duration-500 ease-out ${
+          loading
+            ? "scale-[1.008] -translate-y-1.5 shadow-[0_30px_75px_-12px_rgba(76,111,255,0.22)]"
+            : "shadow-[0_20px_50px_-15px_rgba(30,58,138,0.12)] hover:shadow-[0_25px_60px_-15px_rgba(30,58,138,0.16)]"
+        }`}
+      >
+        {/* LEFT COLUMN: COMPLETELY STABLE LOGIN FORM */}
         <div className="lg:col-span-6 p-8 sm:p-12 lg:p-14 flex flex-col justify-between z-10 bg-white dark:bg-slate-900">
           <div>
             {/* 1. Login Heading */}
@@ -242,12 +248,12 @@ export default function LoginPage() {
             </svg>
           </div>
 
-          {/* Main Illustration: login-right.jpg */}
-          <div className="relative w-full max-w-md flex items-center justify-center z-0 transition-transform duration-500 hover:scale-[1.02]">
+          {/* Main Illustration: login-right.jpg with gentle floating animation */}
+          <div className="relative w-full max-w-md flex items-center justify-center z-0 animate-gentle-float transition-transform duration-700 hover:scale-[1.03]">
             <img
               src="/login-right.jpg"
               alt="PharmaBiz Counter Illustration"
-              className="w-full max-h-[460px] object-contain drop-shadow-md rounded-2xl"
+              className="w-full max-h-[460px] object-contain drop-shadow-lg rounded-2xl"
             />
           </div>
         </div>

@@ -10,58 +10,10 @@ import {
 
 export class AccountingService {
   /**
-   * Ensure default accounts exist for a branch
-   */
-  static async ensureDefaultAccounts(tenantId: string, branchId: string) {
-    const existingCount = await (prisma as any).financialAccount.count({
-      where: { tenantId, branchId },
-    });
-
-    if (existingCount === 0) {
-      const defaults = [
-        { name: "Main Cash Drawer", type: "CASH" },
-        { name: "Main Bank Account", type: "BANK" },
-        { name: "bKash Merchant Account", type: "MOBILE" },
-        { name: "Nagad Merchant Account", type: "MOBILE" },
-        { name: "Card / POS Settlement", type: "CARD_SETTLEMENT" },
-      ];
-
-      for (const acc of defaults) {
-        await (prisma as any).financialAccount.create({
-          data: {
-            tenantId,
-            branchId,
-            name: acc.name,
-            type: acc.type,
-            balance: 0,
-            isActive: true,
-          },
-        });
-      }
-    }
-  }
-
-  /**
-   * List all financial accounts for a tenant / branch
+   * List all financial accounts for a tenant / branch with live metadata.
+   * Only returns accounts actually created by the pharmacy — no auto-seeding.
    */
   static async listAccounts(tenantId: string, branchId?: string) {
-    if (branchId) {
-      await this.ensureDefaultAccounts(tenantId, branchId);
-    } else {
-      const existingCount = await (prisma as any).financialAccount.count({
-        where: { tenantId },
-      });
-      if (existingCount === 0) {
-        const firstBranch = await (prisma as any).branch.findFirst({
-          where: { tenantId, isActive: true },
-          orderBy: { createdAt: "asc" },
-        });
-        if (firstBranch) {
-          await this.ensureDefaultAccounts(tenantId, firstBranch.id);
-        }
-      }
-    }
-
     const where: any = { tenantId, isActive: true };
     if (branchId) {
       where.branchId = branchId;
@@ -69,7 +21,7 @@ export class AccountingService {
 
     const accounts = await (prisma as any).financialAccount.findMany({
       where,
-      orderBy: { createdAt: "asc" },
+      orderBy: [{ isDefault: "desc" }, { type: "asc" }, { createdAt: "asc" }],
       include: {
         branch: { select: { id: true, name: true } },
       },
@@ -79,15 +31,21 @@ export class AccountingService {
   }
 
   /**
-   * Create a new custom financial account / wallet
+   * Create a new custom financial account (Cash, bKash, Nagad, or named Bank Account)
    */
   static async createAccount(tenantId: string, userId: string, data: CreateAccountInput) {
     const account = await (prisma as any).financialAccount.create({
       data: {
         tenantId,
         branchId: data.branchId,
-        name: data.name,
+        name: data.name.trim(),
         type: data.type,
+        accountNumber: data.accountNumber?.trim() || null,
+        bankName: data.bankName?.trim() || null,
+        branchName: data.branchName?.trim() || null,
+        routingNumber: data.routingNumber?.trim() || null,
+        isDefault: Boolean(data.isDefault),
+        description: data.description?.trim() || null,
         balance: data.initialBalance || 0,
         isActive: true,
       },
@@ -105,7 +63,7 @@ export class AccountingService {
           amount: data.initialBalance,
           type: "INCOME",
           reference: "INITIAL_BALANCE",
-          note: "Initial opening balance",
+          note: `Initial opening balance for ${account.name}`,
           userId,
         },
       });
@@ -120,6 +78,74 @@ export class AccountingService {
     });
 
     return account;
+  }
+
+  /**
+   * Update an existing financial account
+   */
+  static async updateAccount(tenantId: string, accountId: string, userId: string, data: UpdateAccountInput) {
+    const existing = await (prisma as any).financialAccount.findFirst({
+      where: { id: accountId, tenantId },
+    });
+    if (!existing) throw new Error("Financial account not found");
+
+    const updated = await (prisma as any).financialAccount.update({
+      where: { id: accountId },
+      data: {
+        ...(data.name !== undefined && { name: data.name.trim() }),
+        ...(data.accountNumber !== undefined && { accountNumber: data.accountNumber?.trim() || null }),
+        ...(data.bankName !== undefined && { bankName: data.bankName?.trim() || null }),
+        ...(data.branchName !== undefined && { branchName: data.branchName?.trim() || null }),
+        ...(data.routingNumber !== undefined && { routingNumber: data.routingNumber?.trim() || null }),
+        ...(data.isDefault !== undefined && { isDefault: Boolean(data.isDefault) }),
+        ...(data.description !== undefined && { description: data.description?.trim() || null }),
+        ...(data.isActive !== undefined && { isActive: Boolean(data.isActive) }),
+      },
+      include: {
+        branch: { select: { id: true, name: true } },
+      },
+    });
+
+    await AuditService.log({
+      tenantId,
+      branchId: existing.branchId,
+      userId,
+      action: "ACCOUNT_UPDATED",
+      details: { accountId, changes: data },
+    });
+
+    return updated;
+  }
+
+  /**
+   * Safely remove/deactivate a financial account so transactions, transfers, and sales history remain intact
+   */
+  static async deleteAccount(tenantId: string, accountId: string, userId: string) {
+    const existing = await (prisma as any).financialAccount.findFirst({
+      where: { id: accountId, tenantId },
+    });
+    if (!existing) throw new Error("Financial account not found");
+
+    if (Number(existing.balance) > 0) {
+      throw new Error(
+        `Cannot remove account "${existing.name}" because it still has an active balance of ৳${Number(existing.balance).toFixed(2)}. Please transfer or withdraw the balance to ৳0 first.`
+      );
+    }
+
+    const deactivated = await (prisma as any).financialAccount.update({
+      where: { id: accountId },
+      data: { isActive: false },
+    });
+
+    await AuditService.log({
+      tenantId,
+      branchId: existing.branchId,
+      userId,
+      action: "ACCOUNT_DEACTIVATED",
+      details: { accountId, name: existing.name, type: existing.type },
+    });
+
+    return deactivated;
   }
 
   /**
@@ -337,66 +363,73 @@ export class AccountingService {
     branchId?: string,
     options?: { startDate?: string; endDate?: string; period?: string }
   ) {
-    if (branchId) {
-      await this.ensureDefaultAccounts(tenantId, branchId);
-    } else {
-      const existingCount = await (prisma as any).financialAccount.count({
-        where: { tenantId },
-      });
-      if (existingCount === 0) {
-        const firstBranch = await (prisma as any).branch.findFirst({
-          where: { tenantId, isActive: true },
-          orderBy: { createdAt: "asc" },
-        });
-        if (firstBranch) {
-          await this.ensureDefaultAccounts(tenantId, firstBranch.id);
-        }
-      }
-    }
-
     const where: any = { tenantId, isActive: true };
-    if (branchId) where.branchId = branchId;
+    if (branchId) {
+      where.OR = [{ branchId }, { branchId: null }];
+    }
 
     const accounts = await (prisma as any).financialAccount.findMany({
       where,
+      orderBy: [{ isDefault: "desc" }, { type: "asc" }, { createdAt: "asc" }],
+      include: {
+        branch: { select: { id: true, name: true } },
+      },
     });
 
     let totalCash = 0;
     let totalBank = 0;
+    let totalBkash = 0;
+    let totalNagad = 0;
     let totalMobile = 0;
-    let totalCardSettlement = 0;
     let totalOther = 0;
+
+    const bankAccountsList: any[] = [];
 
     for (const acc of accounts) {
       const balance = Number(acc.balance || 0);
-      switch (acc.type) {
-        case "CASH":
-          totalCash += balance;
-          break;
-        case "BANK":
-          totalBank += balance;
-          break;
-        case "MOBILE":
-          totalMobile += balance;
-          break;
-        case "CARD_SETTLEMENT":
-          totalCardSettlement += balance;
-          break;
-        default:
-          totalOther += balance;
-          break;
+      const accType = String(acc.type).toUpperCase();
+      const nameLower = (acc.name || "").toLowerCase();
+
+      if (accType === "CASH") {
+        totalCash += balance;
+      } else if (accType === "BANK" || accType === "CARD_SETTLEMENT") {
+        totalBank += balance;
+        bankAccountsList.push({
+          id: acc.id,
+          name: acc.name,
+          bankName: acc.bankName || acc.name,
+          accountNumber: acc.accountNumber,
+          branchName: acc.branchName,
+          routingNumber: acc.routingNumber,
+          balance,
+          isDefault: acc.isDefault,
+          isActive: acc.isActive,
+        });
+      } else if (accType === "BKASH" || (accType === "MOBILE" && nameLower.includes("bkash")) || nameLower.includes("bkash")) {
+        totalBkash += balance;
+        totalMobile += balance;
+      } else if (accType === "NAGAD" || (accType === "MOBILE" && nameLower.includes("nagad")) || nameLower.includes("nagad")) {
+        totalNagad += balance;
+        totalMobile += balance;
+      } else if (accType === "MOBILE") {
+        totalMobile += balance;
+      } else {
+        totalOther += balance;
       }
     }
 
-    const totalLiquidity = totalCash + totalBank + totalMobile + totalCardSettlement + totalOther;
+    const totalLiquidity = accounts.reduce((sum: number, a: any) => sum + Number(a.balance || 0), 0);
 
-    // Fetch total supplier dues
+    // Fetch total supplier dues from Supplier model
     const supplierWhere: any = { tenantId, isActive: true };
     const suppliers = await (prisma as any).supplier.findMany({
       where: supplierWhere,
-      select: { dueBalance: true },
+      select: { totalDue: true, dueBalance: true },
     });
-    const totalSupplierDues = suppliers.reduce((sum: number, s: any) => sum + Number(s.dueBalance || 0), 0);
+    const totalSupplierDues = suppliers.reduce(
+      (sum: number, s: any) => sum + Number(s.totalDue ?? s.dueBalance ?? 0),
+      0
+    );
 
     // Compute period date bounds
     const now = new Date();
@@ -440,7 +473,10 @@ export class AccountingService {
       select: {
         id: true,
         totalAmount: true,
+        paidAmount: true,
         paymentMethod: true,
+        bankName: true,
+        financialAccountId: true,
         notes: true,
         createdAt: true,
       },
@@ -450,31 +486,148 @@ export class AccountingService {
     let periodCashSales = 0;
     let periodBkashSales = 0;
     let periodNagadSales = 0;
-    let periodCardSales = 0;
+    let periodBankSales = 0;
     let periodOtherSales = 0;
 
     for (const s of periodSales) {
-      const amt = Number(s.totalAmount || 0);
+      const amt = Number(s.paidAmount || s.totalAmount || 0);
       periodTotalSales += amt;
+      const pMethod = String(s.paymentMethod || "").toUpperCase();
       const notesLower = (s.notes || "").toLowerCase();
 
-      if (s.paymentMethod === "CASH") {
+      if (pMethod === "CASH") {
         periodCashSales += amt;
-      } else if (s.paymentMethod === "CARD") {
-        periodCardSales += amt;
-      } else if (s.paymentMethod === "MOBILE") {
-        if (notesLower.includes("nagad")) {
-          periodNagadSales += amt;
-        } else {
-          periodBkashSales += amt;
-        }
+      } else if (pMethod === "BKASH" || (pMethod === "MOBILE" && notesLower.includes("bkash"))) {
+        periodBkashSales += amt;
+      } else if (pMethod === "NAGAD" || (pMethod === "MOBILE" && notesLower.includes("nagad"))) {
+        periodNagadSales += amt;
+      } else if (pMethod === "BANK" || pMethod === "CARD") {
+        periodBankSales += amt;
       } else {
         periodOtherSales += amt;
       }
     }
 
-    const periodMobileSales = periodBkashSales + periodNagadSales;
-    const periodBankCardSales = periodCardSales;
+    // Today's Sales Telemetry & Hourly Breakdown
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+
+    const todaySales = await (prisma as any).sale.findMany({
+      where: {
+        tenantId,
+        status: "COMPLETED",
+        ...(branchId ? { branchId } : {}),
+        createdAt: { gte: todayStart, lte: todayEnd },
+      },
+      select: { totalAmount: true, paidAmount: true, paymentMethod: true, createdAt: true },
+    });
+
+    let todayRevenue = 0;
+    let todayCash = 0;
+    let todayBkash = 0;
+    let todayNagad = 0;
+    let todayBank = 0;
+
+    for (const s of todaySales) {
+      const amt = Number(s.paidAmount || s.totalAmount || 0);
+      todayRevenue += amt;
+      const m = String(s.paymentMethod).toUpperCase();
+      if (m === "CASH") todayCash += amt;
+      else if (m === "BKASH") todayBkash += amt;
+      else if (m === "NAGAD") todayNagad += amt;
+      else if (m === "BANK" || m === "CARD") todayBank += amt;
+    }
+
+    const hourlySlots = [
+      { label: "8-10 AM", startHour: 8, endHour: 10 },
+      { label: "10-12 PM", startHour: 10, endHour: 12 },
+      { label: "12-2 PM", startHour: 12, endHour: 14 },
+      { label: "2-4 PM", startHour: 14, endHour: 16 },
+      { label: "4-6 PM", startHour: 16, endHour: 18 },
+      { label: "6-8 PM", startHour: 18, endHour: 20 },
+      { label: "8-10 PM", startHour: 20, endHour: 22 },
+      { label: "Night", startHour: 22, endHour: 24 },
+    ];
+
+    const todayHourly = hourlySlots.map((slot) => {
+      const slotSales = todaySales.filter((s: any) => {
+        const hour = new Date(s.createdAt).getHours();
+        return hour >= slot.startHour && hour < slot.endHour;
+      });
+      const revenue = slotSales.reduce((acc: number, s: any) => acc + Number(s.paidAmount || s.totalAmount || 0), 0);
+      return {
+        label: slot.label,
+        revenue,
+        salesCount: slotSales.length,
+      };
+    });
+
+    // 7-Day Trend
+    const last7Days = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - i);
+      const dayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+      const dayEnd = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+
+      const dSales = await (prisma as any).sale.findMany({
+        where: {
+          tenantId,
+          status: "COMPLETED",
+          ...(branchId ? { branchId } : {}),
+          createdAt: { gte: dayStart, lte: dayEnd },
+        },
+        select: { totalAmount: true, paidAmount: true, paymentMethod: true },
+      });
+
+      const dayRevenue = dSales.reduce((acc: number, s: any) => acc + Number(s.paidAmount || s.totalAmount || 0), 0);
+      let dayCash = 0;
+      let dayDigital = 0;
+      for (const s of dSales) {
+        const amt = Number(s.paidAmount || s.totalAmount || 0);
+        if (s.paymentMethod === "CASH") dayCash += amt;
+        else dayDigital += amt;
+      }
+
+      last7Days.push({
+        date: dayStart.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+        dayName: dayStart.toLocaleDateString("en-US", { weekday: "short" }),
+        dateKey: `${dayStart.getFullYear()}-${String(dayStart.getMonth() + 1).padStart(2, "0")}-${String(dayStart.getDate()).padStart(2, "0")}`,
+        revenue: dayRevenue,
+        orderCount: dSales.length,
+        cashAmount: dayCash,
+        digitalAmount: dayDigital,
+      });
+    }
+
+    // Build 30-Day Daily Sales Trend
+    const last30Days = [];
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - i);
+      const dayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+      const dayEnd = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+
+      const dSales = await (prisma as any).sale.findMany({
+        where: {
+          tenantId,
+          status: "COMPLETED",
+          ...(branchId ? { branchId } : {}),
+          createdAt: { gte: dayStart, lte: dayEnd },
+        },
+        select: { totalAmount: true, paidAmount: true, paymentMethod: true },
+      });
+
+      const dayRevenue = dSales.reduce((acc: number, s: any) => acc + Number(s.paidAmount || s.totalAmount || 0), 0);
+
+      last30Days.push({
+        date: dayStart.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+        dayName: dayStart.toLocaleDateString("en-US", { weekday: "narrow" }),
+        dateKey: `${dayStart.getFullYear()}-${String(dayStart.getMonth() + 1).padStart(2, "0")}-${String(dayStart.getDate()).padStart(2, "0")}`,
+        revenue: dayRevenue,
+        orderCount: dSales.length,
+      });
+    }
 
     // Build 6-Month Sales Trend
     const monthlyTrend = [];
@@ -492,6 +645,7 @@ export class AccountingService {
         },
         select: {
           totalAmount: true,
+          paidAmount: true,
           paymentMethod: true,
         },
       });
@@ -501,7 +655,7 @@ export class AccountingService {
       let mDigital = 0;
 
       for (const s of mSales) {
-        const amt = Number(s.totalAmount || 0);
+        const amt = Number(s.paidAmount || s.totalAmount || 0);
         mRevenue += amt;
         if (s.paymentMethod === "CASH") mCash += amt;
         else mDigital += amt;
@@ -521,11 +675,11 @@ export class AccountingService {
     // Recent Financial Ledger (Audit Trail)
     const recentLedger = await (prisma as any).financialTransaction.findMany({
       where: { tenantId, ...(branchId ? { branchId } : {}) },
-      take: 8,
+      take: 10,
       orderBy: { createdAt: "desc" },
       include: {
-        sourceAccount: { select: { id: true, name: true, type: true } },
-        destinationAccount: { select: { id: true, name: true, type: true } },
+        sourceAccount: { select: { id: true, name: true, type: true, bankName: true, accountNumber: true } },
+        destinationAccount: { select: { id: true, name: true, type: true, bankName: true, accountNumber: true } },
         user: { select: { id: true, name: true, username: true } },
       },
     });
@@ -534,35 +688,52 @@ export class AccountingService {
       summary: {
         totalSales: periodTotalSales,
         cashSales: periodCashSales,
-        bankCardSales: periodBankCardSales,
-        mobileSales: periodMobileSales,
         bkashSales: periodBkashSales,
         nagadSales: periodNagadSales,
-        cardSales: periodCardSales,
+        bankSales: periodBankSales,
         otherSales: periodOtherSales,
         totalTransactions: periodSales.length,
         totalSupplierDues,
         currentCashBalance: totalCash,
+        currentBkashBalance: totalBkash,
+        currentNagadBalance: totalNagad,
         currentBankBalance: totalBank,
-        currentMobileBalance: totalMobile,
         totalLiquidity,
+        todayRevenue,
+        todaySalesCount: todaySales.length,
+        todayCash,
+        todayBkash,
+        todayNagad,
+        todayBank,
       },
       paymentBreakdown: {
         cash: periodCashSales,
         bkash: periodBkashSales,
         nagad: periodNagadSales,
-        card: periodCardSales,
+        bank: periodBankSales,
         other: periodOtherSales,
         grandTotal: periodTotalSales,
       },
+      bankAccounts: bankAccountsList,
+      todayHourly,
+      last7Days,
+      last30Days,
       monthlyTrend,
       recentLedger,
       accounts: accounts.map((a: any) => ({
         id: a.id,
         name: a.name,
         type: a.type,
+        bankName: a.bankName,
+        accountNumber: a.accountNumber,
+        branchName: a.branchName,
+        routingNumber: a.routingNumber,
+        isDefault: a.isDefault,
+        isActive: a.isActive,
+        description: a.description,
         balance: Number(a.balance),
         branchId: a.branchId,
+        branchNameStr: a.branch?.name,
       })),
     };
   }

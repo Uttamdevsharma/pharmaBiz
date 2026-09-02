@@ -63,4 +63,32 @@
   .brand-gradient {
     background: linear-gradient(135deg, var(--primary-color) 0%, rgba(var(--primary-rgb), 0.75) 100%);
   }
+
+  @keyframes gentle-float {
+    0%, 100% {
+      transform: translateY(0px);
+    }
+    50% {
+      transform: translateY(-10px);
+    }
+  }
+
+  .animate-gentle-float {
+    animation: gentle-float 5s ease-in-out infinite;
+  }
+
+  @keyframes subtle-card-float {
+    0%, 100% {
+      transform: translateY(0px);
+      box-shadow: 0 25px 60px -15px rgba(30, 58, 138, 0.12), 0 10px 25px -5px rgba(30, 58, 138, 0.05);
+    }
+    50% {
+      transform: translateY(-5px);
+      box-shadow: 0 35px 70px -15px rgba(30, 58, 138, 0.18), 0 15px 30px -5px rgba(30, 58, 138, 0.08);
+    }
+  }
+
+  .animate-card-float {
+    animation: subtle-card-float 7s ease-in-out infinite;
+  }
 }

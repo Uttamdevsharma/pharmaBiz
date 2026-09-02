@@ -19,7 +19,6 @@ import {
   Building,
   FolderTree,
 } from "lucide-react";
-import { ImageUploader } from "@/components/common/ImageUploader";
 
 interface AddProductViewProps {
   editingProduct?: Product | null;
@@ -69,7 +68,6 @@ export function AddProductView({
     tabletsPerStrip: editingProduct?.tabletsPerStrip || 10,
     minStockAlert: editingProduct?.minStockAlert || 20,
     description: editingProduct?.description || "",
-    imageUrl: editingProduct?.imageUrl || "",
     isControlled: Boolean(editingProduct?.isControlled),
     requiresPrescription: Boolean(editingProduct?.requiresPrescription),
   });
@@ -251,7 +249,6 @@ export function AddProductView({
         tabletsPerStrip: isMedicineCategory ? Number(formData.tabletsPerStrip) : null,
         minStockAlert: Number(formData.minStockAlert),
         description: formData.description || null,
-        imageUrl: formData.imageUrl || null,
         isControlled: formData.isControlled,
         requiresPrescription: formData.requiresPrescription,
       };
@@ -304,7 +301,6 @@ export function AddProductView({
       tabletsPerStrip: 10,
       minStockAlert: 20,
       description: "",
-      imageUrl: "",
       isControlled: false,
       requiresPrescription: false,
     });
@@ -743,19 +739,6 @@ export function AddProductView({
                 className="h-4 w-4 text-brand-primary rounded"
               />
             </label>
-          </div>
-
-          {/* Image Uploader */}
-          <div className="pt-2">
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-              Product Image
-            </label>
-            <ImageUploader
-              value={formData.imageUrl}
-              onChange={(data) => setFormData({ ...formData, imageUrl: data ? data.url : "" })}
-              folder="pharmacy_products"
-              label="Upload Product Packaging Photo"
-            />
           </div>
         </div>
 

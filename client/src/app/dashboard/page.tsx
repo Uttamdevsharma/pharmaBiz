@@ -13,7 +13,6 @@ import { BranchModule } from "@/components/dashboard/BranchModule";
 import { StaffModule } from "@/components/dashboard/StaffModule";
 import { RolesModule } from "@/components/dashboard/RolesModule";
 import { PosModule } from "@/components/dashboard/PosModule";
-import { AccountsModule } from "@/components/dashboard/AccountsModule";
 import { ReportsModule } from "@/components/dashboard/ReportsModule";
 import { SubscriptionModule } from "@/components/dashboard/SubscriptionModule";
 import { SettingsModule } from "@/components/dashboard/SettingsModule";
@@ -34,6 +33,12 @@ import { PurchaseHistoryView } from "@/components/dashboard/PurchaseHistoryView"
 import { PaymentsDueView } from "@/components/dashboard/PaymentsDueView";
 import { PaymentMethodSalesView } from "@/components/dashboard/PaymentMethodSalesView";
 import { ProductWiseSalesView } from "@/components/dashboard/ProductWiseSalesView";
+import { AccountsOverviewView } from "@/components/dashboard/AccountsOverviewView";
+import { FinancialAccountsView } from "@/components/dashboard/FinancialAccountsView";
+import { FundTransferView } from "@/components/dashboard/FundTransferView";
+import { TransactionHistoryView } from "@/components/dashboard/TransactionHistoryView";
+import { SalesHistoryView } from "@/components/dashboard/SalesHistoryView";
+import { VatSettingsView } from "@/components/dashboard/VatSettingsView";
 import { Product } from "@/types";
 import {
   CreditCard,
@@ -49,7 +54,7 @@ import {
 function getDefaultModuleForRole(role?: string): OwnerModule {
   switch (role) {
     case "ACCOUNTS":
-      return "accounts";
+      return "acc_overview";
     case "CASHIER":
       return "pos";
     case "INVENTORY_EXECUTIVE":
@@ -341,15 +346,24 @@ export default function RoleBasedDashboard() {
         />
 
         {/* Content Area */}
-        <main className="flex-1 p-6 lg:p-8 overflow-y-auto max-w-7xl">
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 2xl:p-10 overflow-y-auto w-full min-w-0">
           {/* Core Hubs */}
           {activeModule === "overview" && <OverviewModule onNavigate={setActiveModule} />}
-          {activeModule === "pos" && <PosModule />}
-          {activeModule === "accounts" && <AccountsModule onNavigate={setActiveModule} />}
+
+          {/* 🛒 Dedicated Sales & POS Subpages */}
+          {(activeModule === "pos" || activeModule === "pos_sale") && <PosModule />}
+          {activeModule === "pos_history" && <SalesHistoryView onNavigate={setActiveModule} />}
+          {activeModule === "pos_vat" && <VatSettingsView onNavigate={setActiveModule} />}
 
           {/* 💳 Dedicated Accounts & Sales Analysis Subpages */}
+          {(activeModule === "acc_overview" || activeModule === "accounts") && (
+            <AccountsOverviewView onNavigate={setActiveModule} />
+          )}
+          {activeModule === "acc_financial_accounts" && <FinancialAccountsView onNavigate={setActiveModule} />}
+          {activeModule === "acc_fund_transfer" && <FundTransferView onNavigate={setActiveModule} />}
           {activeModule === "acc_payment_sales" && <PaymentMethodSalesView onNavigate={setActiveModule} />}
           {activeModule === "acc_product_sales" && <ProductWiseSalesView onNavigate={setActiveModule} />}
+          {activeModule === "acc_transaction_history" && <TransactionHistoryView onNavigate={setActiveModule} />}
 
           {/* 📦 Dedicated Inventory Subpages */}
           {activeModule === "inv_add_product" && (

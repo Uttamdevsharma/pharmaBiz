@@ -6,17 +6,24 @@ import {
   CreditCard,
   Banknote,
   Smartphone,
-  Wallet,
+  Building2,
   Calendar,
   Filter,
   Loader2,
   Receipt,
   Store,
-  DollarSign,
   Search,
   ChevronLeft,
   ChevronRight,
+  Wallet,
 } from "lucide-react";
+
+interface FinancialAccount {
+  id: string;
+  name: string;
+  type: string;
+  accountNumber?: string | null;
+}
 
 interface PaymentMethodSalesViewProps {
   onNavigate?: (module: any) => void;
@@ -30,6 +37,9 @@ export function PaymentMethodSalesView({ onNavigate: _onNavigate }: PaymentMetho
   const [selectedBranchId, setSelectedBranchId] = useState<string>("");
   const [branches, setBranches] = useState<any[]>([]);
 
+  // Accounts for dynamic payment method filter
+  const [accounts, setAccounts] = useState<FinancialAccount[]>([]);
+
   // Telemetry Data
   const [dailyData, setDailyData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -40,6 +50,18 @@ export function PaymentMethodSalesView({ onNavigate: _onNavigate }: PaymentMetho
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
+
+  const loadAccounts = async (branchId?: string) => {
+    try {
+      const url = branchId ? `/accounting/accounts?branchId=${branchId}` : "/accounting/accounts";
+      const res = await fetchApi<FinancialAccount[]>(url);
+      if (res.success && res.data) {
+        setAccounts(res.data);
+      }
+    } catch (err) {
+      console.error("Failed to load accounts for filter", err);
+    }
+  };
 
   const loadPaymentSales = async (isManualRefresh = false) => {
     try {
@@ -70,7 +92,9 @@ export function PaymentMethodSalesView({ onNavigate: _onNavigate }: PaymentMetho
     }
   };
 
+  // Initial load
   useEffect(() => {
+    loadAccounts(selectedBranchId || undefined);
     loadPaymentSales();
   }, [startDate, endDate, selectedBranchId]);
 
@@ -99,30 +123,42 @@ export function PaymentMethodSalesView({ onNavigate: _onNavigate }: PaymentMetho
     }
   };
 
-  const summary = dailyData?.summary || {
-    totalSales: 0,
-    transactionCount: 0,
-    totalUnitsSold: 0,
-    averageOrderValue: 0,
-  };
+  // Build dynamic payment method options from real accounts
+  const paymentMethodOptions = [
+    { value: "ALL", label: "All Methods" },
+    ...accounts.map((acc) => ({
+      value: acc.id,
+      label: acc.name,
+      type: acc.type,
+    })),
+  ];
 
-  const paymentBreakdown = dailyData?.paymentBreakdown || {
-    cash: 0,
-    bkash: 0,
-    nagad: 0,
-    card: 0,
-    other: 0,
-    grandTotal: 0,
-  };
-
+  // Filter transactions
   const filteredTransactions = (dailyData?.transactions || []).filter((t: any) => {
     if (selectedMethodFilter !== "ALL") {
-      if (selectedMethodFilter === "CASH" && t.paymentMethod !== "CASH") return false;
-      if (selectedMethodFilter === "CARD" && t.paymentMethod !== "CARD") return false;
-      if (selectedMethodFilter === "BKASH" && !t.paymentDetail?.toLowerCase().includes("bkash")) return false;
-      if (selectedMethodFilter === "NAGAD" && !t.paymentDetail?.toLowerCase().includes("nagad")) return false;
-      if (selectedMethodFilter === "OTHER" && (t.paymentMethod === "CASH" || t.paymentMethod === "CARD" || t.paymentDetail?.toLowerCase().includes("bkash") || t.paymentDetail?.toLowerCase().includes("nagad"))) return false;
+      // Match by account id (financialAccountId) or by paymentMethod/type heuristics
+      const acc = accounts.find((a) => a.id === selectedMethodFilter);
+      if (acc) {
+        const accType = acc.type.toUpperCase();
+        const tMethod = (t.paymentMethod || "").toUpperCase();
+        const tDetail = (t.paymentDetail || "").toLowerCase();
+        const tAccId = t.financialAccountId;
+
+        // Prefer financialAccountId match
+        if (tAccId && tAccId === acc.id) {
+          // matched
+        } else if (accType === "CASH" && tMethod !== "CASH") {
+          return false;
+        } else if (accType === "BKASH" && !tDetail.includes("bkash") && tMethod !== "BKASH") {
+          return false;
+        } else if (accType === "NAGAD" && !tDetail.includes("nagad") && tMethod !== "NAGAD") {
+          return false;
+        } else if (accType === "BANK" || accType === "CARD_SETTLEMENT") {
+          if (tMethod !== "BANK" && tMethod !== "CARD" && tMethod !== "CARD_SETTLEMENT") return false;
+        }
+      }
     }
+
     if (searchTerm.trim()) {
       const s = searchTerm.toLowerCase();
       return (
@@ -140,22 +176,40 @@ export function PaymentMethodSalesView({ onNavigate: _onNavigate }: PaymentMetho
     currentPage * itemsPerPage
   );
 
+  const getAccountIcon = (type: string) => {
+    const t = type?.toUpperCase();
+    if (t === "CASH") return Banknote;
+    if (t === "BKASH" || t === "NAGAD" || t === "MOBILE") return Smartphone;
+    if (t === "BANK" || t === "CARD_SETTLEMENT") return Building2;
+    return Wallet;
+  };
+
+  const getPaymentBadgeStyle = (paymentMethod: string, paymentDetail: string) => {
+    const m = (paymentMethod || "").toUpperCase();
+    const d = (paymentDetail || "").toLowerCase();
+    if (m === "CASH") return "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400";
+    if (m === "CARD" || m === "CARD_SETTLEMENT") return "bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-400";
+    if (d.includes("nagad") || m === "NAGAD") return "bg-orange-50 text-orange-700 dark:bg-orange-950/60 dark:text-orange-400";
+    if (d.includes("bkash") || m === "BKASH") return "bg-pink-50 text-pink-700 dark:bg-pink-950/60 dark:text-pink-400";
+    return "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300";
+  };
+
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
+    <div className="space-y-6 2xl:space-y-8 w-full max-w-[1920px] 2xl:max-w-[2560px] mx-auto">
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
         <div>
-          <div className="flex items-center gap-2 text-xs text-slate-400 mb-1">
-            <span>Accounts Management</span>
+          <div className="flex items-center gap-2 text-xs xl:text-sm text-slate-400 mb-1">
+            <span>Accounts & Finance</span>
             <span>/</span>
-            <span className="text-slate-700 dark:text-slate-300 font-bold">Payment Method Sales</span>
+            <span className="text-slate-700 dark:text-slate-300 font-bold">Payment Methods</span>
           </div>
-          <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-slate-100 flex items-center gap-2.5">
-            <CreditCard className="h-7 w-7 text-emerald-600 dark:text-emerald-400" />
-            Payment Method Sales
+          <h1 className="text-2xl xl:text-3xl font-black tracking-tight text-slate-900 dark:text-slate-100 flex items-center gap-2.5">
+            <CreditCard className="h-7 w-7 xl:h-8 xl:w-8 text-emerald-600 dark:text-emerald-400" />
+            Payment Method Sales History
           </h1>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Real-time breakdown of sales collected by Cash Drawer, bKash, Nagad, Card/POS, and other gateways.
+          <p className="text-xs sm:text-sm xl:text-base text-slate-500 dark:text-slate-400 mt-1">
+            Filter and audit individual customer sales transactions by specific payment method and destination financial accounts.
           </p>
         </div>
 
@@ -257,91 +311,6 @@ export function PaymentMethodSalesView({ onNavigate: _onNavigate }: PaymentMetho
         </div>
       ) : (
         <>
-          {/* SUMMARY CARDS FOR PAYMENT CHANNELS */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-            {/* Total Sales */}
-            <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-700 text-white shadow-md space-y-1">
-              <div className="flex items-center justify-between opacity-80 text-[10px] font-black uppercase tracking-wider">
-                <span>Total Sales</span>
-                <DollarSign className="h-3.5 w-3.5" />
-              </div>
-              <div className="text-xl font-black font-mono">
-                ৳{paymentBreakdown.grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </div>
-              <div className="text-[10px] opacity-85 font-medium">{summary.transactionCount} transactions</div>
-            </div>
-
-            {/* Cash */}
-            <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
-              <div className="flex items-center justify-between text-slate-400 text-[10px] font-black uppercase tracking-wider">
-                <span>Cash Drawer</span>
-                <Banknote className="h-3.5 w-3.5 text-emerald-500" />
-              </div>
-              <div className="text-xl font-black text-slate-900 dark:text-white font-mono">
-                ৳{paymentBreakdown.cash.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </div>
-              <div className="text-[10px] text-slate-400 font-medium">
-                {summary.totalSales > 0 ? `${Math.round((paymentBreakdown.cash / summary.totalSales) * 100)}% of total` : "0%"}
-              </div>
-            </div>
-
-            {/* bKash */}
-            <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
-              <div className="flex items-center justify-between text-slate-400 text-[10px] font-black uppercase tracking-wider">
-                <span>bKash</span>
-                <Smartphone className="h-3.5 w-3.5 text-pink-500" />
-              </div>
-              <div className="text-xl font-black text-slate-900 dark:text-white font-mono">
-                ৳{paymentBreakdown.bkash.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </div>
-              <div className="text-[10px] text-slate-400 font-medium">
-                {summary.totalSales > 0 ? `${Math.round((paymentBreakdown.bkash / summary.totalSales) * 100)}% of total` : "0%"}
-              </div>
-            </div>
-
-            {/* Nagad */}
-            <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
-              <div className="flex items-center justify-between text-slate-400 text-[10px] font-black uppercase tracking-wider">
-                <span>Nagad</span>
-                <Smartphone className="h-3.5 w-3.5 text-orange-500" />
-              </div>
-              <div className="text-xl font-black text-slate-900 dark:text-white font-mono">
-                ৳{paymentBreakdown.nagad.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </div>
-              <div className="text-[10px] text-slate-400 font-medium">
-                {summary.totalSales > 0 ? `${Math.round((paymentBreakdown.nagad / summary.totalSales) * 100)}% of total` : "0%"}
-              </div>
-            </div>
-
-            {/* Card / POS */}
-            <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
-              <div className="flex items-center justify-between text-slate-400 text-[10px] font-black uppercase tracking-wider">
-                <span>Card / POS</span>
-                <CreditCard className="h-3.5 w-3.5 text-blue-500" />
-              </div>
-              <div className="text-xl font-black text-slate-900 dark:text-white font-mono">
-                ৳{paymentBreakdown.card.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </div>
-              <div className="text-[10px] text-slate-400 font-medium">
-                {summary.totalSales > 0 ? `${Math.round((paymentBreakdown.card / summary.totalSales) * 100)}% of total` : "0%"}
-              </div>
-            </div>
-
-            {/* Other Methods */}
-            <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
-              <div className="flex items-center justify-between text-slate-400 text-[10px] font-black uppercase tracking-wider">
-                <span>Other Methods</span>
-                <Wallet className="h-3.5 w-3.5 text-purple-500" />
-              </div>
-              <div className="text-xl font-black text-slate-900 dark:text-white font-mono">
-                ৳{paymentBreakdown.other.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </div>
-              <div className="text-[10px] text-slate-400 font-medium">
-                {summary.totalSales > 0 ? `${Math.round((paymentBreakdown.other / summary.totalSales) * 100)}% of total` : "0%"}
-              </div>
-            </div>
-          </div>
-
           {/* PAYMENT TRANSACTIONS TABLE */}
           <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -351,12 +320,17 @@ export function PaymentMethodSalesView({ onNavigate: _onNavigate }: PaymentMetho
                   Payment Transactions Ledger
                 </h3>
                 <p className="text-xs text-slate-400">
-                  Detailed list of customer invoices and verified payment collection methods.
+                  Detailed list of invoices with verified payment collection methods.
+                  {filteredTransactions.length > 0 && (
+                    <span className="ml-2 font-bold text-slate-600 dark:text-slate-300">
+                      {filteredTransactions.length} transaction{filteredTransactions.length !== 1 ? "s" : ""}
+                    </span>
+                  )}
                 </p>
               </div>
 
-              <div className="flex items-center gap-3">
-                <div className="relative w-full sm:w-60">
+              <div className="flex items-center gap-3 flex-wrap">
+                <div className="relative w-full sm:w-56">
                   <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
                   <input
                     type="text"
@@ -370,6 +344,7 @@ export function PaymentMethodSalesView({ onNavigate: _onNavigate }: PaymentMetho
                   />
                 </div>
 
+                {/* Dynamic account-based payment filter */}
                 <select
                   value={selectedMethodFilter}
                   onChange={(e) => {
@@ -378,12 +353,19 @@ export function PaymentMethodSalesView({ onNavigate: _onNavigate }: PaymentMetho
                   }}
                   className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 outline-none"
                 >
-                  <option value="ALL">All Methods</option>
-                  <option value="CASH">Cash Drawer</option>
-                  <option value="BKASH">bKash</option>
-                  <option value="NAGAD">Nagad</option>
-                  <option value="CARD">Card / POS</option>
-                  <option value="OTHER">Other Methods</option>
+                  <option value="ALL">All Accounts</option>
+                  {accounts.length === 0 ? (
+                    <option value="" disabled>No accounts created yet</option>
+                  ) : (
+                    accounts.map((acc) => {
+                      const Icon = getAccountIcon(acc.type);
+                      return (
+                        <option key={acc.id} value={acc.id}>
+                          {acc.name}{acc.accountNumber ? ` (${acc.accountNumber})` : ""}
+                        </option>
+                      );
+                    })
+                  )}
                 </select>
               </div>
             </div>
@@ -392,12 +374,11 @@ export function PaymentMethodSalesView({ onNavigate: _onNavigate }: PaymentMetho
               <table className="w-full text-left text-xs">
                 <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 uppercase font-bold text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-800">
                   <tr>
-                    <th className="py-3 px-4">Date</th>
-                    <th className="py-3 px-4">Time</th>
+                    <th className="py-3 px-4">Date & Time</th>
                     <th className="py-3 px-4">Invoice #</th>
                     <th className="py-3 px-4">Customer</th>
                     <th className="py-3 px-4">Cashier</th>
-                    <th className="py-3 px-4">Payment Method</th>
+                    <th className="py-3 px-4">Payment Method / Account</th>
                     <th className="py-3 px-4">Branch</th>
                     <th className="py-3 px-4 text-right">Amount</th>
                   </tr>
@@ -405,18 +386,18 @@ export function PaymentMethodSalesView({ onNavigate: _onNavigate }: PaymentMetho
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300 font-medium">
                   {paginatedTransactions.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="py-8 text-center text-slate-400">
-                        No transactions found for the selected payment criteria.
+                      <td colSpan={7} className="py-12 text-center">
+                        <CreditCard className="h-10 w-10 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
+                        <div className="text-slate-400 font-semibold">No transactions found for the selected criteria.</div>
+                        <div className="text-slate-300 dark:text-slate-600 text-[11px] mt-1">Try a different date range or payment filter.</div>
                       </td>
                     </tr>
                   ) : (
                     paginatedTransactions.map((t: any) => (
                       <tr key={t.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition">
-                        <td className="py-3 px-4 whitespace-nowrap text-slate-600 dark:text-slate-400 font-mono">
-                          {new Date(t.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                        </td>
-                        <td className="py-3 px-4 whitespace-nowrap text-slate-400 font-mono">
-                          {new Date(t.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                        <td className="py-3 px-4 whitespace-nowrap text-slate-500 font-mono">
+                          <div>{new Date(t.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</div>
+                          <div className="text-[10px] text-slate-400">{new Date(t.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div>
                         </td>
                         <td className="py-3 px-4 font-mono font-bold text-slate-900 dark:text-slate-100">
                           {t.receiptNo}
@@ -425,17 +406,9 @@ export function PaymentMethodSalesView({ onNavigate: _onNavigate }: PaymentMetho
                         <td className="py-3 px-4 text-slate-600 dark:text-slate-400">{t.cashier?.name || "Staff"}</td>
                         <td className="py-3 px-4">
                           <span
-                            className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                              t.paymentMethod === "CASH"
-                                ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400"
-                                : t.paymentMethod === "CARD"
-                                ? "bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-400"
-                                : t.paymentDetail?.toLowerCase().includes("nagad")
-                                ? "bg-orange-50 text-orange-700 dark:bg-orange-950/60 dark:text-orange-400"
-                                : "bg-pink-50 text-pink-700 dark:bg-pink-950/60 dark:text-pink-400"
-                            }`}
+                            className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${getPaymentBadgeStyle(t.paymentMethod, t.paymentDetail)}`}
                           >
-                            {t.paymentDetail}
+                            {t.paymentDetail || t.paymentMethod || "—"}
                           </span>
                         </td>
                         <td className="py-3 px-4 text-slate-500">{t.branchName || "Main Branch"}</td>

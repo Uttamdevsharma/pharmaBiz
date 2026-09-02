@@ -1,7 +1,11 @@
 enum PaymentMethod {
   CASH
+  BKASH
+  NAGAD
+  BANK
   CARD
   MOBILE
+  OTHER
 }
 
 enum SaleStatus {
@@ -11,42 +15,47 @@ enum SaleStatus {
 }
 
 model Sale {
-  id                String        @id @default(uuid())
-  tenantId          String
-  branchId          String
-  userId            String
-  customerName      String?
-  customerPhone     String?
-  customerEmail     String?
-  subTotal          Decimal       @default(0) @db.Decimal(12, 2)
-  discount          Decimal       @default(0) @db.Decimal(12, 2)
-  discountType      String?       @default("FIXED") // "FIXED" | "PERCENT"
-  tax               Decimal       @default(0) @db.Decimal(12, 2)
-  totalAmount       Decimal       @db.Decimal(12, 2)
-  paidAmount        Decimal       @default(0) @db.Decimal(12, 2)
-  dueAmount         Decimal       @default(0) @db.Decimal(12, 2)
-  changeAmount      Decimal       @default(0) @db.Decimal(12, 2)
-  paymentMethod     PaymentMethod @default(CASH)
-  status            SaleStatus    @default(COMPLETED)
-  receiptNo         String        @unique
-  invoicePdfUrl     String?
-  notes             String?
-  managerApprovedBy String?       // Required if controlled or prescription medicine included
-  prescriptionRef   String?
-  refundReason      String?
-  voidReason        String?
-  localCreatedAt    DateTime      // Captured offline from edge device or online
-  syncedAt          DateTime      @default(now())
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
+  id                 String            @id @default(uuid())
+  tenantId           String
+  branchId           String
+  userId             String
+  financialAccountId String?
+  customerName       String?
+  customerPhone      String?
+  customerEmail      String?
+  subTotal           Decimal           @default(0) @db.Decimal(12, 2)
+  discount           Decimal           @default(0) @db.Decimal(12, 2)
+  discountType       String?           @default("FIXED") // "FIXED" | "PERCENT"
+  tax                Decimal           @default(0) @db.Decimal(12, 2)
+  totalAmount        Decimal           @db.Decimal(12, 2)
+  paidAmount         Decimal           @default(0) @db.Decimal(12, 2)
+  dueAmount          Decimal           @default(0) @db.Decimal(12, 2)
+  changeAmount       Decimal           @default(0) @db.Decimal(12, 2)
+  paymentMethod      PaymentMethod     @default(CASH)
+  bankName           String?
+  transactionRef     String?
+  status             SaleStatus        @default(COMPLETED)
+  receiptNo          String            @unique
+  invoicePdfUrl      String?
+  notes              String?
+  managerApprovedBy  String?           // Required if controlled or prescription medicine included
+  prescriptionRef    String?
+  refundReason       String?
+  voidReason         String?
+  localCreatedAt     DateTime          // Captured offline from edge device or online
+  syncedAt           DateTime          @default(now())
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
 
-  branch            Branch        @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  user              User          @relation(fields: [userId], references: [id])
-  items             SaleItem[]
+  branch             Branch            @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  user               User              @relation(fields: [userId], references: [id])
+  financialAccount   FinancialAccount? @relation(fields: [financialAccountId], references: [id], onDelete: SetNull)
+  items              SaleItem[]
 
   @@index([tenantId])
   @@index([branchId])
   @@index([userId])
+  @@index([financialAccountId])
   @@index([status])
   @@index([customerPhone])
   @@index([createdAt])

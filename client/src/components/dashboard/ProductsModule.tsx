@@ -64,7 +64,6 @@ export function ProductsModule({ subAction }: ProductsModuleProps = {}) {
     shelfLocation: "Rack A-1",
     minStockAlert: 20,
     description: "",
-    imageUrl: "",
     isControlled: false,
     requiresPrescription: false,
   });
@@ -211,7 +210,6 @@ export function ProductsModule({ subAction }: ProductsModuleProps = {}) {
       shelfLocation: "Rack A-1",
       minStockAlert: 20,
       description: "",
-      imageUrl: "",
       isControlled: false,
       requiresPrescription: false,
     });
@@ -239,7 +237,6 @@ export function ProductsModule({ subAction }: ProductsModuleProps = {}) {
       shelfLocation: p.shelfLocation || "",
       minStockAlert: p.minStockAlert || 10,
       description: p.description || "",
-      imageUrl: p.imageUrl || "",
       isControlled: Boolean(p.isControlled),
       requiresPrescription: Boolean(p.requiresPrescription),
     });
@@ -272,7 +269,6 @@ export function ProductsModule({ subAction }: ProductsModuleProps = {}) {
         shelfLocation: formData.shelfLocation || null,
         minStockAlert: Number(formData.minStockAlert),
         description: formData.description || null,
-        imageUrl: formData.imageUrl || null,
         isControlled: formData.isControlled,
         requiresPrescription: formData.requiresPrescription,
       };
@@ -497,22 +493,9 @@ export function ProductsModule({ subAction }: ProductsModuleProps = {}) {
                     <tr key={p.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition">
                       <td className="py-3.5 px-4">
                         <div className="flex items-center gap-3">
-                          {p.imageUrl ? (
-                            <div className="h-10 w-10 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden bg-slate-50 dark:bg-slate-800 shrink-0 shadow-2xs">
-                              <img
-                                src={p.imageUrl}
-                                alt={p.name}
-                                className="h-full w-full object-cover"
-                                onError={(e) => {
-                                  (e.target as HTMLElement).style.display = "none";
-                                }}
-                              />
-                            </div>
-                          ) : (
-                            <div className="h-10 w-10 rounded-xl bg-brand-primary/10 text-brand-primary flex items-center justify-center font-bold text-sm shrink-0">
-                              {p.name.charAt(0)}
-                            </div>
-                          )}
+                          <div className="h-10 w-10 rounded-xl bg-brand-primary/10 text-brand-primary flex items-center justify-center font-bold text-sm shrink-0">
+                            {p.name.charAt(0)}
+                          </div>
                           <div>
                             <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
                               {p.name}

@@ -5,11 +5,23 @@ const zod_1 = require("zod");
 exports.createAccountSchema = zod_1.z.object({
     branchId: zod_1.z.string().uuid("Invalid branch ID"),
     name: zod_1.z.string().min(2, "Account name must be at least 2 characters"),
-    type: zod_1.z.enum(["CASH", "BANK", "MOBILE", "CARD_SETTLEMENT", "OTHER"]),
+    type: zod_1.z.enum(["CASH", "BANK", "BKASH", "NAGAD", "MOBILE", "CARD_SETTLEMENT", "OTHER"]),
+    accountNumber: zod_1.z.string().optional().nullable(),
+    bankName: zod_1.z.string().optional().nullable(),
+    branchName: zod_1.z.string().optional().nullable(),
+    routingNumber: zod_1.z.string().optional().nullable(),
+    isDefault: zod_1.z.boolean().optional().default(false),
+    description: zod_1.z.string().optional().nullable(),
     initialBalance: zod_1.z.number().nonnegative().optional().default(0),
 });
 exports.updateAccountSchema = zod_1.z.object({
     name: zod_1.z.string().min(2).optional(),
+    accountNumber: zod_1.z.string().optional().nullable(),
+    bankName: zod_1.z.string().optional().nullable(),
+    branchName: zod_1.z.string().optional().nullable(),
+    routingNumber: zod_1.z.string().optional().nullable(),
+    isDefault: zod_1.z.boolean().optional(),
+    description: zod_1.z.string().optional().nullable(),
     isActive: zod_1.z.boolean().optional(),
 });
 exports.transferFundsSchema = zod_1.z.object({

@@ -27,6 +27,7 @@ import {
   MapPin,
   Calendar,
   FileText,
+  Building2,
 } from "lucide-react";
 
 interface CartItem {
@@ -67,9 +68,11 @@ export function PosModule() {
   const [discountType, setDiscountType] = useState<"FIXED" | "PERCENT">("FIXED");
   const [discountValue, setDiscountValue] = useState<number>(0);
   const [taxPercent, setTaxPercent] = useState<number>(0);
-  const [paymentMethod, setPaymentMethod] = useState<"CASH" | "CARD" | "MOBILE">("CASH");
-  const [mobileProvider, setMobileProvider] = useState<"bKash" | "Nagad">("bKash");
+  const [paymentMethod, setPaymentMethod] = useState<"CASH" | "BKASH" | "NAGAD" | "BANK">("CASH");
   const [mobileTrxId, setMobileTrxId] = useState<string>("");
+  const [financialAccounts, setFinancialAccounts] = useState<any[]>([]);
+  const [selectedBankAccountId, setSelectedBankAccountId] = useState<string>("");
+  const [bankTrxRef, setBankTrxRef] = useState<string>("");
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [paidInput, setPaidInput] = useState<string>("");
@@ -156,9 +159,44 @@ export function PosModule() {
     init();
   }, [user?.branchId]);
 
+  const loadFinancialAccounts = async (branchId: string) => {
+    try {
+      const res = await fetchApi<any>(`/accounting/accounts?branchId=${branchId}`);
+      if (res.success && res.data) {
+        setFinancialAccounts(res.data);
+        const banks = res.data.filter((a: any) => a.type === "BANK" || a.type === "CARD_SETTLEMENT");
+        if (banks.length > 0 && !selectedBankAccountId) {
+          setSelectedBankAccountId(banks[0].id);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load financial accounts for POS", err);
+    }
+  };
+
+  const loadVatSettings = async () => {
+    try {
+      const res = await fetchApi<any>("/settings/vat");
+      if (res.success && res.data) {
+        if (res.data.isVatEnabled && typeof res.data.vatPercent === "number") {
+          setTaxPercent(res.data.vatPercent);
+        } else if (!res.data.isVatEnabled) {
+          setTaxPercent(0);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load VAT settings for POS", err);
+    }
+  };
+
+  useEffect(() => {
+    loadVatSettings();
+  }, []);
+
   useEffect(() => {
     if (selectedBranchId) {
       loadPosProducts();
+      loadFinancialAccounts(selectedBranchId);
       if (viewTab === "history") loadSalesHistory();
     }
   }, [selectedBranchId, viewTab]);
@@ -348,9 +386,38 @@ export function PosModule() {
       setCheckingOut(true);
       setError(null);
 
+      let targetAccountId: string | null = null;
       let paymentNote: string | null = null;
-      if (paymentMethod === "MOBILE") {
-        paymentNote = `${mobileProvider}${mobileTrxId.trim() ? ` (Trx: ${mobileTrxId.trim()})` : ""}`;
+      let targetBankName: string | null = null;
+      let trxRef: string | null = null;
+
+      if (paymentMethod === "CASH") {
+        const cashAcc = financialAccounts.find((a) => a.type === "CASH");
+        if (cashAcc) targetAccountId = cashAcc.id;
+      } else if (paymentMethod === "BKASH") {
+        const bkashAcc = financialAccounts.find(
+          (a) => a.type === "BKASH" || (a.type === "MOBILE" && a.name.toLowerCase().includes("bkash"))
+        );
+        if (bkashAcc) targetAccountId = bkashAcc.id;
+        paymentNote = `bKash${mobileTrxId.trim() ? ` (Trx: ${mobileTrxId.trim()})` : ""}`;
+        trxRef = mobileTrxId.trim() || null;
+      } else if (paymentMethod === "NAGAD") {
+        const nagadAcc = financialAccounts.find(
+          (a) => a.type === "NAGAD" || (a.type === "MOBILE" && a.name.toLowerCase().includes("nagad"))
+        );
+        if (nagadAcc) targetAccountId = nagadAcc.id;
+        paymentNote = `Nagad${mobileTrxId.trim() ? ` (Trx: ${mobileTrxId.trim()})` : ""}`;
+        trxRef = mobileTrxId.trim() || null;
+      } else if (paymentMethod === "BANK") {
+        const bankAcc =
+          financialAccounts.find((a) => a.id === selectedBankAccountId) ||
+          financialAccounts.find((a) => a.type === "BANK" || a.type === "CARD_SETTLEMENT");
+        if (bankAcc) {
+          targetAccountId = bankAcc.id;
+          targetBankName = bankAcc.bankName || bankAcc.name;
+          paymentNote = `${bankAcc.name}${bankTrxRef.trim() ? ` (Ref: ${bankTrxRef.trim()})` : ""}`;
+          trxRef = bankTrxRef.trim() || null;
+        }
       }
 
       const payload = {
@@ -358,6 +425,9 @@ export function PosModule() {
         customerName: customerName.trim() || "Walk-in Customer",
         customerPhone: customerPhone.trim() || null,
         paymentMethod,
+        financialAccountId: targetAccountId,
+        bankName: targetBankName,
+        transactionRef: trxRef,
         notes: paymentNote,
         discount: discountValue,
         discountType,
@@ -401,7 +471,9 @@ export function PosModule() {
       setManagerPin("");
       setPrescriptionRef("");
       setMobileTrxId("");
+      setBankTrxRef("");
       loadPosProducts();
+      loadFinancialAccounts(selectedBranchId);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -800,12 +872,13 @@ export function PosModule() {
 
                 {/* Payment Methods */}
                 <div>
-                  <div className="text-[11px] font-bold text-slate-500 mb-1.5">Payment Mode</div>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="text-[11px] font-bold text-slate-500 mb-1.5">Payment Method & Account</div>
+                  <div className="grid grid-cols-4 gap-1.5">
                     {[
-                      { id: "CASH", label: "Cash", icon: Banknote },
-                      { id: "CARD", label: "Card / POS", icon: CreditCard },
-                      { id: "MOBILE", label: "bKash / Nagad", icon: Smartphone },
+                      { id: "CASH", label: "Cash", icon: Banknote, color: "hover:border-emerald-500" },
+                      { id: "BKASH", label: "bKash", icon: Smartphone, color: "hover:border-pink-500" },
+                      { id: "NAGAD", label: "Nagad", icon: Smartphone, color: "hover:border-orange-500" },
+                      { id: "BANK", label: "Bank POS", icon: Building2, color: "hover:border-blue-500" },
                     ].map((m) => {
                       const Icon = m.icon;
                       const active = paymentMethod === m.id;
@@ -816,57 +889,97 @@ export function PosModule() {
                           onClick={() => setPaymentMethod(m.id as any)}
                           className={`p-2 rounded-xl border text-center transition flex flex-col items-center gap-1 ${
                             active
-                              ? "border-brand-primary bg-brand-primary/10 text-brand-primary font-bold"
-                              : "border-slate-200 dark:border-slate-800 text-slate-600 hover:bg-slate-50"
+                              ? m.id === "BKASH"
+                                ? "border-pink-500 bg-pink-500/10 text-pink-600 dark:text-pink-400 font-black shadow-xs"
+                                : m.id === "NAGAD"
+                                ? "border-orange-500 bg-orange-500/10 text-orange-600 dark:text-orange-400 font-black shadow-xs"
+                                : m.id === "BANK"
+                                ? "border-blue-500 bg-blue-500/10 text-blue-600 dark:text-blue-400 font-black shadow-xs"
+                                : "border-brand-primary bg-brand-primary/10 text-brand-primary font-black shadow-xs"
+                              : `border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 ${m.color}`
                           }`}
                         >
-                          <Icon className="h-4 w-4" />
-                          <span className="text-[10px]">{m.label}</span>
+                          <Icon className="h-4 w-4 shrink-0" />
+                          <span className="text-[10px] font-bold truncate">{m.label}</span>
                         </button>
                       );
                     })}
                   </div>
 
-                  {paymentMethod === "MOBILE" && (
-                    <div className="mt-2 p-2.5 bg-pink-50/50 dark:bg-pink-950/20 border border-pink-200 dark:border-pink-900 rounded-xl space-y-2">
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setMobileProvider("bKash")}
-                          className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition ${
-                            mobileProvider === "bKash"
-                              ? "bg-pink-600 text-white shadow-sm"
-                              : "bg-white dark:bg-slate-800 text-slate-600 border border-slate-200 dark:border-slate-700"
-                          }`}
-                        >
-                          bKash
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setMobileProvider("Nagad")}
-                          className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition ${
-                            mobileProvider === "Nagad"
-                              ? "bg-orange-600 text-white shadow-sm"
-                              : "bg-white dark:bg-slate-800 text-slate-600 border border-slate-200 dark:border-slate-700"
-                          }`}
-                        >
-                          Nagad
-                        </button>
+                  {/* bKash Details Input */}
+                  {paymentMethod === "BKASH" && (
+                    <div className="mt-2 p-2.5 bg-pink-50/60 dark:bg-pink-950/20 border border-pink-200 dark:border-pink-900 rounded-xl space-y-1.5">
+                      <div className="flex items-center justify-between text-[11px] font-bold text-pink-700 dark:text-pink-400">
+                        <span>bKash Payment Gateway</span>
+                        <span className="text-[10px] bg-pink-100 dark:bg-pink-900/50 px-2 py-0.5 rounded font-mono">
+                          {financialAccounts.find((a) => a.type === "BKASH" || a.name.toLowerCase().includes("bkash"))?.accountNumber || "Merchant Wallet"}
+                        </span>
                       </div>
                       <input
                         type="text"
-                        placeholder={`${mobileProvider} Transaction ID / Phone (optional)`}
+                        placeholder="bKash Transaction ID / Customer Phone *"
                         value={mobileTrxId}
                         onChange={(e) => setMobileTrxId(e.target.value)}
-                        className="w-full px-2.5 py-1 bg-white dark:bg-slate-800 border border-pink-200 dark:border-pink-900 rounded-lg text-xs outline-none"
+                        className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-800 border border-pink-300 dark:border-pink-800 rounded-lg text-xs outline-none font-mono"
+                      />
+                    </div>
+                  )}
+
+                  {/* Nagad Details Input */}
+                  {paymentMethod === "NAGAD" && (
+                    <div className="mt-2 p-2.5 bg-orange-50/60 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-900 rounded-xl space-y-1.5">
+                      <div className="flex items-center justify-between text-[11px] font-bold text-orange-700 dark:text-orange-400">
+                        <span>Nagad Payment Gateway</span>
+                        <span className="text-[10px] bg-orange-100 dark:bg-orange-900/50 px-2 py-0.5 rounded font-mono">
+                          {financialAccounts.find((a) => a.type === "NAGAD" || a.name.toLowerCase().includes("nagad"))?.accountNumber || "Merchant Wallet"}
+                        </span>
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="Nagad Transaction ID / Customer Phone *"
+                        value={mobileTrxId}
+                        onChange={(e) => setMobileTrxId(e.target.value)}
+                        className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-800 border border-orange-300 dark:border-orange-800 rounded-lg text-xs outline-none font-mono"
+                      />
+                    </div>
+                  )}
+
+                  {/* Bank Account Selection */}
+                  {paymentMethod === "BANK" && (
+                    <div className="mt-2 p-2.5 bg-blue-50/60 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 rounded-xl space-y-2">
+                      <div className="text-[11px] font-bold text-blue-700 dark:text-blue-400">
+                        Select Destination Bank Account
+                      </div>
+                      <select
+                        value={selectedBankAccountId}
+                        onChange={(e) => setSelectedBankAccountId(e.target.value)}
+                        className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-800 border border-blue-300 dark:border-blue-800 rounded-lg text-xs font-bold text-slate-800 dark:text-slate-200 outline-none"
+                      >
+                        {financialAccounts
+                          .filter((a) => a.type === "BANK" || a.type === "CARD_SETTLEMENT")
+                          .map((bank) => (
+                            <option key={bank.id} value={bank.id}>
+                              {bank.name} {bank.accountNumber ? `(${bank.accountNumber})` : ""} - Balance: ৳{Number(bank.balance).toFixed(2)}
+                            </option>
+                          ))}
+                        {financialAccounts.filter((a) => a.type === "BANK" || a.type === "CARD_SETTLEMENT").length === 0 && (
+                          <option value="">Default Bank Account</option>
+                        )}
+                      </select>
+                      <input
+                        type="text"
+                        placeholder="Card Slip Ref / Auth Code / Cheque No (optional)"
+                        value={bankTrxRef}
+                        onChange={(e) => setBankTrxRef(e.target.value)}
+                        className="w-full px-2.5 py-1 bg-white dark:bg-slate-800 border border-blue-200 dark:border-blue-800 rounded-lg text-xs outline-none"
                       />
                     </div>
                   )}
                 </div>
 
                 {/* Paid & Due / Change Calculation */}
-                <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl space-y-1.5 text-xs">
-                  <div className="flex justify-between text-slate-500">
+                <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2 text-xs">
+                  <div className="flex justify-between text-slate-500 font-medium">
                     <span>Subtotal:</span>
                     <span>৳{subTotal.toFixed(2)}</span>
                   </div>
@@ -876,6 +989,12 @@ export function PosModule() {
                       <span>-৳{discountAmount.toFixed(2)}</span>
                     </div>
                   )}
+                  <div className="flex justify-between text-slate-600 dark:text-slate-400 font-bold">
+                    <span>VAT ({taxPercent}%):</span>
+                    <span className={taxPercent > 0 ? "text-emerald-600 dark:text-emerald-400 font-mono" : "text-slate-400 font-mono"}>
+                      {taxPercent > 0 ? `+৳${taxAmount.toFixed(2)}` : "৳0.00 (Exempt)"}
+                    </span>
+                  </div>
                   <div className="flex justify-between font-black text-sm text-slate-900 dark:text-white pt-1 border-t border-slate-200 dark:border-slate-700">
                     <span>Grand Total:</span>
                     <span>৳{grandTotal.toFixed(2)}</span>

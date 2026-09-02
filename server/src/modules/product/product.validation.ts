@@ -54,8 +54,6 @@ export const createProductSchema = z.object({
 
   minStockAlert: z.number().int().nonnegative().default(10),
   description: z.string().optional().nullable(),
-  imageUrl: z.string().optional().nullable(),
-  imagePublicId: z.string().optional().nullable(),
   isControlled: z.boolean().default(false),
   requiresPrescription: z.boolean().default(false),
 });

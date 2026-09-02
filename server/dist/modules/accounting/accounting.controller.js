@@ -26,6 +26,30 @@ class AccountingController {
             res.status(400).json({ success: false, message: err.message });
         }
     }
+    static async updateAccount(req, res) {
+        try {
+            const tenantId = req.user.tenantId;
+            const userId = req.user.id;
+            const accountId = req.params.id;
+            const account = await accounting_service_1.AccountingService.updateAccount(tenantId, accountId, userId, req.body);
+            res.status(200).json({ success: true, data: account, message: "Account updated successfully" });
+        }
+        catch (err) {
+            res.status(400).json({ success: false, message: err.message });
+        }
+    }
+    static async deleteAccount(req, res) {
+        try {
+            const tenantId = req.user.tenantId;
+            const userId = req.user.id;
+            const accountId = req.params.id;
+            await accounting_service_1.AccountingService.deleteAccount(tenantId, accountId, userId);
+            res.status(200).json({ success: true, message: "Financial account removed successfully" });
+        }
+        catch (err) {
+            res.status(400).json({ success: false, message: err.message });
+        }
+    }
     static async transferFunds(req, res) {
         try {
             const tenantId = req.user.tenantId;

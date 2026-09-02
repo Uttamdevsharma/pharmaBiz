@@ -194,6 +194,7 @@ export class SalesService {
           branchId: data.branchId,
           userId,
           receiptNo,
+          financialAccountId: data.financialAccountId || null,
           customerName: data.customerName || "Walk-in Customer",
           customerPhone: data.customerPhone || null,
           customerEmail: data.customerEmail || null,
@@ -206,6 +207,8 @@ export class SalesService {
           dueAmount,
           changeAmount,
           paymentMethod: data.paymentMethod,
+          bankName: data.bankName || null,
+          transactionRef: data.transactionRef || null,
           status: "COMPLETED",
           notes: data.notes || null,
           managerApprovedBy: data.managerApprovedBy || null,
@@ -252,70 +255,107 @@ export class SalesService {
       // Record Financial Transaction in accounting ledger and update account balance
       const actualPaid = Math.min(paidAmount, totalAmount);
       if (actualPaid > 0) {
-        let targetAccountType = "CASH";
-        let targetAccountNameSearch: string | null = null;
+        let financialAccount: any = null;
 
-        if (data.paymentMethod === "CARD") {
-          targetAccountType = "CARD_SETTLEMENT";
-        } else if (data.paymentMethod === "MOBILE") {
-          targetAccountType = "MOBILE";
+        // 1. If explicit financialAccountId passed
+        if (data.financialAccountId) {
+          financialAccount = await tx.financialAccount.findFirst({
+            where: { id: data.financialAccountId, tenantId, branchId: data.branchId, isActive: true },
+          });
+        }
+
+        // 2. If not found or not passed, resolve by paymentMethod & metadata
+        if (!financialAccount) {
+          const pMethod = String(data.paymentMethod).toUpperCase();
           const notesLower = (data.notes || "").toLowerCase();
-          if (notesLower.includes("nagad")) {
-            targetAccountNameSearch = "nagad";
-          } else {
-            targetAccountNameSearch = "bkash";
+
+          if (pMethod === "BKASH" || (pMethod === "MOBILE" && notesLower.includes("bkash"))) {
+            financialAccount = await tx.financialAccount.findFirst({
+              where: {
+                tenantId,
+                branchId: data.branchId,
+                isActive: true,
+                OR: [
+                  { type: "BKASH" },
+                  { name: { contains: "bkash", mode: "insensitive" } },
+                ],
+              },
+            });
+          } else if (pMethod === "NAGAD" || (pMethod === "MOBILE" && notesLower.includes("nagad"))) {
+            financialAccount = await tx.financialAccount.findFirst({
+              where: {
+                tenantId,
+                branchId: data.branchId,
+                isActive: true,
+                OR: [
+                  { type: "NAGAD" },
+                  { name: { contains: "nagad", mode: "insensitive" } },
+                ],
+              },
+            });
+          } else if (pMethod === "BANK" || pMethod === "CARD") {
+            if (data.bankName) {
+              financialAccount = await tx.financialAccount.findFirst({
+                where: {
+                  tenantId,
+                  branchId: data.branchId,
+                  type: "BANK",
+                  isActive: true,
+                  OR: [
+                    { name: { contains: data.bankName, mode: "insensitive" } },
+                    { bankName: { contains: data.bankName, mode: "insensitive" } },
+                  ],
+                },
+              });
+            }
+            if (!financialAccount) {
+              financialAccount = await tx.financialAccount.findFirst({
+                where: {
+                  tenantId,
+                  branchId: data.branchId,
+                  type: "BANK",
+                  isActive: true,
+                },
+                orderBy: { isDefault: "desc" },
+              });
+            }
+          }
+
+          // Fallback to cash drawer if still not resolved
+          if (!financialAccount) {
+            financialAccount = await tx.financialAccount.findFirst({
+              where: {
+                tenantId,
+                branchId: data.branchId,
+                type: "CASH",
+                isActive: true,
+              },
+              orderBy: { isDefault: "desc" },
+            });
+          }
+
+          // Ultimate fallback: any active account
+          if (!financialAccount) {
+            financialAccount = await tx.financialAccount.findFirst({
+              where: { tenantId, branchId: data.branchId, isActive: true },
+            });
           }
         }
 
-        let financialAccount = await tx.financialAccount.findFirst({
-          where: {
-            tenantId,
-            branchId: data.branchId,
-            type: targetAccountType,
-            isActive: true,
-            ...(targetAccountNameSearch
-              ? { name: { contains: targetAccountNameSearch, mode: "insensitive" } }
-              : {}),
-          },
-        });
-
-        if (!financialAccount) {
-          financialAccount = await tx.financialAccount.findFirst({
-            where: { tenantId, branchId: data.branchId, type: targetAccountType, isActive: true },
-          });
-        }
-        if (!financialAccount) {
-          financialAccount = await tx.financialAccount.findFirst({
-            where: { tenantId, branchId: data.branchId, isActive: true },
-          });
-        }
-
-        if (!financialAccount) {
-          financialAccount = await tx.financialAccount.create({
-            data: {
-              tenantId,
-              branchId: data.branchId,
-              name:
-                data.paymentMethod === "CARD"
-                  ? "Card / POS Settlement"
-                  : data.paymentMethod === "MOBILE"
-                  ? targetAccountNameSearch === "nagad"
-                    ? "Nagad Merchant Account"
-                    : "bKash Merchant Account"
-                  : "Main Cash Drawer",
-              type: targetAccountType,
-              balance: 0,
-              isActive: true,
-            },
-          });
-        }
-
         if (financialAccount) {
+          // Increment account balance atomically
           await tx.financialAccount.update({
             where: { id: financialAccount.id },
             data: { balance: { increment: actualPaid } },
           });
 
+          // Link financialAccountId in sale record if not already set
+          await tx.sale.update({
+            where: { id: createdSale.id },
+            data: { financialAccountId: financialAccount.id },
+          });
+
+          // Create Double-Entry Ledger Entry
           await tx.financialTransaction.create({
             data: {
               tenantId,
@@ -324,7 +364,21 @@ export class SalesService {
               amount: actualPaid,
               type: "SALE_PAYMENT",
               reference: receiptNo,
-              note: `POS Sale Receipt #${receiptNo} (${data.paymentMethod}${data.notes ? ` - ${data.notes}` : ""})`,
+              note: `POS Sale Receipt #${receiptNo} via ${financialAccount.name}${data.transactionRef ? ` (Ref: ${data.transactionRef})` : ""}`,
+              userId,
+            },
+          });
+        } else {
+          // Record ledger transaction even if pharmacy has not yet created dedicated financial accounts
+          await tx.financialTransaction.create({
+            data: {
+              tenantId,
+              branchId: data.branchId,
+              destinationAccountId: null,
+              amount: actualPaid,
+              type: "SALE_PAYMENT",
+              reference: receiptNo,
+              note: `POS Sale Receipt #${receiptNo} via ${data.paymentMethod}${data.bankName ? ` (${data.bankName})` : ""}${data.transactionRef ? ` (Ref: ${data.transactionRef})` : ""}`,
               userId,
             },
           });

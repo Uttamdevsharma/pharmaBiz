@@ -695,8 +695,6 @@ export class ProductService {
 
         minStockAlert: data.minStockAlert !== undefined ? data.minStockAlert : 10,
         description: data.description || null,
-        imageUrl: data.imageUrl || null,
-        imagePublicId: data.imagePublicId || null,
         isControlled: data.isControlled || false,
         requiresPrescription: data.requiresPrescription || false,
         isActive: true,
@@ -1003,8 +1001,6 @@ export class ProductService {
         tabletsPerStrip: isMed ? (data.tabletsPerStrip !== undefined ? data.tabletsPerStrip : product.tabletsPerStrip) : null,
         ...(data.minStockAlert !== undefined && { minStockAlert: data.minStockAlert }),
         ...(data.description !== undefined && { description: data.description }),
-        ...(data.imageUrl !== undefined && { imageUrl: data.imageUrl }),
-        ...(data.imagePublicId !== undefined && { imagePublicId: data.imagePublicId }),
         ...(data.isControlled !== undefined && { isControlled: data.isControlled }),
         ...(data.requiresPrescription !== undefined && { requiresPrescription: data.requiresPrescription }),
         ...(data.isActive !== undefined && { isActive: data.isActive }),

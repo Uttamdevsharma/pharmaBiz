@@ -26,4 +26,13 @@ router.patch(
   SettingsController.updateSettings
 );
 
+// Pharmacy Tenant VAT & Tax Configuration
+router.get("/vat", authenticate, SettingsController.getTenantVatSettings);
+router.put(
+  "/vat",
+  authenticate,
+  authorize(["COMPANY_OWNER", "BRANCH_MANAGER", "REGIONAL_ADMIN"]),
+  SettingsController.updateTenantVatSettings
+);
+
 export { router as settingsRoutes };

@@ -49,8 +49,6 @@ exports.createProductSchema = zod_1.z.object({
     tabletsPerStrip: zod_1.z.number().int().positive().optional().nullable(),
     minStockAlert: zod_1.z.number().int().nonnegative().default(10),
     description: zod_1.z.string().optional().nullable(),
-    imageUrl: zod_1.z.string().optional().nullable(),
-    imagePublicId: zod_1.z.string().optional().nullable(),
     isControlled: zod_1.z.boolean().default(false),
     requiresPrescription: zod_1.z.boolean().default(false),
 });

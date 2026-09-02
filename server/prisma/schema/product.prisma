@@ -79,6 +79,7 @@ model Product {
   brandName            String?
   manufacturer         String?
   unit                 String          @default("piece")
+  imageUrl             String?
   size                 String?         // e.g. "500mg", "100ml", "1000ml", "Standard"
   defaultPackType      String?         @default("PIECE") // e.g. "BOX", "STRIP", "TABLET", "BOTTLE", "PIECE"
   stripsPerBox         Int?            @default(10)
@@ -86,8 +87,6 @@ model Product {
 
   minStockAlert        Int             @default(10)
   description          String?
-  imageUrl             String?
-  imagePublicId        String?
   isControlled         Boolean         @default(false)
   requiresPrescription Boolean         @default(false)
   isActive             Boolean         @default(true)

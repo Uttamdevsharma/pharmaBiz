@@ -1,6 +1,8 @@
 enum AccountType {
   CASH
   BANK
+  BKASH
+  NAGAD
   MOBILE
   CARD_SETTLEMENT
   OTHER
@@ -16,24 +18,32 @@ enum TransactionType {
 }
 
 model FinancialAccount {
-  id          String      @id @default(uuid())
-  tenantId    String
-  branchId    String
-  name        String
-  type        AccountType @default(CASH)
-  balance     Decimal     @default(0) @db.Decimal(15, 2)
-  isActive    Boolean     @default(true)
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  id            String      @id @default(uuid())
+  tenantId      String
+  branchId      String
+  name          String
+  type          AccountType @default(CASH)
+  accountNumber String?
+  bankName      String?
+  branchName    String?
+  routingNumber String?
+  isDefault     Boolean     @default(false)
+  description   String?
+  balance       Decimal     @default(0) @db.Decimal(15, 2)
+  isActive      Boolean     @default(true)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
 
   tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   branch      Branch      @relation(fields: [branchId], references: [id], onDelete: Cascade)
 
   transactionsOut FinancialTransaction[] @relation("SourceAccount")
   transactionsIn  FinancialTransaction[] @relation("DestinationAccount")
+  sales           Sale[]
 
   @@index([tenantId])
   @@index([branchId])
+  @@index([type])
 }
 
 model FinancialTransaction {

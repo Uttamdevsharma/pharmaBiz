@@ -118,7 +118,6 @@ export interface Product {
   shelfLocation?: string | null;
   minStockAlert: number;
   description?: string | null;
-  imageUrl?: string | null;
   isControlled: boolean;
   requiresPrescription: boolean;
   isActive: boolean;

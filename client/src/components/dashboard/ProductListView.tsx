@@ -219,7 +219,6 @@ export function ProductListView({ onNavigate, onEditProduct }: ProductListViewPr
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="bg-slate-50/75 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 uppercase tracking-wider font-bold text-[10px]">
-                  <th className="py-3 px-4 w-14 text-center">Image</th>
                   <th className="py-3 px-4">Product & Specs</th>
                   <th className="py-3 px-4">Category & Subcategory</th>
                   <th className="py-3 px-4">Selling Price</th>
@@ -237,25 +236,6 @@ export function ProductListView({ onNavigate, onEditProduct }: ProductListViewPr
                     p.productType === "MEDICINE";
                   return (
                     <tr key={p.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition">
-                      <td className="py-3 px-4 text-center">
-                        {p.imageUrl ? (
-                          <div className="h-10 w-10 mx-auto rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden bg-slate-50 dark:bg-slate-800 shrink-0 shadow-2xs">
-                            <img
-                              src={p.imageUrl}
-                              alt={p.name}
-                              className="h-full w-full object-cover"
-                              onError={(e) => {
-                                (e.target as HTMLElement).style.display = "none";
-                              }}
-                            />
-                          </div>
-                        ) : (
-                          <div className="h-10 w-10 mx-auto rounded-xl border border-dashed border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 flex items-center justify-center text-slate-400 shrink-0">
-                            <Package className="h-4 w-4 text-slate-400 dark:text-slate-500" />
-                          </div>
-                        )}
-                      </td>
-
                       <td className="py-3.5 px-4">
                         <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
                           {p.name}

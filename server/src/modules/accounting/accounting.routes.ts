@@ -6,6 +6,7 @@ import { validateRequest } from "../../middleware/validate";
 import { requireActiveSubscription } from "../../middleware/planLimiter";
 import {
   createAccountSchema,
+  updateAccountSchema,
   transferFundsSchema,
   recordTransactionSchema,
   listTransactionsQuerySchema,
@@ -22,7 +23,7 @@ router.get(
   AccountingController.getOverview
 );
 
-// Accounts list & create
+// Accounts list & create & update
 router.get(
   "/accounts",
   requirePermission("accounts.view"),
@@ -34,6 +35,19 @@ router.post(
   requirePermission("accounts.manage"),
   validateRequest({ body: createAccountSchema }),
   AccountingController.createAccount
+);
+
+router.patch(
+  "/accounts/:id",
+  requirePermission("accounts.manage"),
+  validateRequest({ body: updateAccountSchema }),
+  AccountingController.updateAccount
+);
+
+router.delete(
+  "/accounts/:id",
+  requirePermission("accounts.manage"),
+  AccountingController.deleteAccount
 );
 
 // Double-entry transfer

@@ -126,13 +126,19 @@ class ReportService {
             totalPaid += salePaid;
             totalDue += saleDue;
             // Payment Method categorization
-            const method = s.paymentMethod;
+            const method = String(s.paymentMethod || "").toUpperCase();
             const note = (s.notes || "").toLowerCase();
             paymentBreakdown.grandTotal += saleTotal;
             if (method === "CASH") {
                 paymentBreakdown.cash += saleTotal;
             }
-            else if (method === "CARD") {
+            else if (method === "BKASH") {
+                paymentBreakdown.bkash += saleTotal;
+            }
+            else if (method === "NAGAD") {
+                paymentBreakdown.nagad += saleTotal;
+            }
+            else if (method === "BANK" || method === "CARD") {
                 paymentBreakdown.card += saleTotal;
             }
             else if (method === "MOBILE") {
@@ -140,7 +146,6 @@ class ReportService {
                     paymentBreakdown.nagad += saleTotal;
                 }
                 else {
-                    // Default mobile payment to bKash if not specifically Nagad
                     paymentBreakdown.bkash += saleTotal;
                 }
             }
@@ -576,7 +581,14 @@ class ReportService {
                     items: {
                         include: {
                             product: {
-                                select: { id: true, name: true, categoryId: true, category: { select: { name: true } } },
+                                select: {
+                                    id: true,
+                                    name: true,
+                                    category: true,
+                                    categoryId: true,
+                                    categoryRef: { select: { name: true } },
+                                    basePrice: true,
+                                },
                             },
                         },
                     },
@@ -587,8 +599,13 @@ class ReportService {
                 where: inventoryWhere,
                 include: {
                     product: {
-                        include: {
-                            category: { select: { name: true } },
+                        select: {
+                            id: true,
+                            name: true,
+                            category: true,
+                            categoryId: true,
+                            categoryRef: { select: { name: true } },
+                            basePrice: true,
                         },
                     },
                 },
@@ -598,7 +615,7 @@ class ReportService {
             }),
             prisma_1.prisma.supplier.findMany({
                 where: { tenantId, isActive: true },
-                select: { dueBalance: true },
+                select: { totalDue: true },
             }),
         ]);
         // Financial calculations
@@ -610,21 +627,38 @@ class ReportService {
         let monthlySales = 0;
         const paymentBreakdown = {
             CASH: 0,
+            BKASH: 0,
+            NAGAD: 0,
             CARD: 0,
-            MOBILE: 0,
             OTHER: 0,
         };
         const categoryMap = {};
         const productSalesMap = {};
-        const dailyTrendMap = {};
-        // Initialize last 7 days trend
+        // 7-Day & 30-Day Daily Trend Maps
+        const dailyTrend7Map = {};
+        const dailyTrend30Map = {};
         for (let i = 6; i >= 0; i--) {
-            const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+            const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
             const dateStr = d.toISOString().split("T")[0];
-            dailyTrendMap[dateStr] = { date: dateStr, sales: 0, revenue: 0, profit: 0 };
+            const label = d.toLocaleDateString("en-US", { weekday: "short" });
+            dailyTrend7Map[dateStr] = { date: dateStr, label, sales: 0, revenue: 0, profit: 0 };
+        }
+        for (let i = 29; i >= 0; i--) {
+            const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+            const dateStr = d.toISOString().split("T")[0];
+            const label = `${d.getDate()} ${d.toLocaleDateString("en-US", { month: "short" })}`;
+            dailyTrend30Map[dateStr] = { date: dateStr, label, sales: 0, revenue: 0, profit: 0 };
+        }
+        // 6-Month Monthly Trend Map
+        const monthlyTrendMap = {};
+        for (let i = 5; i >= 0; i--) {
+            const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+            const label = d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+            monthlyTrendMap[key] = { month: key, label, sales: 0, revenue: 0, profit: 0 };
         }
         sales.forEach((s) => {
-            const saleAmount = Number(s.totalAmount);
+            const saleAmount = Number(s.totalAmount || 0);
             totalRevenue += saleAmount;
             const saleDate = new Date(s.createdAt);
             if (saleDate >= todayStart) {
@@ -637,30 +671,44 @@ class ReportService {
             if (saleDate >= thirtyDaysAgo) {
                 monthlySales += saleAmount;
             }
-            // Payment method
-            const method = s.paymentMethod;
-            if (paymentBreakdown[method] !== undefined) {
-                paymentBreakdown[method] += saleAmount;
+            // Payment method normalization
+            const rawMethod = String(s.paymentMethod || "CASH").toUpperCase();
+            if (rawMethod === "CASH") {
+                paymentBreakdown.CASH += saleAmount;
+            }
+            else if (rawMethod === "BKASH") {
+                paymentBreakdown.BKASH += saleAmount;
+            }
+            else if (rawMethod === "NAGAD") {
+                paymentBreakdown.NAGAD += saleAmount;
+            }
+            else if (rawMethod === "CARD" || rawMethod === "POS") {
+                paymentBreakdown.CARD += saleAmount;
+            }
+            else if (rawMethod === "MOBILE") {
+                paymentBreakdown.BKASH += saleAmount;
             }
             else {
                 paymentBreakdown.OTHER += saleAmount;
             }
             // Items calculation for profit, categories, top products
             let saleCost = 0;
-            s.items.forEach((item) => {
-                const itemSub = Number(item.subTotal);
-                const itemQty = item.quantity;
-                const purchaseP = Number(item.purchasePrice || 0);
+            (s.items || []).forEach((item) => {
+                const itemSub = Number(item.subTotal || item.totalPrice || 0);
+                const itemQty = Number(item.quantity || 0);
+                const purchaseP = Number(item.purchasePrice || (item.product?.basePrice ? Number(item.product.basePrice) * 0.8 : 0));
                 saleCost += purchaseP * itemQty;
-                // Category
-                const catName = item.product?.category?.name || "General / Uncategorized";
+                // Category resolution
+                const catName = item.product?.categoryRef?.name ||
+                    (typeof item.product?.category === "string" ? item.product.category : null) ||
+                    "Medicine";
                 if (!categoryMap[catName]) {
                     categoryMap[catName] = { name: catName, revenue: 0, count: 0 };
                 }
                 categoryMap[catName].revenue += itemSub;
                 categoryMap[catName].count += itemQty;
                 // Top products
-                const pId = item.productId;
+                const pId = item.productId || (item.product?.id || `prod_${item.id}`);
                 const pName = item.product?.name || "Product";
                 if (!productSalesMap[pId]) {
                     productSalesMap[pId] = { id: pId, name: pName, quantity: 0, revenue: 0 };
@@ -669,12 +717,23 @@ class ReportService {
                 productSalesMap[pId].revenue += itemSub;
             });
             totalCost += saleCost;
-            // Trend mapping
             const dateKey = saleDate.toISOString().split("T")[0];
-            if (dailyTrendMap[dateKey]) {
-                dailyTrendMap[dateKey].sales += 1;
-                dailyTrendMap[dateKey].revenue += saleAmount;
-                dailyTrendMap[dateKey].profit += Math.max(0, saleAmount - saleCost);
+            const monthKey = `${saleDate.getFullYear()}-${String(saleDate.getMonth() + 1).padStart(2, "0")}`;
+            const profit = Math.max(0, saleAmount - saleCost);
+            if (dailyTrend7Map[dateKey]) {
+                dailyTrend7Map[dateKey].sales += 1;
+                dailyTrend7Map[dateKey].revenue += saleAmount;
+                dailyTrend7Map[dateKey].profit += profit;
+            }
+            if (dailyTrend30Map[dateKey]) {
+                dailyTrend30Map[dateKey].sales += 1;
+                dailyTrend30Map[dateKey].revenue += saleAmount;
+                dailyTrend30Map[dateKey].profit += profit;
+            }
+            if (monthlyTrendMap[monthKey]) {
+                monthlyTrendMap[monthKey].sales += 1;
+                monthlyTrendMap[monthKey].revenue += saleAmount;
+                monthlyTrendMap[monthKey].profit += profit;
             }
         });
         const totalProfit = Math.max(0, totalRevenue - totalCost);
@@ -687,20 +746,21 @@ class ReportService {
         const lowStockItems = [];
         const nearExpiryItems = [];
         inventories.forEach((inv) => {
-            totalStockUnits += inv.quantity;
+            const qty = Number(inv.quantity || 0);
+            totalStockUnits += qty;
             const unitVal = Number(inv.purchasePrice || inv.product?.basePrice || 0);
-            totalInventoryValue += inv.quantity * unitVal;
+            totalInventoryValue += qty * unitVal;
             const threshold = inv.lowStockThreshold || 10;
-            if (inv.quantity <= threshold) {
+            if (qty <= threshold) {
                 lowStockCount += 1;
                 if (lowStockItems.length < 5) {
                     lowStockItems.push({
                         id: inv.id,
-                        productName: inv.product?.name,
-                        batchNumber: inv.batchNumber,
-                        quantity: inv.quantity,
+                        productName: inv.product?.name || "Product",
+                        batchNumber: inv.batchNumber || "BATCH-01",
+                        quantity: qty,
                         threshold,
-                        rackLocation: inv.rackLocation || "N/A",
+                        rackLocation: inv.rackLocation || "Rack A-1",
                     });
                 }
             }
@@ -714,11 +774,11 @@ class ReportService {
                     if (nearExpiryItems.length < 5) {
                         nearExpiryItems.push({
                             id: inv.id,
-                            productName: inv.product?.name,
-                            batchNumber: inv.batchNumber,
+                            productName: inv.product?.name || "Product",
+                            batchNumber: inv.batchNumber || "BATCH-01",
                             expiryDate: inv.expiryDate,
-                            quantity: inv.quantity,
-                            rackLocation: inv.rackLocation || "N/A",
+                            quantity: qty,
+                            rackLocation: inv.rackLocation || "Rack A-1",
                         });
                     }
                 }
@@ -737,7 +797,7 @@ class ReportService {
             else if (acc.type === "MOBILE")
                 digitalWalletBalance += bal;
         });
-        const totalSupplierDues = suppliers.reduce((sum, s) => sum + Number(s.dueBalance || 0), 0);
+        const totalSupplierDues = suppliers.reduce((sum, s) => sum + Number(s.totalDue || 0), 0);
         const topSellingProducts = Object.values(productSalesMap)
             .sort((a, b) => b.quantity - a.quantity)
             .slice(0, 5);
@@ -763,7 +823,9 @@ class ReportService {
                 digitalWalletBalance: Math.round(digitalWalletBalance * 100) / 100,
             },
             charts: {
-                dailySalesTrend: Object.values(dailyTrendMap),
+                dailySalesTrend: Object.values(dailyTrend7Map),
+                dailyTrend30: Object.values(dailyTrend30Map),
+                monthlySalesTrend: Object.values(monthlyTrendMap),
                 paymentBreakdown,
                 categoryDistribution,
                 topSellingProducts,
