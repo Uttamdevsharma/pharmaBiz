@@ -32,6 +32,7 @@ model Tenant {
   notifications          Notification[]
   financialAccounts      FinancialAccount[]
   financialTransactions  FinancialTransaction[]
+  pharmacyRoles          PharmacyRole[]
 }
 
 model Branch {

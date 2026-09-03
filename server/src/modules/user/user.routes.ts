@@ -8,17 +8,41 @@ import {
   createUserSchema,
   updateUserSchema,
   listUsersQuerySchema,
+  createPharmacyRoleSchema,
+  updatePharmacyRoleSchema,
+  updateRolePermissionsSchema,
 } from "./user.validation";
 
 const router = Router();
 
 router.use(authenticate, requireActiveSubscription);
 
+// Dynamic Pharmacy Roles CRUD
+router.get("/roles", UserController.listRoles);
+router.post(
+  "/roles",
+  authorize(["COMPANY_OWNER", "SUPER_ADMIN"]),
+  validateRequest({ body: createPharmacyRoleSchema }),
+  UserController.createRole
+);
+router.patch(
+  "/roles/:id",
+  authorize(["COMPANY_OWNER", "SUPER_ADMIN"]),
+  validateRequest({ body: updatePharmacyRoleSchema }),
+  UserController.updateRole
+);
+router.delete(
+  "/roles/:id",
+  authorize(["COMPANY_OWNER", "SUPER_ADMIN"]),
+  UserController.deleteRole
+);
+
 // RBAC Permissions Info
 router.get("/roles/permissions", UserController.getPermissionsHierarchy);
 router.post(
   "/roles/permissions",
   authorize(["COMPANY_OWNER", "SUPER_ADMIN"]),
+  validateRequest({ body: updateRolePermissionsSchema }),
   UserController.updateRolePermissions
 );
 
@@ -46,6 +70,12 @@ router.patch(
   "/:id/status",
   authorize(["COMPANY_OWNER", "SUPER_ADMIN"]),
   UserController.updateUserStatus
+);
+
+router.delete(
+  "/:id",
+  authorize(["COMPANY_OWNER", "SUPER_ADMIN"]),
+  UserController.deleteUser
 );
 
 export { router as userRoutes };

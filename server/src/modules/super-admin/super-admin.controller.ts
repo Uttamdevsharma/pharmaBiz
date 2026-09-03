@@ -145,7 +145,54 @@ export class SuperAdminController {
     }
   }
 
-  // ==================== PLATFORM STAFF (CTO / PROJECT MANAGER) ====================
+  // ==================== PLATFORM DYNAMIC ROLES ====================
+  static async listRoles(req: Request, res: Response): Promise<void> {
+    try {
+      const roles = await SuperAdminService.listRoles();
+      res.status(200).json({ success: true, data: roles });
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
+
+  static async createRole(req: Request, res: Response): Promise<void> {
+    try {
+      const role = await SuperAdminService.createRole(req.body);
+      res.status(201).json({
+        success: true,
+        message: `Custom role "${role.name}" created successfully`,
+        data: role,
+      });
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  }
+
+  static async updateRole(req: Request, res: Response): Promise<void> {
+    try {
+      const id = req.params.id as string;
+      const updated = await SuperAdminService.updateRole(id, req.body);
+      res.status(200).json({
+        success: true,
+        message: `Role "${updated.name}" updated successfully`,
+        data: updated,
+      });
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  }
+
+  static async deleteRole(req: Request, res: Response): Promise<void> {
+    try {
+      const id = req.params.id as string;
+      const result = await SuperAdminService.deleteRole(id);
+      res.status(200).json(result);
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  }
+
+  // ==================== PLATFORM STAFF ====================
   static async listPlatformStaff(req: Request, res: Response): Promise<void> {
     try {
       const staff = await SuperAdminService.listPlatformStaff();
@@ -162,7 +209,7 @@ export class SuperAdminController {
       const staff = await SuperAdminService.createPlatformStaff(creatorId, creatorRole, req.body);
       res.status(201).json({
         success: true,
-        message: `Platform staff member (${staff.role}) created successfully`,
+        message: `Platform staff member "${staff.name}" (${staff.customRoleName || staff.role}) created successfully`,
         data: staff,
       });
     } catch (error: any) {
@@ -238,3 +285,4 @@ export class SuperAdminController {
     }
   }
 }
+

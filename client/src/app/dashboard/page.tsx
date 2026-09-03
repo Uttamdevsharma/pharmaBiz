@@ -11,6 +11,7 @@ import { OverviewModule } from "@/components/dashboard/OverviewModule";
 import { ProfileModule } from "@/components/dashboard/ProfileModule";
 import { BranchModule } from "@/components/dashboard/BranchModule";
 import { StaffModule } from "@/components/dashboard/StaffModule";
+import { CreateStaffTab } from "@/components/dashboard/CreateStaffTab";
 import { RolesModule } from "@/components/dashboard/RolesModule";
 import { PosModule } from "@/components/dashboard/PosModule";
 import { ReportsModule } from "@/components/dashboard/ReportsModule";
@@ -71,7 +72,7 @@ function getDefaultModuleForRole(role?: string): OwnerModule {
 
 export default function RoleBasedDashboard() {
   const router = useRouter();
-  const { user, isAuthenticated, isSuperAdmin, isPlatformStaff, loading: authLoading } = useAuth();
+  const { user, isAuthenticated, isSuperAdmin, isPlatformStaff, hasPermission, loading: authLoading } = useAuth();
 
   const [activeModule, setActiveModule] = useState<OwnerModule>(getDefaultModuleForRole(user?.role));
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
@@ -347,67 +348,251 @@ export default function RoleBasedDashboard() {
 
         {/* Content Area */}
         <main className="flex-1 p-4 sm:p-6 lg:p-8 2xl:p-10 overflow-y-auto w-full min-w-0">
-          {/* Core Hubs */}
-          {activeModule === "overview" && <OverviewModule onNavigate={setActiveModule} />}
-
-          {/* 🛒 Dedicated Sales & POS Subpages */}
-          {(activeModule === "pos" || activeModule === "pos_sale") && <PosModule />}
-          {activeModule === "pos_history" && <SalesHistoryView onNavigate={setActiveModule} />}
-          {activeModule === "pos_vat" && <VatSettingsView onNavigate={setActiveModule} />}
-
-          {/* 💳 Dedicated Accounts & Sales Analysis Subpages */}
-          {(activeModule === "acc_overview" || activeModule === "accounts") && (
-            <AccountsOverviewView onNavigate={setActiveModule} />
-          )}
-          {activeModule === "acc_financial_accounts" && <FinancialAccountsView onNavigate={setActiveModule} />}
-          {activeModule === "acc_fund_transfer" && <FundTransferView onNavigate={setActiveModule} />}
-          {activeModule === "acc_payment_sales" && <PaymentMethodSalesView onNavigate={setActiveModule} />}
-          {activeModule === "acc_product_sales" && <ProductWiseSalesView onNavigate={setActiveModule} />}
-          {activeModule === "acc_transaction_history" && <TransactionHistoryView onNavigate={setActiveModule} />}
-
-          {/* 📦 Dedicated Inventory Subpages */}
-          {activeModule === "inv_add_product" && (
-            <AddProductView
-              editingProduct={editingProduct}
-              onNavigate={setActiveModule}
-              onClearEditing={() => setEditingProduct(null)}
-            />
-          )}
-          {activeModule === "inv_product_list" && (
-            <ProductListView
-              onNavigate={setActiveModule}
-              onEditProduct={(p) => {
-                setEditingProduct(p);
-                setActiveModule("inv_add_product");
-              }}
-            />
-          )}
-          {activeModule === "inv_variants" && <VariantsView />}
-          {activeModule === "inv_expired_products" && <ExpiredProductsView />}
-
-          {/* 🔄 Dedicated Stock Management Subpages */}
-          {activeModule === "stock_add_stock" && <AddStockView onNavigate={setActiveModule} />}
-          {activeModule === "stock_stock_list" && <StockListView onNavigate={setActiveModule} />}
-          {activeModule === "stock_stock_history" && <StockHistoryView />}
-          {activeModule === "stock_transfer_stock" && <TransferStockView onNavigate={setActiveModule} />}
-          {activeModule === "stock_transfer_history" && <TransferHistoryView onNavigate={setActiveModule} />}
-          {activeModule === "stock_stock_receive" && <StockReceiveView onNavigate={setActiveModule} />}
-
-          {/* 🏭 Dedicated Supplier Management Subpages */}
-          {activeModule === "sup_suppliers" && <SuppliersView onNavigate={setActiveModule} />}
-          {activeModule === "sup_purchase_history" && <PurchaseHistoryView onNavigate={setActiveModule} />}
-          {activeModule === "sup_payments_due" && <PaymentsDueView onNavigate={setActiveModule} />}
-
-          {/* Organization & System Hubs */}
-          {activeModule === "branches" && <BranchModule />}
-          {activeModule === "staff" && <StaffModule />}
-          {activeModule === "roles" && <RolesModule />}
-          {activeModule === "reports" && <ReportsModule />}
-          {activeModule === "profile" && <ProfileModule />}
-          {activeModule === "subscription" && <SubscriptionModule />}
-          {activeModule === "settings" && <SettingsModule />}
+          {renderModuleContent()}
         </main>
       </div>
     </div>
   );
+
+  function renderModuleContent() {
+    const isOwner = user?.role === "COMPANY_OWNER" || user?.role === "SUPER_ADMIN";
+
+    switch (activeModule) {
+      // 📊 Overview & Dashboard
+      case "overview":
+        if (!isOwner && !hasPermission("dashboard.view")) {
+          return <TenantAccessRestricted moduleName="Dashboard" requiredPerm="dashboard.view" />;
+        }
+        return <OverviewModule onNavigate={setActiveModule} />;
+
+      // 🛒 Sales & POS Subpages
+      case "pos":
+      case "pos_sale":
+        if (!isOwner && !hasPermission("pos.manage")) {
+          return <TenantAccessRestricted moduleName="Sales & POS" requiredPerm="pos.manage" />;
+        }
+        return <PosModule />;
+
+      case "pos_history":
+        if (!isOwner && !hasPermission("pos.history")) {
+          return <TenantAccessRestricted moduleName="Sales History" requiredPerm="pos.history" />;
+        }
+        return <SalesHistoryView onNavigate={setActiveModule} />;
+
+      case "pos_vat":
+        if (!isOwner && !hasPermission("pos.vat")) {
+          return <TenantAccessRestricted moduleName="VAT Settings" requiredPerm="pos.vat" />;
+        }
+        return <VatSettingsView onNavigate={setActiveModule} />;
+
+      // 💳 Accounts & Finance Subpages
+      case "acc_overview":
+      case "accounts":
+        if (!isOwner && !hasPermission("accounts.manage")) {
+          return <TenantAccessRestricted moduleName="Accounts & Finance Overview" requiredPerm="accounts.manage" />;
+        }
+        return <AccountsOverviewView onNavigate={setActiveModule} />;
+
+      case "acc_financial_accounts":
+        if (!isOwner && !hasPermission("accounts.financial_accounts")) {
+          return <TenantAccessRestricted moduleName="Financial Accounts" requiredPerm="accounts.financial_accounts" />;
+        }
+        return <FinancialAccountsView onNavigate={setActiveModule} />;
+
+      case "acc_fund_transfer":
+        if (!isOwner && !hasPermission("accounts.fund_transfer")) {
+          return <TenantAccessRestricted moduleName="Fund Transfer" requiredPerm="accounts.fund_transfer" />;
+        }
+        return <FundTransferView onNavigate={setActiveModule} />;
+
+      case "acc_payment_sales":
+        if (!isOwner && !hasPermission("accounts.payment_sales")) {
+          return <TenantAccessRestricted moduleName="Payment Method Sales" requiredPerm="accounts.payment_sales" />;
+        }
+        return <PaymentMethodSalesView onNavigate={setActiveModule} />;
+
+      case "acc_product_sales":
+        if (!isOwner && !hasPermission("accounts.product_sales")) {
+          return <TenantAccessRestricted moduleName="Product-Wise Sales" requiredPerm="accounts.product_sales" />;
+        }
+        return <ProductWiseSalesView onNavigate={setActiveModule} />;
+
+      case "acc_transaction_history":
+        if (!isOwner && !hasPermission("accounts.transaction_history")) {
+          return <TenantAccessRestricted moduleName="Transaction History" requiredPerm="accounts.transaction_history" />;
+        }
+        return <TransactionHistoryView onNavigate={setActiveModule} />;
+
+      // 📦 Inventory Subpages
+      case "inv_add_product":
+        if (!isOwner && !hasPermission("inventory.manage")) {
+          return <TenantAccessRestricted moduleName="Add Product" requiredPerm="inventory.manage" />;
+        }
+        return (
+          <AddProductView
+            editingProduct={editingProduct}
+            onNavigate={setActiveModule}
+            onClearEditing={() => setEditingProduct(null)}
+          />
+        );
+
+      case "inv_product_list":
+        if (!isOwner && !hasPermission("inventory.manage")) {
+          return <TenantAccessRestricted moduleName="Product List" requiredPerm="inventory.manage" />;
+        }
+        return (
+          <ProductListView
+            onNavigate={setActiveModule}
+            onEditProduct={(p) => {
+              setEditingProduct(p);
+              setActiveModule("inv_add_product");
+            }}
+          />
+        );
+
+      case "inv_variants":
+        if (!isOwner && !hasPermission("inventory.manage")) {
+          return <TenantAccessRestricted moduleName="Categories & Variants" requiredPerm="inventory.manage" />;
+        }
+        return <VariantsView />;
+
+      case "inv_expired_products":
+        if (!isOwner && !hasPermission("inventory.manage")) {
+          return <TenantAccessRestricted moduleName="Expired Products" requiredPerm="inventory.manage" />;
+        }
+        return <ExpiredProductsView />;
+
+      // 🔄 Stock Management Subpages
+      case "stock_add_stock":
+        if (!isOwner && !hasPermission("stock.manage")) {
+          return <TenantAccessRestricted moduleName="Add Stock" requiredPerm="stock.manage" />;
+        }
+        return <AddStockView onNavigate={setActiveModule} />;
+
+      case "stock_stock_list":
+        if (!isOwner && !hasPermission("stock.manage")) {
+          return <TenantAccessRestricted moduleName="Stock List" requiredPerm="stock.manage" />;
+        }
+        return <StockListView onNavigate={setActiveModule} />;
+
+      case "stock_stock_history":
+        if (!isOwner && !hasPermission("stock.manage")) {
+          return <TenantAccessRestricted moduleName="Stock History" requiredPerm="stock.manage" />;
+        }
+        return <StockHistoryView />;
+
+      case "stock_transfer_stock":
+        if (!isOwner && !hasPermission("stock.manage")) {
+          return <TenantAccessRestricted moduleName="Transfer Stock" requiredPerm="stock.manage" />;
+        }
+        return <TransferStockView onNavigate={setActiveModule} />;
+
+      case "stock_transfer_history":
+        if (!isOwner && !hasPermission("stock.manage")) {
+          return <TenantAccessRestricted moduleName="Transfer History" requiredPerm="stock.manage" />;
+        }
+        return <TransferHistoryView onNavigate={setActiveModule} />;
+
+      case "stock_stock_receive":
+        if (!isOwner && !hasPermission("stock.manage")) {
+          return <TenantAccessRestricted moduleName="Stock Receive" requiredPerm="stock.manage" />;
+        }
+        return <StockReceiveView onNavigate={setActiveModule} />;
+
+      // 🏭 Supplier Management Subpages
+      case "sup_suppliers":
+        if (!isOwner && !hasPermission("suppliers.manage")) {
+          return <TenantAccessRestricted moduleName="Suppliers" requiredPerm="suppliers.manage" />;
+        }
+        return <SuppliersView onNavigate={setActiveModule} />;
+
+      case "sup_purchase_history":
+        if (!isOwner && !hasPermission("suppliers.manage")) {
+          return <TenantAccessRestricted moduleName="Purchase History" requiredPerm="suppliers.manage" />;
+        }
+        return <PurchaseHistoryView onNavigate={setActiveModule} />;
+
+      case "sup_payments_due":
+        if (!isOwner && !hasPermission("suppliers.manage") && !hasPermission("accounts.supplier_due")) {
+          return <TenantAccessRestricted moduleName="Payments / Due" requiredPerm="suppliers.manage" />;
+        }
+        return <PaymentsDueView onNavigate={setActiveModule} />;
+
+      // 👥 Staff & Roles Administration
+      case "branches":
+        if (!isOwner && !hasPermission("branches.manage")) {
+          return <TenantAccessRestricted moduleName="Branch Network" requiredPerm="branches.manage" />;
+        }
+        return <BranchModule />;
+
+      case "staff":
+        if (!isOwner && !hasPermission("staff.manage")) {
+          return <TenantAccessRestricted moduleName="Staff List" requiredPerm="staff.manage" />;
+        }
+        return <StaffModule onNavigate={setActiveModule} />;
+
+      case "staff_create":
+        if (!isOwner && !hasPermission("staff.manage")) {
+          return <TenantAccessRestricted moduleName="Create Staff" requiredPerm="staff.manage" />;
+        }
+        return <CreateStaffTab onNavigate={setActiveModule} />;
+
+      case "roles":
+        if (!isOwner && !hasPermission("roles.manage")) {
+          return <TenantAccessRestricted moduleName="Roles & Permissions" requiredPerm="roles.manage" />;
+        }
+        return <RolesModule />;
+
+      case "reports":
+        if (!isOwner && !hasPermission("accounts.reports")) {
+          return <TenantAccessRestricted moduleName="Sales Reports" requiredPerm="accounts.reports" />;
+        }
+        return <ReportsModule />;
+
+      // ⚙️ Pharmacy Owner Settings
+      case "profile":
+        if (!isOwner) {
+          return <TenantAccessRestricted moduleName="Pharmacy Profile" requiredPerm="Owner Only" />;
+        }
+        return <ProfileModule />;
+
+      case "subscription":
+        if (!isOwner) {
+          return <TenantAccessRestricted moduleName="Subscription Plan" requiredPerm="Owner Only" />;
+        }
+        return <SubscriptionModule />;
+
+      case "settings":
+        if (!isOwner) {
+          return <TenantAccessRestricted moduleName="Settings" requiredPerm="Owner Only" />;
+        }
+        return <SettingsModule />;
+
+      default:
+        return <OverviewModule onNavigate={setActiveModule} />;
+    }
+  }
 }
+
+function TenantAccessRestricted({ moduleName, requiredPerm }: { moduleName: string; requiredPerm: string }) {
+  return (
+    <div className="p-12 text-center bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-4 max-w-lg mx-auto my-12 shadow-xs">
+      <div className="h-14 w-14 rounded-2xl bg-red-50 dark:bg-red-950/50 text-red-500 flex items-center justify-center mx-auto">
+        <Users className="h-8 w-8" />
+      </div>
+      <div>
+        <h2 className="text-lg font-bold text-slate-900 dark:text-white">Module Access Restricted</h2>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5">
+          You do not have permission to access <span className="font-semibold text-slate-700 dark:text-slate-300">{moduleName}</span>.
+        </p>
+      </div>
+      <div className="inline-block px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg text-xs font-mono text-slate-600 dark:text-slate-400">
+        Required permission: <span className="text-brand-primary font-bold">{requiredPerm}</span>
+      </div>
+      <p className="text-[11px] text-slate-400">
+        Please contact your Pharmacy Owner to adjust your role permissions.
+      </p>
+    </div>
+  );
+}
+

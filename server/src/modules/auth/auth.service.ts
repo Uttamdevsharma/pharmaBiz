@@ -40,11 +40,51 @@ export class AuthService {
       throw new Error("Invalid username/email or password");
     }
 
+    // Resolve custom role, pharmacy role, and effective permissions
+    let effectivePermissions: string[] = user.permissions || [];
+    let customRoleName = user.customRoleName || null;
+    let pharmacyRoleName = user.pharmacyRoleName || null;
+
+    if (user.role === "SUPER_ADMIN" || user.role === "COMPANY_OWNER") {
+      effectivePermissions = ["*"];
+    } else if (user.pharmacyRoleId) {
+      try {
+        const pharmacyRole = await (prisma as any).pharmacyRole.findUnique({
+          where: { id: user.pharmacyRoleId },
+        });
+        if (pharmacyRole) {
+          pharmacyRoleName = pharmacyRole.name;
+          const combined = new Set([...(pharmacyRole.permissions || []), ...(user.permissions || [])]);
+          effectivePermissions = Array.from(combined);
+        }
+      } catch (e) {
+        // Fallback
+      }
+    } else if (user.customRoleId) {
+      try {
+        const customRole = await (prisma as any).platformRole.findUnique({
+          where: { id: user.customRoleId },
+        });
+        if (customRole) {
+          customRoleName = customRole.name;
+          const combined = new Set([...(customRole.permissions || []), ...(user.permissions || [])]);
+          effectivePermissions = Array.from(combined);
+        }
+      } catch (e) {
+        // Fallback
+      }
+    }
+
     const payload: AuthenticatedUser = {
       id: user.id,
       tenantId: user.tenantId,
       branchId: user.branchId,
       role: user.role,
+      customRoleId: user.customRoleId || null,
+      customRoleName: customRoleName,
+      pharmacyRoleId: user.pharmacyRoleId || null,
+      pharmacyRoleName: pharmacyRoleName,
+      permissions: effectivePermissions,
       username: user.username,
       name: user.name,
       email: user.email,
@@ -58,6 +98,64 @@ export class AuthService {
     return {
       token,
       user: payload,
+    };
+  }
+
+  /**
+   * Get current authenticated user with live permissions
+   */
+  static async getMe(userId: string): Promise<AuthenticatedUser> {
+    const user = await (prisma as any).user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    let effectivePermissions: string[] = user.permissions || [];
+    let customRoleName = user.customRoleName || null;
+    let pharmacyRoleName = user.pharmacyRoleName || null;
+
+    if (user.role === "SUPER_ADMIN" || user.role === "COMPANY_OWNER") {
+      effectivePermissions = ["*"];
+    } else if (user.pharmacyRoleId) {
+      try {
+        const pharmacyRole = await (prisma as any).pharmacyRole.findUnique({
+          where: { id: user.pharmacyRoleId },
+        });
+        if (pharmacyRole) {
+          pharmacyRoleName = pharmacyRole.name;
+          const combined = new Set([...(pharmacyRole.permissions || []), ...(user.permissions || [])]);
+          effectivePermissions = Array.from(combined);
+        }
+      } catch (e) {}
+    } else if (user.customRoleId) {
+      try {
+        const customRole = await (prisma as any).platformRole.findUnique({
+          where: { id: user.customRoleId },
+        });
+        if (customRole) {
+          customRoleName = customRole.name;
+          const combined = new Set([...(customRole.permissions || []), ...(user.permissions || [])]);
+          effectivePermissions = Array.from(combined);
+        }
+      } catch (e) {}
+    }
+
+    return {
+      id: user.id,
+      tenantId: user.tenantId,
+      branchId: user.branchId,
+      role: user.role,
+      customRoleId: user.customRoleId || null,
+      customRoleName,
+      pharmacyRoleId: user.pharmacyRoleId || null,
+      pharmacyRoleName,
+      permissions: effectivePermissions,
+      username: user.username,
+      name: user.name,
+      email: user.email,
     };
   }
 
@@ -184,6 +282,7 @@ export class AuthService {
       tenantId: result.tenant.id,
       branchId: result.mainBranch.id,
       role: result.user.role,
+      permissions: ["*"],
       username: result.user.username,
       name: result.user.name,
       email: result.user.email,

@@ -14,16 +14,42 @@ export type UserRole =
   | "CASHIER"
   | "ACCOUNTS"
   | "REGIONAL_ADMIN"
-  | "AUDITOR";
+  | "AUDITOR"
+  | string;
 
 export interface User {
   id: string;
   tenantId: string;
   branchId: string | null;
   role: UserRole;
+  customRoleId?: string | null;
+  customRoleName?: string | null;
+  pharmacyRoleId?: string | null;
+  pharmacyRoleName?: string | null;
+  permissions?: string[];
   name?: string;
   username?: string;
   email?: string;
+}
+
+/**
+ * Returns the proper dashboard URL for a user based on their role and tenant context
+ */
+export function getRedirectUrlForUser(user: User | null): string {
+  if (!user) return "/login";
+
+  // 1. Super Admin & Platform Staff (CTO, Project Manager, Platform Delegates)
+  if (
+    user.role === "SUPER_ADMIN" ||
+    user.role === "CTO" ||
+    user.role === "PROJECT_MANAGER" ||
+    (Boolean(user.customRoleId) && !user.pharmacyRoleId && user.role !== "COMPANY_OWNER")
+  ) {
+    return "/admin";
+  }
+
+  // 2. Pharmacy Owner, Pharmacy Staff (Cashier, Branch Manager, Inventory, Accounts, Custom Roles)
+  return "/dashboard";
 }
 
 interface AuthContextType {
@@ -33,8 +59,12 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isSuperAdmin: boolean;
   isPlatformStaff: boolean;
-  login: (identifier: string, password: string) => Promise<{ success: boolean; message?: string }>;
+  isPharmacyOwner: boolean;
+  isPharmacyStaff: boolean;
+  hasPermission: (permissionKey: string) => boolean;
+  login: (identifier: string, password: string) => Promise<{ success: boolean; message?: string; redirectUrl?: string }>;
   logout: () => void;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -44,8 +74,12 @@ const AuthContext = createContext<AuthContextType>({
   isAuthenticated: false,
   isSuperAdmin: false,
   isPlatformStaff: false,
+  isPharmacyOwner: false,
+  isPharmacyStaff: false,
+  hasPermission: () => false,
   login: async () => ({ success: false }),
   logout: () => {},
+  refreshUser: async () => {},
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -53,6 +87,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
+
+  const refreshUser = async () => {
+    try {
+      const storedToken = localStorage.getItem("token");
+      if (!storedToken) return;
+      const res = await fetchApi<User>("/auth/me");
+      if (res.success && res.data) {
+        setUser(res.data);
+        localStorage.setItem("user", JSON.stringify(res.data));
+      }
+    } catch (e) {
+      console.warn("Could not refresh user session", e);
+    }
+  };
 
   useEffect(() => {
     // Rehydrate auth from localStorage
@@ -62,7 +110,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (storedToken && storedUser) {
         setToken(storedToken);
-        setUser(JSON.parse(storedUser));
+        const parsed = JSON.parse(storedUser);
+        setUser(parsed);
+        // Silently refresh permissions in background
+        fetchApi<User>("/auth/me").then((res) => {
+          if (res.success && res.data) {
+            setUser(res.data);
+            localStorage.setItem("user", JSON.stringify(res.data));
+          }
+        }).catch(() => {});
       }
     } catch (e) {
       console.error("Failed to rehydrate auth state", e);
@@ -90,7 +146,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         localStorage.setItem("token", jwtToken);
         localStorage.setItem("user", JSON.stringify(authUser));
 
-        return { success: true };
+        const targetUrl = getRedirectUrlForUser(authUser);
+
+        return { success: true, redirectUrl: targetUrl };
       }
 
       return {
@@ -113,8 +171,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     router.push("/login");
   };
 
+  // Explicit Platform Super Admin vs Pharmacy Role Detection
   const isSuperAdmin = user?.role === "SUPER_ADMIN";
-  const isPlatformStaff = ["SUPER_ADMIN", "CTO", "PROJECT_MANAGER"].includes(user?.role || "");
+  
+  const isPlatformStaff =
+    user?.role === "SUPER_ADMIN" ||
+    user?.role === "CTO" ||
+    user?.role === "PROJECT_MANAGER" ||
+    (Boolean(user?.customRoleId) && !user?.pharmacyRoleId && user?.role !== "COMPANY_OWNER");
+
+  const isPharmacyOwner = user?.role === "COMPANY_OWNER";
+
+  const isPharmacyStaff =
+    user?.role === "COMPANY_OWNER" ||
+    Boolean(user?.pharmacyRoleId) ||
+    [
+      "BRANCH_MANAGER",
+      "MANAGER",
+      "INVENTORY_EXECUTIVE",
+      "CASHIER",
+      "ACCOUNTS",
+      "REGIONAL_ADMIN",
+      "AUDITOR",
+    ].includes(user?.role || "");
+
+  const hasPermission = (permissionKey: string): boolean => {
+    if (!user) return false;
+    // Super Admin & Pharmacy Owner have full authority within their respective scopes
+    if (user.role === "SUPER_ADMIN" || user.role === "COMPANY_OWNER") return true;
+    const perms = user.permissions || [];
+    if (perms.includes("*")) return true;
+    return perms.includes(permissionKey);
+  };
 
   return (
     <AuthContext.Provider
@@ -125,8 +213,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isAuthenticated: !!user && !!token,
         isSuperAdmin,
         isPlatformStaff,
+        isPharmacyOwner,
+        isPharmacyStaff,
+        hasPermission,
         login,
         logout,
+        refreshUser,
       }}
     >
       {children}

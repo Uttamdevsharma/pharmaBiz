@@ -44,16 +44,10 @@ export default function LoginPage() {
 
     try {
       const res = await login(identifier, password);
-      if (res.success) {
-        // Read user role from localStorage to route correctly
-        const stored = localStorage.getItem("user");
-        const userObj = stored ? JSON.parse(stored) : null;
-
-        if (["SUPER_ADMIN", "CTO", "PROJECT_MANAGER"].includes(userObj?.role)) {
-          router.push("/admin");
-        } else {
-          router.push("/dashboard");
-        }
+      if (res.success && res.redirectUrl) {
+        router.push(res.redirectUrl);
+      } else if (res.success) {
+        router.push("/dashboard");
       } else {
         setError(res.message || "Invalid email/username or password");
       }

@@ -11,9 +11,7 @@ export interface LogAuditParams {
 }
 
 export class AuditService {
-  /**
-   * Log an audit trail entry safely (non-blocking for errors)
-   */
+  
   static async log(params: LogAuditParams): Promise<void> {
     try {
       await (prisma as any).auditLog.create({

@@ -1,13 +1,15 @@
 import { Router } from "express";
 import { SuperAdminController } from "./super-admin.controller";
 import { authenticate } from "../../middleware/authenticate";
-import { authorize } from "../../middleware/authorize";
+import { requirePermission } from "../../middleware/requirePermission";
 import { validateRequest } from "../../middleware/validate";
 import {
   createPlanSchema,
   updatePlanSchema,
   updateTenantStatusSchema,
   listTenantsQuerySchema,
+  createRoleSchema,
+  updateRoleSchema,
   createPlatformStaffSchema,
   updatePlatformStaffSchema,
   updatePlatformRolePermissionsSchema,
@@ -18,75 +20,82 @@ const router = Router();
 // Base authentication
 router.use(authenticate);
 
-// Subscription Plans (Delegated platform management)
-router.get("/plans", authorize(["SUPER_ADMIN", "CTO", "PROJECT_MANAGER"]), SuperAdminController.listPlans);
-router.post("/plans", authorize(["SUPER_ADMIN", "CTO", "PROJECT_MANAGER"]), validateRequest({ body: createPlanSchema }), SuperAdminController.createPlan);
-router.get("/plans/:id", authorize(["SUPER_ADMIN", "CTO", "PROJECT_MANAGER"]), SuperAdminController.getPlanById);
-router.patch("/plans/:id", authorize(["SUPER_ADMIN", "CTO", "PROJECT_MANAGER"]), validateRequest({ body: updatePlanSchema }), SuperAdminController.updatePlan);
-router.delete("/plans/:id", authorize(["SUPER_ADMIN", "CTO", "PROJECT_MANAGER"]), SuperAdminController.deletePlan);
+// ==================== SUBSCRIPTION PLANS ====================
+router.get("/plans", requirePermission("plans.manage"), SuperAdminController.listPlans);
+router.post("/plans", requirePermission("plans.manage"), validateRequest({ body: createPlanSchema }), SuperAdminController.createPlan);
+router.get("/plans/:id", requirePermission("plans.manage"), SuperAdminController.getPlanById);
+router.patch("/plans/:id", requirePermission("plans.manage"), validateRequest({ body: updatePlanSchema }), SuperAdminController.updatePlan);
+router.delete("/plans/:id", requirePermission("plans.manage"), SuperAdminController.deletePlan);
 
-// Tenants Management (Delegated status & pharmacy management)
-router.get("/tenants", authorize(["SUPER_ADMIN", "CTO", "PROJECT_MANAGER"]), validateRequest({ query: listTenantsQuerySchema }), SuperAdminController.listTenants);
-router.get("/tenants/:id", authorize(["SUPER_ADMIN", "CTO", "PROJECT_MANAGER"]), SuperAdminController.getTenantDetails);
-router.get("/tenants/:id/subscription", authorize(["SUPER_ADMIN", "CTO", "PROJECT_MANAGER"]), SuperAdminController.getTenantSubscription);
+// ==================== PHARMACIES & TENANTS ====================
+router.get("/tenants", requirePermission("pharmacies.manage"), validateRequest({ query: listTenantsQuerySchema }), SuperAdminController.listTenants);
+router.get("/tenants/:id", requirePermission("pharmacies.manage"), SuperAdminController.getTenantDetails);
+router.get("/tenants/:id/subscription", requirePermission("pharmacies.manage"), SuperAdminController.getTenantSubscription);
 router.patch(
   "/tenants/:id/status",
-  authorize(["SUPER_ADMIN", "CTO", "PROJECT_MANAGER"]),
+  requirePermission("pharmacies.manage"),
   validateRequest({ body: updateTenantStatusSchema }),
   SuperAdminController.updateTenantStatus
 );
 
-// Subscriptions Management
-router.get("/subscriptions", authorize(["SUPER_ADMIN", "CTO", "PROJECT_MANAGER"]), SuperAdminController.listSubscriptions);
+// ==================== SUBSCRIPTIONS ====================
+router.get("/subscriptions", requirePermission("subscriptions.manage"), SuperAdminController.listSubscriptions);
 
-// Platform Payments & Analytics
-router.get("/payments", authorize(["SUPER_ADMIN", "CTO", "PROJECT_MANAGER"]), SuperAdminController.listPayments);
-router.get("/analytics", authorize(["SUPER_ADMIN", "CTO", "PROJECT_MANAGER"]), SuperAdminController.getAnalytics);
+// ==================== PAYMENTS & ANALYTICS ====================
+router.get("/payments", requirePermission("payments.view"), SuperAdminController.listPayments);
+router.get("/analytics", requirePermission("reports.view"), SuperAdminController.getAnalytics);
 
-// ==================== PLATFORM STAFF & DELEGATE ROLES (CTO / PROJECT MANAGER) ====================
+// ==================== DYNAMIC ROLES & PERMISSIONS ====================
+router.get("/roles", requirePermission("roles.manage"), SuperAdminController.listRoles);
+router.post("/roles", requirePermission("roles.manage"), validateRequest({ body: createRoleSchema }), SuperAdminController.createRole);
+router.patch("/roles/:id", requirePermission("roles.manage"), validateRequest({ body: updateRoleSchema }), SuperAdminController.updateRole);
+router.delete("/roles/:id", requirePermission("roles.manage"), SuperAdminController.deleteRole);
+
+// ==================== PLATFORM STAFF ====================
 router.get(
   "/staff",
-  authorize(["SUPER_ADMIN", "CTO", "PROJECT_MANAGER"]),
+  requirePermission("staff.manage"),
   SuperAdminController.listPlatformStaff
 );
 
 router.post(
   "/staff",
-  authorize(["SUPER_ADMIN", "CTO", "PROJECT_MANAGER"]),
+  requirePermission("staff.create"),
   validateRequest({ body: createPlatformStaffSchema }),
   SuperAdminController.createPlatformStaff
 );
 
 router.patch(
   "/staff/:id",
-  authorize(["SUPER_ADMIN", "CTO", "PROJECT_MANAGER"]),
+  requirePermission("staff.manage"),
   validateRequest({ body: updatePlatformStaffSchema }),
   SuperAdminController.updatePlatformStaff
 );
 
 router.patch(
   "/staff/:id/status",
-  authorize(["SUPER_ADMIN", "CTO", "PROJECT_MANAGER"]),
+  requirePermission("staff.manage"),
   SuperAdminController.updatePlatformStaffStatus
 );
 
 router.delete(
   "/staff/:id",
-  authorize(["SUPER_ADMIN", "CTO", "PROJECT_MANAGER"]),
+  requirePermission("staff.manage"),
   SuperAdminController.deletePlatformStaff
 );
 
+// Platform Permissions Metadata & Hierarchy
 router.get(
   "/staff/permissions",
-  authorize(["SUPER_ADMIN", "CTO", "PROJECT_MANAGER"]),
   SuperAdminController.getPlatformPermissions
 );
 
 router.post(
   "/staff/permissions",
-  authorize(["SUPER_ADMIN", "CTO", "PROJECT_MANAGER"]),
+  requirePermission("roles.manage"),
   validateRequest({ body: updatePlatformRolePermissionsSchema }),
   SuperAdminController.updatePlatformPermissions
 );
 
 export { router as superAdminRoutes };
+

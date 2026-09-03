@@ -90,30 +90,59 @@ export const requirePermission = (permissionString: string) => {
 
       const role = req.user.role;
 
-      // Super Admin and Company Owner automatically bypass checks
-      if (role === "SUPER_ADMIN" || role === "COMPANY_OWNER") {
+      // Super Admin automatically bypasses all checks with full root authority
+      if (role === "SUPER_ADMIN") {
         next();
         return;
       }
 
-      // Security Boundary: CTO and Project Manager can operate delegated platform capabilities,
-      // but are strictly barred from root destruction, ownership transfer, or altering Super Admin.
-      if (["CTO", "PROJECT_MANAGER"].includes(role)) {
-        if (
-          permissionString.startsWith("platform.destroy") ||
-          permissionString.startsWith("platform.owner") ||
-          permissionString.startsWith("platform.super_admin") ||
-          permissionString.startsWith("platform.transfer_ownership")
-        ) {
-          res.status(403).json({
-            success: false,
-            message: "Forbidden - CTO/Project Manager cannot execute root Super Admin actions or alter Super Admin authority.",
-          });
+      // Company Owner automatically bypasses all tenant-level checks
+      if (role === "COMPANY_OWNER") {
+        next();
+        return;
+      }
+
+      // 1. Check user.permissions from request / JWT payload
+      const userPerms = req.user.permissions || [];
+      if (userPerms.includes("*") || userPerms.includes(permissionString)) {
+        next();
+        return;
+      }
+
+      // 2. Fetch live user & custom / pharmacy roles from database for up-to-date permissions
+      const dbUser = await (prisma as any).user.findUnique({
+        where: { id: req.user.id },
+        include: { customRole: true, pharmacyRole: true },
+      });
+
+      if (dbUser) {
+        // Check direct user permissions
+        const directPermissions: string[] = dbUser.permissions || [];
+        if (directPermissions.includes("*") || directPermissions.includes(permissionString)) {
+          next();
           return;
+        }
+
+        // Check assigned pharmacy role permissions (Tenant-level custom roles)
+        if (dbUser.pharmacyRole && dbUser.pharmacyRole.permissions) {
+          const pharmacyRolePermissions: string[] = dbUser.pharmacyRole.permissions || [];
+          if (pharmacyRolePermissions.includes("*") || pharmacyRolePermissions.includes(permissionString)) {
+            next();
+            return;
+          }
+        }
+
+        // Check assigned custom role permissions (Platform-level custom roles)
+        if (dbUser.customRole && dbUser.customRole.permissions) {
+          const rolePermissions: string[] = dbUser.customRole.permissions || [];
+          if (rolePermissions.includes("*") || rolePermissions.includes(permissionString)) {
+            next();
+            return;
+          }
         }
       }
 
-      // Check DB RolePermission first
+      // 3. Check legacy DB RolePermission table
       const rolePerm = await (prisma as any).rolePermission.findUnique({
         where: {
           role_permission: {
@@ -128,7 +157,7 @@ export const requirePermission = (permissionString: string) => {
         return;
       }
 
-      // If not found in DB, check default matrix
+      // 4. Check static default fallback matrix for legacy roles
       const defaultPerms = DEFAULT_ROLE_PERMISSIONS[role] || [];
       if (defaultPerms.includes(permissionString) || defaultPerms.includes("*")) {
         next();
@@ -137,7 +166,7 @@ export const requirePermission = (permissionString: string) => {
 
       res.status(403).json({
         success: false,
-        message: `Forbidden - Missing permission: ${permissionString}`,
+        message: `Forbidden - You do not have permission (${permissionString}) to perform this action.`,
       });
     } catch (err) {
       console.error("Permission Check Error:", err);
@@ -145,3 +174,4 @@ export const requirePermission = (permissionString: string) => {
     }
   };
 };
+

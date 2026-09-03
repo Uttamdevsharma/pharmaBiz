@@ -113,7 +113,107 @@ export async function seedSuperAdmin(): Promise<void> {
       }
     }
     console.log("[Seed] All 4 subscription plans (Plan 0 Free Trial, Plan 1, Plan 2, Plan 3) verified.");
+
+    // 6. Ensure PlatformRole table and seed default dynamic roles
+    try {
+      await (prisma as any).$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS "PlatformRole" (
+          "id" TEXT NOT NULL PRIMARY KEY,
+          "name" TEXT NOT NULL UNIQUE,
+          "description" TEXT,
+          "permissions" TEXT[] DEFAULT ARRAY[]::TEXT[],
+          "isSystem" BOOLEAN NOT NULL DEFAULT false,
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+
+        DO $$
+        BEGIN
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='User' AND column_name='customRoleId') THEN
+            ALTER TABLE "User" ADD COLUMN "customRoleId" TEXT;
+          END IF;
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='User' AND column_name='customRoleName') THEN
+            ALTER TABLE "User" ADD COLUMN "customRoleName" TEXT;
+          END IF;
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='User' AND column_name='permissions') THEN
+            ALTER TABLE "User" ADD COLUMN "permissions" TEXT[] DEFAULT ARRAY[]::TEXT[];
+          END IF;
+        END $$;
+      `);
+
+      const defaultRoles = [
+        {
+          name: "CTO",
+          description: "Chief Technology Officer - Full platform telemetry, tenant management, plans, payments, and system controls.",
+          permissions: [
+            "pharmacies.manage",
+            "subscriptions.manage",
+            "plans.manage",
+            "payments.view",
+            "reports.view",
+            "staff.create",
+            "staff.manage",
+            "roles.manage",
+            "settings.manage",
+            "platform.data",
+          ],
+          isSystem: false,
+        },
+        {
+          name: "Project Manager",
+          description: "Platform Operations - Pharmacy onboarding, subscription management, plan modifications, payments, and reports.",
+          permissions: [
+            "pharmacies.manage",
+            "subscriptions.manage",
+            "plans.manage",
+            "payments.view",
+            "reports.view",
+          ],
+          isSystem: false,
+        },
+        {
+          name: "Support Lead",
+          description: "Customer Support & Success - Managing pharmacies, inspecting subscriptions, and verifying payments.",
+          permissions: [
+            "pharmacies.manage",
+            "subscriptions.manage",
+            "payments.view",
+          ],
+          isSystem: false,
+        },
+        {
+          name: "Financial Auditor",
+          description: "Financial Oversight - Payment transaction inspection and revenue analytics reports.",
+          permissions: [
+            "payments.view",
+            "reports.view",
+          ],
+          isSystem: false,
+        },
+      ];
+
+      for (const roleDef of defaultRoles) {
+        const existing = await (prisma as any).platformRole.findUnique({
+          where: { name: roleDef.name },
+        });
+        if (!existing) {
+          await (prisma as any).platformRole.create({
+            data: {
+              id: roleDef.name.toLowerCase().replace(/\s+/g, "-"),
+              name: roleDef.name,
+              description: roleDef.description,
+              permissions: roleDef.permissions,
+              isSystem: roleDef.isSystem,
+            },
+          });
+          console.log(`[Seed] Created dynamic role: ${roleDef.name}`);
+        }
+      }
+    } catch (err: any) {
+      console.error("[Seed Error] Failed to ensure dynamic roles:", err.message);
+    }
   } catch (error: any) {
     console.error("[Seed Error] Failed to seed Super Admin / Settings:", error.message);
   }
 }
+
