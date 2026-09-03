@@ -105,4 +105,21 @@ export class TransferController {
       res.status(400).json({ success: false, message: error.message });
     }
   }
+
+  static async getDamagedProducts(req: Request, res: Response): Promise<void> {
+    try {
+      const tenantId = req.user!.tenantId;
+      const userRole = req.user!.role;
+      const userBranchId = req.user!.branchId;
+      const query = {
+        branchId: req.query.branchId as string,
+        search: req.query.search as string,
+      };
+
+      const result = await TransferService.getDamagedProducts(tenantId, userRole, userBranchId, query);
+      res.status(200).json({ success: true, ...result });
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
 }

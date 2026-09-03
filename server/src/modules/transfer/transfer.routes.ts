@@ -1,9 +1,9 @@
 import { Router } from "express";
 import { TransferController } from "./transfer.controller";
 import { authenticate } from "../../middleware/authenticate";
-import { authorize } from "../../middleware/authorize";
+import { requirePermission } from "../../middleware/requirePermission";
 import { validateRequest } from "../../middleware/validate";
-import { requireActiveSubscription, requireTier } from "../../middleware/planLimiter";
+import { requireActiveSubscription } from "../../middleware/planLimiter";
 import {
   createTransferSchema,
   receiveTransferSchema,
@@ -14,16 +14,30 @@ import {
 const router = Router();
 
 // Inter-branch transfers require active subscription
-router.use(authenticate, requireActiveSubscription, requireTier("GROWTH"));
+router.use(authenticate, requireActiveSubscription);
 
 // List & Details
-router.get("/", validateRequest({ query: listTransfersQuerySchema }), TransferController.listTransfers);
-router.get("/:id", TransferController.getTransferDetails);
+router.get(
+  "/damaged-products",
+  requirePermission("stock.manage"),
+  TransferController.getDamagedProducts
+);
+router.get(
+  "/",
+  requirePermission("stock.manage"),
+  validateRequest({ query: listTransfersQuerySchema }),
+  TransferController.listTransfers
+);
+router.get(
+  "/:id",
+  requirePermission("stock.manage"),
+  TransferController.getTransferDetails
+);
 
 // Create & Dispatch Transfer
 router.post(
   "/",
-  authorize(["COMPANY_OWNER", "REGIONAL_ADMIN", "BRANCH_MANAGER", "SUPER_ADMIN", "INVENTORY_EXECUTIVE"]),
+  requirePermission("stock.manage"),
   validateRequest({ body: createTransferSchema }),
   TransferController.createTransfer
 );
@@ -31,7 +45,7 @@ router.post(
 // Receive Shipment (with damaged/missing quantities & optional immediate settlement)
 router.post(
   "/:id/receive",
-  authorize(["COMPANY_OWNER", "REGIONAL_ADMIN", "BRANCH_MANAGER", "SUPER_ADMIN", "INVENTORY_EXECUTIVE"]),
+  requirePermission("stock.manage"),
   validateRequest({ body: receiveTransferSchema }),
   TransferController.receiveTransfer
 );
@@ -39,7 +53,7 @@ router.post(
 // Settle Transfer Payable (Pay destination payable to source branch account)
 router.post(
   "/:id/settle",
-  authorize(["COMPANY_OWNER", "REGIONAL_ADMIN", "BRANCH_MANAGER", "SUPER_ADMIN", "ACCOUNTS"]),
+  requirePermission("stock.manage"),
   validateRequest({ body: settleTransferSchema }),
   TransferController.settleTransfer
 );
@@ -47,7 +61,7 @@ router.post(
 // Cancel Transfer (Returns stock to source branch)
 router.post(
   "/:id/cancel",
-  authorize(["COMPANY_OWNER", "REGIONAL_ADMIN", "BRANCH_MANAGER", "SUPER_ADMIN"]),
+  requirePermission("stock.manage"),
   TransferController.cancelTransfer
 );
 

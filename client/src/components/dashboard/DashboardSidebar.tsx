@@ -33,6 +33,7 @@ import {
   CalendarX2,
   Wallet,
   Percent,
+  AlertTriangle,
 } from "lucide-react";
 
 export type OwnerModule =
@@ -58,6 +59,7 @@ export type OwnerModule =
   | "stock_transfer_stock"
   | "stock_transfer_history"
   | "stock_stock_receive"
+  | "stock_damaged_products"
   | "sup_suppliers"
   | "sup_purchase_history"
   | "sup_payments_due"
@@ -255,6 +257,12 @@ export function DashboardSidebar({
       id: "stock_stock_receive" as OwnerModule,
       label: "Stock Receive",
       icon: Inbox,
+      visible: hasStockPerm,
+    },
+    {
+      id: "stock_damaged_products" as OwnerModule,
+      label: "Damaged Products",
+      icon: AlertTriangle,
       visible: hasStockPerm,
     },
   ].filter((item) => item.visible);

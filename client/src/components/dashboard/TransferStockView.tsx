@@ -7,6 +7,7 @@ import { useAuth } from "@/context/AuthContext";
 import {
   ArrowLeftRight,
   ArrowLeft,
+  ArrowRight,
   Plus,
   Trash2,
   CheckCircle2,
@@ -19,39 +20,59 @@ import {
   Boxes,
   Lock,
   Search,
+  Check,
+  RotateCcw,
+  FileSpreadsheet,
+  AlertTriangle,
+  Info,
 } from "lucide-react";
 
 interface TransferStockViewProps {
   onNavigate: (module: any) => void;
 }
 
-interface TransferItemRow {
-  id: string; // local row id
+interface PackagingOption {
+  label: string;
+  unit: string;
+  factor: number;
+}
+
+interface SelectedTransferItem {
+  id: string; // unique row id
   productId: string;
-  inventoryId?: string;
+  inventoryId: string;
   batchNumber: string;
   expiryDate?: string;
-  packageType: string;
-  packageQuantity: number;
-  conversionFactor: number;
-  sentQuantity: number;
-  costPrice: number;
-  availableStock: number;
   productName: string;
   genericName?: string;
-  unit: string;
+  category?: string;
+  baseUnit: string;
+  availableStock: number; // in base units (e.g. 590 tablets)
+  costPrice: number; // purchase price per base unit
+
+  // Packaging configuration (derived rigidly from batch/product data)
+  packagingOptions: PackagingOption[];
+  selectedUnit: string;
+  conversionFactor: number; // e.g. 100 for BOX, 10 for STRIP, 1 for TABLET
+  packageQuantity: number; // e.g. 5 boxes
+  maxPackageQuantity: number; // Math.floor(availableStock / conversionFactor)
+  sentQuantity: number; // packageQuantity * conversionFactor
+  transferValue: number; // sentQuantity * costPrice
 }
 
 export function TransferStockView({ onNavigate }: TransferStockViewProps) {
   const { user } = useAuth();
+  const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
+
   const [branches, setBranches] = useState<Branch[]>([]);
   const [availableInventory, setAvailableInventory] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [inventoryLoading, setInventoryLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
   const [stockSearch, setStockSearch] = useState("");
+
+  const [dispatchedTransfer, setDispatchedTransfer] = useState<any | null>(null);
 
   const isBranchLocked = Boolean(
     user?.branchId && user?.role !== "COMPANY_OWNER" && user?.role !== "SUPER_ADMIN"
@@ -60,7 +81,7 @@ export function TransferStockView({ onNavigate }: TransferStockViewProps) {
   const [fromBranchId, setFromBranchId] = useState<string>(user?.branchId || "");
   const [toBranchId, setToBranchId] = useState<string>("");
   const [notes, setNotes] = useState<string>("");
-  const [items, setItems] = useState<TransferItemRow[]>([]);
+  const [selectedItems, setSelectedItems] = useState<SelectedTransferItem[]>([]);
 
   // Load branches
   useEffect(() => {
@@ -72,11 +93,9 @@ export function TransferStockView({ onNavigate }: TransferStockViewProps) {
           const activeBranches = bRes.data.filter((b) => b.isActive !== false);
           setBranches(activeBranches);
 
-          // If branch manager, strictly lock to their branch
-          const initialFrom = (isBranchLocked && user?.branchId) ? user.branchId : (fromBranchId || activeBranches[0].id);
+          const initialFrom = isBranchLocked && user?.branchId ? user.branchId : fromBranchId || activeBranches[0].id;
           setFromBranchId(initialFrom);
 
-          // Find first destination branch different from initialFrom
           const destCandidate = activeBranches.find((b) => b.id !== initialFrom);
           if (destCandidate) {
             setToBranchId(destCandidate.id);
@@ -91,33 +110,6 @@ export function TransferStockView({ onNavigate }: TransferStockViewProps) {
     loadBranches();
   }, [user?.branchId, isBranchLocked]);
 
-  // Load source branch inventory whenever fromBranchId changes
-  useEffect(() => {
-    async function loadSourceInventory() {
-      if (!fromBranchId) return;
-      try {
-        setInventoryLoading(true);
-        // Request branch inventory via primary endpoint with fallback
-        const res = await fetchApi<any>(`/inventory/branch/${fromBranchId}?limit=500`);
-        const rawList = Array.isArray(res?.data)
-          ? res.data
-          : Array.isArray(res)
-          ? res
-          : [];
-
-        // Filter items with positive available stock
-        const inStock = rawList.filter((inv: any) => Number(inv.quantity || 0) > 0);
-        setAvailableInventory(inStock);
-        setItems([]); // Reset items cart on source branch change
-      } catch (err) {
-        console.error("Failed to load source inventory", err);
-      } finally {
-        setInventoryLoading(false);
-      }
-    }
-    loadSourceInventory();
-  }, [fromBranchId]);
-
   const availableDestinations = branches.filter((b) => b.id !== fromBranchId && b.isActive !== false);
 
   // Automatically keep toBranchId synchronized with available destination branches
@@ -131,82 +123,147 @@ export function TransferStockView({ onNavigate }: TransferStockViewProps) {
     }
   }, [fromBranchId, branches]);
 
-  // Update destination branch options if fromBranchId changes
-  const handleFromBranchChange = (newFromId: string) => {
-    setFromBranchId(newFromId);
-    const nextDest = branches.find((b) => b.id !== newFromId && b.isActive !== false);
-    setToBranchId(nextDest?.id || "");
+  // Load source branch inventory whenever fromBranchId changes
+  useEffect(() => {
+    async function loadSourceInventory() {
+      if (!fromBranchId) return;
+      try {
+        setInventoryLoading(true);
+        const res = await fetchApi<any>(`/inventory/branch/${fromBranchId}?limit=500`);
+        const rawList = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
+        const inStock = rawList.filter((inv: any) => Number(inv.quantity || 0) > 0);
+        setAvailableInventory(inStock);
+        setSelectedItems([]); // Reset items cart on source branch change
+      } catch (err) {
+        console.error("Failed to load source inventory", err);
+      } finally {
+        setInventoryLoading(false);
+      }
+    }
+    loadSourceInventory();
+  }, [fromBranchId]);
+
+  // Helper: Derive rigid packaging options from batch & product metadata
+  const derivePackagingOptions = (inv: any): PackagingOption[] => {
+    const stripsPerBox = Number(inv.stripsPerBox || inv.product?.stripsPerBox || 0);
+    const tabletsPerStrip = Number(inv.tabletsPerStrip || inv.product?.tabletsPerStrip || 0);
+    const category = (inv.category || inv.product?.category || "").toLowerCase();
+    const defaultPack = (inv.packageType || inv.product?.defaultPackType || "PIECE").toUpperCase();
+
+    const options: PackagingOption[] = [];
+
+    if (stripsPerBox > 1 && tabletsPerStrip > 1) {
+      const boxFactor = stripsPerBox * tabletsPerStrip;
+      options.push({ label: `BOX (${boxFactor} Tablets)`, unit: "BOX", factor: boxFactor });
+      options.push({ label: `STRIP (${tabletsPerStrip} Tablets)`, unit: "STRIP", factor: tabletsPerStrip });
+      options.push({ label: `TABLET (Single Unit)`, unit: "TABLET", factor: 1 });
+    } else if (stripsPerBox > 1) {
+      options.push({ label: `BOX (${stripsPerBox} Units)`, unit: "BOX", factor: stripsPerBox });
+      options.push({ label: `PIECE / UNIT`, unit: "PIECE", factor: 1 });
+    } else if (category.includes("syrup") || defaultPack === "BOTTLE") {
+      options.push({ label: "BOTTLE", unit: "BOTTLE", factor: 1 });
+    } else if (category.includes("injection") || defaultPack === "VIAL" || defaultPack === "AMPOULE") {
+      options.push({ label: defaultPack, unit: defaultPack, factor: 1 });
+    } else {
+      options.push({ label: defaultPack, unit: defaultPack, factor: 1 });
+      if (defaultPack !== "PIECE" && defaultPack !== "UNIT") {
+        options.push({ label: "PIECE / UNIT", unit: "PIECE", factor: 1 });
+      }
+    }
+
+    return options;
   };
 
-  const handleAddItem = (inventoryItem: any) => {
-    // Check if already in list
-    const existingIndex = items.findIndex((i) => i.inventoryId === inventoryItem.id);
+  // Add batch to selected transfer items
+  const handleToggleAddBatch = (inv: any) => {
+    const existingIndex = selectedItems.findIndex((i) => i.inventoryId === inv.id);
     if (existingIndex >= 0) {
-      alert(
-        `"${inventoryItem.productName || inventoryItem.product?.name}" (Batch: ${
-          inventoryItem.batchNumber || "Default"
-        }) is already in the transfer list.`
-      );
+      setSelectedItems((prev) => prev.filter((i) => i.inventoryId !== inv.id));
       return;
     }
 
-    const costPrice = Number(
-      inventoryItem.purchasePrice ?? inventoryItem.basePrice ?? inventoryItem.product?.basePrice ?? 0
-    );
-    const available = Number(inventoryItem.quantity || 0);
-    const stripsPerBox = Number(inventoryItem.stripsPerBox || inventoryItem.product?.stripsPerBox || 10);
-    const tabletsPerStrip = Number(
-      inventoryItem.tabletsPerStrip || inventoryItem.product?.tabletsPerStrip || 10
-    );
-    const conversion = stripsPerBox * tabletsPerStrip > 1 ? stripsPerBox * tabletsPerStrip : 1;
+    const costPrice = Number(inv.purchasePrice ?? inv.basePrice ?? inv.product?.basePrice ?? 0);
+    const availableStock = Number(inv.quantity || 0);
+    const packagingOptions = derivePackagingOptions(inv);
+    const defaultOpt = packagingOptions[0];
 
-    const newRow: TransferItemRow = {
+    const maxPkg = Math.floor(availableStock / defaultOpt.factor);
+    const initialPkgQty = maxPkg >= 1 ? 1 : 0;
+    const initialSentUnits = initialPkgQty * defaultOpt.factor;
+
+    const newItem: SelectedTransferItem = {
       id: Math.random().toString(),
-      productId: inventoryItem.productId,
-      inventoryId: inventoryItem.id,
-      batchNumber: inventoryItem.batchNumber || "DEFAULT",
-      expiryDate: inventoryItem.expiryDate
-        ? new Date(inventoryItem.expiryDate).toISOString().split("T")[0]
-        : undefined,
-      packageType: inventoryItem.packageType || inventoryItem.product?.defaultPackType || "PIECE",
-      packageQuantity: 1,
-      conversionFactor: conversion,
-      sentQuantity: Math.min(conversion, available),
+      productId: inv.productId,
+      inventoryId: inv.id,
+      batchNumber: inv.batchNumber || "DEFAULT",
+      expiryDate: inv.expiryDate ? new Date(inv.expiryDate).toISOString().split("T")[0] : undefined,
+      productName: inv.productName || inv.product?.name || "Product",
+      genericName: inv.genericName || inv.product?.genericName,
+      category: inv.category || inv.product?.category,
+      baseUnit: inv.unit || inv.product?.unit || "unit",
+      availableStock,
       costPrice,
-      availableStock: available,
-      productName: inventoryItem.productName || inventoryItem.product?.name || "Product",
-      genericName: inventoryItem.genericName || inventoryItem.product?.genericName,
-      unit: inventoryItem.unit || inventoryItem.product?.unit || "piece",
+      packagingOptions,
+      selectedUnit: defaultOpt.unit,
+      conversionFactor: defaultOpt.factor,
+      packageQuantity: initialPkgQty,
+      maxPackageQuantity: maxPkg,
+      sentQuantity: initialSentUnits,
+      transferValue: initialSentUnits * costPrice,
     };
 
-    setItems((prev) => [...prev, newRow]);
+    setSelectedItems((prev) => [...prev, newItem]);
   };
 
-  const handleRemoveItem = (id: string) => {
-    setItems((prev) => prev.filter((item) => item.id !== id));
-  };
-
-  const handleUpdateItem = (id: string, updates: Partial<TransferItemRow>) => {
-    setItems((prev) =>
+  // Handle unit package change
+  const handlePackagingUnitChange = (itemId: string, unitName: string) => {
+    setSelectedItems((prev) =>
       prev.map((item) => {
-        if (item.id !== id) return item;
-        const updated = { ...item, ...updates };
+        if (item.id !== itemId) return item;
+        const opt = item.packagingOptions.find((o) => o.unit === unitName) || item.packagingOptions[0];
+        const newMaxPkg = Math.floor(item.availableStock / opt.factor);
+        const newPkgQty = Math.min(item.packageQuantity || 1, Math.max(1, newMaxPkg));
+        const newSentUnits = newPkgQty * opt.factor;
 
-        // Recalculate sentQuantity if packageQuantity or conversionFactor changed
-        if (updates.packageQuantity !== undefined || updates.conversionFactor !== undefined) {
-          const calculated = Number(updated.packageQuantity) * Number(updated.conversionFactor);
-          updated.sentQuantity = Math.min(calculated, updated.availableStock);
-        }
-
-        return updated;
+        return {
+          ...item,
+          selectedUnit: opt.unit,
+          conversionFactor: opt.factor,
+          maxPackageQuantity: newMaxPkg,
+          packageQuantity: newPkgQty,
+          sentQuantity: newSentUnits,
+          transferValue: newSentUnits * item.costPrice,
+        };
       })
     );
   };
 
-  const totalCostValue = items.reduce((acc, item) => acc + item.sentQuantity * item.costPrice, 0);
-  const totalSentUnits = items.reduce((acc, item) => acc + item.sentQuantity, 0);
+  // Handle package quantity change with strict capping
+  const handlePackageQuantityChange = (itemId: string, qty: number) => {
+    setSelectedItems((prev) =>
+      prev.map((item) => {
+        if (item.id !== itemId) return item;
+        const validPkgQty = Math.max(1, Math.min(qty, item.maxPackageQuantity));
+        const newSentUnits = validPkgQty * item.conversionFactor;
 
-  // Filter available stock by search query
+        return {
+          ...item,
+          packageQuantity: validPkgQty,
+          sentQuantity: newSentUnits,
+          transferValue: newSentUnits * item.costPrice,
+        };
+      })
+    );
+  };
+
+  const handleRemoveSelectedItem = (id: string) => {
+    setSelectedItems((prev) => prev.filter((i) => i.id !== id));
+  };
+
+  const totalTransferValue = selectedItems.reduce((acc, i) => acc + i.transferValue, 0);
+  const totalTransferUnits = selectedItems.reduce((acc, i) => acc + i.sentQuantity, 0);
+
+  // Filter available stock for Step 2
   const filteredStock = availableInventory.filter((inv) => {
     if (!stockSearch) return true;
     const q = stockSearch.toLowerCase();
@@ -217,38 +274,51 @@ export function TransferStockView({ onNavigate }: TransferStockViewProps) {
     return name.includes(q) || generic.includes(q) || batch.includes(q) || sku.includes(q);
   });
 
-  const handleSubmitTransfer = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Step 1 Validation & Proceed
+  const handleProceedToStep2 = () => {
     setError(null);
-
     if (!fromBranchId) {
-      setError("Please select a source branch.");
+      setError("Please select a valid source branch.");
       return;
     }
-
     if (!toBranchId) {
       setError("Please select a destination branch.");
       return;
     }
-
     if (fromBranchId === toBranchId) {
-      setError("Source branch and destination branch cannot be the same.");
+      setError("Source and destination branches cannot be the same.");
       return;
     }
+    setCurrentStep(2);
+  };
 
-    if (items.length === 0) {
+  // Step 2 Proceed
+  const handleProceedToStep3 = () => {
+    setError(null);
+    if (selectedItems.length === 0) {
       setError("Please select at least one medication batch to transfer.");
       return;
     }
+    setCurrentStep(3);
+  };
 
-    for (const item of items) {
+  // Final Dispatch
+  const handleDispatchTransfer = async () => {
+    setError(null);
+
+    if (selectedItems.length === 0) {
+      setError("No medication batches selected.");
+      return;
+    }
+
+    for (const item of selectedItems) {
       if (item.sentQuantity <= 0) {
-        setError(`Sent quantity for "${item.productName}" must be greater than 0.`);
+        setError(`Please enter a valid transfer quantity for "${item.productName}".`);
         return;
       }
       if (item.sentQuantity > item.availableStock) {
         setError(
-          `Sent quantity for "${item.productName}" (${item.sentQuantity}) exceeds available stock (${item.availableStock}).`
+          `Transfer quantity for "${item.productName}" (${item.sentQuantity}) exceeds available stock (${item.availableStock}).`
         );
         return;
       }
@@ -260,12 +330,12 @@ export function TransferStockView({ onNavigate }: TransferStockViewProps) {
         fromBranchId,
         toBranchId,
         notes: notes.trim() || undefined,
-        items: items.map((i) => ({
+        items: selectedItems.map((i) => ({
           productId: i.productId,
           inventoryId: i.inventoryId,
           batchNumber: i.batchNumber,
           expiryDate: i.expiryDate ? new Date(i.expiryDate).toISOString() : undefined,
-          packageType: i.packageType,
+          packageType: i.selectedUnit,
           packageQuantity: i.packageQuantity,
           conversionFactor: i.conversionFactor,
           sentQuantity: i.sentQuantity,
@@ -273,7 +343,7 @@ export function TransferStockView({ onNavigate }: TransferStockViewProps) {
         })),
       };
 
-      const res = await fetchApi("/transfers", {
+      const res = await fetchApi<any>("/transfers", {
         method: "POST",
         body: JSON.stringify(payload),
       });
@@ -282,18 +352,95 @@ export function TransferStockView({ onNavigate }: TransferStockViewProps) {
         throw new Error(res.message || "Failed to dispatch stock transfer");
       }
 
-      setSuccess(true);
-      setTimeout(() => {
-        onNavigate("stock_transfer_history");
-      }, 1200);
+      setDispatchedTransfer(res.data);
     } catch (err: any) {
-      setError(err.message || "An unexpected error occurred");
+      setError(err.message || "An error occurred while dispatching the transfer");
     } finally {
       setSubmitting(false);
     }
   };
 
   const fromBranchName = branches.find((b) => b.id === fromBranchId)?.name || "Assigned Branch";
+  const toBranchName = branches.find((b) => b.id === toBranchId)?.name || "Destination Branch";
+
+  // Reset to create another transfer
+  const handleCreateAnother = () => {
+    setDispatchedTransfer(null);
+    setSelectedItems([]);
+    setNotes("");
+    setCurrentStep(1);
+  };
+
+  // Render Dispatched Success Screen
+  if (dispatchedTransfer) {
+    return (
+      <div className="max-w-2xl mx-auto py-8 space-y-6">
+        <div className="bg-white dark:bg-slate-900 p-8 rounded-3xl border border-emerald-200 dark:border-emerald-800 shadow-xl text-center space-y-6">
+          <div className="h-20 w-20 bg-emerald-500/10 text-emerald-500 rounded-3xl flex items-center justify-center mx-auto border border-emerald-500/20 shadow-inner">
+            <CheckCircle2 className="h-10 w-10" />
+          </div>
+
+          <div className="space-y-2">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+              Transfer Dispatched & In Transit
+            </div>
+            <h2 className="text-2xl font-black text-slate-900 dark:text-white">
+              Stock Transfer Dispatched Successfully!
+            </h2>
+            <p className="text-xs text-slate-500 max-w-md mx-auto">
+              Stock has been deducted from <strong>{fromBranchName}</strong>. The destination branch manager at <strong>{toBranchName}</strong> has been notified to receive and inspect the shipment.
+            </p>
+          </div>
+
+          <div className="bg-slate-50 dark:bg-slate-800/60 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 text-left space-y-3">
+            <div className="flex items-center justify-between pb-2.5 border-b border-slate-200 dark:border-slate-700 text-xs font-mono">
+              <span className="text-slate-400">Transfer Reference:</span>
+              <strong className="text-brand-primary font-bold">
+                #{dispatchedTransfer.id?.substring(0, 8)?.toUpperCase()}
+              </strong>
+            </div>
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div>
+                <span className="text-slate-400 block text-[11px]">Source Branch</span>
+                <strong className="text-slate-800 dark:text-slate-200 font-bold">{fromBranchName}</strong>
+              </div>
+              <div>
+                <span className="text-slate-400 block text-[11px]">Destination Branch</span>
+                <strong className="text-slate-800 dark:text-slate-200 font-bold">{toBranchName}</strong>
+              </div>
+              <div>
+                <span className="text-slate-400 block text-[11px]">Total Sent Units</span>
+                <strong className="text-slate-800 dark:text-slate-200 font-bold">{totalTransferUnits} Units</strong>
+              </div>
+              <div>
+                <span className="text-slate-400 block text-[11px]">Dispatched Valuation (Cost)</span>
+                <strong className="text-brand-primary font-black text-sm">৳{totalTransferValue.toFixed(2)}</strong>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+            <button
+              type="button"
+              onClick={() => onNavigate("stock_transfer_history")}
+              className="w-full sm:w-auto px-6 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold transition flex items-center justify-center gap-2"
+            >
+              <FileSpreadsheet className="h-4 w-4" />
+              <span>View Transfer Ledger</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleCreateAnother}
+              className="w-full sm:w-auto px-6 py-3 rounded-xl bg-brand-primary hover:bg-brand-primary/90 text-white text-xs font-bold shadow-sm transition flex items-center justify-center gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              <span>Initiate Another Transfer</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
@@ -310,32 +457,112 @@ export function TransferStockView({ onNavigate }: TransferStockViewProps) {
             <span>Inter-Branch Stock Transfer</span>
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Select batches with specific packaging units and purchase/cost prices. Transferred quantities are immediately deducted from the source branch.
+            Step-by-step transfer dispatch with rigid batch packaging controls and purchase/cost price valuation.
           </p>
         </div>
 
         <button
           type="button"
           onClick={() => onNavigate("stock_transfer_history")}
-          className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition flex items-center gap-1.5"
+          className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition flex items-center gap-1.5 self-start sm:self-auto"
         >
           <ArrowLeft className="h-4 w-4" />
           <span>Transfer Ledger</span>
         </button>
       </div>
 
-      {/* Success Alert */}
-      {success && (
-        <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-2xl flex items-center gap-3 text-emerald-800 dark:text-emerald-300 text-xs animate-in fade-in">
-          <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
-          <div>
-            <div className="font-bold text-sm">Stock Transfer Dispatched Successfully!</div>
-            <p className="text-[11px] text-emerald-700 dark:text-emerald-400 mt-0.5">
-              Source stock has been deducted and shipment is now in transit. Redirecting to ledger...
-            </p>
+      {/* Stepper Progress Bar */}
+      <div className="bg-white dark:bg-slate-900 p-4 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs">
+        <div className="grid grid-cols-3 gap-2">
+          {/* Step 1 Tab */}
+          <div
+            onClick={() => setCurrentStep(1)}
+            className={`p-3 rounded-2xl cursor-pointer transition border flex items-center gap-3 ${
+              currentStep === 1
+                ? "bg-brand-primary/10 border-brand-primary text-brand-primary"
+                : currentStep > 1
+                ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300"
+                : "bg-slate-50 dark:bg-slate-800/40 border-transparent text-slate-400"
+            }`}
+          >
+            <div
+              className={`h-7 w-7 rounded-xl flex items-center justify-center font-black text-xs shrink-0 ${
+                currentStep === 1
+                  ? "bg-brand-primary text-white"
+                  : currentStep > 1
+                  ? "bg-emerald-600 text-white"
+                  : "bg-slate-200 dark:bg-slate-700 text-slate-500"
+              }`}
+            >
+              {currentStep > 1 ? <Check className="h-4 w-4" /> : "1"}
+            </div>
+            <div className="overflow-hidden">
+              <div className="text-[10px] font-bold uppercase tracking-wider opacity-75">Step 1</div>
+              <div className="text-xs font-black truncate">Branch Routing</div>
+            </div>
+          </div>
+
+          {/* Step 2 Tab */}
+          <div
+            onClick={() => {
+              if (fromBranchId && toBranchId && fromBranchId !== toBranchId) {
+                setCurrentStep(2);
+              }
+            }}
+            className={`p-3 rounded-2xl transition border flex items-center gap-3 ${
+              currentStep === 2
+                ? "bg-brand-primary/10 border-brand-primary text-brand-primary cursor-pointer"
+                : currentStep > 2
+                ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 cursor-pointer"
+                : "bg-slate-50 dark:bg-slate-800/40 border-transparent text-slate-400"
+            }`}
+          >
+            <div
+              className={`h-7 w-7 rounded-xl flex items-center justify-center font-black text-xs shrink-0 ${
+                currentStep === 2
+                  ? "bg-brand-primary text-white"
+                  : currentStep > 2
+                  ? "bg-emerald-600 text-white"
+                  : "bg-slate-200 dark:bg-slate-700 text-slate-500"
+              }`}
+            >
+              {currentStep > 2 ? <Check className="h-4 w-4" /> : "2"}
+            </div>
+            <div className="overflow-hidden">
+              <div className="text-[10px] font-bold uppercase tracking-wider opacity-75">Step 2</div>
+              <div className="text-xs font-black truncate">Select Batches ({selectedItems.length})</div>
+            </div>
+          </div>
+
+          {/* Step 3 Tab */}
+          <div
+            onClick={() => {
+              if (selectedItems.length > 0) {
+                setCurrentStep(3);
+              }
+            }}
+            className={`p-3 rounded-2xl transition border flex items-center gap-3 ${
+              currentStep === 3
+                ? "bg-brand-primary/10 border-brand-primary text-brand-primary cursor-pointer"
+                : "bg-slate-50 dark:bg-slate-800/40 border-transparent text-slate-400"
+            }`}
+          >
+            <div
+              className={`h-7 w-7 rounded-xl flex items-center justify-center font-black text-xs shrink-0 ${
+                currentStep === 3
+                  ? "bg-brand-primary text-white"
+                  : "bg-slate-200 dark:bg-slate-700 text-slate-500"
+              }`}
+            >
+              3
+            </div>
+            <div className="overflow-hidden">
+              <div className="text-[10px] font-bold uppercase tracking-wider opacity-75">Step 3</div>
+              <div className="text-xs font-black truncate">Configure & Dispatch</div>
+            </div>
           </div>
         </div>
-      )}
+      </div>
 
       {/* Error Alert */}
       {error && (
@@ -348,31 +575,38 @@ export function TransferStockView({ onNavigate }: TransferStockViewProps) {
       {/* Single Branch Warning */}
       {branches.length < 2 && !loading && (
         <div className="p-4 bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-300 rounded-2xl flex items-center gap-3 text-xs">
-          <AlertCircle className="h-5 w-5 text-amber-600 shrink-0" />
+          <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0" />
           <div>
             <strong>Single Branch Detected: </strong>
-            Your pharmacy currently has only 1 active branch ({branches[0]?.name || "Main Branch"}). Inter-branch stock transfers require at least 2 branches. Create an additional branch under <strong>Branch Management</strong> to transfer stock.
+            Your pharmacy currently has only 1 active branch ({branches[0]?.name || "Main Branch"}). Inter-branch stock transfers require at least 2 branches under the same pharmacy.
           </div>
         </div>
       )}
 
-      <form onSubmit={handleSubmitTransfer} className="space-y-6">
-        {/* Branch Routing Card */}
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-            <div className="font-black text-sm text-slate-900 dark:text-white flex items-center gap-2">
-              <Store className="h-4 w-4 text-brand-primary" />
-              <span>Branch Routing</span>
+      {/* ========================================================================= */}
+      {/* STEP 1: Branch Routing View */}
+      {/* ========================================================================= */}
+      {currentStep === 1 && (
+        <div className="bg-white dark:bg-slate-900 p-8 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-6 animate-in fade-in">
+          <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
+            <div>
+              <h3 className="font-black text-base text-slate-900 dark:text-white flex items-center gap-2">
+                <Store className="h-5 w-5 text-brand-primary" />
+                <span>Step 1: Select Source & Destination Branches</span>
+              </h3>
+              <p className="text-xs text-slate-400 mt-0.5">
+                The source branch is automatically set to your assigned branch. Select the target branch for stock delivery.
+              </p>
             </div>
-            <span className="text-[11px] font-bold text-slate-400">
-              Valuation: Actual Purchase / Cost Price (৳)
+            <span className="px-3 py-1 rounded-full text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+              Pricing: Actual Purchase Cost (৳)
             </span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             {/* From (Source Branch) */}
-            <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
+            <div className="space-y-2">
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
                 <span>From (Source Branch)</span>
                 <span className="text-red-500">*</span>
                 {isBranchLocked && (
@@ -382,18 +616,27 @@ export function TransferStockView({ onNavigate }: TransferStockViewProps) {
                 )}
               </label>
               {isBranchLocked ? (
-                <input
-                  type="text"
-                  disabled
-                  value={`${fromBranchName}`}
-                  className="w-full px-3.5 py-2.5 bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-200 cursor-not-allowed"
-                />
+                <div className="p-3.5 bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-2xl flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <Store className="h-4 w-4 text-slate-400" />
+                    <div>
+                      <div className="text-xs font-black text-slate-900 dark:text-white">{fromBranchName}</div>
+                      <div className="text-[10px] text-slate-400 font-medium">Origin Branch</div>
+                    </div>
+                  </div>
+                  <Lock className="h-4 w-4 text-slate-400" />
+                </div>
               ) : (
                 <select
                   required
                   value={fromBranchId}
-                  onChange={(e) => handleFromBranchChange(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none cursor-pointer"
+                  onChange={(e) => {
+                    const newFrom = e.target.value;
+                    setFromBranchId(newFrom);
+                    const nextDest = branches.find((b) => b.id !== newFrom && b.isActive !== false);
+                    setToBranchId(nextDest?.id || "");
+                  }}
+                  className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-xs font-bold outline-none cursor-pointer"
                 >
                   {branches.map((b) => (
                     <option key={b.id} value={b.id}>
@@ -405,8 +648,8 @@ export function TransferStockView({ onNavigate }: TransferStockViewProps) {
             </div>
 
             {/* To (Destination Branch) */}
-            <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+            <div className="space-y-2">
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
                 To (Destination Branch) <span className="text-red-500">*</span>
               </label>
               <select
@@ -414,7 +657,7 @@ export function TransferStockView({ onNavigate }: TransferStockViewProps) {
                 value={toBranchId}
                 disabled={availableDestinations.length === 0}
                 onChange={(e) => setToBranchId(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-xs font-bold outline-none cursor-pointer disabled:opacity-50"
               >
                 {availableDestinations.length === 0 ? (
                   <option value="">No other active branches available</option>
@@ -429,83 +672,97 @@ export function TransferStockView({ onNavigate }: TransferStockViewProps) {
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+          <div className="space-y-2">
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
               Transfer Notes / Dispatch Reason (Optional)
             </label>
             <input
               type="text"
-              placeholder="e.g. Urgent stock requisition for outpatient counter"
+              placeholder="e.g. Counter stock replenishment, urgent requisition"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none"
+              className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-xs outline-none"
             />
           </div>
-        </div>
 
-        {/* Available Source Stock Selection Drawer */}
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+          <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-end">
+            <button
+              type="button"
+              disabled={!fromBranchId || !toBranchId || fromBranchId === toBranchId}
+              onClick={handleProceedToStep2}
+              className="px-6 py-3 rounded-2xl bg-brand-primary hover:bg-brand-primary/90 text-white text-xs font-bold shadow-md transition flex items-center gap-2 disabled:opacity-50 active:scale-98"
+            >
+              <span>Continue to Select Batches</span>
+              <ArrowRight className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* STEP 2: Available Inventory Batches Selection */}
+      {/* ========================================================================= */}
+      {currentStep === 2 && (
+        <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-5 animate-in fade-in">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100 dark:border-slate-800">
             <div>
-              <div className="font-black text-sm text-slate-900 dark:text-white flex items-center gap-2">
-                <Boxes className="h-4 w-4 text-brand-primary" />
-                <span>Available Inventory Batches at Source Branch</span>
-              </div>
-              <div className="text-xs font-semibold text-slate-400 mt-0.5">
-                Loaded from <strong>{fromBranchName}</strong> ({availableInventory.length} batches in-stock)
-              </div>
+              <h3 className="font-black text-base text-slate-900 dark:text-white flex items-center gap-2">
+                <Boxes className="h-5 w-5 text-brand-primary" />
+                <span>Step 2: Available Inventory Batches at {fromBranchName}</span>
+              </h3>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Select the medication batches to transfer. ({availableInventory.length} in-stock batches found)
+              </p>
             </div>
 
-            {availableInventory.length > 0 && (
-              <div className="relative w-full sm:w-64">
-                <Search className="h-3.5 w-3.5 text-slate-400 absolute left-3 top-2.5" />
-                <input
-                  type="text"
-                  placeholder="Filter by name, generic, batch..."
-                  value={stockSearch}
-                  onChange={(e) => setStockSearch(e.target.value)}
-                  className="w-full pl-8 pr-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs outline-none"
-                />
-              </div>
-            )}
+            <div className="relative w-full sm:w-72">
+              <Search className="h-4 w-4 text-slate-400 absolute left-3.5 top-3" />
+              <input
+                type="text"
+                placeholder="Search medication, generic, batch..."
+                value={stockSearch}
+                onChange={(e) => setStockSearch(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs outline-none"
+              />
+            </div>
           </div>
 
           {inventoryLoading ? (
-            <div className="py-12 flex flex-col items-center justify-center gap-2 text-slate-400 text-xs">
-              <Loader2 className="h-6 w-6 animate-spin text-brand-primary" />
-              <span>Loading source branch stock batches...</span>
+            <div className="py-16 flex flex-col items-center justify-center gap-2 text-slate-400 text-xs">
+              <Loader2 className="h-7 w-7 animate-spin text-brand-primary" />
+              <span>Loading source branch batches...</span>
             </div>
           ) : availableInventory.length === 0 ? (
-            <div className="py-12 text-center text-xs text-slate-400 space-y-2">
-              <Package className="h-8 w-8 mx-auto text-slate-300 dark:text-slate-700" />
-              <p className="font-bold text-slate-600 dark:text-slate-400">
+            <div className="py-16 text-center text-xs text-slate-400 space-y-2">
+              <Package className="h-10 w-10 mx-auto text-slate-300 dark:text-slate-700" />
+              <p className="font-bold text-slate-700 dark:text-slate-300">
                 No active in-stock inventory found at {fromBranchName}.
               </p>
               <p className="text-[11px]">
-                Make sure stock has been added to this branch via Inward Stock / Purchases before initiating a transfer.
+                Add stock via Inward Stock / Purchases before initiating a transfer.
               </p>
             </div>
           ) : filteredStock.length === 0 ? (
-            <div className="py-8 text-center text-xs text-slate-400">
+            <div className="py-12 text-center text-xs text-slate-400">
               No matching inventory batches found for "{stockSearch}".
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-72 overflow-y-auto pr-1">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 max-h-96 overflow-y-auto pr-1">
               {filteredStock.map((inv) => {
-                const isSelected = items.some((i) => i.inventoryId === inv.id);
-                const costPrice = Number(
-                  inv.purchasePrice ?? inv.basePrice ?? inv.product?.basePrice ?? 0
-                );
+                const isSelected = selectedItems.some((i) => i.inventoryId === inv.id);
+                const costPrice = Number(inv.purchasePrice ?? inv.basePrice ?? inv.product?.basePrice ?? 0);
                 const prodName = inv.productName || inv.product?.name || "Product";
                 const genName = inv.genericName || inv.product?.genericName;
+                const stripsPerBox = Number(inv.stripsPerBox || inv.product?.stripsPerBox || 0);
+                const tabletsPerStrip = Number(inv.tabletsPerStrip || inv.product?.tabletsPerStrip || 0);
 
                 return (
                   <div
                     key={inv.id}
-                    className={`p-3.5 rounded-2xl border transition flex flex-col justify-between space-y-2.5 ${
+                    className={`p-4 rounded-2xl border transition flex flex-col justify-between space-y-3 ${
                       isSelected
-                        ? "bg-brand-primary/5 border-brand-primary/40 opacity-70"
-                        : "bg-slate-50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-800 hover:border-brand-primary/50"
+                        ? "bg-brand-primary/10 border-brand-primary/60 shadow-xs"
+                        : "bg-slate-50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-800 hover:border-brand-primary/40"
                     }`}
                   >
                     <div>
@@ -513,13 +770,24 @@ export function TransferStockView({ onNavigate }: TransferStockViewProps) {
                         <div className="font-bold text-xs text-slate-900 dark:text-white leading-tight">
                           {prodName}
                         </div>
-                        <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 shrink-0">
+                        <span className="px-2 py-0.5 rounded text-[10px] font-black bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 shrink-0">
                           {inv.quantity} in-stock
                         </span>
                       </div>
-                      {genName && (
-                        <div className="text-[10px] text-slate-400 mt-0.5">{genName}</div>
-                      )}
+                      {genName && <div className="text-[10px] text-slate-400 mt-0.5">{genName}</div>}
+
+                      {/* Packaging specification pill */}
+                      <div className="mt-2 text-[10px] text-slate-500 bg-white dark:bg-slate-800 px-2 py-1 rounded-lg border border-slate-200/60 dark:border-slate-700/60">
+                        {stripsPerBox > 1 && tabletsPerStrip > 1 ? (
+                          <span>
+                            Pack: <strong>1 Box = {stripsPerBox * tabletsPerStrip} Tabs</strong> ({stripsPerBox}×{tabletsPerStrip})
+                          </span>
+                        ) : (
+                          <span>
+                            Pack Unit: <strong>{inv.packageType || inv.product?.defaultPackType || "Piece"}</strong>
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     <div className="flex items-center justify-between text-[11px] text-slate-500 pt-2 border-t border-slate-200/50 dark:border-slate-700/50">
@@ -531,156 +799,200 @@ export function TransferStockView({ onNavigate }: TransferStockViewProps) {
                       </div>
                       <div>
                         <span>Cost: </span>
-                        <strong className="text-brand-primary font-bold">
-                          ৳{costPrice.toFixed(2)}
-                        </strong>
+                        <strong className="text-brand-primary font-bold">৳{costPrice.toFixed(2)}</strong>
                       </div>
                     </div>
 
                     <button
                       type="button"
-                      disabled={isSelected}
-                      onClick={() => handleAddItem(inv)}
-                      className={`w-full py-1.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                      onClick={() => handleToggleAddBatch(inv)}
+                      className={`w-full py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
                         isSelected
-                          ? "bg-slate-200 text-slate-500 cursor-not-allowed"
+                          ? "bg-emerald-600 text-white shadow-xs"
                           : "bg-brand-primary hover:bg-brand-primary/90 text-white shadow-xs active:scale-98"
                       }`}
                     >
-                      <Plus className="h-3.5 w-3.5" />
-                      <span>{isSelected ? "Added to Transfer" : "Add to Transfer"}</span>
+                      {isSelected ? (
+                        <>
+                          <Check className="h-3.5 w-3.5" />
+                          <span>Selected</span>
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="h-3.5 w-3.5" />
+                          <span>Add to Transfer</span>
+                        </>
+                      )}
                     </button>
                   </div>
                 );
               })}
             </div>
           )}
-        </div>
 
-        {/* Transfer Items Table */}
-        <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
-          <div className="p-6 pb-4 flex items-center justify-between border-b border-slate-100 dark:border-slate-800">
+          {/* Step 2 Footer Navigation */}
+          <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => setCurrentStep(1)}
+              className="px-5 py-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold hover:bg-slate-100 transition flex items-center gap-2"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              <span>Back to Step 1</span>
+            </button>
+
+            <button
+              type="button"
+              disabled={selectedItems.length === 0}
+              onClick={handleProceedToStep3}
+              className="px-6 py-2.5 rounded-2xl bg-brand-primary hover:bg-brand-primary/90 text-white text-xs font-bold shadow-md transition flex items-center gap-2 disabled:opacity-50 active:scale-98"
+            >
+              <span>Proceed to Transfer Quantities ({selectedItems.length} items)</span>
+              <ArrowRight className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* STEP 3: Products to Transfer (Strict Packaging & Calculations) */}
+      {/* ========================================================================= */}
+      {currentStep === 3 && (
+        <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden animate-in fade-in space-y-6">
+          <div className="p-6 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800">
             <div>
-              <h3 className="font-black text-sm text-slate-900 dark:text-white flex items-center gap-2">
-                <Package className="h-4 w-4 text-brand-primary" />
-                <span>Medications to Transfer ({items.length})</span>
+              <h3 className="font-black text-base text-slate-900 dark:text-white flex items-center gap-2">
+                <Package className="h-5 w-5 text-brand-primary" />
+                <span>Step 3: Products to Transfer & Packaging Control</span>
               </h3>
               <p className="text-xs text-slate-400 mt-0.5">
-                Specify packaging units and quantities. Sent values are calculated using purchase/cost prices.
+                Packaging configurations and units/pack are non-editable. Transfer quantities cannot exceed available batch stock.
               </p>
+            </div>
+
+            <div className="text-xs font-bold bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-xl text-slate-700 dark:text-slate-300">
+              Route: <span className="text-brand-primary">{fromBranchName}</span> → <span className="text-brand-primary">{toBranchName}</span>
             </div>
           </div>
 
-          {items.length === 0 ? (
-            <div className="py-12 text-center text-xs text-slate-400">
-              No medications selected yet. Click "Add to Transfer" on the batches above.
+          {selectedItems.length === 0 ? (
+            <div className="py-16 text-center text-xs text-slate-400 space-y-3">
+              <p>No products selected yet.</p>
+              <button
+                type="button"
+                onClick={() => setCurrentStep(2)}
+                className="px-4 py-2 bg-brand-primary text-white rounded-xl text-xs font-bold"
+              >
+                Go to Step 2 to select batches
+              </button>
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="px-6 overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead className="bg-slate-50 dark:bg-slate-800/60 uppercase font-bold text-slate-500 border-b border-slate-200 dark:border-slate-800">
                   <tr>
-                    <th className="py-3.5 px-4">Medication & Batch</th>
-                    <th className="py-3.5 px-4">Packaging Unit</th>
-                    <th className="py-3.5 px-4">Package Qty</th>
-                    <th className="py-3.5 px-4">Units / Pack</th>
-                    <th className="py-3.5 px-4">Total Sent (Units)</th>
-                    <th className="py-3.5 px-4">Cost Price (৳)</th>
-                    <th className="py-3.5 px-4">Transfer Value (৳)</th>
-                    <th className="py-3.5 px-4 text-right">Action</th>
+                    <th className="py-3.5 px-3">Medication & Batch</th>
+                    <th className="py-3.5 px-3">Package Unit</th>
+                    <th className="py-3.5 px-3">Units / Pack (Fixed)</th>
+                    <th className="py-3.5 px-3">Package Qty</th>
+                    <th className="py-3.5 px-3">Total Sent (Units)</th>
+                    <th className="py-3.5 px-3">Cost Price (৳)</th>
+                    <th className="py-3.5 px-3">Transfer Value (৳)</th>
+                    <th className="py-3.5 px-3 text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
-                  {items.map((item) => {
-                    const lineValue = item.sentQuantity * item.costPrice;
+                  {selectedItems.map((item) => {
+                    const isExceeding = item.packageQuantity > item.maxPackageQuantity;
 
                     return (
                       <tr key={item.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
-                        <td className="py-3.5 px-4">
+                        {/* Medication Info */}
+                        <td className="py-3.5 px-3">
                           <div className="font-bold text-slate-900 dark:text-white">
                             {item.productName}
                           </div>
                           <div className="text-[11px] text-slate-400 font-mono">
                             Batch: {item.batchNumber} {item.expiryDate ? `| Exp: ${item.expiryDate}` : ""}
                           </div>
-                          <div className="text-[10px] text-slate-500">
-                            Available in source stock: {item.availableStock} {item.unit}s
+                          <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold mt-0.5">
+                            Available In-Stock: {item.availableStock} {item.baseUnit}s
                           </div>
                         </td>
 
-                        <td className="py-3.5 px-4">
+                        {/* Package Unit Selector (Derived from Batch) */}
+                        <td className="py-3.5 px-3">
                           <select
-                            value={item.packageType}
-                            onChange={(e) => handleUpdateItem(item.id, { packageType: e.target.value })}
-                            className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-bold text-xs"
+                            value={item.selectedUnit}
+                            onChange={(e) => handlePackagingUnitChange(item.id, e.target.value)}
+                            className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-bold text-xs cursor-pointer outline-none"
                           >
-                            <option value="BOX">BOX</option>
-                            <option value="STRIP">STRIP</option>
-                            <option value="BOTTLE">BOTTLE</option>
-                            <option value="PIECE">PIECE</option>
-                            <option value="VIAL">VIAL</option>
-                            <option value="TABLET">TABLET</option>
+                            {item.packagingOptions.map((opt) => (
+                              <option key={opt.unit} value={opt.unit}>
+                                {opt.unit}
+                              </option>
+                            ))}
                           </select>
                         </td>
 
-                        <td className="py-3.5 px-4">
-                          <input
-                            type="number"
-                            min="1"
-                            value={item.packageQuantity}
-                            onChange={(e) =>
-                              handleUpdateItem(item.id, {
-                                packageQuantity: Math.max(1, parseInt(e.target.value) || 1),
-                              })
-                            }
-                            className="w-20 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-bold text-xs font-mono"
-                          />
+                        {/* Units / Pack (Strictly Non-Editable) */}
+                        <td className="py-3.5 px-3">
+                          <span className="inline-flex items-center px-2.5 py-1.5 rounded-lg text-xs font-mono font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                            {item.conversionFactor} {item.baseUnit}s / {item.selectedUnit}
+                          </span>
                         </td>
 
-                        <td className="py-3.5 px-4">
-                          <input
-                            type="number"
-                            min="1"
-                            value={item.conversionFactor}
-                            onChange={(e) =>
-                              handleUpdateItem(item.id, {
-                                conversionFactor: Math.max(1, parseInt(e.target.value) || 1),
-                              })
-                            }
-                            className="w-20 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-bold text-xs font-mono"
-                          />
+                        {/* Package Quantity Input (Strictly Capped) */}
+                        <td className="py-3.5 px-3">
+                          <div className="space-y-1">
+                            <input
+                              type="number"
+                              min="1"
+                              max={item.maxPackageQuantity}
+                              value={item.packageQuantity}
+                              onChange={(e) =>
+                                handlePackageQuantityChange(
+                                  item.id,
+                                  parseInt(e.target.value) || 1
+                                )
+                              }
+                              className={`w-20 px-2.5 py-1.5 rounded-xl border font-bold text-xs font-mono outline-none ${
+                                isExceeding
+                                  ? "border-red-500 bg-red-50 text-red-700"
+                                  : "border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
+                              }`}
+                            />
+                            <div className="text-[10px] text-slate-400">
+                              Max: {item.maxPackageQuantity} {item.selectedUnit}s
+                            </div>
+                          </div>
                         </td>
 
-                        <td className="py-3.5 px-4 font-black font-mono text-slate-900 dark:text-white">
-                          <input
-                            type="number"
-                            min="1"
-                            max={item.availableStock}
-                            value={item.sentQuantity}
-                            onChange={(e) =>
-                              handleUpdateItem(item.id, {
-                                sentQuantity: Math.min(
-                                  item.availableStock,
-                                  Math.max(1, parseInt(e.target.value) || 1)
-                                ),
-                              })
-                            }
-                            className="w-24 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-bold text-xs font-mono"
-                          />
+                        {/* Total Sent Units */}
+                        <td className="py-3.5 px-3">
+                          <div className="font-black font-mono text-slate-900 dark:text-white text-xs">
+                            {item.sentQuantity} {item.baseUnit}s
+                          </div>
+                          <div className="text-[10px] text-slate-400">
+                            ({item.packageQuantity} × {item.conversionFactor})
+                          </div>
                         </td>
 
-                        <td className="py-3.5 px-4 font-bold font-mono text-slate-700 dark:text-slate-300">
+                        {/* Cost Price */}
+                        <td className="py-3.5 px-3 font-bold font-mono text-slate-700 dark:text-slate-300">
                           ৳{item.costPrice.toFixed(2)}
                         </td>
 
-                        <td className="py-3.5 px-4 font-black font-mono text-brand-primary text-sm">
-                          ৳{lineValue.toFixed(2)}
+                        {/* Line Total Value */}
+                        <td className="py-3.5 px-3 font-black font-mono text-brand-primary text-sm">
+                          ৳{item.transferValue.toFixed(2)}
                         </td>
 
-                        <td className="py-3.5 px-4 text-right">
+                        {/* Action Remove */}
+                        <td className="py-3.5 px-3 text-right">
                           <button
                             type="button"
-                            onClick={() => handleRemoveItem(item.id)}
+                            onClick={() => handleRemoveSelectedItem(item.id)}
                             className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/50 rounded-lg transition"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -694,22 +1006,22 @@ export function TransferStockView({ onNavigate }: TransferStockViewProps) {
             </div>
           )}
 
-          {/* Transfer Summary Footer */}
-          {items.length > 0 && (
-            <div className="p-6 bg-slate-50/70 dark:bg-slate-800/40 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
+          {/* Step 3 Footer Summary & Action */}
+          {selectedItems.length > 0 && (
+            <div className="p-6 bg-slate-50/80 dark:bg-slate-800/40 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
               <div className="flex items-center gap-6 text-xs">
                 <div>
-                  <span className="text-slate-400">Total Items: </span>
-                  <strong className="text-slate-900 dark:text-white font-bold">{items.length}</strong>
+                  <span className="text-slate-400">Medications: </span>
+                  <strong className="text-slate-900 dark:text-white font-bold">{selectedItems.length}</strong>
                 </div>
                 <div>
                   <span className="text-slate-400">Total Sent Units: </span>
-                  <strong className="text-slate-900 dark:text-white font-bold">{totalSentUnits}</strong>
+                  <strong className="text-slate-900 dark:text-white font-bold">{totalTransferUnits}</strong>
                 </div>
                 <div>
-                  <span className="text-slate-400">Total Transfer Cost Value: </span>
-                  <strong className="text-brand-primary font-black text-sm">
-                    ৳{totalCostValue.toFixed(2)}
+                  <span className="text-slate-400">Total Valuation (Cost Price): </span>
+                  <strong className="text-brand-primary font-black text-base">
+                    ৳{totalTransferValue.toFixed(2)}
                   </strong>
                 </div>
               </div>
@@ -717,20 +1029,23 @@ export function TransferStockView({ onNavigate }: TransferStockViewProps) {
               <div className="flex items-center gap-3">
                 <button
                   type="button"
-                  onClick={() => onNavigate("stock_transfer_history")}
-                  className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold hover:bg-slate-100 transition"
+                  onClick={() => setCurrentStep(2)}
+                  className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold hover:bg-slate-100 transition flex items-center gap-1.5"
                 >
-                  Cancel
+                  <ArrowLeft className="h-4 w-4" />
+                  <span>Back to Batches</span>
                 </button>
+
                 <button
-                  type="submit"
-                  disabled={submitting || items.length === 0 || availableDestinations.length === 0}
-                  className="px-6 py-2.5 rounded-xl bg-brand-primary hover:bg-brand-primary/90 text-white text-xs font-bold shadow-sm transition flex items-center gap-2 disabled:opacity-50 active:scale-98"
+                  type="button"
+                  disabled={submitting || selectedItems.length === 0}
+                  onClick={handleDispatchTransfer}
+                  className="px-7 py-2.5 rounded-xl bg-brand-primary hover:bg-brand-primary/90 text-white text-xs font-bold shadow-md transition flex items-center gap-2 disabled:opacity-50 active:scale-98"
                 >
                   {submitting ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      <span>Dispatching Shipment...</span>
+                      <span>Dispatching Stock Transfer...</span>
                     </>
                   ) : (
                     <>
@@ -743,7 +1058,7 @@ export function TransferStockView({ onNavigate }: TransferStockViewProps) {
             </div>
           )}
         </div>
-      </form>
+      )}
     </div>
   );
 }

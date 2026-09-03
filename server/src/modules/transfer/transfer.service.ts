@@ -801,4 +801,96 @@ export class TransferService {
 
     return cancelled;
   }
+
+  /**
+   * 6. List Damaged Products & Losses from Inter-Branch Transfers
+   */
+  static async getDamagedProducts(
+    tenantId: string,
+    userRole?: string,
+    userBranchId?: string | null,
+    query?: { branchId?: string; search?: string }
+  ) {
+    const where: any = {
+      product: {
+        tenantId,
+      },
+      OR: [
+        { damagedQuantity: { gt: 0 } },
+        { missingQuantity: { gt: 0 } },
+      ],
+    };
+
+    if (query?.branchId) {
+      where.transfer = {
+        OR: [
+          { fromBranchId: query.branchId },
+          { toBranchId: query.branchId },
+        ],
+      };
+    } else if (userRole === "BRANCH_MANAGER" && userBranchId) {
+      where.transfer = {
+        OR: [
+          { fromBranchId: userBranchId },
+          { toBranchId: userBranchId },
+        ],
+      };
+    }
+
+    if (query?.search) {
+      where.product = {
+        OR: [
+          { name: { contains: query.search, mode: "insensitive" } },
+          { genericName: { contains: query.search, mode: "insensitive" } },
+        ],
+      };
+    }
+
+    const items = await (prisma as any).transferItem.findMany({
+      where,
+      orderBy: { transfer: { transferDate: "desc" } },
+      include: {
+        product: {
+          select: {
+            id: true,
+            name: true,
+            genericName: true,
+            sku: true,
+            unit: true,
+            category: true,
+          },
+        },
+        transfer: {
+          select: {
+            id: true,
+            status: true,
+            settlementStatus: true,
+            transferDate: true,
+            receivedDate: true,
+            notes: true,
+            fromBranch: { select: { id: true, name: true, location: true } },
+            toBranch: { select: { id: true, name: true, location: true } },
+          },
+        },
+      },
+    });
+
+    const totalDamagedUnits = items.reduce((acc: number, item: any) => acc + (item.damagedQuantity || 0), 0);
+    const totalMissingUnits = items.reduce((acc: number, item: any) => acc + (item.missingQuantity || 0), 0);
+    const totalDamagedValue = items.reduce((acc: number, item: any) => acc + Number(item.damagedValue || 0), 0);
+    const totalMissingValue = items.reduce((acc: number, item: any) => acc + Number(item.missingValue || 0), 0);
+    const totalLossValue = totalDamagedValue + totalMissingValue;
+
+    return {
+      summary: {
+        totalDamagedUnits,
+        totalMissingUnits,
+        totalDamagedValue,
+        totalMissingValue,
+        totalLossValue,
+        incidentCount: items.length,
+      },
+      data: items,
+    };
+  }
 }

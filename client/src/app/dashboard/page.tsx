@@ -29,6 +29,7 @@ import { StockHistoryView } from "@/components/dashboard/StockHistoryView";
 import { TransferStockView } from "@/components/dashboard/TransferStockView";
 import { TransferHistoryView } from "@/components/dashboard/TransferHistoryView";
 import { StockReceiveView } from "@/components/dashboard/StockReceiveView";
+import { DamagedProductsView } from "@/components/dashboard/DamagedProductsView";
 import { SuppliersView } from "@/components/dashboard/SuppliersView";
 import { PurchaseHistoryView } from "@/components/dashboard/PurchaseHistoryView";
 import { PaymentsDueView } from "@/components/dashboard/PaymentsDueView";
@@ -498,6 +499,12 @@ export default function RoleBasedDashboard() {
           return <TenantAccessRestricted moduleName="Stock Receive" requiredPerm="stock.manage" />;
         }
         return <StockReceiveView onNavigate={setActiveModule} />;
+
+      case "stock_damaged_products":
+        if (!isOwner && !hasPermission("stock.manage")) {
+          return <TenantAccessRestricted moduleName="Damaged Products" requiredPerm="stock.manage" />;
+        }
+        return <DamagedProductsView onNavigate={setActiveModule} />;
 
       // 🏭 Supplier Management Subpages
       case "sup_suppliers":

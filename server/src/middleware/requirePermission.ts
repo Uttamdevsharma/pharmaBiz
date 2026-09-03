@@ -5,40 +5,56 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
   SUPER_ADMIN: ["*"],
   COMPANY_OWNER: ["*"],
   BRANCH_MANAGER: [
+    "dashboard.view",
     "product.view",
     "product.create",
     "product.update",
+    "inventory.manage",
     "inventory.view",
     "inventory.add_stock",
     "inventory.adjust",
     "inventory.batch",
     "inventory.transfer",
+    "stock.manage",
     "supplier.view",
     "supplier.manage",
+    "suppliers.manage",
     "sales.view",
     "sales.create",
     "sales.pos",
+    "pos.manage",
+    "pos.history",
+    "pos.vat",
+    "accounts.manage",
+    "accounts.reports",
     "reports.view",
     "reports.sales",
     "reports.stock",
     "reports.revenue",
+    "staff.manage",
   ],
   INVENTORY_EXECUTIVE: [
     "product.view",
     "product.create",
     "product.update",
+    "inventory.manage",
     "inventory.view",
     "inventory.add_stock",
     "inventory.adjust",
     "inventory.batch",
     "inventory.transfer",
+    "stock.manage",
     "supplier.view",
+    "supplier.manage",
+    "suppliers.manage",
     "reports.stock",
   ],
   CASHIER: [
     "sales.pos",
     "sales.create",
     "sales.view_own",
+    "pos.manage",
+    "pos.history",
     "product.view",
     "inventory.view",
   ],
@@ -49,6 +65,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     "accounts.reconciliation",
     "accounts.expense",
     "accounts.income",
+    "accounts.reports",
     "supplier.view",
     "supplier.payment",
     "reports.view",
@@ -80,6 +97,31 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
   ],
 };
 
+const PERMISSION_ALIASES: Record<string, string[]> = {
+  "stock.manage": ["inventory.transfer"],
+  "inventory.transfer": ["stock.manage"],
+  "inventory.view": ["inventory.manage", "stock.manage"],
+  "inventory.add_stock": ["stock.manage", "inventory.manage"],
+  "inventory.adjust": ["stock.manage", "inventory.manage"],
+  "pos.manage": ["sales.pos", "sales.create"],
+  "pos.history": ["sales.view", "sales.history", "pos.manage"],
+  "pos.vat": ["pos.manage"],
+  "suppliers.manage": ["supplier.manage"],
+  "accounts.manage": ["accounts.view", "accounts.transfer"],
+  "staff.manage": ["user.create", "user.view", "user.update", "user.manage"],
+};
+
+function hasMatchingPermission(userPerms: string[], requiredPerm: string): boolean {
+  if (userPerms.includes("*") || userPerms.includes(requiredPerm)) {
+    return true;
+  }
+  const grantingPerms = PERMISSION_ALIASES[requiredPerm] || [];
+  if (grantingPerms.some((granting) => userPerms.includes(granting))) {
+    return true;
+  }
+  return false;
+}
+
 export const requirePermission = (permissionString: string) => {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
@@ -104,7 +146,7 @@ export const requirePermission = (permissionString: string) => {
 
       // 1. Check user.permissions from request / JWT payload
       const userPerms = req.user.permissions || [];
-      if (userPerms.includes("*") || userPerms.includes(permissionString)) {
+      if (hasMatchingPermission(userPerms, permissionString)) {
         next();
         return;
       }
@@ -118,7 +160,7 @@ export const requirePermission = (permissionString: string) => {
       if (dbUser) {
         // Check direct user permissions
         const directPermissions: string[] = dbUser.permissions || [];
-        if (directPermissions.includes("*") || directPermissions.includes(permissionString)) {
+        if (hasMatchingPermission(directPermissions, permissionString)) {
           next();
           return;
         }
@@ -126,7 +168,7 @@ export const requirePermission = (permissionString: string) => {
         // Check assigned pharmacy role permissions (Tenant-level custom roles)
         if (dbUser.pharmacyRole && dbUser.pharmacyRole.permissions) {
           const pharmacyRolePermissions: string[] = dbUser.pharmacyRole.permissions || [];
-          if (pharmacyRolePermissions.includes("*") || pharmacyRolePermissions.includes(permissionString)) {
+          if (hasMatchingPermission(pharmacyRolePermissions, permissionString)) {
             next();
             return;
           }
@@ -135,7 +177,7 @@ export const requirePermission = (permissionString: string) => {
         // Check assigned custom role permissions (Platform-level custom roles)
         if (dbUser.customRole && dbUser.customRole.permissions) {
           const rolePermissions: string[] = dbUser.customRole.permissions || [];
-          if (rolePermissions.includes("*") || rolePermissions.includes(permissionString)) {
+          if (hasMatchingPermission(rolePermissions, permissionString)) {
             next();
             return;
           }
@@ -159,7 +201,7 @@ export const requirePermission = (permissionString: string) => {
 
       // 4. Check static default fallback matrix for legacy roles
       const defaultPerms = DEFAULT_ROLE_PERMISSIONS[role] || [];
-      if (defaultPerms.includes(permissionString) || defaultPerms.includes("*")) {
+      if (hasMatchingPermission(defaultPerms, permissionString)) {
         next();
         return;
       }
