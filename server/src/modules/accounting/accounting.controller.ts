@@ -25,6 +25,7 @@ export class AccountingController {
     }
   }
 
+
   static async updateAccount(req: Request, res: Response): Promise<void> {
     try {
       const tenantId = req.user!.tenantId;

@@ -40,6 +40,8 @@ model FinancialAccount {
   transactionsOut FinancialTransaction[] @relation("SourceAccount")
   transactionsIn  FinancialTransaction[] @relation("DestinationAccount")
   sales           Sale[]
+  settlementsOut  TransferSettlement[]   @relation("SettlementSourceAccount")
+  settlementsIn   TransferSettlement[]   @relation("SettlementDestAccount")
 
   @@index([tenantId])
   @@index([branchId])

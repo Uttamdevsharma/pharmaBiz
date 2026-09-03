@@ -37,15 +37,10 @@ export class BranchService {
 
   static async listBranches(
     tenantId: string,
-    userRole: string,
+    userRole?: string,
     userBranchId?: string | null
   ) {
     const where: any = { tenantId, isActive: true };
-
-    // Branch managers and cashiers only see their assigned branch
-    if (["BRANCH_MANAGER", "CASHIER"].includes(userRole) && userBranchId) {
-      where.id = userBranchId;
-    }
 
     return await (prisma as any).branch.findMany({
       where,

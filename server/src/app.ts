@@ -1,5 +1,5 @@
 import "dotenv/config";
-import express, { Request, Response, NextFunction } from "express";
+import express, { Request, Response, NextFunction, response } from "express";
 import { seedSuperAdmin } from "./app/lib/seedAdmin";
 
 // Route imports
@@ -92,6 +92,8 @@ app.use((req: Request, res: Response) => {
     message: `Cannot ${req.method} ${req.originalUrl} - Route not found`,
   });
 });
+
+
 
 // Global Error Handler
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {

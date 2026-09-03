@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { UploadService } from "./upload.service";
+import { success } from "zod";
 
 export class UploadController {
   /**
@@ -11,13 +12,23 @@ export class UploadController {
       const folder = req.body.folder || "pharmacy_saas/general";
       const oldPublicId = req.body.oldPublicId;
 
-      if (!fileData) {
+      // if (!fileData) {
+      //   res.status(400).json({
+      //     success: false,
+      //     message: "No image file provided. Send base64 data URI or multipart file.",
+      //   });
+      //   return;
+      // }
+
+      if(!fileData) {
         res.status(400).json({
           success: false,
-          message: "No image file provided. Send base64 data URI or multipart file.",
-        });
+          message : "No image file provided. Send base64 data URI or multipart file."
+        })
         return;
       }
+
+
 
       const result = await UploadService.uploadImage(fileData, folder, oldPublicId);
 

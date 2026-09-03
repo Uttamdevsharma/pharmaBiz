@@ -58,8 +58,10 @@ model Branch {
   financialAccounts      FinancialAccount[]
   financialTransactions  FinancialTransaction[]
   
-  stockTransfersFrom StockTransfer[] @relation("TransferFrom")
-  stockTransfersTo   StockTransfer[] @relation("TransferTo")
+  stockTransfersFrom StockTransfer[]      @relation("TransferFrom")
+  stockTransfersTo   StockTransfer[]      @relation("TransferTo")
+  settlementsFrom    TransferSettlement[] @relation("SettlementFromBranch")
+  settlementsTo      TransferSettlement[] @relation("SettlementToBranch")
 
   @@index([tenantId])
   @@index([isActive])

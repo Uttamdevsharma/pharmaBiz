@@ -102,6 +102,7 @@ model Product {
   saleItems            SaleItem[]
   branchOverrides      BranchProduct[]
   purchaseItems        PurchaseItem[]
+  transferItems        TransferItem[]
 
   @@unique([tenantId, sku])
   @@index([tenantId])

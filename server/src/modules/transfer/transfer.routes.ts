@@ -6,45 +6,49 @@ import { validateRequest } from "../../middleware/validate";
 import { requireActiveSubscription, requireTier } from "../../middleware/planLimiter";
 import {
   createTransferSchema,
-  rejectTransferSchema,
+  receiveTransferSchema,
+  settleTransferSchema,
   listTransfersQuerySchema,
 } from "./transfer.validation";
 
 const router = Router();
 
-// Inter-branch transfers require active subscription and at least GROWTH tier
+// Inter-branch transfers require active subscription
 router.use(authenticate, requireActiveSubscription, requireTier("GROWTH"));
 
+// List & Details
 router.get("/", validateRequest({ query: listTransfersQuerySchema }), TransferController.listTransfers);
 router.get("/:id", TransferController.getTransferDetails);
 
-// Transfer Requests (Branch Manager, Regional Admin, Company Owner)
+// Create & Dispatch Transfer
 router.post(
   "/",
-  authorize(["COMPANY_OWNER", "REGIONAL_ADMIN", "BRANCH_MANAGER", "SUPER_ADMIN"]),
+  authorize(["COMPANY_OWNER", "REGIONAL_ADMIN", "BRANCH_MANAGER", "SUPER_ADMIN", "INVENTORY_EXECUTIVE"]),
   validateRequest({ body: createTransferSchema }),
   TransferController.createTransfer
 );
 
-// Approval & Rejection (Regional Admin, Company Owner)
+// Receive Shipment (with damaged/missing quantities & optional immediate settlement)
 router.post(
-  "/:id/approve",
-  authorize(["COMPANY_OWNER", "REGIONAL_ADMIN", "SUPER_ADMIN"]),
-  TransferController.approveTransfer
+  "/:id/receive",
+  authorize(["COMPANY_OWNER", "REGIONAL_ADMIN", "BRANCH_MANAGER", "SUPER_ADMIN", "INVENTORY_EXECUTIVE"]),
+  validateRequest({ body: receiveTransferSchema }),
+  TransferController.receiveTransfer
 );
 
+// Settle Transfer Payable (Pay destination payable to source branch account)
 router.post(
-  "/:id/reject",
-  authorize(["COMPANY_OWNER", "REGIONAL_ADMIN", "SUPER_ADMIN"]),
-  validateRequest({ body: rejectTransferSchema }),
-  TransferController.rejectTransfer
+  "/:id/settle",
+  authorize(["COMPANY_OWNER", "REGIONAL_ADMIN", "BRANCH_MANAGER", "SUPER_ADMIN", "ACCOUNTS"]),
+  validateRequest({ body: settleTransferSchema }),
+  TransferController.settleTransfer
 );
 
-// Completion (Branch Manager, Regional Admin, Company Owner)
+// Cancel Transfer (Returns stock to source branch)
 router.post(
-  "/:id/complete",
+  "/:id/cancel",
   authorize(["COMPANY_OWNER", "REGIONAL_ADMIN", "BRANCH_MANAGER", "SUPER_ADMIN"]),
-  TransferController.completeTransfer
+  TransferController.cancelTransfer
 );
 
 export { router as transferRoutes };

@@ -7,10 +7,22 @@ export class TransferController {
     try {
       const tenantId = req.user!.tenantId;
       const userId = req.user!.id;
+      const userRole = req.user!.role;
+      const userBranchId = req.user!.branchId;
+
+      // Enforce branch manager can only transfer from their assigned branch
+      if (userRole === "BRANCH_MANAGER" && userBranchId && req.body.fromBranchId !== userBranchId) {
+        res.status(403).json({
+          success: false,
+          message: "Branch Managers can only dispatch stock transfers from their assigned branch.",
+        });
+        return;
+      }
+
       const transfer = await TransferService.createTransfer(tenantId, userId, req.body);
       res.status(201).json({
         success: true,
-        message: "Inter-branch transfer request created successfully",
+        message: "Inter-branch stock transfer dispatched successfully",
         data: transfer,
       });
     } catch (error: any) {
@@ -43,52 +55,51 @@ export class TransferController {
     }
   }
 
-  static async approveTransfer(req: Request, res: Response): Promise<void> {
+  static async receiveTransfer(req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params;
       const tenantId = req.user!.tenantId;
-      const approverId = req.user!.id;
+      const userId = req.user!.id;
 
-      const updated = await TransferService.approveTransfer(id, tenantId, approverId);
+      const result = await TransferService.receiveTransfer(id, tenantId, userId, req.body);
       res.status(200).json({
         success: true,
-        message: "Transfer approved successfully",
-        data: updated,
+        message: "Stock shipment received and verified successfully",
+        data: result,
       });
     } catch (error: any) {
       res.status(400).json({ success: false, message: error.message });
     }
   }
 
-  static async rejectTransfer(req: Request, res: Response): Promise<void> {
+  static async settleTransfer(req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params;
       const tenantId = req.user!.tenantId;
       const userId = req.user!.id;
-      const { reason } = req.body;
 
-      const updated = await TransferService.rejectTransfer(id, tenantId, userId, reason);
+      const result = await TransferService.settleTransfer(id, tenantId, userId, req.body);
       res.status(200).json({
         success: true,
-        message: "Transfer rejected",
-        data: updated,
+        message: "Inter-branch payment settlement recorded successfully",
+        data: result,
       });
     } catch (error: any) {
       res.status(400).json({ success: false, message: error.message });
     }
   }
 
-  static async completeTransfer(req: Request, res: Response): Promise<void> {
+  static async cancelTransfer(req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params;
       const tenantId = req.user!.tenantId;
       const userId = req.user!.id;
 
-      const completed = await TransferService.completeTransfer(id, tenantId, userId);
+      const result = await TransferService.cancelTransfer(id, tenantId, userId);
       res.status(200).json({
         success: true,
-        message: "Transfer completed and stock successfully adjusted in both branches",
-        data: completed,
+        message: "Transfer cancelled and stock returned to source branch",
+        data: result,
       });
     } catch (error: any) {
       res.status(400).json({ success: false, message: error.message });

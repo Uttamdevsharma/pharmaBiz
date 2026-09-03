@@ -125,7 +125,7 @@ export const requireTier = (minTier: "TRIAL" | "STARTER" | "GROWTH" | "ENTERPRIS
       const currentTierLevel = TIER_ORDER[tenant.tier] || 0;
       const requiredTierLevel = TIER_ORDER[minTier] || 0;
 
-      if (currentTierLevel < requiredTierLevel) {
+      if (tenant.tier !== "TRIAL" && currentTierLevel < requiredTierLevel) {
         res.status(403).json({
           success: false,
           message: `This feature requires a ${minTier} plan or higher. Your current plan is ${tenant.tier}. Please upgrade your subscription.`,

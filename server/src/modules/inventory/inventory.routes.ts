@@ -72,4 +72,19 @@ router.get(
   InventoryController.getBranchInventory
 );
 
+// Query-based branch inventory list (e.g. /api/inventory?branchId=...)
+router.get(
+  "/",
+  requirePermission("inventory.view"),
+  (req, res) => {
+    const branchId = (req.query.branchId as string) || req.user?.branchId;
+    if (!branchId) {
+      res.status(400).json({ success: false, message: "branchId is required" });
+      return;
+    }
+    req.params.branchId = branchId;
+    return InventoryController.getBranchInventory(req, res);
+  }
+);
+
 export const inventoryRoutes = router;
