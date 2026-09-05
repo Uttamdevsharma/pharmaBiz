@@ -73,11 +73,11 @@ function PaymentSuccessContent() {
         </div>
 
         <Link
-          href="/dashboard"
+          href={typeof window !== "undefined" && localStorage.getItem("token") ? "/dashboard" : "/login?payment=success"}
           className="w-full py-3.5 rounded-xl bg-brand-primary text-white font-bold text-sm shadow-md hover:opacity-90 transition active:scale-95 flex items-center justify-center gap-2"
         >
           <Store className="h-4 w-4" />
-          Enter Pharmacy Owner Dashboard
+          <span>{typeof window !== "undefined" && localStorage.getItem("token") ? "Enter Pharmacy Owner Dashboard" : "Login to Enter Dashboard"}</span>
           <ArrowRight className="h-4 w-4" />
         </Link>
 

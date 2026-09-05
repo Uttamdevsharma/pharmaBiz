@@ -25,6 +25,7 @@ import {
   Clock,
   ArrowDownLeft,
   ArrowUpRight,
+  ArrowRight,
   ShieldAlert,
 } from "lucide-react";
 
@@ -747,40 +748,62 @@ export function TransferHistoryView({ onNavigate }: TransferHistoryViewProps) {
             )}
 
             <form onSubmit={handleExecuteSettlement} className="space-y-4 text-xs">
+              {/* Route Visual Banner */}
+              <div className="p-3 rounded-2xl bg-brand-primary/5 border border-brand-primary/20 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-slate-900 dark:text-white">
+                    {selectedTransfer.toBranch?.name} ({payingAccounts.find((a) => a.id === settlePayingAccId)?.name || "Paying"})
+                  </span>
+                  <ArrowRight className="h-4 w-4 text-brand-primary shrink-0" />
+                  <span className="font-bold text-slate-900 dark:text-white">
+                    {selectedTransfer.fromBranch?.name} ({receivingAccounts.find((a) => a.id === settleReceivingAccId)?.name || "Receiving"})
+                  </span>
+                </div>
+                <div className="font-mono font-black text-brand-primary text-sm">
+                  ৳{settleAmount.toFixed(2)}
+                </div>
+              </div>
+
               <div>
                 <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Paying Financial Account ({selectedTransfer.toBranch?.name}) *
+                  Paying Financial Account (Destination — {selectedTransfer.toBranch?.name}) *
                 </label>
                 <select
                   required
                   value={settlePayingAccId}
                   onChange={(e) => setSettlePayingAccId(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-bold outline-none cursor-pointer"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 font-bold text-slate-900 dark:text-white outline-none cursor-pointer"
                 >
                   {payingAccounts.map((acc) => (
                     <option key={acc.id} value={acc.id}>
-                      {acc.name} ({acc.type}) — Current Balance: ৳{Number(acc.balance || 0).toFixed(2)}
+                      {acc.name} ({acc.type}) — Balance: ৳{Number(acc.balance || 0).toFixed(2)}
                     </option>
                   ))}
                 </select>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Money will be deducted from this account at {selectedTransfer.toBranch?.name}.
+                </p>
               </div>
 
               <div>
                 <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Receiving Financial Account ({selectedTransfer.fromBranch?.name}) *
+                  Receiving Financial Account (Source — {selectedTransfer.fromBranch?.name}) *
                 </label>
                 <select
                   required
                   value={settleReceivingAccId}
                   onChange={(e) => setSettleReceivingAccId(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-bold outline-none cursor-pointer"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 font-bold text-slate-900 dark:text-white outline-none cursor-pointer"
                 >
                   {receivingAccounts.map((acc) => (
                     <option key={acc.id} value={acc.id}>
-                      {acc.name} ({acc.type})
+                      {acc.name} ({acc.type}) — Current Balance: ৳{Number(acc.balance || 0).toFixed(2)}
                     </option>
                   ))}
                 </select>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Money will be credited into this account at {selectedTransfer.fromBranch?.name}.
+                </p>
               </div>
 
               <div>
@@ -795,7 +818,7 @@ export function TransferHistoryView({ onNavigate }: TransferHistoryViewProps) {
                   required
                   value={settleAmount}
                   onChange={(e) => setSettleAmount(parseFloat(e.target.value) || 0)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-bold font-mono text-sm outline-none"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 font-bold font-mono text-sm text-slate-900 dark:text-white outline-none"
                 />
               </div>
 

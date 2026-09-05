@@ -64,8 +64,7 @@ export class CloudinaryService {
     try {
       const result: UploadApiResponse = await cloudinary.uploader.upload(filePayload, {
         folder,
-        resource_type: "image",
-
+        resource_type: "auto",
       });
 
       return {

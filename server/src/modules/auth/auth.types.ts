@@ -27,10 +27,19 @@ export interface AuthenticatedUser {
   name?: string | null;
   username?: string | null;
   email?: string | null;
+  verificationStatus?: string | null;
+  rejectionReason?: string | null;
+  requiresOtp?: boolean;
+  paymentRequired?: boolean;
 }
 
 export interface LoginResponse {
   token: string;
   user: AuthenticatedUser;
+  verificationStatus?: string | null;
+  requiresOtp?: boolean;
+  paymentRequired?: boolean;
+  rejectionReason?: string | null;
+  subscriptionId?: string | null;
 }
 

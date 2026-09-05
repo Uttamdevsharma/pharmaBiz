@@ -672,7 +672,17 @@ export class TransferService {
           items: {
             include: {
               product: {
-                select: { id: true, name: true, genericName: true, sku: true, unit: true },
+                select: {
+                  id: true,
+                  name: true,
+                  genericName: true,
+                  sku: true,
+                  unit: true,
+                  category: true,
+                  defaultPackType: true,
+                  stripsPerBox: true,
+                  tabletsPerStrip: true,
+                },
               },
             },
           },
@@ -712,7 +722,18 @@ export class TransferService {
         items: {
           include: {
             product: {
-              select: { id: true, name: true, genericName: true, sku: true, unit: true, basePrice: true },
+              select: {
+                id: true,
+                name: true,
+                genericName: true,
+                sku: true,
+                unit: true,
+                basePrice: true,
+                category: true,
+                defaultPackType: true,
+                stripsPerBox: true,
+                tabletsPerStrip: true,
+              },
             },
           },
         },
@@ -858,6 +879,9 @@ export class TransferService {
             sku: true,
             unit: true,
             category: true,
+            defaultPackType: true,
+            stripsPerBox: true,
+            tabletsPerStrip: true,
           },
         },
         transfer: {

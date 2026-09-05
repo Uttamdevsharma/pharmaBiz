@@ -16,6 +16,7 @@ import { PaymentsTab } from "@/components/admin/PaymentsTab";
 import { AnalyticsTab } from "@/components/admin/AnalyticsTab";
 import { NotificationsTab } from "@/components/admin/NotificationsTab";
 import { SettingsTab } from "@/components/admin/SettingsTab";
+import { PharmacyVerificationTab } from "@/components/admin/PharmacyVerificationTab";
 import { Loader2, ShieldAlert } from "lucide-react";
 
 export default function AdminDashboardPage() {
@@ -59,6 +60,12 @@ export default function AdminDashboardPage() {
     switch (activeTab) {
       case "overview":
         return <OverviewTab />;
+
+      case "verifications":
+        if (!isSuperAdmin && !hasPermission("pharmacies.manage")) {
+          return <AccessRestrictedView moduleName="Pharmacy Verification" requiredPerm="pharmacies.manage" />;
+        }
+        return <PharmacyVerificationTab />;
 
       case "tenants":
         if (!isSuperAdmin && !hasPermission("pharmacies.manage")) {

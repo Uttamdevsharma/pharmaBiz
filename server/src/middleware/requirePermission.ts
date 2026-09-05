@@ -107,7 +107,9 @@ const PERMISSION_ALIASES: Record<string, string[]> = {
   "pos.history": ["sales.view", "sales.history", "pos.manage"],
   "pos.vat": ["pos.manage"],
   "suppliers.manage": ["supplier.manage"],
+  "accounts.view": ["accounts.manage", "accounts.reports", "accounts.transfer", "stock.manage", "dashboard.view"],
   "accounts.manage": ["accounts.view", "accounts.transfer"],
+  "accounts.transfer": ["accounts.manage", "stock.manage"],
   "staff.manage": ["user.create", "user.view", "user.update", "user.manage"],
 };
 

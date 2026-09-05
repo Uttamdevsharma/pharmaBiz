@@ -100,6 +100,11 @@ export default function RoleBasedDashboard() {
       return;
     }
 
+    if (user?.role === "COMPANY_OWNER" && user.verificationStatus && user.verificationStatus !== "ACTIVE") {
+      router.push(`/verification-status?tenantId=${user.tenantId}&email=${encodeURIComponent(user.email || "")}`);
+      return;
+    }
+
     if (user?.role) {
       setActiveModule(getDefaultModuleForRole(user.role));
     }

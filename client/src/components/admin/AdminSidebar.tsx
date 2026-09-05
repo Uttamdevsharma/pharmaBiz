@@ -21,6 +21,7 @@ import { useAuth } from "@/context/AuthContext";
 
 export type AdminTab =
   | "overview"
+  | "verifications"
   | "tenants"
   | "staff"
   | "staff-list"
@@ -83,6 +84,26 @@ export function AdminSidebar({ activeTab, onTabChange }: AdminSidebarProps) {
           <LayoutDashboard className="h-4 w-4 shrink-0" />
           <span>Overview</span>
         </button>
+
+        {/* Pharmacy Verification & Compliance */}
+        {canViewTenants && (
+          <button
+            onClick={() => onTabChange("verifications")}
+            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+              activeTab === "verifications"
+                ? "bg-brand-primary text-white shadow-sm"
+                : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white"
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-500" />
+              <span>Pharmacy Verification</span>
+            </div>
+            <span className="px-1.5 py-0.5 rounded-md bg-amber-500/20 text-amber-600 dark:text-amber-400 text-[10px] font-extrabold">
+              Review
+            </span>
+          </button>
+        )}
 
         {/* Pharmacies / Tenants */}
         {canViewTenants && (

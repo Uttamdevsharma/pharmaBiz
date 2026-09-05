@@ -1,6 +1,7 @@
 import { prisma } from "../../app/lib/prisma";
 import { CreatePlanInput, UpdatePlanInput, ListTenantsQuery } from "./super-admin.validation";
 import { PlatformAnalyticsResponse } from "./super-admin.types";
+import { EmailService } from "../../app/lib/email.service";
 
 export class SuperAdminService {
   /**
@@ -921,6 +922,308 @@ export class SuperAdminService {
     });
 
     return { success: true, role: updated.name, permissions: updated.permissions };
+  }
+
+  /**
+   * List Pharmacy Verification Applications with filtering & metrics
+   */
+  static async listPharmacyVerifications(query?: {
+    status?: string;
+    search?: string;
+    page?: number;
+    limit?: number;
+  }) {
+    const page = Math.max(1, Number(query?.page) || 1);
+    const limit = Math.max(1, Math.min(100, Number(query?.limit) || 20));
+    const skip = (page - 1) * limit;
+
+    const where: any = {};
+
+    if (query?.status && query.status !== "ALL") {
+      where.verificationStatus = query.status;
+    }
+
+    if (query?.search) {
+      const search = query.search.trim();
+      where.OR = [
+        { name: { contains: search, mode: "insensitive" } },
+        { email: { contains: search, mode: "insensitive" } },
+        { phone: { contains: search, mode: "insensitive" } },
+        { nidNumber: { contains: search, mode: "insensitive" } },
+        { tradeLicenseNumber: { contains: search, mode: "insensitive" } },
+        { drugLicenseNumber: { contains: search, mode: "insensitive" } },
+        { users: { some: { name: { contains: search, mode: "insensitive" }, role: "COMPANY_OWNER" } } },
+      ];
+    }
+
+    const [tenants, total, pendingCount, approvedCount, rejectedCount, activeCount] = await Promise.all([
+      (prisma as any).tenant.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: "desc" },
+        include: {
+          users: {
+            where: { role: "COMPANY_OWNER" },
+            select: { id: true, name: true, email: true, phone: true, username: true, createdAt: true },
+            take: 1,
+          },
+          subscriptions: {
+            orderBy: { createdAt: "desc" },
+            take: 1,
+            include: { plan: true },
+          },
+        },
+      }),
+      (prisma as any).tenant.count({ where }),
+      (prisma as any).tenant.count({ where: { verificationStatus: "PENDING_APPROVAL" } }),
+      (prisma as any).tenant.count({ where: { verificationStatus: "APPROVED_PENDING_PAYMENT" } }),
+      (prisma as any).tenant.count({ where: { verificationStatus: "REJECTED" } }),
+      (prisma as any).tenant.count({ where: { verificationStatus: "ACTIVE" } }),
+    ]);
+
+    const formatted = tenants.map((t: any) => {
+      const owner = t.users?.[0] || null;
+      const latestSub = t.subscriptions?.[0] || null;
+      return {
+        id: t.id,
+        name: t.name,
+        email: t.email,
+        phone: t.phone,
+        address: t.address,
+        tier: t.tier,
+        isActive: t.isActive,
+        verificationStatus: t.verificationStatus,
+        nidNumber: t.nidNumber,
+        nidDocUrl: t.nidDocUrl,
+        nidFrontUrl: t.nidFrontUrl || t.nidDocUrl,
+        nidBackUrl: t.nidBackUrl,
+        tradeLicenseNumber: t.tradeLicenseNumber,
+        tradeLicenseDocUrl: t.tradeLicenseDocUrl,
+        tradeLicenseFrontUrl: t.tradeLicenseFrontUrl || t.tradeLicenseDocUrl,
+        tradeLicenseBackUrl: t.tradeLicenseBackUrl,
+        drugLicenseNumber: t.drugLicenseNumber,
+        drugLicenseDocUrl: t.drugLicenseDocUrl,
+        drugLicenseFrontUrl: t.drugLicenseFrontUrl || t.drugLicenseDocUrl,
+        drugLicenseBackUrl: t.drugLicenseBackUrl,
+        otpVerifiedAt: t.otpVerifiedAt,
+        approvedAt: t.approvedAt,
+        approvedBy: t.approvedBy,
+        approvalNotes: t.approvalNotes,
+        rejectedAt: t.rejectedAt,
+        rejectedBy: t.rejectedBy,
+        rejectionReason: t.rejectionReason,
+        pendingPlanId: t.pendingPlanId,
+        pendingBillingCycle: t.pendingBillingCycle,
+        createdAt: t.createdAt,
+        owner,
+        subscription: latestSub,
+      };
+    });
+
+    return {
+      data: formatted,
+      metrics: {
+        total,
+        pendingReview: pendingCount,
+        approved: approvedCount,
+        rejected: rejectedCount,
+        active: activeCount,
+      },
+      pagination: {
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  /**
+   * Get single pharmacy verification application details
+   */
+  static async getPharmacyVerification(id: string) {
+    const tenant = await (prisma as any).tenant.findUnique({
+      where: { id },
+      include: {
+        users: {
+          where: { role: "COMPANY_OWNER" },
+          take: 1,
+        },
+        subscriptions: {
+          orderBy: { createdAt: "desc" },
+          include: { plan: true, payments: true },
+        },
+      },
+    });
+
+    if (!tenant) {
+      throw new Error("Pharmacy application record not found.");
+    }
+
+    return tenant;
+  }
+
+  /**
+   * Approve pharmacy application and dispatch approval email with payment checkout URL
+   */
+  static async approvePharmacyVerification(
+    id: string,
+    adminUserId: string,
+    data?: { planId?: string; billingCycle?: "MONTHLY" | "YEARLY"; notes?: string }
+  ) {
+    const tenant = await (prisma as any).tenant.findUnique({
+      where: { id },
+      include: {
+        users: { where: { role: "COMPANY_OWNER" }, take: 1 },
+        subscriptions: { orderBy: { createdAt: "desc" }, take: 1, include: { plan: true } },
+      },
+    });
+
+    if (!tenant) {
+      throw new Error("Pharmacy application not found.");
+    }
+
+    const owner = tenant.users?.[0];
+    if (!owner) {
+      throw new Error("Owner user not found for this pharmacy application.");
+    }
+
+    // Resolve subscription plan
+    let planId = data?.planId || tenant.pendingPlanId || tenant.subscriptions?.[0]?.planId;
+    let plan = planId ? await (prisma as any).subscriptionPlan.findUnique({ where: { id: planId } }) : null;
+
+    if (!plan) {
+      plan = await (prisma as any).subscriptionPlan.findFirst({ where: { tier: "STARTER" } }) ||
+             await (prisma as any).subscriptionPlan.findFirst();
+    }
+
+    const billingCycle = data?.billingCycle || tenant.pendingBillingCycle || "MONTHLY";
+    const durationDays = billingCycle === "YEARLY" ? 365 : 30;
+    const startDate = new Date();
+    const endDate = new Date(startDate.getTime() + durationDays * 24 * 60 * 60 * 1000);
+
+    const basePrice = Number(plan.price);
+    const amount = billingCycle === "YEARLY" ? Math.round(basePrice * 12 * 0.85) : basePrice;
+
+    // Update Tenant to APPROVED_PENDING_PAYMENT
+    const updatedTenant = await (prisma as any).tenant.update({
+      where: { id: tenant.id },
+      data: {
+        verificationStatus: "APPROVED_PENDING_PAYMENT",
+        approvedAt: new Date(),
+        approvedBy: adminUserId,
+        approvalNotes: data?.notes || "Approved by Super Admin",
+        pendingPlanId: plan.id,
+        pendingBillingCycle: billingCycle,
+        tier: plan.tier,
+      },
+    });
+
+    // Update or create pending subscription
+    let subscription = tenant.subscriptions?.[0];
+    if (subscription) {
+      subscription = await (prisma as any).subscription.update({
+        where: { id: subscription.id },
+        data: {
+          planId: plan.id,
+          status: "PENDING",
+          startDate,
+          endDate,
+        },
+        include: { plan: true },
+      });
+    } else {
+      subscription = await (prisma as any).subscription.create({
+        data: {
+          tenantId: tenant.id,
+          planId: plan.id,
+          status: "PENDING",
+          startDate,
+          endDate,
+        },
+        include: { plan: true },
+      });
+    }
+
+    // Build payment checkout URL
+    const clientUrl = process.env.CLIENT_URL || "http://localhost:3000";
+    const paymentUrl = `${clientUrl}/verification-status?tenantId=${tenant.id}&email=${encodeURIComponent(owner.email || tenant.email || "")}`;
+
+    // Send Approval Email
+    const emailRecipient = owner.email || tenant.email;
+    if (emailRecipient) {
+      await EmailService.sendApprovalEmail({
+        to: emailRecipient,
+        name: owner.name || tenant.name,
+        companyName: tenant.name,
+        planName: plan.name,
+        planTier: plan.tier,
+        billingCycle,
+        price: amount,
+        paymentUrl,
+      });
+    }
+
+    return {
+      success: true,
+      message: `Pharmacy "${tenant.name}" application approved. Approval email with payment instructions dispatched to ${emailRecipient}.`,
+      tenant: updatedTenant,
+      subscription,
+      paymentUrl,
+    };
+  }
+
+  /**
+   * Reject pharmacy application with reason and notify applicant
+   */
+  static async rejectPharmacyVerification(
+    id: string,
+    adminUserId: string,
+    data: { reason: string }
+  ) {
+    if (!data.reason || !data.reason.trim()) {
+      throw new Error("A clear rejection reason is required.");
+    }
+
+    const tenant = await (prisma as any).tenant.findUnique({
+      where: { id },
+      include: {
+        users: { where: { role: "COMPANY_OWNER" }, take: 1 },
+      },
+    });
+
+    if (!tenant) {
+      throw new Error("Pharmacy application not found.");
+    }
+
+    const owner = tenant.users?.[0];
+
+    const updatedTenant = await (prisma as any).tenant.update({
+      where: { id: tenant.id },
+      data: {
+        verificationStatus: "REJECTED",
+        rejectedAt: new Date(),
+        rejectedBy: adminUserId,
+        rejectionReason: data.reason.trim(),
+        isActive: false,
+      },
+    });
+
+    const emailRecipient = owner?.email || tenant.email;
+    if (emailRecipient) {
+      await EmailService.sendRejectionEmail({
+        to: emailRecipient,
+        name: owner?.name || tenant.name,
+        companyName: tenant.name,
+        reason: data.reason.trim(),
+      });
+    }
+
+    return {
+      success: true,
+      message: `Pharmacy application rejected and notification sent to ${emailRecipient}.`,
+      tenant: updatedTenant,
+    };
   }
 }
 

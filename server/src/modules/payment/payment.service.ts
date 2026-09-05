@@ -209,12 +209,13 @@ export class PaymentService {
           include: { plan: true },
         });
 
-        // 3. Update Tenant Tier to match plan tier
+        // 3. Update Tenant Tier and activate verification status
         if (updatedSubscription.plan) {
           await tx.tenant.update({
             where: { id: payment.tenantId },
             data: {
               tier: updatedSubscription.plan.tier,
+              verificationStatus: "ACTIVE",
               isActive: true,
             },
           });

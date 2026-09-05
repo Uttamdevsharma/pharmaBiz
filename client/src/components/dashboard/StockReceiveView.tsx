@@ -19,10 +19,20 @@ import {
   X,
   ArrowRight,
   ShieldAlert,
+  Layers,
+  Sparkles,
+  Calculator,
+  RefreshCw,
 } from "lucide-react";
 
 interface StockReceiveViewProps {
   onNavigate?: (module: any) => void;
+}
+
+interface PackagingOption {
+  unit: string;
+  label: string;
+  factor: number;
 }
 
 interface ItemReceiptState {
@@ -30,14 +40,34 @@ interface ItemReceiptState {
   productId: string;
   productName: string;
   genericName?: string;
+  sku?: string;
   batchNumber: string;
   expiryDate?: string;
   packageType?: string;
   sentQuantity: number;
   costPrice: number;
-  receivedQuantity: number;
-  damagedQuantity: number;
-  missingQuantity: number;
+  
+  // Available packaging options for this product
+  packagingOptions: PackagingOption[];
+
+  // Received
+  receivedUnit: string;
+  receivedPackQty: number;
+  receivedExtraUnits: number;
+  receivedQuantity: number; // total base units
+
+  // Damaged
+  damagedUnit: string;
+  damagedPackQty: number;
+  damagedExtraUnits: number;
+  damagedQuantity: number; // total base units
+
+  // Missing
+  missingUnit: string;
+  missingPackQty: number;
+  missingExtraUnits: number;
+  missingQuantity: number; // total base units
+
   notes?: string;
 }
 
@@ -110,6 +140,32 @@ export function StockReceiveView({ onNavigate }: StockReceiveViewProps = {}) {
     (t) => t.status === "IN_TRANSIT" || t.status === "PENDING" || t.status === "APPROVED"
   );
 
+  const getPackagingOptions = (product: any, item: any): PackagingOption[] => {
+    const opts: PackagingOption[] = [];
+    const stripsPerBox = Number(product?.stripsPerBox || 0);
+    const tabletsPerStrip = Number(product?.tabletsPerStrip || 0);
+    const baseUnitName = (product?.unit || "Unit").toUpperCase();
+
+    if (stripsPerBox > 1 && tabletsPerStrip > 1) {
+      const boxFactor = stripsPerBox * tabletsPerStrip;
+      opts.push({ unit: "BOX", label: `Box (${boxFactor} ${baseUnitName}s)`, factor: boxFactor });
+      opts.push({ unit: "STRIP", label: `Strip (${tabletsPerStrip} ${baseUnitName}s)`, factor: tabletsPerStrip });
+      opts.push({ unit: baseUnitName, label: `${baseUnitName} (1 ${baseUnitName})`, factor: 1 });
+    } else if (item.conversionFactor && item.conversionFactor > 1) {
+      const packUnit = item.packageType || "PACK";
+      opts.push({ unit: packUnit, label: `${packUnit} (${item.conversionFactor} Units)`, factor: item.conversionFactor });
+      opts.push({ unit: baseUnitName, label: `${baseUnitName} (1 Unit)`, factor: 1 });
+    } else {
+      const pType = (product?.defaultPackType || item.packageType || baseUnitName).toUpperCase();
+      opts.push({ unit: pType, label: `${pType} (1 ${pType})`, factor: 1 });
+      if (pType !== baseUnitName && baseUnitName !== "UNIT") {
+        opts.push({ unit: baseUnitName, label: `${baseUnitName} (1 ${baseUnitName})`, factor: 1 });
+      }
+    }
+
+    return opts;
+  };
+
   const handleOpenReceiveModal = async (transfer: any) => {
     setActiveTransfer(transfer);
     setModalError(null);
@@ -117,21 +173,47 @@ export function StockReceiveView({ onNavigate }: StockReceiveViewProps = {}) {
     setEnableImmediateSettlement(false);
 
     // Initialize item intake state with all received by default
-    const itemsState: ItemReceiptState[] = (transfer.items || []).map((i: any) => ({
-      itemId: i.id,
-      productId: i.productId,
-      productName: i.product?.name || "Product",
-      genericName: i.product?.genericName,
-      batchNumber: i.batchNumber || "DEFAULT",
-      expiryDate: i.expiryDate ? new Date(i.expiryDate).toISOString().split("T")[0] : undefined,
-      packageType: i.packageType || "PIECE",
-      sentQuantity: Number(i.sentQuantity || i.quantity || 0),
-      costPrice: Number(i.costPrice || i.unitPrice || 0),
-      receivedQuantity: Number(i.sentQuantity || i.quantity || 0),
-      damagedQuantity: 0,
-      missingQuantity: 0,
-      notes: "",
-    }));
+    const itemsState: ItemReceiptState[] = (transfer.items || []).map((i: any) => {
+      const options = getPackagingOptions(i.product, i);
+      const defaultUnit = options[0]?.unit || i.packageType || "PIECE";
+      const defaultFactor = options[0]?.factor || 1;
+      const sentQty = Number(i.sentQuantity || i.quantity || 0);
+
+      // Default: All received
+      const initialPackQty = defaultFactor > 1 ? Math.floor(sentQty / defaultFactor) : sentQty;
+      const initialExtraUnits = defaultFactor > 1 ? sentQty % defaultFactor : 0;
+
+      return {
+        itemId: i.id,
+        productId: i.productId,
+        productName: i.product?.name || "Product",
+        genericName: i.product?.genericName,
+        sku: i.product?.sku,
+        batchNumber: i.batchNumber || "DEFAULT",
+        expiryDate: i.expiryDate ? new Date(i.expiryDate).toISOString().split("T")[0] : undefined,
+        packageType: i.packageType || "PIECE",
+        sentQuantity: sentQty,
+        costPrice: Number(i.costPrice || i.unitPrice || 0),
+        packagingOptions: options,
+
+        receivedUnit: defaultUnit,
+        receivedPackQty: initialPackQty,
+        receivedExtraUnits: initialExtraUnits,
+        receivedQuantity: sentQty,
+
+        damagedUnit: defaultUnit,
+        damagedPackQty: 0,
+        damagedExtraUnits: 0,
+        damagedQuantity: 0,
+
+        missingUnit: defaultUnit,
+        missingPackQty: 0,
+        missingExtraUnits: 0,
+        missingQuantity: 0,
+
+        notes: "",
+      };
+    });
 
     setReceiptItems(itemsState);
 
@@ -154,23 +236,107 @@ export function StockReceiveView({ onNavigate }: StockReceiveViewProps = {}) {
     }
   };
 
-  const handleUpdateItemReceipt = (
+  const calculateBaseUnits = (options: PackagingOption[], unitName: string, packQty: number, extraUnits: number): number => {
+    const opt = options.find((o) => o.unit === unitName);
+    const factor = opt ? opt.factor : 1;
+    return Math.max(0, packQty * factor + extraUnits);
+  };
+
+  const handleUpdatePackaging = (
     itemId: string,
-    field: "receivedQuantity" | "damagedQuantity" | "missingQuantity" | "notes",
+    category: "received" | "damaged" | "missing",
+    field: "unit" | "packQty" | "extraUnits",
     value: any
   ) => {
     setReceiptItems((prev) =>
       prev.map((item) => {
         if (item.itemId !== itemId) return item;
+
+        const updated = { ...item };
+        if (category === "received") {
+          if (field === "unit") updated.receivedUnit = value;
+          if (field === "packQty") updated.receivedPackQty = Math.max(0, parseInt(value) || 0);
+          if (field === "extraUnits") updated.receivedExtraUnits = Math.max(0, parseInt(value) || 0);
+          updated.receivedQuantity = calculateBaseUnits(
+            updated.packagingOptions,
+            updated.receivedUnit,
+            updated.receivedPackQty,
+            updated.receivedExtraUnits
+          );
+        } else if (category === "damaged") {
+          if (field === "unit") updated.damagedUnit = value;
+          if (field === "packQty") updated.damagedPackQty = Math.max(0, parseInt(value) || 0);
+          if (field === "extraUnits") updated.damagedExtraUnits = Math.max(0, parseInt(value) || 0);
+          updated.damagedQuantity = calculateBaseUnits(
+            updated.packagingOptions,
+            updated.damagedUnit,
+            updated.damagedPackQty,
+            updated.damagedExtraUnits
+          );
+
+          // Automatically adjust received quantity to remaining usable balance
+          const nonReceived = updated.damagedQuantity + updated.missingQuantity;
+          const targetReceived = Math.max(0, updated.sentQuantity - nonReceived);
+          const opt = updated.packagingOptions.find((o) => o.unit === updated.receivedUnit);
+          const factor = opt ? opt.factor : 1;
+          updated.receivedPackQty = factor > 1 ? Math.floor(targetReceived / factor) : targetReceived;
+          updated.receivedExtraUnits = factor > 1 ? targetReceived % factor : 0;
+          updated.receivedQuantity = targetReceived;
+        } else if (category === "missing") {
+          if (field === "unit") updated.missingUnit = value;
+          if (field === "packQty") updated.missingPackQty = Math.max(0, parseInt(value) || 0);
+          if (field === "extraUnits") updated.missingExtraUnits = Math.max(0, parseInt(value) || 0);
+          updated.missingQuantity = calculateBaseUnits(
+            updated.packagingOptions,
+            updated.missingUnit,
+            updated.missingPackQty,
+            updated.missingExtraUnits
+          );
+
+          // Automatically adjust received quantity to remaining usable balance
+          const nonReceived = updated.damagedQuantity + updated.missingQuantity;
+          const targetReceived = Math.max(0, updated.sentQuantity - nonReceived);
+          const opt = updated.packagingOptions.find((o) => o.unit === updated.receivedUnit);
+          const factor = opt ? opt.factor : 1;
+          updated.receivedPackQty = factor > 1 ? Math.floor(targetReceived / factor) : targetReceived;
+          updated.receivedExtraUnits = factor > 1 ? targetReceived % factor : 0;
+          updated.receivedQuantity = targetReceived;
+        }
+
+        return updated;
+      })
+    );
+  };
+
+  const handleAutoBalanceReceived = (itemId: string) => {
+    setReceiptItems((prev) =>
+      prev.map((item) => {
+        if (item.itemId !== itemId) return item;
+
+        const nonReceived = item.damagedQuantity + item.missingQuantity;
+        const targetReceived = Math.max(0, item.sentQuantity - nonReceived);
+
+        const opt = item.packagingOptions.find((o) => o.unit === item.receivedUnit);
+        const factor = opt ? opt.factor : 1;
+
+        const newPackQty = factor > 1 ? Math.floor(targetReceived / factor) : targetReceived;
+        const newExtra = factor > 1 ? targetReceived % factor : 0;
+
         return {
           ...item,
-          [field]: field === "notes" ? value : Math.max(0, parseInt(value) || 0),
+          receivedPackQty: newPackQty,
+          receivedExtraUnits: newExtra,
+          receivedQuantity: targetReceived,
         };
       })
     );
   };
 
   // Calculations
+  const totalSentValue = receiptItems.reduce(
+    (acc, i) => acc + i.sentQuantity * i.costPrice,
+    0
+  );
   const totalReceivedValue = receiptItems.reduce(
     (acc, i) => acc + i.receivedQuantity * i.costPrice,
     0
@@ -183,6 +349,11 @@ export function StockReceiveView({ onNavigate }: StockReceiveViewProps = {}) {
     (acc, i) => acc + i.missingQuantity * i.costPrice,
     0
   );
+
+  const destinationPayable = totalReceivedValue;
+
+  const totalDamagedUnits = receiptItems.reduce((acc, i) => acc + i.damagedQuantity, 0);
+  const totalMissingUnits = receiptItems.reduce((acc, i) => acc + i.missingQuantity, 0);
 
   const hasMismatch = receiptItems.some(
     (i) => i.receivedQuantity + i.damagedQuantity + i.missingQuantity !== i.sentQuantity
@@ -198,7 +369,7 @@ export function StockReceiveView({ onNavigate }: StockReceiveViewProps = {}) {
       const sum = item.receivedQuantity + item.damagedQuantity + item.missingQuantity;
       if (sum !== item.sentQuantity) {
         setModalError(
-          `Quantity mismatch for "${item.productName}". Sent: ${item.sentQuantity}, but Received (${item.receivedQuantity}) + Damaged (${item.damagedQuantity}) + Missing (${item.missingQuantity}) = ${sum}.`
+          `Quantity mismatch for "${item.productName}". Sent: ${item.sentQuantity} units, but Received (${item.receivedQuantity}) + Damaged (${item.damagedQuantity}) + Missing (${item.missingQuantity}) = ${sum} units.`
         );
         return;
       }
@@ -231,7 +402,7 @@ export function StockReceiveView({ onNavigate }: StockReceiveViewProps = {}) {
           amount: totalReceivedValue,
           paymentMethod:
             destAccounts.find((a) => a.id === selectedDestAccId)?.type || "CASH",
-          reference: `Immediate Settlement on Intake`,
+          reference: `Immediate Settlement on Intake (#${activeTransfer.id.substring(0, 8)})`,
         };
       }
 
@@ -246,7 +417,9 @@ export function StockReceiveView({ onNavigate }: StockReceiveViewProps = {}) {
 
       setFeedback({
         type: "success",
-        text: `Shipment #${activeTransfer.id.substring(0, 8)} successfully received! Usable stock has been updated at ${activeTransfer.toBranch?.name}.`,
+        text: `Shipment #${activeTransfer.id.substring(0, 8)} successfully verified and received! ${
+          totalReceivedValue > 0 ? `৳${totalReceivedValue.toFixed(2)} payable recorded.` : ""
+        } Usable stock credited at ${activeTransfer.toBranch?.name}.`,
       });
       setActiveTransfer(null);
       await loadData();
@@ -257,8 +430,11 @@ export function StockReceiveView({ onNavigate }: StockReceiveViewProps = {}) {
     }
   };
 
+  const selectedPayingAcc = destAccounts.find((a) => a.id === selectedDestAccId);
+  const selectedRecAcc = sourceAccounts.find((a) => a.id === selectedSourceAccId);
+
   return (
-    <div className="space-y-6 max-w-6xl mx-auto">
+    <div className="space-y-6 max-w-7xl mx-auto">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
         <div>
@@ -272,7 +448,7 @@ export function StockReceiveView({ onNavigate }: StockReceiveViewProps = {}) {
             <span>Stock Receiving & Intake Hub</span>
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Receive incoming shipments, account for damaged/missing quantities, update destination stock, and record cost payables.
+            Receive incoming shipments with unit-aware damage/missing recording, destination stock updates, and direct financial settlement.
           </p>
         </div>
 
@@ -325,9 +501,9 @@ export function StockReceiveView({ onNavigate }: StockReceiveViewProps = {}) {
               {pendingReceive.length}
             </div>
             <div>
-              <div className="font-black text-xs">Shipments Awaiting Intake Confirmation</div>
+              <div className="font-black text-xs">Shipments Awaiting Intake Verification</div>
               <p className="text-[11px] text-sky-700 dark:text-sky-300/80 mt-0.5">
-                {pendingReceive.length} shipment(s) dispatched to this branch are ready to be verified and accepted into stock.
+                {pendingReceive.length} shipment(s) dispatched to this branch are ready to be verified, checked for packaging damage/loss, and accepted into stock.
               </p>
             </div>
           </div>
@@ -423,7 +599,7 @@ export function StockReceiveView({ onNavigate }: StockReceiveViewProps = {}) {
                           <button
                             type="button"
                             onClick={() => handleOpenReceiveModal(t)}
-                            className="px-3.5 py-1.5 rounded-xl bg-brand-primary hover:bg-brand-primary/90 text-white font-bold text-xs shadow-xs transition flex items-center gap-1.5 ml-auto"
+                            className="px-3.5 py-1.5 rounded-xl bg-brand-primary hover:bg-brand-primary/90 text-white font-bold text-xs shadow-xs transition flex items-center gap-1.5 ml-auto cursor-pointer"
                           >
                             <PackageCheck className="h-3.5 w-3.5" />
                             <span>Verify & Receive</span>
@@ -432,7 +608,7 @@ export function StockReceiveView({ onNavigate }: StockReceiveViewProps = {}) {
                           <button
                             type="button"
                             onClick={() => onNavigate && onNavigate("stock_transfer_history")}
-                            className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 text-xs font-semibold"
+                            className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 text-xs font-semibold cursor-pointer"
                           >
                             View Ledger
                           </button>
@@ -447,24 +623,34 @@ export function StockReceiveView({ onNavigate }: StockReceiveViewProps = {}) {
         )}
       </div>
 
-      {/* Itemized Stock Receive Modal */}
+      {/* Advanced Unit-Aware Stock Receive Modal */}
       {activeTransfer && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="max-w-4xl w-full rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 space-y-5 shadow-2xl animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
+          <div className="max-w-5xl w-full rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 space-y-6 shadow-2xl animate-in fade-in zoom-in-95 duration-150 max-h-[92vh] overflow-y-auto">
+            {/* Modal Header */}
             <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
               <div>
-                <h3 className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
-                  <PackageCheck className="h-5 w-5 text-brand-primary" />
-                  <span>Receive Shipment #{activeTransfer.id.substring(0, 8)}</span>
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Dispatched from <strong>{activeTransfer.fromBranch?.name}</strong> to{" "}
-                  <strong>{activeTransfer.toBranch?.name}</strong>
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-0.5 rounded-full bg-brand-primary/10 text-brand-primary font-mono text-[10px] font-bold">
+                    #TRF-{activeTransfer.id.substring(0, 8).toUpperCase()}
+                  </span>
+                  <h3 className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
+                    <PackageCheck className="h-5 w-5 text-brand-primary" />
+                    <span>Intake Inspection & Packaging Settlement</span>
+                  </h3>
+                </div>
+                <p className="text-xs text-slate-500 mt-1 flex items-center gap-1.5">
+                  <span>Source:</span>
+                  <strong className="text-slate-800 dark:text-white font-bold">{activeTransfer.fromBranch?.name}</strong>
+                  <ArrowRight className="h-3.5 w-3.5 text-slate-400" />
+                  <span>Destination:</span>
+                  <strong className="text-slate-800 dark:text-white font-bold">{activeTransfer.toBranch?.name}</strong>
                 </p>
               </div>
               <button
+                type="button"
                 onClick={() => setActiveTransfer(null)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-600"
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -477,190 +663,453 @@ export function StockReceiveView({ onNavigate }: StockReceiveViewProps = {}) {
               </div>
             )}
 
-            <form onSubmit={handleConfirmIntake} className="space-y-5">
-              {/* Product items table */}
-              <div className="border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-slate-50 dark:bg-slate-800 font-bold text-slate-500 border-b border-slate-200 dark:border-slate-800">
-                    <tr>
-                      <th className="py-3 px-3">Medication & Batch</th>
-                      <th className="py-3 px-2 text-center">Sent Units</th>
-                      <th className="py-3 px-2 text-center text-emerald-600">Received Units</th>
-                      <th className="py-3 px-2 text-center text-amber-600">Damaged Units</th>
-                      <th className="py-3 px-2 text-center text-rose-600">Missing Units</th>
-                      <th className="py-3 px-3 text-right">Cost Price</th>
-                      <th className="py-3 px-3 text-right">Received Payable</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
-                    {receiptItems.map((item) => {
-                      const sum = item.receivedQuantity + item.damagedQuantity + item.missingQuantity;
-                      const isBalanced = sum === item.sentQuantity;
-                      const linePayable = item.receivedQuantity * item.costPrice;
-
-                      return (
-                        <tr key={item.itemId} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
-                          <td className="py-3 px-3">
-                            <div className="font-bold text-slate-900 dark:text-white">
-                              {item.productName}
-                            </div>
-                            <div className="text-[10px] text-slate-400 font-mono">
-                              Batch: {item.batchNumber} | Pack: {item.packageType}
-                            </div>
-                            {!isBalanced && (
-                              <div className="text-[10px] font-bold text-rose-500 mt-0.5">
-                                ⚠️ Total accounted: {sum} / {item.sentQuantity}
-                              </div>
-                            )}
-                          </td>
-
-                          <td className="py-3 px-2 text-center font-black font-mono text-slate-900 dark:text-white">
-                            {item.sentQuantity}
-                          </td>
-
-                          <td className="py-3 px-2 text-center">
-                            <input
-                              type="number"
-                              min="0"
-                              max={item.sentQuantity}
-                              value={item.receivedQuantity}
-                              onChange={(e) =>
-                                handleUpdateItemReceipt(item.itemId, "receivedQuantity", e.target.value)
-                              }
-                              className="w-16 px-2 py-1 text-center font-bold text-xs rounded-lg border border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 outline-none"
-                            />
-                          </td>
-
-                          <td className="py-3 px-2 text-center">
-                            <input
-                              type="number"
-                              min="0"
-                              max={item.sentQuantity}
-                              value={item.damagedQuantity}
-                              onChange={(e) =>
-                                handleUpdateItemReceipt(item.itemId, "damagedQuantity", e.target.value)
-                              }
-                              className="w-16 px-2 py-1 text-center font-bold text-xs rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 outline-none"
-                            />
-                          </td>
-
-                          <td className="py-3 px-2 text-center">
-                            <input
-                              type="number"
-                              min="0"
-                              max={item.sentQuantity}
-                              value={item.missingQuantity}
-                              onChange={(e) =>
-                                handleUpdateItemReceipt(item.itemId, "missingQuantity", e.target.value)
-                              }
-                              className="w-16 px-2 py-1 text-center font-bold text-xs rounded-lg border border-rose-300 dark:border-rose-700 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 outline-none"
-                            />
-                          </td>
-
-                          <td className="py-3 px-3 text-right font-mono text-slate-500">
-                            ৳{item.costPrice.toFixed(2)}
-                          </td>
-
-                          <td className="py-3 px-3 text-right font-black font-mono text-emerald-600">
-                            ৳{linePayable.toFixed(2)}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Financial Calculation Summary */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800">
-                  <div className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300">
-                    Received Usable Value (Payable)
-                  </div>
-                  <div className="text-lg font-black font-mono text-emerald-700 dark:text-emerald-200 mt-0.5">
-                    ৳{totalReceivedValue.toFixed(2)}
-                  </div>
-                  <p className="text-[10px] text-emerald-600/80 mt-0.5">
-                    Stock added to destination branch
-                  </p>
-                </div>
-
-                <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800">
-                  <div className="text-[11px] font-bold text-amber-700 dark:text-amber-300">
-                    Damaged Stock Loss
-                  </div>
-                  <div className="text-lg font-black font-mono text-amber-700 dark:text-amber-200 mt-0.5">
-                    ৳{totalDamagedValue.toFixed(2)}
-                  </div>
-                  <p className="text-[10px] text-amber-600/80 mt-0.5">
-                    Excluded from payable, logged as loss
-                  </p>
-                </div>
-
-                <div className="p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800">
-                  <div className="text-[11px] font-bold text-rose-700 dark:text-rose-300">
-                    Missing Stock Loss
-                  </div>
-                  <div className="text-lg font-black font-mono text-rose-700 dark:text-rose-200 mt-0.5">
-                    ৳{totalMissingValue.toFixed(2)}
-                  </div>
-                  <p className="text-[10px] text-rose-600/80 mt-0.5">
-                    Excluded from payable, logged in audit
-                  </p>
-                </div>
-              </div>
-
-              {/* Immediate Settlement Toggle */}
-              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-3">
+            <form onSubmit={handleConfirmIntake} className="space-y-6">
+              {/* Itemized Packaging Breakdown Cards */}
+              <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <CreditCard className="h-4 w-4 text-brand-primary" />
-                    <span className="font-bold text-xs text-slate-900 dark:text-white">
-                      Settle Payment Immediately on Intake?
-                    </span>
+                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                    <Layers className="h-4 w-4 text-brand-primary" />
+                    <span>Medications in Shipment ({receiptItems.length})</span>
+                  </h4>
+                  <span className="text-[11px] text-slate-400">
+                    Specify received, damaged (transit loss) and missing quantities in their respective units
+                  </span>
+                </div>
+
+                {receiptItems.map((item, idx) => {
+                  const totalAccounted = item.receivedQuantity + item.damagedQuantity + item.missingQuantity;
+                  const isBalanced = totalAccounted === item.sentQuantity;
+                  const linePayable = item.receivedQuantity * item.costPrice;
+                  const lineDamagedLoss = item.damagedQuantity * item.costPrice;
+                  const lineMissingLoss = item.missingQuantity * item.costPrice;
+
+                  return (
+                    <div
+                      key={item.itemId}
+                      className={`p-4 rounded-2xl border transition ${
+                        isBalanced
+                          ? "bg-slate-50/50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700"
+                          : "bg-rose-50/30 dark:bg-rose-950/20 border-rose-300 dark:border-rose-800"
+                      }`}
+                    >
+                      {/* Product Header Bar */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-200/60 dark:border-slate-700/60">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-mono font-bold text-slate-400">#{idx + 1}</span>
+                            <span className="font-bold text-sm text-slate-900 dark:text-white">
+                              {item.productName}
+                            </span>
+                            {item.genericName && (
+                              <span className="text-xs text-slate-500 font-medium">
+                                ({item.genericName})
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-slate-500 font-mono mt-0.5 flex items-center gap-3">
+                            <span>Batch: <strong>{item.batchNumber}</strong></span>
+                            {item.expiryDate && <span>Exp: {item.expiryDate}</span>}
+                            <span>Cost Price: <strong className="text-brand-primary font-bold">৳{item.costPrice.toFixed(2)}/unit</strong></span>
+                          </div>
+                        </div>
+
+                        {/* Sent Quantity & Balanced Badge */}
+                        <div className="flex items-center gap-2.5">
+                          <div className="px-3 py-1 rounded-xl bg-slate-200/60 dark:bg-slate-700/60 text-slate-800 dark:text-slate-200 text-xs font-bold font-mono">
+                            Sent: {item.sentQuantity} lowest units
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleAutoBalanceReceived(item.itemId)}
+                            className="px-2.5 py-1 rounded-xl bg-brand-primary/10 hover:bg-brand-primary/20 text-brand-primary text-[11px] font-bold transition flex items-center gap-1 cursor-pointer"
+                            title="Set received to remaining balance"
+                          >
+                            <Sparkles className="h-3 w-3" />
+                            <span>Auto-Balance</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* 3-Column Unit-Aware Breakdown: Received, Damaged, Missing */}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 pt-3">
+                        {/* 1. Received (Usable Stock) */}
+                        <div className="p-3 rounded-xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/60 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-emerald-800 dark:text-emerald-300 flex items-center gap-1">
+                              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                              <span>Received (Usable)</span>
+                            </span>
+                            <span className="text-[10px] font-mono font-bold text-emerald-700 dark:text-emerald-400">
+                              ৳{linePayable.toFixed(2)}
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-1.5">
+                            <div>
+                              <label className="block text-[9px] uppercase font-bold text-emerald-700 dark:text-emerald-400 mb-0.5">
+                                Unit
+                              </label>
+                              <select
+                                value={item.receivedUnit}
+                                onChange={(e) =>
+                                  handleUpdatePackaging(item.itemId, "received", "unit", e.target.value)
+                                }
+                                className="w-full px-2 py-1.5 text-xs font-bold rounded-lg border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-white outline-none cursor-pointer"
+                              >
+                                {item.packagingOptions.map((opt) => (
+                                  <option key={opt.unit} value={opt.unit}>
+                                    {opt.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block text-[9px] uppercase font-bold text-emerald-700 dark:text-emerald-400 mb-0.5">
+                                Qty
+                              </label>
+                              <input
+                                type="number"
+                                min="0"
+                                value={item.receivedPackQty}
+                                onChange={(e) =>
+                                  handleUpdatePackaging(item.itemId, "received", "packQty", e.target.value)
+                                }
+                                className="w-full px-2 py-1.5 text-xs font-bold rounded-lg border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-white outline-none font-mono"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Loose Units input if package has conversionFactor > 1 */}
+                          {item.packagingOptions.some((o) => o.unit === item.receivedUnit && o.factor > 1) && (
+                            <div>
+                              <label className="block text-[9px] uppercase font-bold text-emerald-700 dark:text-emerald-400 mb-0.5">
+                                + Extra Loose Units
+                              </label>
+                              <input
+                                type="number"
+                                min="0"
+                                value={item.receivedExtraUnits}
+                                onChange={(e) =>
+                                  handleUpdatePackaging(item.itemId, "received", "extraUnits", e.target.value)
+                                }
+                                placeholder="0"
+                                className="w-full px-2 py-1 text-xs font-bold rounded-lg border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-white outline-none font-mono"
+                              />
+                            </div>
+                          )}
+
+                          <div className="text-[10px] text-emerald-700 dark:text-emerald-300 font-mono font-semibold pt-1 border-t border-emerald-200/50 dark:border-emerald-800/40">
+                            Total Usable: <strong>{item.receivedQuantity}</strong> units (added to stock)
+                          </div>
+                        </div>
+
+                        {/* 2. Damaged (Transit Loss) */}
+                        <div className="p-3 rounded-xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/60 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1">
+                              <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
+                              <span>Damaged (Transit Loss)</span>
+                            </span>
+                            <span className="text-[10px] font-mono font-bold text-amber-700 dark:text-amber-400">
+                              ৳{lineDamagedLoss.toFixed(2)} Loss
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-1.5">
+                            <div>
+                              <label className="block text-[9px] uppercase font-bold text-amber-700 dark:text-amber-400 mb-0.5">
+                                Unit
+                              </label>
+                              <select
+                                value={item.damagedUnit}
+                                onChange={(e) =>
+                                  handleUpdatePackaging(item.itemId, "damaged", "unit", e.target.value)
+                                }
+                                className="w-full px-2 py-1.5 text-xs font-bold rounded-lg border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-white outline-none cursor-pointer"
+                              >
+                                {item.packagingOptions.map((opt) => (
+                                  <option key={opt.unit} value={opt.unit}>
+                                    {opt.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block text-[9px] uppercase font-bold text-amber-700 dark:text-amber-400 mb-0.5">
+                                Qty
+                              </label>
+                              <input
+                                type="number"
+                                min="0"
+                                value={item.damagedPackQty}
+                                onChange={(e) =>
+                                  handleUpdatePackaging(item.itemId, "damaged", "packQty", e.target.value)
+                                }
+                                className="w-full px-2 py-1.5 text-xs font-bold rounded-lg border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-white outline-none font-mono"
+                              />
+                            </div>
+                          </div>
+
+                          {item.packagingOptions.some((o) => o.unit === item.damagedUnit && o.factor > 1) && (
+                            <div>
+                              <label className="block text-[9px] uppercase font-bold text-amber-700 dark:text-amber-400 mb-0.5">
+                                + Extra Loose Units
+                              </label>
+                              <input
+                                type="number"
+                                min="0"
+                                value={item.damagedExtraUnits}
+                                onChange={(e) =>
+                                  handleUpdatePackaging(item.itemId, "damaged", "extraUnits", e.target.value)
+                                }
+                                placeholder="0"
+                                className="w-full px-2 py-1 text-xs font-bold rounded-lg border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-white outline-none font-mono"
+                              />
+                            </div>
+                          )}
+
+                          <div className="text-[10px] text-amber-700 dark:text-amber-300 font-mono font-semibold pt-1 border-t border-amber-200/50 dark:border-amber-800/40">
+                            Total Damaged: <strong>{item.damagedQuantity}</strong> units (Source Loss)
+                          </div>
+                        </div>
+
+                        {/* 3. Missing (Missing Units) */}
+                        <div className="p-3 rounded-xl bg-rose-50/50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-800/60 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-rose-800 dark:text-rose-300 flex items-center gap-1">
+                              <ShieldAlert className="h-3.5 w-3.5 text-rose-600" />
+                              <span>Missing in Transit</span>
+                            </span>
+                            <span className="text-[10px] font-mono font-bold text-rose-700 dark:text-rose-400">
+                              ৳{lineMissingLoss.toFixed(2)} Loss
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-1.5">
+                            <div>
+                              <label className="block text-[9px] uppercase font-bold text-rose-700 dark:text-rose-400 mb-0.5">
+                                Unit
+                              </label>
+                              <select
+                                value={item.missingUnit}
+                                onChange={(e) =>
+                                  handleUpdatePackaging(item.itemId, "missing", "unit", e.target.value)
+                                }
+                                className="w-full px-2 py-1.5 text-xs font-bold rounded-lg border border-rose-300 dark:border-rose-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-white outline-none cursor-pointer"
+                              >
+                                {item.packagingOptions.map((opt) => (
+                                  <option key={opt.unit} value={opt.unit}>
+                                    {opt.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block text-[9px] uppercase font-bold text-rose-700 dark:text-rose-400 mb-0.5">
+                                Qty
+                              </label>
+                              <input
+                                type="number"
+                                min="0"
+                                value={item.missingPackQty}
+                                onChange={(e) =>
+                                  handleUpdatePackaging(item.itemId, "missing", "packQty", e.target.value)
+                                }
+                                className="w-full px-2 py-1.5 text-xs font-bold rounded-lg border border-rose-300 dark:border-rose-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-white outline-none font-mono"
+                              />
+                            </div>
+                          </div>
+
+                          {item.packagingOptions.some((o) => o.unit === item.missingUnit && o.factor > 1) && (
+                            <div>
+                              <label className="block text-[9px] uppercase font-bold text-rose-700 dark:text-rose-400 mb-0.5">
+                                + Extra Loose Units
+                              </label>
+                              <input
+                                type="number"
+                                min="0"
+                                value={item.missingExtraUnits}
+                                onChange={(e) =>
+                                  handleUpdatePackaging(item.itemId, "missing", "extraUnits", e.target.value)
+                                }
+                                placeholder="0"
+                                className="w-full px-2 py-1 text-xs font-bold rounded-lg border border-rose-300 dark:border-rose-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-white outline-none font-mono"
+                              />
+                            </div>
+                          )}
+
+                          <div className="text-[10px] text-rose-700 dark:text-rose-300 font-mono font-semibold pt-1 border-t border-rose-200/50 dark:border-rose-800/40">
+                            Total Missing: <strong>{item.missingQuantity}</strong> units
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Line Balance Indicator */}
+                      <div className="mt-3 pt-2 border-t border-slate-200/40 dark:border-slate-700/40 flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md font-bold text-[10px] ${
+                              isBalanced
+                                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                                : "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 animate-pulse"
+                            }`}
+                          >
+                            {isBalanced ? (
+                              <>
+                                <CheckCircle2 className="h-3 w-3" />
+                                <span>100% Accounted ({totalAccounted} / {item.sentQuantity} units)</span>
+                              </>
+                            ) : (
+                              <>
+                                <AlertCircle className="h-3 w-3" />
+                                <span>Mismatch: {totalAccounted} / {item.sentQuantity} units ({item.sentQuantity - totalAccounted} unassigned)</span>
+                              </>
+                            )}
+                          </span>
+                        </div>
+
+                        <div className="text-[11px] font-medium text-slate-500">
+                          Destination Payable: <strong className="text-emerald-600 font-black font-mono">৳{linePayable.toFixed(2)}</strong>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Financial & Accounting Summary Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                <div className="p-4 rounded-2xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 space-y-1">
+                  <div className="text-[11px] font-bold text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
+                    <Layers className="h-4 w-4 text-slate-500" />
+                    <span>Sent Shipment Value</span>
                   </div>
-                  <input
-                    type="checkbox"
-                    checked={enableImmediateSettlement}
-                    onChange={(e) => setEnableImmediateSettlement(e.target.checked)}
-                    className="h-4 w-4 rounded text-brand-primary cursor-pointer"
-                  />
+                  <div className="text-2xl font-black font-mono text-slate-800 dark:text-slate-200">
+                    ৳{totalSentValue.toFixed(2)}
+                  </div>
+                  <p className="text-[11px] text-slate-500">
+                    Total {receiptItems.reduce((acc, i) => acc + i.sentQuantity, 0)} units dispatched from {activeTransfer.fromBranch?.name}.
+                  </p>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-amber-50/80 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/80 space-y-1">
+                  <div className="text-[11px] font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
+                    <AlertTriangle className="h-4 w-4 text-amber-600" />
+                    <span>Damaged / Missing Losses (Deducted)</span>
+                  </div>
+                  <div className="text-2xl font-black font-mono text-amber-700 dark:text-amber-200">
+                    -৳{(totalDamagedValue + totalMissingValue).toFixed(2)}
+                  </div>
+                  <p className="text-[11px] text-amber-700/80 dark:text-amber-400">
+                    {totalDamagedUnits + totalMissingUnits} damaged/missing units deducted & charged to {activeTransfer.fromBranch?.name}.
+                  </p>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/80 space-y-1">
+                  <div className="text-[11px] font-bold text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                    <span>Net Destination Payable (Usable Stock)</span>
+                  </div>
+                  <div className="text-2xl font-black font-mono text-emerald-700 dark:text-emerald-200">
+                    ৳{destinationPayable.toFixed(2)}
+                  </div>
+                  <p className="text-[11px] text-emerald-700/80 dark:text-emerald-400">
+                    Strictly for {receiptItems.reduce((acc, i) => acc + i.receivedQuantity, 0)} usable units added to {activeTransfer.toBranch?.name}.
+                  </p>
+                </div>
+              </div>
+
+              {/* Direct Financial Settlement Section */}
+              <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 rounded-xl bg-brand-primary/10 text-brand-primary">
+                      <CreditCard className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <div className="font-bold text-xs text-slate-900 dark:text-white">
+                        Settle Payment Immediately on Intake?
+                      </div>
+                      <div className="text-[11px] text-slate-500">
+                        Transfer ৳{totalReceivedValue.toFixed(2)} directly from {activeTransfer.toBranch?.name} to {activeTransfer.fromBranch?.name} accounts now.
+                      </div>
+                    </div>
+                  </div>
+
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={enableImmediateSettlement}
+                      onChange={(e) => setEnableImmediateSettlement(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-brand-primary"></div>
+                  </label>
                 </div>
 
                 {enableImmediateSettlement && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-200/70 dark:border-slate-700">
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
-                        Paying Account ({activeTransfer.toBranch?.name})
-                      </label>
-                      <select
-                        value={selectedDestAccId}
-                        onChange={(e) => setSelectedDestAccId(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold"
-                      >
-                        {destAccounts.map((a) => (
-                          <option key={a.id} value={a.id}>
-                            {a.name} ({a.type}) — Balance: ৳{Number(a.balance || 0).toFixed(2)}
-                          </option>
-                        ))}
-                      </select>
+                  <div className="pt-3 border-t border-slate-200/70 dark:border-slate-700/70 space-y-3.5 animate-in fade-in duration-150">
+                    {/* Visual Account Route Banner */}
+                    <div className="p-3 rounded-xl bg-brand-primary/5 border border-brand-primary/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-slate-900 dark:text-white">
+                          {activeTransfer.toBranch?.name} ({selectedPayingAcc?.name || "Paying Account"})
+                        </span>
+                        <ArrowRight className="h-4 w-4 text-brand-primary shrink-0" />
+                        <span className="font-bold text-slate-900 dark:text-white">
+                          {activeTransfer.fromBranch?.name} ({selectedRecAcc?.name || "Receiving Account"})
+                        </span>
+                      </div>
+                      <div className="font-mono font-black text-brand-primary text-sm">
+                        ৳{totalReceivedValue.toFixed(2)}
+                      </div>
                     </div>
 
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
-                        Receiving Account ({activeTransfer.fromBranch?.name})
-                      </label>
-                      <select
-                        value={selectedSourceAccId}
-                        onChange={(e) => setSelectedSourceAccId(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold"
-                      >
-                        {sourceAccounts.map((a) => (
-                          <option key={a.id} value={a.id}>
-                            {a.name} ({a.type})
-                          </option>
-                        ))}
-                      </select>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {/* Destination Paying Account */}
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          Paying Account ({activeTransfer.toBranch?.name})
+                        </label>
+                        <select
+                          value={selectedDestAccId}
+                          onChange={(e) => setSelectedDestAccId(e.target.value)}
+                          className="w-full px-3 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-xs font-bold text-slate-900 dark:text-white outline-none cursor-pointer"
+                        >
+                          {destAccounts.map((a) => (
+                            <option key={a.id} value={a.id}>
+                              {a.name} ({a.type}) — Available: ৳{Number(a.balance || 0).toFixed(2)}
+                            </option>
+                          ))}
+                        </select>
+                        <p className="text-[10px] text-slate-400 mt-1">
+                          Money will be deducted from this account at {activeTransfer.toBranch?.name}.
+                        </p>
+                      </div>
+
+                      {/* Source Receiving Account */}
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          Receiving Account ({activeTransfer.fromBranch?.name})
+                        </label>
+                        <select
+                          value={selectedSourceAccId}
+                          onChange={(e) => setSelectedSourceAccId(e.target.value)}
+                          className="w-full px-3 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-xs font-bold text-slate-900 dark:text-white outline-none cursor-pointer"
+                        >
+                          {sourceAccounts.map((a) => (
+                            <option key={a.id} value={a.id}>
+                              {a.name} ({a.type}) — Current: ৳{Number(a.balance || 0).toFixed(2)}
+                            </option>
+                          ))}
+                        </select>
+                        <p className="text-[10px] text-slate-400 mt-1">
+                          Money will be credited into this account at {activeTransfer.fromBranch?.name}.
+                        </p>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -673,38 +1122,55 @@ export function StockReceiveView({ onNavigate }: StockReceiveViewProps = {}) {
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. 4 bottles found cracked upon delivery box opening"
+                  placeholder="e.g. 1 box arrived damaged due to courier carton crush, remaining bottles intact"
                   value={receiveNotes}
                   onChange={(e) => setReceiveNotes(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs outline-none"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-900 dark:text-white outline-none"
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setActiveTransfer(null)}
-                  className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={receiving || hasMismatch}
-                  className="px-6 py-2.5 rounded-xl bg-brand-primary hover:bg-brand-primary/90 text-white font-bold text-xs shadow-sm transition flex items-center gap-2 disabled:opacity-50"
-                >
-                  {receiving ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      <span>Confirming Intake...</span>
-                    </>
+              {/* Modal Actions */}
+              <div className="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-slate-800">
+                <div className="text-xs text-slate-500">
+                  {hasMismatch ? (
+                    <span className="text-rose-600 font-bold flex items-center gap-1">
+                      <AlertCircle className="h-3.5 w-3.5" />
+                      <span>Please balance all medication quantities before confirming.</span>
+                    </span>
                   ) : (
-                    <>
-                      <CheckCircle2 className="h-4 w-4" />
-                      <span>Confirm & Credit to Stock</span>
-                    </>
+                    <span className="text-emerald-600 font-bold flex items-center gap-1">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      <span>All quantities balanced and ready for stock credit.</span>
+                    </span>
                   )}
-                </button>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTransfer(null)}
+                    className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={receiving || hasMismatch}
+                    className="px-6 py-2.5 rounded-xl bg-brand-primary hover:bg-brand-primary/90 text-white font-bold text-xs shadow-md transition flex items-center gap-2 disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
+                  >
+                    {receiving ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span>Confirming Intake...</span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="h-4 w-4" />
+                        <span>Confirm Intake & Credit Stock</span>
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
             </form>
           </div>

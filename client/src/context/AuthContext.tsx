@@ -30,6 +30,9 @@ export interface User {
   name?: string;
   username?: string;
   email?: string;
+  verificationStatus?: string | null;
+  requiresOtp?: boolean;
+  paymentRequired?: boolean;
 }
 
 /**
@@ -48,7 +51,12 @@ export function getRedirectUrlForUser(user: User | null): string {
     return "/admin";
   }
 
-  // 2. Pharmacy Owner, Pharmacy Staff (Cashier, Branch Manager, Inventory, Accounts, Custom Roles)
+  // 2. Unverified or Pending Pharmacy Owners -> Redirect to Verification Status
+  if (user.role === "COMPANY_OWNER" && user.verificationStatus && user.verificationStatus !== "ACTIVE") {
+    return `/verification-status?tenantId=${user.tenantId}&email=${encodeURIComponent(user.email || "")}`;
+  }
+
+  // 3. Pharmacy Owner, Pharmacy Staff (Cashier, Branch Manager, Inventory, Accounts, Custom Roles)
   return "/dashboard";
 }
 

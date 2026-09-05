@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useSettings } from "@/context/SettingsContext";
 import {
@@ -18,17 +18,28 @@ import {
   HelpCircle,
 } from "lucide-react";
 
-export default function LoginPage() {
+function LoginFormContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { login } = useAuth();
   const { settings } = useSettings();
 
-  const [identifier, setIdentifier] = useState("admin@gmail.com");
-  const [password, setPassword] = useState("admin1234");
+  const emailParam = searchParams.get("email") || "";
+  const isApprovedParam = searchParams.get("approved") === "true";
+  const isPaymentSuccess = searchParams.get("payment") === "success";
+
+  const [identifier, setIdentifier] = useState(emailParam || "admin@gmail.com");
+  const [password, setPassword] = useState(emailParam ? "" : "admin1234");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showForgotModal, setShowForgotModal] = useState(false);
+
+  useEffect(() => {
+    if (emailParam) {
+      setIdentifier(emailParam);
+    }
+  }, [emailParam]);
 
   // Quick Demo Accounts Helper
   const setDemoCredentials = (email: string, pass: string) => {
@@ -99,6 +110,32 @@ export default function LoginPage() {
             <h2 className="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-200 mt-6 sm:mt-8 mb-6">
               Welcome to {settings.siteName ? "PharmaBiz" : "PharmaBiz"}
             </h2>
+
+            {/* Approval Notification Banner */}
+            {isApprovedParam && !error && (
+              <div className="mb-5 p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-xs space-y-1 animate-in fade-in">
+                <div className="flex items-center gap-2 font-bold text-sm">
+                  <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+                  <span>Application Approved! 🎉</span>
+                </div>
+                <p className="text-[11px] text-emerald-600 dark:text-emerald-400">
+                  Please log in with your registration password. You will be prompted to complete your subscription payment to activate your dashboard.
+                </p>
+              </div>
+            )}
+
+            {/* Payment Success Notification Banner */}
+            {isPaymentSuccess && !error && (
+              <div className="mb-5 p-4 rounded-2xl bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 text-sky-700 dark:text-sky-300 text-xs space-y-1 animate-in fade-in">
+                <div className="flex items-center gap-2 font-bold text-sm">
+                  <CheckCircle2 className="h-4 w-4 shrink-0 text-sky-600" />
+                  <span>Payment Completed!</span>
+                </div>
+                <p className="text-[11px] text-sky-600 dark:text-sky-400">
+                  Your pharmacy workspace is active. Please log in to enter your dashboard.
+                </p>
+              </div>
+            )}
 
             {/* Error Notification */}
             {error && (
@@ -284,5 +321,20 @@ export default function LoginPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-[#EBF2FC] dark:bg-slate-950 text-slate-500 gap-2">
+          <Loader2 className="h-6 w-6 animate-spin text-brand-primary" />
+          <span>Loading login portal...</span>
+        </div>
+      }
+    >
+      <LoginFormContent />
+    </Suspense>
   );
 }

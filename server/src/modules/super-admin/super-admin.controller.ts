@@ -284,5 +284,78 @@ export class SuperAdminController {
       res.status(400).json({ success: false, message: error.message });
     }
   }
+
+  /**
+   * GET /api/super-admin/verifications
+   */
+  static async listPharmacyVerifications(req: Request, res: Response): Promise<void> {
+    try {
+      const { status, search, page, limit } = req.query;
+      const result = await SuperAdminService.listPharmacyVerifications({
+        status: status as string,
+        search: search as string,
+        page: page ? parseInt(page as string) : undefined,
+        limit: limit ? parseInt(limit as string) : undefined,
+      });
+
+      res.status(200).json({
+        success: true,
+        data: result.data,
+        metrics: result.metrics,
+        pagination: result.pagination,
+      });
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
+
+  /**
+   * GET /api/super-admin/verifications/:id
+   */
+  static async getPharmacyVerification(req: Request, res: Response): Promise<void> {
+    try {
+      const id = req.params.id as string;
+      const result = await SuperAdminService.getPharmacyVerification(id);
+      res.status(200).json({ success: true, data: result });
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  }
+
+  /**
+   * POST /api/super-admin/verifications/:id/approve
+   */
+  static async approvePharmacyVerification(req: Request, res: Response): Promise<void> {
+    try {
+      const id = req.params.id as string;
+      const adminUserId = req.user!.id;
+      const result = await SuperAdminService.approvePharmacyVerification(id, adminUserId, req.body);
+      res.status(200).json({
+        success: true,
+        message: result.message,
+        data: result,
+      });
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  }
+
+  /**
+   * POST /api/super-admin/verifications/:id/reject
+   */
+  static async rejectPharmacyVerification(req: Request, res: Response): Promise<void> {
+    try {
+      const id = req.params.id as string;
+      const adminUserId = req.user!.id;
+      const result = await SuperAdminService.rejectPharmacyVerification(id, adminUserId, req.body);
+      res.status(200).json({
+        success: true,
+        message: result.message,
+        data: result,
+      });
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  }
 }
 

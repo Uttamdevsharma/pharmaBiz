@@ -22,6 +22,28 @@ interface DamagedProductsViewProps {
   onNavigate?: (module: OwnerModule) => void;
 }
 
+function formatQuantityWithPackaging(qty: number, item: any): string {
+  const p = item.product;
+  const stripsPerBox = Number(p?.stripsPerBox || 0);
+  const tabletsPerStrip = Number(p?.tabletsPerStrip || 0);
+  const baseUnit = (p?.unit || "tablet").toLowerCase();
+
+  if (stripsPerBox > 1 && tabletsPerStrip > 1) {
+    const boxSize = stripsPerBox * tabletsPerStrip;
+    if (qty >= boxSize && qty % boxSize === 0) {
+      const boxes = qty / boxSize;
+      return `${boxes} Box${boxes > 1 ? "es" : ""} / ${qty} ${baseUnit}s`;
+    } else if (qty >= tabletsPerStrip && qty % tabletsPerStrip === 0) {
+      const strips = qty / tabletsPerStrip;
+      return `${strips} Strip${strips > 1 ? "s" : ""} / ${qty} ${baseUnit}s`;
+    }
+    return `${qty} ${baseUnit}s`;
+  }
+
+  const pType = (item.packageType || p?.defaultPackType || baseUnit).toLowerCase();
+  return `${qty} ${pType}${qty > 1 && !pType.endsWith("s") ? "s" : ""}`;
+}
+
 export function DamagedProductsView({ onNavigate }: DamagedProductsViewProps) {
   const [loading, setLoading] = useState(true);
   const [damagedData, setDamagedData] = useState<{
@@ -297,14 +319,19 @@ export function DamagedProductsView({ onNavigate }: DamagedProductsViewProps) {
                         <div className="space-y-1">
                           {hasDamage && (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
-                              <AlertTriangle className="h-2.5 w-2.5" />
-                              {item.damagedQuantity} {item.packageType || "Units"} Damaged
+                              <AlertTriangle className="h-2.5 w-2.5 shrink-0" />
+                              {formatQuantityWithPackaging(item.damagedQuantity, item)} Damaged
                             </span>
                           )}
                           {hasMissing && (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 ml-1">
-                              {item.missingQuantity} {item.packageType || "Units"} Missing
+                              {formatQuantityWithPackaging(item.missingQuantity, item)} Missing
                             </span>
+                          )}
+                          {item.notes && (
+                            <div className="text-[10px] text-slate-400 italic">
+                              "{item.notes}"
+                            </div>
                           )}
                         </div>
                       </td>
