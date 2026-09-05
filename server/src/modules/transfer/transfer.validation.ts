@@ -16,6 +16,14 @@ export const createTransferSchema = z.object({
   fromBranchId: z.string().uuid("Valid source branch ID required"),
   toBranchId: z.string().uuid("Valid destination branch ID required"),
   notes: z.string().optional().nullable(),
+  // Courier Logistics Information
+  courierName: z.string().optional().nullable(),
+  courierHub: z.string().optional().nullable(),
+  trackingId: z.string().optional().nullable(),
+  deliveryPersonName: z.string().optional().nullable(),
+  deliveryPersonContact: z.string().optional().nullable(),
+  dispatchDate: z.string().optional().nullable(),
+  deliveryNote: z.string().optional().nullable(),
   items: z.array(transferItemInputSchema).min(1, "At least one product item must be included in transfer"),
 });
 
@@ -30,17 +38,6 @@ export const receiveItemInputSchema = z.object({
 export const receiveTransferSchema = z.object({
   items: z.array(receiveItemInputSchema).min(1, "At least one receive item entry required"),
   notes: z.string().optional().nullable(),
-  immediateSettlement: z
-    .object({
-      sourceAccountId: z.string().uuid("Valid paying account ID required"),
-      destinationAccountId: z.string().uuid("Valid receiving account ID required"),
-      amount: z.number().min(0.01, "Settlement amount must be greater than 0"),
-      paymentMethod: z.string().default("CASH"),
-      reference: z.string().optional().nullable(),
-      notes: z.string().optional().nullable(),
-    })
-    .optional()
-    .nullable(),
 });
 
 export const settleTransferSchema = z.object({

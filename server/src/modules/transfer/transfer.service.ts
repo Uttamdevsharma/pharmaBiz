@@ -109,6 +109,14 @@ export class TransferService {
           remainingDue: 0,
           settlementStatus: "UNPAID",
           notes: data.notes || null,
+          // Professional Courier Logistics & Delivery Details
+          courierName: data.courierName || null,
+          courierHub: data.courierHub || null,
+          trackingId: data.trackingId || null,
+          deliveryPersonName: data.deliveryPersonName || null,
+          deliveryPersonContact: data.deliveryPersonContact || null,
+          dispatchDate: data.dispatchDate ? new Date(data.dispatchDate) : new Date(),
+          deliveryNote: data.deliveryNote || null,
           items: {
             create: validatedItems.map((item) => ({
               productId: item.productId,
@@ -303,7 +311,7 @@ export class TransferService {
 
     // Execute atomic receive transaction
     const finalized = await (prisma as any).$transaction(async (tx: any) => {
-      // A. Update each transfer item
+      // A. Update each transfer item with inspection metrics
       for (const iu of itemUpdates) {
         await tx.transferItem.update({
           where: { id: iu.id },
@@ -319,7 +327,7 @@ export class TransferService {
           },
         });
 
-        // B. Add ONLY receivedQuantity to destination branch inventory
+        // B. Add ONLY received/usable quantity to destination branch inventory
         if (iu.receivedQuantity > 0) {
           // Find or create matching batch inventory at destination branch
           const existingDestInv = await tx.inventory.findFirst({
@@ -375,13 +383,13 @@ export class TransferService {
         if (iu.damagedQuantity > 0) {
           await tx.stockMovement.create({
             data: {
-              branchId: transfer.fromBranchId,
+              branchId: transfer.toBranchId,
               productId: iu.productId,
               batchNumber: iu.batchNumber,
               type: "DAMAGE",
               quantity: -iu.damagedQuantity,
               unitPrice: iu.costPrice,
-              reason: `In-Transit Damage on Transfer #${transfer.id.substring(0, 8)} to ${transfer.toBranch.name}`,
+              reason: `Transit Damage on Transfer #${transfer.id.substring(0, 8)} from ${transfer.fromBranch.name}`,
               referenceId: transfer.id,
               performedBy: userId,
             },
@@ -389,7 +397,7 @@ export class TransferService {
         }
       }
 
-      // D. Update StockTransfer status and financial totals
+      // D. Update StockTransfer status and internal metrics
       const updatedTransfer = await tx.stockTransfer.update({
         where: { id: transfer.id },
         data: {
@@ -399,9 +407,10 @@ export class TransferService {
           receivedTotalValue,
           damagedTotalValue,
           missingTotalValue,
-          payableAmount,
-          remainingDue,
-          settlementStatus: payableAmount === 0 ? "PAID" : "UNPAID",
+          payableAmount: 0,
+          paidAmount: 0,
+          remainingDue: 0,
+          settlementStatus: "PAID",
           notes: data.notes ? `${transfer.notes || ""}\n${data.notes}`.trim() : transfer.notes,
         },
         include: {
@@ -414,24 +423,11 @@ export class TransferService {
           },
           fromBranch: { select: { id: true, name: true, location: true } },
           toBranch: { select: { id: true, name: true, location: true } },
-          settlements: true,
         },
       });
 
       return updatedTransfer;
     });
-
-    // E. Handle optional immediate settlement
-    if (data.immediateSettlement && payableAmount > 0) {
-      await this.settleTransfer(transfer.id, tenantId, userId, {
-        sourceAccountId: data.immediateSettlement.sourceAccountId,
-        destinationAccountId: data.immediateSettlement.destinationAccountId,
-        amount: Math.min(data.immediateSettlement.amount, payableAmount),
-        paymentMethod: data.immediateSettlement.paymentMethod,
-        reference: data.immediateSettlement.reference || `Immediate settlement on intake`,
-        notes: data.immediateSettlement.notes || null,
-      });
-    }
 
     await AuditService.log({
       tenantId,
@@ -443,7 +439,6 @@ export class TransferService {
         receivedTotalValue,
         damagedTotalValue,
         missingTotalValue,
-        payableAmount,
       },
     });
 
@@ -648,7 +643,7 @@ export class TransferService {
       where.OR = [
         { fromBranchId: query.branchId },
         { toBranchId: query.branchId },
-      ];
+      ]; 
     }
 
     if (query.status) {

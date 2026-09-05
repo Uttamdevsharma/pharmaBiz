@@ -2,7 +2,8 @@
 
 import React, { useEffect, useState } from "react";
 import { fetchApi } from "@/lib/api";
-import { Search, Loader2, AlertTriangle } from "lucide-react";
+import { Search, Loader2, AlertTriangle, Eye } from "lucide-react";
+import { PharmacyDetailsView } from "./PharmacyDetailsView";
 
 export function TenantsTab() {
   const [tenants, setTenants] = useState<any[]>([]);
@@ -10,7 +11,7 @@ export function TenantsTab() {
   const [search, setSearch] = useState("");
   const [tierFilter, setTierFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
-  const [selectedTenant, setSelectedTenant] = useState<any>(null);
+  const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
   const [toggleModalTenant, setToggleModalTenant] = useState<any>(null);
   const [actionLoading, setActionLoading] = useState(false);
 
@@ -62,6 +63,17 @@ export function TenantsTab() {
       setActionLoading(false);
     }
   };
+
+  // If a pharmacy is selected for inspection, render dedicated full page PharmacyDetailsView
+  if (selectedTenantId) {
+    return (
+      <PharmacyDetailsView
+        tenantId={selectedTenantId}
+        onBack={() => setSelectedTenantId(null)}
+        onToggleStatusSuccess={loadTenants}
+      />
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -160,14 +172,15 @@ export function TenantsTab() {
                     </td>
                     <td className="px-6 py-4 text-right space-x-2">
                       <button
-                        onClick={() => setSelectedTenant(tenant)}
-                        className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
+                        onClick={() => setSelectedTenantId(tenant.id)}
+                        className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-brand-primary/10 hover:bg-brand-primary/20 text-brand-primary transition inline-flex items-center gap-1 cursor-pointer"
                       >
-                        View Details
+                        <Eye className="h-3.5 w-3.5" />
+                        <span>View Details</span>
                       </button>
                       <button
                         onClick={() => setToggleModalTenant(tenant)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${
+                        className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold cursor-pointer ${
                           tenant.isActive
                             ? "bg-red-50 dark:bg-red-950/40 text-red-600 hover:bg-red-100"
                             : "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 hover:bg-emerald-100"
@@ -207,14 +220,14 @@ export function TenantsTab() {
               <button
                 onClick={() => setToggleModalTenant(null)}
                 disabled={actionLoading}
-                className="px-4 py-2 rounded-xl text-sm font-semibold border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                className="px-4 py-2 rounded-xl text-sm font-semibold border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 onClick={handleToggleStatus}
                 disabled={actionLoading}
-                className={`px-4 py-2 rounded-xl text-sm font-bold text-white shadow ${
+                className={`px-4 py-2 rounded-xl text-sm font-bold text-white shadow cursor-pointer ${
                   toggleModalTenant.isActive ? "bg-red-600 hover:bg-red-700" : "bg-emerald-600 hover:bg-emerald-700"
                 }`}
               >
@@ -224,58 +237,7 @@ export function TenantsTab() {
           </div>
         </div>
       )}
-
-      {/* Tenant Details Drawer */}
-      {selectedTenant && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="max-w-2xl w-full rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 space-y-6 shadow-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
-              <div>
-                <h3 className="text-xl font-bold text-slate-900 dark:text-white">{selectedTenant.name}</h3>
-                <span className="text-xs text-slate-400">ID: {selectedTenant.id}</span>
-              </div>
-              <button
-                onClick={() => setSelectedTenant(null)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-900 dark:hover:text-white"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 space-y-1">
-                <div className="text-xs text-slate-400 uppercase font-semibold">Tier & Limits</div>
-                <div className="font-bold text-slate-900 dark:text-white">{selectedTenant.tier} Plan</div>
-                <div className="text-xs text-slate-500">{selectedTenant.branchCount || 0} Registered Branches</div>
-              </div>
-
-              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 space-y-1">
-                <div className="text-xs text-slate-400 uppercase font-semibold">Status</div>
-                <div className="font-bold text-slate-900 dark:text-white">
-                  {selectedTenant.isActive ? "Active Account" : "Suspended"}
-                </div>
-                <div className="text-xs text-slate-500">Created {new Date(selectedTenant.createdAt).toLocaleDateString()}</div>
-              </div>
-            </div>
-
-            <div className="p-4 rounded-xl border border-slate-100 dark:border-slate-800 space-y-2 text-xs text-slate-500">
-              <div className="font-bold text-slate-700 dark:text-slate-300">Contact & Address</div>
-              <div>Email: {selectedTenant.email || "N/A"}</div>
-              <div>Phone: {selectedTenant.phone || "N/A"}</div>
-              <div>Address: {selectedTenant.address || "N/A"}</div>
-            </div>
-
-            <div className="flex justify-end">
-              <button
-                onClick={() => setSelectedTenant(null)}
-                className="px-4 py-2 rounded-xl text-sm font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
+

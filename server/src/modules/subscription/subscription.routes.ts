@@ -50,4 +50,11 @@ router.post(
   SubscriptionController.cancel
 );
 
+router.post(
+  "/check-expiry-reminders",
+  authenticate,
+  authorize(["SUPER_ADMIN", "CTO", "PROJECT_MANAGER"]),
+  SubscriptionController.triggerExpiryCheck
+);
+
 export { router as subscriptionRoutes };

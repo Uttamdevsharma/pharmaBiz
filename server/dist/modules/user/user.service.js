@@ -3,31 +3,321 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.UserService = exports.ALLOWED_PHARMACY_STAFF_ROLES = void 0;
+exports.UserService = exports.DEFAULT_PHARMACY_ROLES = exports.ALL_PHARMACY_PERMISSIONS = void 0;
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const prisma_1 = require("../../app/lib/prisma");
 const audit_1 = require("../../app/lib/audit");
 const planLimits_1 = require("../../app/lib/planLimits");
-// Allowed pharmacy staff roles that Shop Owners can create and manage
-exports.ALLOWED_PHARMACY_STAFF_ROLES = [
-    "BRANCH_MANAGER",
-    "INVENTORY_EXECUTIVE",
-    "CASHIER",
-    "ACCOUNTS",
+exports.ALL_PHARMACY_PERMISSIONS = [
+    {
+        id: "dashboard.view",
+        name: "View Dashboard",
+        category: "Dashboard",
+        description: "Access main dashboard metrics, financial KPI summaries, and branch status.",
+    },
+    {
+        id: "pos.manage",
+        name: "Manage Sales & POS",
+        category: "Sales & POS",
+        description: "Process live checkout, dispense items, scan barcodes, and generate invoices.",
+    },
+    {
+        id: "pos.history",
+        name: "View Sales History",
+        category: "Sales & POS",
+        description: "Inspect customer invoices, sales receipt records, and transaction logs.",
+    },
+    {
+        id: "pos.vat",
+        name: "Manage VAT Settings",
+        category: "Sales & POS",
+        description: "Configure tax rules, VAT percentages, and receipt print options.",
+    },
+    {
+        id: "inventory.manage",
+        name: "Manage Inventory",
+        category: "Inventory",
+        description: "Manage product catalog, generic drugs, categories, variants, and expired stock.",
+    },
+    {
+        id: "stock.manage",
+        name: "Manage Stock",
+        category: "Stock Management",
+        description: "Add stock batches, perform inventory counts, execute branch transfers, and receive stock.",
+    },
+    {
+        id: "suppliers.manage",
+        name: "Manage Suppliers",
+        category: "Supplier Management",
+        description: "Manage vendor contacts, purchase history records, and supplier orders.",
+    },
+    {
+        id: "accounts.manage",
+        name: "Manage Accounts & Finance",
+        category: "Accounts & Finance",
+        description: "Access financial overview, balance tracking, and ledger entries.",
+    },
+    {
+        id: "accounts.financial_accounts",
+        name: "Manage Financial Accounts",
+        category: "Accounts & Finance",
+        description: "Manage cash drawers, bank accounts, and digital mobile payment wallets.",
+    },
+    {
+        id: "accounts.fund_transfer",
+        name: "Fund Transfer",
+        category: "Accounts & Finance",
+        description: "Execute account-to-account internal fund transfers with audit trace.",
+    },
+    {
+        id: "accounts.payment_sales",
+        name: "Payment Method Sales",
+        category: "Accounts & Finance",
+        description: "Analyze revenue breakdowns by cash, card, and digital payment methods.",
+    },
+    {
+        id: "accounts.product_sales",
+        name: "Product-Wise Sales",
+        category: "Accounts & Finance",
+        description: "Inspect sales velocity and revenue contributions by specific items and categories.",
+    },
+    {
+        id: "accounts.reports",
+        name: "Sales Reports",
+        category: "Accounts & Finance",
+        description: "Generate sales reports, profit/loss summaries, and financial analytics.",
+    },
+    {
+        id: "accounts.supplier_due",
+        name: "Supplier Payments / Due",
+        category: "Accounts & Finance",
+        description: "Track unpaid supplier invoices, purchase dues, and record settlements.",
+    },
+    {
+        id: "accounts.transaction_history",
+        name: "Transaction History",
+        category: "Accounts & Finance",
+        description: "Review complete financial ledger transactions and income/expense logs.",
+    },
+    {
+        id: "staff.manage",
+        name: "Manage Staff",
+        category: "Staff Management",
+        description: "Create and manage pharmacy staff members and assign their roles.",
+    },
+    {
+        id: "roles.manage",
+        name: "Manage Roles & Permissions",
+        category: "Staff Management",
+        description: "Create custom roles and customize operational permissions for your pharmacy.",
+    },
+    {
+        id: "branches.manage",
+        name: "Manage Branches",
+        category: "Branch Network",
+        description: "Configure branch locations, contact info, and branch settings.",
+    },
+];
+exports.DEFAULT_PHARMACY_ROLES = [
+    {
+        name: "Branch Manager",
+        description: "Full operational oversight over branch sales, stock, inventory, and staff.",
+        isSystem: true,
+        permissions: [
+            "dashboard.view",
+            "pos.manage",
+            "pos.history",
+            "pos.vat",
+            "inventory.manage",
+            "stock.manage",
+            "suppliers.manage",
+            "accounts.manage",
+            "accounts.reports",
+            "staff.manage",
+        ],
+    },
+    {
+        name: "Cashier",
+        description: "Counter POS sales, invoice generation, and sales history.",
+        isSystem: true,
+        permissions: ["pos.manage", "pos.history"],
+    },
+    {
+        name: "Inventory Manager",
+        description: "Product catalog, categories, stock batches, transfers, and receiving.",
+        isSystem: true,
+        permissions: ["inventory.manage", "stock.manage", "suppliers.manage"],
+    },
+    {
+        name: "Accounts Manager",
+        description: "Financial accounts, fund transfers, revenue ledgers, supplier dues, and sales reports.",
+        isSystem: true,
+        permissions: [
+            "accounts.manage",
+            "accounts.financial_accounts",
+            "accounts.fund_transfer",
+            "accounts.payment_sales",
+            "accounts.product_sales",
+            "accounts.reports",
+            "accounts.supplier_due",
+            "accounts.transaction_history",
+        ],
+    },
 ];
 class UserService {
-    static async createUser(tenantId, creatorId, creatorRole, data) {
-        // 1. Verify creator authority
-        if (creatorRole === "COMPANY_OWNER") {
-            if (!exports.ALLOWED_PHARMACY_STAFF_ROLES.includes(data.role)) {
-                throw new Error("Shop Owners can only create Branch Manager, Inventory Executive, Cashier, and Accounts staff roles.");
+    /**
+     * Ensure default pharmacy roles are seeded for a tenant
+     */
+    static async ensureDefaultRoles(tenantId) {
+        const existing = await prisma_1.prisma.pharmacyRole.findMany({
+            where: { tenantId },
+        });
+        if (existing.length === 0) {
+            for (const def of exports.DEFAULT_PHARMACY_ROLES) {
+                await prisma_1.prisma.pharmacyRole.create({
+                    data: {
+                        tenantId,
+                        name: def.name,
+                        description: def.description,
+                        permissions: def.permissions,
+                        isSystem: def.isSystem,
+                    },
+                });
             }
         }
-        else if (!["SUPER_ADMIN", "CTO", "PROJECT_MANAGER"].includes(creatorRole)) {
-            throw new Error("You do not have permission to create staff members.");
+    }
+    /**
+     * ==================== PHARMACY ROLE CRUD ====================
+     */
+    static async listPharmacyRoles(tenantId) {
+        await this.ensureDefaultRoles(tenantId);
+        const roles = await prisma_1.prisma.pharmacyRole.findMany({
+            where: { tenantId },
+            orderBy: { createdAt: "asc" },
+            include: {
+                _count: {
+                    select: { users: true },
+                },
+            },
+        });
+        return roles.map((r) => ({
+            id: r.id,
+            tenantId: r.tenantId,
+            name: r.name,
+            description: r.description,
+            permissions: r.permissions || [],
+            isSystem: r.isSystem,
+            userCount: r._count?.users || 0,
+            createdAt: r.createdAt,
+            updatedAt: r.updatedAt,
+        }));
+    }
+    static async createPharmacyRole(tenantId, userId, data) {
+        const nameTrimmed = data.name.trim();
+        if (nameTrimmed.toUpperCase() === "COMPANY_OWNER" || nameTrimmed.toUpperCase() === "SUPER_ADMIN") {
+            throw new Error("Cannot create role with reserved system name.");
         }
-        if (creatorRole !== "SUPER_ADMIN" && data.role === "SUPER_ADMIN") {
-            throw new Error("Delegated platform staff cannot create a Super Admin account.");
+        const existing = await prisma_1.prisma.pharmacyRole.findFirst({
+            where: {
+                tenantId,
+                name: { equals: nameTrimmed, mode: "insensitive" },
+            },
+        });
+        if (existing) {
+            throw new Error(`A role named "${nameTrimmed}" already exists in your pharmacy.`);
+        }
+        const role = await prisma_1.prisma.pharmacyRole.create({
+            data: {
+                tenantId,
+                name: nameTrimmed,
+                description: data.description?.trim() || null,
+                permissions: data.permissions || [],
+                isSystem: false,
+            },
+        });
+        await audit_1.AuditService.log({
+            tenantId,
+            userId,
+            action: "PHARMACY_ROLE_CREATE",
+            details: { roleId: role.id, name: role.name, permissionsCount: role.permissions.length },
+        });
+        return role;
+    }
+    static async updatePharmacyRole(tenantId, roleId, userId, data) {
+        const role = await prisma_1.prisma.pharmacyRole.findFirst({
+            where: { id: roleId, tenantId },
+        });
+        if (!role) {
+            throw new Error("Pharmacy role not found");
+        }
+        const updateData = {};
+        if (data.name) {
+            const nameTrimmed = data.name.trim();
+            if (nameTrimmed.toUpperCase() === "COMPANY_OWNER" || nameTrimmed.toUpperCase() === "SUPER_ADMIN") {
+                throw new Error("Cannot rename role to reserved system name.");
+            }
+            const duplicate = await prisma_1.prisma.pharmacyRole.findFirst({
+                where: {
+                    tenantId,
+                    name: { equals: nameTrimmed, mode: "insensitive" },
+                    id: { not: roleId },
+                },
+            });
+            if (duplicate) {
+                throw new Error(`A role named "${nameTrimmed}" already exists in your pharmacy.`);
+            }
+            updateData.name = nameTrimmed;
+        }
+        if (data.description !== undefined) {
+            updateData.description = data.description?.trim() || null;
+        }
+        if (data.permissions !== undefined) {
+            updateData.permissions = data.permissions;
+        }
+        const updated = await prisma_1.prisma.pharmacyRole.update({
+            where: { id: roleId },
+            data: updateData,
+        });
+        await audit_1.AuditService.log({
+            tenantId,
+            userId,
+            action: "PHARMACY_ROLE_UPDATE",
+            details: { roleId, changes: Object.keys(data) },
+        });
+        return updated;
+    }
+    static async deletePharmacyRole(tenantId, roleId, userId) {
+        const role = await prisma_1.prisma.pharmacyRole.findFirst({
+            where: { id: roleId, tenantId },
+            include: {
+                _count: { select: { users: true } },
+            },
+        });
+        if (!role) {
+            throw new Error("Pharmacy role not found");
+        }
+        if (role.isSystem) {
+            throw new Error("Default system roles cannot be deleted.");
+        }
+        if (role._count?.users > 0) {
+            throw new Error(`Cannot delete role "${role.name}" because ${role._count.users} staff member(s) are currently assigned to it. Please reassign their roles first.`);
+        }
+        await prisma_1.prisma.pharmacyRole.delete({ where: { id: roleId } });
+        await audit_1.AuditService.log({
+            tenantId,
+            userId,
+            action: "PHARMACY_ROLE_DELETE",
+            details: { roleId, name: role.name },
+        });
+        return { success: true, message: `Role "${role.name}" deleted successfully.` };
+    }
+    /**
+     * ==================== PHARMACY STAFF CRUD ====================
+     */
+    static async createUser(tenantId, creatorId, creatorRole, data) {
+        // 1. Verify creator authority
+        if (creatorRole !== "COMPANY_OWNER" && creatorRole !== "SUPER_ADMIN") {
+            throw new Error("Only the Pharmacy Owner can create new staff members.");
         }
         const tenant = await prisma_1.prisma.tenant.findUnique({
             where: { id: tenantId },
@@ -40,12 +330,21 @@ class UserService {
         if (!staffCheck.allowed) {
             throw new Error(staffCheck.message || "Staff limit reached for current subscription plan");
         }
-        // 3. Check if username is already registered
-        const existing = await prisma_1.prisma.user.findUnique({
-            where: { username: data.username },
+        // 3. Check if email or username is already taken
+        const identifier = (data.username || data.email || "").trim();
+        if (!identifier) {
+            throw new Error("Email is required");
+        }
+        const existing = await prisma_1.prisma.user.findFirst({
+            where: {
+                OR: [
+                    { email: data.email },
+                    { username: data.username || data.email },
+                ],
+            },
         });
         if (existing) {
-            throw new Error("Username is already taken");
+            throw new Error("A user with this email or username already exists");
         }
         // 4. Verify branch belongs to tenant if branchId provided
         if (data.branchId) {
@@ -56,31 +355,62 @@ class UserService {
                 throw new Error("Invalid branch ID for this tenant");
             }
         }
-        // 5. Hash password
+        // 5. Resolve Pharmacy Role from tenantId
+        await this.ensureDefaultRoles(tenantId);
+        let matchedRole = await prisma_1.prisma.pharmacyRole.findFirst({
+            where: {
+                tenantId,
+                OR: [
+                    { id: data.role },
+                    { name: { equals: data.role, mode: "insensitive" } },
+                ],
+            },
+        });
+        if (!matchedRole) {
+            // Fallback: match by enum name or create
+            matchedRole = await prisma_1.prisma.pharmacyRole.findFirst({
+                where: { tenantId },
+            });
+        }
+        const assignedPermissions = matchedRole?.permissions || [];
+        // Map Prisma enum role for database compatibility
+        const roleNameUpper = (matchedRole?.name || data.role).toUpperCase().replace(/\s+/g, "_");
+        let enumRole = "CASHIER";
+        if (roleNameUpper.includes("MANAGER") || roleNameUpper.includes("BRANCH")) {
+            enumRole = "BRANCH_MANAGER";
+        }
+        else if (roleNameUpper.includes("INVENTORY")) {
+            enumRole = "INVENTORY_EXECUTIVE";
+        }
+        else if (roleNameUpper.includes("ACCOUNT")) {
+            enumRole = "ACCOUNTS";
+        }
+        else if (roleNameUpper.includes("AUDIT")) {
+            enumRole = "AUDITOR";
+        }
+        else {
+            enumRole = "CASHIER";
+        }
+        // 6. Hash password
         const passwordHash = await bcryptjs_1.default.hash(data.password, 10);
         const user = await prisma_1.prisma.user.create({
             data: {
                 tenantId,
-                username: data.username,
-                passwordHash,
-                name: data.name || null,
+                username: data.username || data.email,
                 email: data.email || null,
+                name: data.name || null,
                 phone: data.phone || null,
-                role: data.role,
+                passwordHash,
+                role: enumRole,
+                pharmacyRoleId: matchedRole?.id || null,
+                pharmacyRoleName: matchedRole?.name || data.role,
+                permissions: assignedPermissions,
                 branchId: data.branchId || null,
                 isActive: true,
             },
-            select: {
-                id: true,
-                tenantId: true,
-                branchId: true,
-                role: true,
-                username: true,
-                name: true,
-                email: true,
-                phone: true,
-                isActive: true,
-                createdAt: true,
+            include: {
+                pharmacyRole: true,
+                branch: { select: { id: true, name: true } },
             },
         });
         await audit_1.AuditService.log({
@@ -88,9 +418,24 @@ class UserService {
             branchId: data.branchId || null,
             userId: creatorId,
             action: "USER_CREATE",
-            details: { createdUserId: user.id, username: user.username, role: user.role },
+            details: { createdUserId: user.id, username: user.username, role: user.pharmacyRoleName || user.role },
         });
-        return user;
+        return {
+            id: user.id,
+            tenantId: user.tenantId,
+            branchId: user.branchId,
+            role: user.role,
+            pharmacyRoleId: user.pharmacyRoleId,
+            pharmacyRoleName: user.pharmacyRole?.name || user.pharmacyRoleName,
+            permissions: user.permissions,
+            username: user.username,
+            name: user.name,
+            email: user.email,
+            phone: user.phone,
+            isActive: user.isActive,
+            branch: user.branch,
+            createdAt: user.createdAt,
+        };
     }
     static async listUsers(tenantId, query, userRole, userBranchId) {
         const page = query.page || 1;
@@ -105,7 +450,10 @@ class UserService {
             where.branchId = query.branchId;
         }
         if (query.role) {
-            where.role = query.role;
+            where.OR = [
+                { role: query.role },
+                { pharmacyRoleName: { contains: query.role, mode: "insensitive" } },
+            ];
         }
         if (query.isActive !== undefined) {
             where.isActive = query.isActive;
@@ -115,6 +463,7 @@ class UserService {
                 { name: { contains: query.search, mode: "insensitive" } },
                 { username: { contains: query.search, mode: "insensitive" } },
                 { email: { contains: query.search, mode: "insensitive" } },
+                { pharmacyRoleName: { contains: query.search, mode: "insensitive" } },
             ];
         }
         const [total, users] = await Promise.all([
@@ -124,23 +473,29 @@ class UserService {
                 skip,
                 take: limit,
                 orderBy: { createdAt: "desc" },
-                select: {
-                    id: true,
-                    tenantId: true,
-                    branchId: true,
-                    role: true,
-                    username: true,
-                    name: true,
-                    email: true,
-                    phone: true,
-                    isActive: true,
-                    createdAt: true,
+                include: {
+                    pharmacyRole: true,
                     branch: { select: { id: true, name: true } },
                 },
             }),
         ]);
         return {
-            data: users,
+            data: users.map((u) => ({
+                id: u.id,
+                tenantId: u.tenantId,
+                branchId: u.branchId,
+                role: u.role,
+                pharmacyRoleId: u.pharmacyRoleId,
+                pharmacyRoleName: u.role === "COMPANY_OWNER" ? "Pharmacy Owner" : u.pharmacyRole?.name || u.pharmacyRoleName || u.role,
+                permissions: u.role === "COMPANY_OWNER" ? ["*"] : (u.pharmacyRole?.permissions?.length ? u.pharmacyRole.permissions : u.permissions || []),
+                username: u.username,
+                name: u.name,
+                email: u.email,
+                phone: u.phone,
+                isActive: u.isActive,
+                createdAt: u.createdAt,
+                branch: u.branch,
+            })),
             meta: {
                 total,
                 page,
@@ -152,72 +507,85 @@ class UserService {
     static async getUserDetails(userId, tenantId) {
         const user = await prisma_1.prisma.user.findFirst({
             where: { id: userId, tenantId },
-            select: {
-                id: true,
-                tenantId: true,
-                branchId: true,
-                role: true,
-                username: true,
-                name: true,
-                email: true,
-                phone: true,
-                isActive: true,
-                createdAt: true,
-                updatedAt: true,
+            include: {
+                pharmacyRole: true,
                 branch: { select: { id: true, name: true, location: true } },
             },
         });
         if (!user) {
             throw new Error("User not found");
         }
-        return user;
+        return {
+            id: user.id,
+            tenantId: user.tenantId,
+            branchId: user.branchId,
+            role: user.role,
+            pharmacyRoleId: user.pharmacyRoleId,
+            pharmacyRoleName: user.role === "COMPANY_OWNER" ? "Pharmacy Owner" : user.pharmacyRole?.name || user.pharmacyRoleName || user.role,
+            permissions: user.role === "COMPANY_OWNER" ? ["*"] : (user.pharmacyRole?.permissions?.length ? user.pharmacyRole.permissions : user.permissions || []),
+            username: user.username,
+            name: user.name,
+            email: user.email,
+            phone: user.phone,
+            isActive: user.isActive,
+            createdAt: user.createdAt,
+            updatedAt: user.updatedAt,
+            branch: user.branch,
+        };
     }
     static async updateUser(userId, tenantId, updaterId, updaterRole, data) {
         const user = await prisma_1.prisma.user.findFirst({
             where: { id: userId, tenantId },
+            include: { pharmacyRole: true },
         });
         if (!user) {
             throw new Error("User not found");
         }
-        // Security Rule: Super Admin can never be compromised by subordinate or delegated roles
-        if (user.role === "SUPER_ADMIN" && updaterRole !== "SUPER_ADMIN") {
-            throw new Error("Super Admin account cannot be modified by any subordinate or delegated role.");
+        // Owner protection
+        if (user.role === "COMPANY_OWNER" && updaterRole !== "SUPER_ADMIN" && updaterId !== userId) {
+            throw new Error("Pharmacy Owner account cannot be altered by delegates.");
         }
-        if (updaterRole !== "SUPER_ADMIN" && data.role === "SUPER_ADMIN") {
-            throw new Error("Delegated platform staff cannot elevate an account to Super Admin.");
-        }
-        // Shop Owner boundary
-        if (updaterRole === "COMPANY_OWNER" && data.role) {
-            if (!exports.ALLOWED_PHARMACY_STAFF_ROLES.includes(data.role)) {
-                throw new Error("Shop Owners can only assign Branch Manager, Inventory Executive, Cashier, or Accounts roles.");
+        let pharmacyRoleId = user.pharmacyRoleId;
+        let pharmacyRoleName = user.pharmacyRoleName;
+        let permissions = user.permissions;
+        if (data.role && user.role !== "COMPANY_OWNER") {
+            const matchedRole = await prisma_1.prisma.pharmacyRole.findFirst({
+                where: {
+                    tenantId,
+                    OR: [
+                        { id: data.role },
+                        { name: { equals: data.role, mode: "insensitive" } },
+                    ],
+                },
+            });
+            if (matchedRole) {
+                pharmacyRoleId = matchedRole.id;
+                pharmacyRoleName = matchedRole.name;
+                permissions = matchedRole.permissions || [];
+            }
+            else {
+                pharmacyRoleName = data.role;
             }
         }
         const updateData = {
             ...(data.name !== undefined && { name: data.name }),
             ...(data.email !== undefined && { email: data.email }),
             ...(data.phone !== undefined && { phone: data.phone }),
-            ...(data.role !== undefined && { role: data.role }),
             ...(data.branchId !== undefined && { branchId: data.branchId }),
             ...(data.isActive !== undefined && { isActive: data.isActive }),
+            pharmacyRoleId,
+            pharmacyRoleName,
+            permissions,
         };
         if (data.password) {
-            const bcrypt = require("bcryptjs");
-            updateData.passwordHash = await bcrypt.hash(data.password, 10);
+            updateData.passwordHash = await bcryptjs_1.default.hash(data.password, 10);
         }
         const updated = await prisma_1.prisma.user.update({
             where: { id: userId },
             data: updateData,
-            select: {
-                id: true,
-                tenantId: true,
-                branchId: true,
-                role: true,
-                username: true,
-                name: true,
-                email: true,
-                phone: true,
-                isActive: true,
-                updatedAt: true,
+            include: {
+                pharmacyRole: true,
+                branch: { select: { id: true, name: true } },
             },
         });
         await audit_1.AuditService.log({
@@ -227,7 +595,22 @@ class UserService {
             action: "USER_UPDATE",
             details: { updatedUserId: userId, changes: Object.keys(data) },
         });
-        return updated;
+        return {
+            id: updated.id,
+            tenantId: updated.tenantId,
+            branchId: updated.branchId,
+            role: updated.role,
+            pharmacyRoleId: updated.pharmacyRoleId,
+            pharmacyRoleName: updated.role === "COMPANY_OWNER" ? "Pharmacy Owner" : updated.pharmacyRole?.name || updated.pharmacyRoleName,
+            permissions: updated.role === "COMPANY_OWNER" ? ["*"] : (updated.pharmacyRole?.permissions?.length ? updated.pharmacyRole.permissions : updated.permissions || []),
+            username: updated.username,
+            name: updated.name,
+            email: updated.email,
+            phone: updated.phone,
+            isActive: updated.isActive,
+            updatedAt: updated.updatedAt,
+            branch: updated.branch,
+        };
     }
     static async updateUserStatus(userId, tenantId, updaterId, updaterRole, isActive) {
         const user = await prisma_1.prisma.user.findFirst({
@@ -236,14 +619,11 @@ class UserService {
         if (!user) {
             throw new Error("User not found");
         }
-        // Security Rule: Super Admin cannot be deactivated
-        if (user.role === "SUPER_ADMIN") {
-            throw new Error("Super Admin account cannot be disabled or deactivated.");
+        if (user.role === "COMPANY_OWNER") {
+            throw new Error("Pharmacy Owner account cannot be deactivated.");
         }
-        if (user.role === "COMPANY_OWNER" &&
-            !["SUPER_ADMIN", "CTO", "PROJECT_MANAGER"].includes(updaterRole) &&
-            updaterId !== userId) {
-            throw new Error("Only Super Admin or delegated platform staff can change a Pharmacy Owner account status.");
+        if (user.id === updaterId && !isActive) {
+            throw new Error("You cannot deactivate your own account.");
         }
         const updated = await prisma_1.prisma.user.update({
             where: { id: userId },
@@ -264,105 +644,47 @@ class UserService {
         });
         return updated;
     }
-    static async getPermissionsHierarchy() {
-        // The exact 4 staff roles for each Pharmacy / Shop Owner
-        const roles = [
-            {
-                role: "BRANCH_MANAGER",
-                name: "Branch Manager",
-                level: "Operational Oversight",
-                description: "Manages local branch inventory, stock adjustments, supplier interaction, POS oversight, and staff.",
-            },
-            {
-                role: "INVENTORY_EXECUTIVE",
-                name: "Inventory Executive",
-                level: "Stock & Batches",
-                description: "Specialized in product catalog, batches, expiry dates, rack locations, and stock receiving without financial access.",
-            },
-            {
-                role: "CASHIER",
-                name: "Cashier",
-                level: "Counter POS",
-                description: "Handles POS checkout, FEFO batch selection, invoice printing, and personal shift sales history.",
-            },
-            {
-                role: "ACCOUNTS",
-                name: "Accounts Manager",
-                level: "Finance & Accounts",
-                description: "Manages cash drawers, bank accounts, digital mobile wallets (bKash/Nagad), supplier dues, and financial ledgers.",
-            },
-        ];
-        const dbPermissions = await prisma_1.prisma.rolePermission.findMany({
-            where: {
-                role: { in: ["BRANCH_MANAGER", "INVENTORY_EXECUTIVE", "CASHIER", "ACCOUNTS"] },
-            },
+    static async deleteUser(userId, tenantId, deleterId, deleterRole) {
+        const user = await prisma_1.prisma.user.findFirst({
+            where: { id: userId, tenantId },
         });
-        const permissionMap = {};
-        dbPermissions.forEach((p) => {
-            if (!permissionMap[p.role])
-                permissionMap[p.role] = [];
-            permissionMap[p.role].push(p.permission);
-        });
-        const ALL_AVAILABLE_PERMISSIONS = [
-            { id: "product.view", label: "View Products & Categories", category: "Products" },
-            { id: "product.create", label: "Create Products & Categories", category: "Products" },
-            { id: "product.update", label: "Update Products & Prices", category: "Products" },
-            { id: "inventory.view", label: "View Inventory & Stock Alerts", category: "Inventory" },
-            { id: "inventory.add_stock", label: "Add Stock & Inward Batches", category: "Inventory" },
-            { id: "inventory.adjust", label: "Adjust Stock Quantities", category: "Inventory" },
-            { id: "inventory.batch", label: "Manage Batches & Expiry Dates", category: "Inventory" },
-            { id: "inventory.transfer", label: "Transfer Stock Between Branches", category: "Inventory" },
-            { id: "supplier.view", label: "View Suppliers & Purchase History", category: "Suppliers" },
-            { id: "supplier.manage", label: "Create & Manage Suppliers", category: "Suppliers" },
-            { id: "sales.pos", label: "Access POS & Sell Items", category: "POS & Sales" },
-            { id: "sales.create", label: "Create Sales Invoices", category: "POS & Sales" },
-            { id: "sales.view_own", label: "View Own Sales History", category: "POS & Sales" },
-            { id: "sales.view", label: "View All Branch/Tenant Sales", category: "POS & Sales" },
-            { id: "sales.refund", label: "Process Sales Refunds", category: "POS & Sales" },
-            { id: "sales.void", label: "Void Invoices", category: "POS & Sales" },
-            { id: "accounts.view", label: "View Financial Accounts & Balances", category: "Accounting" },
-            { id: "accounts.manage", label: "Manage Accounts & Record Income/Expense", category: "Accounting" },
-            { id: "accounts.transfer", label: "Execute Account-to-Account Transfers", category: "Accounting" },
-            { id: "accounts.reconciliation", label: "Perform Cash & Payment Reconciliation", category: "Accounting" },
-            { id: "supplier.payment", label: "Record Supplier Due Settlements", category: "Accounting" },
-            { id: "reports.view", label: "Access Management Dashboard", category: "Reports" },
-            { id: "reports.sales", label: "View Sales & Revenue Reports", category: "Reports" },
-            { id: "reports.stock", label: "View Inventory Valuation Reports", category: "Reports" },
-            { id: "reports.financial", label: "View Financial & Profit Analytics", category: "Reports" },
-            { id: "staff.manage", label: "Manage Staff & Permissions", category: "Administration" },
-        ];
-        return {
-            roles,
-            activePermissions: permissionMap,
-            allPermissions: ALL_AVAILABLE_PERMISSIONS,
-        };
-    }
-    static async updateRolePermissions(tenantId, updaterId, role, permissions) {
-        if (!exports.ALLOWED_PHARMACY_STAFF_ROLES.includes(role)) {
-            throw new Error(`Can only customize permissions for: ${exports.ALLOWED_PHARMACY_STAFF_ROLES.join(", ")}`);
+        if (!user) {
+            throw new Error("Staff member not found in your pharmacy.");
         }
-        await prisma_1.prisma.$transaction(async (tx) => {
-            // Clear existing
-            await tx.rolePermission.deleteMany({
-                where: { role: role },
-            });
-            // Insert new
-            if (permissions.length > 0) {
-                await tx.rolePermission.createMany({
-                    data: permissions.map((p) => ({
-                        role: role,
-                        permission: p,
-                    })),
-                });
-            }
+        if (user.role === "COMPANY_OWNER") {
+            throw new Error("Pharmacy Owner account cannot be deleted.");
+        }
+        if (user.id === deleterId) {
+            throw new Error("You cannot delete your own account.");
+        }
+        await prisma_1.prisma.user.delete({
+            where: { id: userId },
         });
         await audit_1.AuditService.log({
             tenantId,
-            userId: updaterId,
-            action: "ROLE_PERMISSIONS_UPDATED",
-            details: { role, permissionsCount: permissions.length, permissions },
+            branchId: user.branchId,
+            userId: deleterId,
+            action: "USER_DELETE",
+            details: { deletedUserId: userId, username: user.username, name: user.name, role: user.pharmacyRoleName || user.role },
         });
-        return { success: true, role, permissions };
+        return {
+            success: true,
+            message: `Staff member "${user.name || user.username}" deleted successfully.`,
+        };
+    }
+    static async getPermissionsHierarchy(tenantId) {
+        await this.ensureDefaultRoles(tenantId);
+        const roles = await this.listPharmacyRoles(tenantId);
+        const permissionMap = {};
+        roles.forEach((r) => {
+            permissionMap[r.id] = r.permissions || [];
+            permissionMap[r.name] = r.permissions || [];
+        });
+        return {
+            roles,
+            activePermissions: permissionMap,
+            allPermissions: exports.ALL_PHARMACY_PERMISSIONS,
+        };
     }
 }
 exports.UserService = UserService;

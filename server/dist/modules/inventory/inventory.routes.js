@@ -24,4 +24,14 @@ router.get("/low-stock", (0, requirePermission_1.requirePermission)("inventory.v
 router.get("/near-expiry", (0, requirePermission_1.requirePermission)("inventory.view"), (0, validate_1.validateRequest)({ query: inventory_validation_1.inventoryAlertsQuerySchema }), inventory_controller_1.InventoryController.getNearExpiry);
 // Get branch inventory list
 router.get("/branch/:branchId", (0, requirePermission_1.requirePermission)("inventory.view"), inventory_controller_1.InventoryController.getBranchInventory);
+// Query-based branch inventory list (e.g. /api/inventory?branchId=...)
+router.get("/", (0, requirePermission_1.requirePermission)("inventory.view"), (req, res) => {
+    const branchId = req.query.branchId || req.user?.branchId;
+    if (!branchId) {
+        res.status(400).json({ success: false, message: "branchId is required" });
+        return;
+    }
+    req.params.branchId = branchId;
+    return inventory_controller_1.InventoryController.getBranchInventory(req, res);
+});
 exports.inventoryRoutes = router;

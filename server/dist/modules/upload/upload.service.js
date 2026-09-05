@@ -49,13 +49,18 @@ class UploadService {
                 }
                 const timestamp = Date.now();
                 const randomStr = Math.random().toString(36).substring(2, 9);
-                const filename = `img_${timestamp}_${randomStr}.png`;
-                const filePath = path_1.default.join(uploadDir, filename);
+                let ext = "png";
                 let buffer;
                 if (Buffer.isBuffer(fileData)) {
                     buffer = fileData;
                 }
                 else if (typeof fileData === "string" && fileData.includes(";base64,")) {
+                    if (fileData.includes("application/pdf"))
+                        ext = "pdf";
+                    else if (fileData.includes("image/jpeg") || fileData.includes("image/jpg"))
+                        ext = "jpg";
+                    else if (fileData.includes("image/webp"))
+                        ext = "webp";
                     const base64Data = fileData.split(";base64,").pop() || "";
                     buffer = Buffer.from(base64Data, "base64");
                 }
@@ -72,6 +77,8 @@ class UploadService {
                 else {
                     throw cloudinaryErr;
                 }
+                const filename = `doc_${timestamp}_${randomStr}.${ext}`;
+                const filePath = path_1.default.join(uploadDir, filename);
                 fs_1.default.writeFileSync(filePath, buffer);
                 const serverPort = process.env.PORT || 3000;
                 const host = process.env.SERVER_URL || `http://localhost:${serverPort}`;
@@ -80,7 +87,7 @@ class UploadService {
                     url: fileUrl,
                     secureUrl: fileUrl,
                     publicId: `local_${filename}`,
-                    format: "png",
+                    format: ext,
                     bytes: buffer.length,
                 };
             }

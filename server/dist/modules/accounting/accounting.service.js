@@ -316,10 +316,15 @@ class AccountingService {
     }
     static async getFinancialOverview(tenantId, branchId, options) {
         const where = { tenantId, isActive: true };
-        if (branchId)
-            where.branchId = branchId;
+        if (branchId) {
+            where.OR = [{ branchId }, { branchId: null }];
+        }
         const accounts = await prisma_1.prisma.financialAccount.findMany({
             where,
+            orderBy: [{ isDefault: "desc" }, { type: "asc" }, { createdAt: "asc" }],
+            include: {
+                branch: { select: { id: true, name: true } },
+            },
         });
         let totalCash = 0;
         let totalBank = 0;
@@ -349,11 +354,11 @@ class AccountingService {
                     isActive: acc.isActive,
                 });
             }
-            else if (accType === "BKASH" || (accType === "MOBILE" && nameLower.includes("bkash"))) {
+            else if (accType === "BKASH" || (accType === "MOBILE" && nameLower.includes("bkash")) || nameLower.includes("bkash")) {
                 totalBkash += balance;
                 totalMobile += balance;
             }
-            else if (accType === "NAGAD" || (accType === "MOBILE" && nameLower.includes("nagad"))) {
+            else if (accType === "NAGAD" || (accType === "MOBILE" && nameLower.includes("nagad")) || nameLower.includes("nagad")) {
                 totalNagad += balance;
                 totalMobile += balance;
             }
@@ -364,7 +369,7 @@ class AccountingService {
                 totalOther += balance;
             }
         }
-        const totalLiquidity = totalCash + totalBank + totalBkash + totalNagad + totalOther;
+        const totalLiquidity = accounts.reduce((sum, a) => sum + Number(a.balance || 0), 0);
         // Fetch total supplier dues from Supplier model
         const supplierWhere = { tenantId, isActive: true };
         const suppliers = await prisma_1.prisma.supplier.findMany({
@@ -541,6 +546,31 @@ class AccountingService {
                 digitalAmount: dayDigital,
             });
         }
+        // Build 30-Day Daily Sales Trend
+        const last30Days = [];
+        for (let i = 29; i >= 0; i--) {
+            const d = new Date(now);
+            d.setDate(d.getDate() - i);
+            const dayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+            const dayEnd = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+            const dSales = await prisma_1.prisma.sale.findMany({
+                where: {
+                    tenantId,
+                    status: "COMPLETED",
+                    ...(branchId ? { branchId } : {}),
+                    createdAt: { gte: dayStart, lte: dayEnd },
+                },
+                select: { totalAmount: true, paidAmount: true, paymentMethod: true },
+            });
+            const dayRevenue = dSales.reduce((acc, s) => acc + Number(s.paidAmount || s.totalAmount || 0), 0);
+            last30Days.push({
+                date: dayStart.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+                dayName: dayStart.toLocaleDateString("en-US", { weekday: "narrow" }),
+                dateKey: `${dayStart.getFullYear()}-${String(dayStart.getMonth() + 1).padStart(2, "0")}-${String(dayStart.getDate()).padStart(2, "0")}`,
+                revenue: dayRevenue,
+                orderCount: dSales.length,
+            });
+        }
         // Build 6-Month Sales Trend
         const monthlyTrend = [];
         for (let i = 5; i >= 0; i--) {
@@ -625,6 +655,7 @@ class AccountingService {
             bankAccounts: bankAccountsList,
             todayHourly,
             last7Days,
+            last30Days,
             monthlyTrend,
             recentLedger,
             accounts: accounts.map((a) => ({

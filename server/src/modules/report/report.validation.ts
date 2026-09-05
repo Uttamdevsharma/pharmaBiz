@@ -16,5 +16,13 @@ export const vatMisReportSchema = z.object({
   endDate: z.string().optional(),
 });
 
+export const dashboardQuerySchema = z.object({
+  branchId: z.string().optional().transform(v => (v === "" || v === "null" || v === "undefined" || v === "all" ? undefined : v)),
+  period: z.enum(["today", "yesterday", "7d", "30d", "custom", "all"]).optional(),
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
+});
+
 export type ReportDateRangeQuery = z.infer<typeof reportDateRangeSchema>;
 export type VatMisReportQuery = z.infer<typeof vatMisReportSchema>;
+export type DashboardQuery = z.infer<typeof dashboardQuerySchema>;

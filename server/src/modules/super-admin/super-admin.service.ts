@@ -188,6 +188,8 @@ export class SuperAdminService {
             id: true,
             name: true,
             location: true,
+            phone: true,
+            email: true,
             isActive: true,
             createdAt: true,
           },
@@ -198,6 +200,7 @@ export class SuperAdminService {
             name: true,
             username: true,
             email: true,
+            phone: true,
             role: true,
             isActive: true,
             createdAt: true,
@@ -205,11 +208,20 @@ export class SuperAdminService {
         },
         subscriptions: {
           orderBy: { createdAt: "desc" },
-          include: { plan: true },
+          include: {
+            plan: true,
+            payments: {
+              orderBy: { createdAt: "desc" },
+            },
+          },
         },
         payments: {
           orderBy: { createdAt: "desc" },
-          take: 10,
+          include: {
+            subscription: {
+              include: { plan: true },
+            },
+          },
         },
       },
     });

@@ -34,10 +34,6 @@ class BranchService {
     }
     static async listBranches(tenantId, userRole, userBranchId) {
         const where = { tenantId, isActive: true };
-        // Branch managers and cashiers only see their assigned branch
-        if (["BRANCH_MANAGER", "CASHIER"].includes(userRole) && userBranchId) {
-            where.id = userBranchId;
-        }
         return await prisma_1.prisma.branch.findMany({
             where,
             orderBy: { createdAt: "asc" },

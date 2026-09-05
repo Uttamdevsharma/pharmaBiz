@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { SubscriptionService } from "./subscription.service";
+import { SubscriptionExpiryService } from "./subscription-expiry.service";
 
 export class SubscriptionController {
   static async listPlans(req: Request, res: Response): Promise<void> {
@@ -94,6 +95,19 @@ export class SubscriptionController {
       });
     } catch (error: any) {
       res.status(400).json({ success: false, message: error.message });
+    }
+  }
+
+  static async triggerExpiryCheck(req: Request, res: Response): Promise<void> {
+    try {
+      const summary = await SubscriptionExpiryService.checkAndSendExpiryReminders();
+      res.status(200).json({
+        success: true,
+        message: `Automated expiry scan completed. Reminders sent: ${summary.sentCount}, Errors: ${summary.errorsCount}`,
+        data: summary,
+      });
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error.message });
     }
   }
 }

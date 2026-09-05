@@ -3,9 +3,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.AuditService = void 0;
 const prisma_1 = require("./prisma");
 class AuditService {
-    /**
-     * Log an audit trail entry safely (non-blocking for errors)
-     */
     static async log(params) {
         try {
             await prisma_1.prisma.auditLog.create({

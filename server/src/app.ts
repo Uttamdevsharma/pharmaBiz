@@ -104,10 +104,13 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
   });
 });
 
-// Start Server and trigger Admin seeding
+import { SubscriptionExpiryService } from "./modules/subscription/subscription-expiry.service";
+
+// Start Server and trigger Admin seeding & automated subscription expiry scheduler
 app.listen(port, async () => {
   console.log(`Pharmacy Management SaaS API listening on port ${port}`);
   await seedSuperAdmin();
+  SubscriptionExpiryService.initAutomatedScheduler();
 });
 
 export default app;

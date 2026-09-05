@@ -14,3 +14,6 @@ router.get("/public", settings_controller_1.SettingsController.getPublicSettings
 // Super Admin & Platform Delegate protected routes
 router.get("/admin", authenticate_1.authenticate, (0, authorize_1.authorize)(["SUPER_ADMIN", "CTO", "PROJECT_MANAGER"]), settings_controller_1.SettingsController.getAdminSettings);
 router.patch("/admin", authenticate_1.authenticate, (0, authorize_1.authorize)(["SUPER_ADMIN", "CTO", "PROJECT_MANAGER"]), (0, validate_1.validateRequest)({ body: settings_validation_1.updatePlatformSettingsSchema }), settings_controller_1.SettingsController.updateSettings);
+// Pharmacy Tenant VAT & Tax Configuration
+router.get("/vat", authenticate_1.authenticate, settings_controller_1.SettingsController.getTenantVatSettings);
+router.put("/vat", authenticate_1.authenticate, (0, authorize_1.authorize)(["COMPANY_OWNER", "BRANCH_MANAGER", "REGIONAL_ADMIN"]), settings_controller_1.SettingsController.updateTenantVatSettings);

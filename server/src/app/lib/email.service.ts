@@ -27,6 +27,16 @@ export interface RejectionEmailPayload {
   reason: string;
 }
 
+export interface ExpiryReminderEmailPayload {
+  to: string;
+  name: string;
+  companyName: string;
+  planName: string;
+  planTier: string;
+  expiryDate: Date;
+  renewUrl: string;
+}
+
 function getMailTransporter() {
   const host = process.env.SMTP_HOST || "smtp.gmail.com";
   const port = parseInt(process.env.SMTP_PORT || "587", 10);
@@ -337,6 +347,117 @@ export class EmailService {
       return { success: true, messageId: `local_${Date.now()}` };
     } catch (err: any) {
       console.error(`❌ [EMAIL SERVICE] Failed to send Rejection email to ${recipientEmail}:`, err.message);
+      return { success: false, error: err.message };
+    }
+  }
+
+  /**
+   * Send Automatic Subscription Expiry Reminder Email (2 days before expiry)
+   */
+  static async sendSubscriptionExpiryReminderEmail(payload: ExpiryReminderEmailPayload): Promise<{ success: boolean; messageId?: string; error?: string }> {
+    const { to, name, companyName, planName, planTier, expiryDate, renewUrl } = payload;
+    const recipientEmail = (to || "").trim().toLowerCase();
+    const senderEmail = getSenderAddress();
+    const formattedExpiry = new Date(expiryDate).toLocaleDateString("en-US", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+    const subject = `[PharmaBiz] Urgent: Your Subscription for ${companyName} Expires in 2 Days`;
+
+    if (!recipientEmail || !recipientEmail.includes("@")) {
+      console.error(`❌ [EMAIL SERVICE] Invalid recipient email address provided for expiry reminder: "${to}"`);
+      return { success: false, error: "Invalid recipient email" };
+    }
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px; color: #0f172a; }
+            .card { max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 20px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05); }
+            .header { background: linear-gradient(135deg, #d97706 0%, #b45309 100%); padding: 32px; text-align: center; color: #ffffff; }
+            .header h1 { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.5px; }
+            .header p { margin: 6px 0 0 0; font-size: 13px; opacity: 0.95; }
+            .body { padding: 32px; }
+            .alert-box { background: #fffbeb; border-left: 4px solid #f59e0b; border-radius: 0 12px 12px 0; padding: 18px 20px; margin: 20px 0; color: #92400e; font-size: 14px; line-height: 1.6; }
+            .plan-card { background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 14px; padding: 20px; margin: 24px 0; }
+            .btn { display: inline-block; background: #0284c7; color: #ffffff !important; font-size: 15px; font-weight: 800; text-decoration: none; padding: 15px 36px; border-radius: 14px; margin-top: 8px; box-shadow: 0 4px 12px -2px rgba(2, 132, 199, 0.35); }
+            .footer { padding: 24px; text-align: center; font-size: 11px; color: #64748b; background: #f8fafc; border-top: 1px solid #e2e8f0; }
+          </style>
+        </head>
+        <body>
+          <div class="card">
+            <div class="header">
+              <h1>Subscription Expiry Reminder ⏳</h1>
+              <p>PharmaBiz Multi-Branch Pharmacy SaaS</p>
+            </div>
+            <div class="body">
+              <p style="font-size: 15px; margin-top: 0;">Dear <strong>${name || "Pharmacy Owner"}</strong>,</p>
+              
+              <div class="alert-box">
+                ⚠️ <strong>Action Required:</strong> Your current subscription for <strong>${companyName}</strong> will expire in <strong>2 days</strong> on <strong>${formattedExpiry}</strong>.
+              </div>
+
+              <p style="font-size: 14px; line-height: 1.6; color: #334155;">
+                To avoid any interruption in POS billing, inventory stock management, and multi-branch operations, please renew your subscription or upgrade to a higher tier plan before the expiration date.
+              </p>
+
+              <div class="plan-card">
+                <div style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 4px;">Current Active Subscription</div>
+                <div style="font-size: 18px; font-weight: 800; color: #0f172a;">${planName} (${planTier} Tier)</div>
+                <div style="font-size: 13px; color: #b45309; font-weight: 700; margin-top: 6px;">
+                  Expiration Date: ${formattedExpiry} (2 Days Remaining)
+                </div>
+              </div>
+
+              <div style="text-align: center; margin: 32px 0 20px 0;">
+                <a href="${renewUrl}" class="btn" target="_blank">
+                  Renew / Upgrade Plan &rarr;
+                </a>
+              </div>
+
+              <p style="font-size: 12px; color: #64748b; line-height: 1.5; margin-top: 24px;">
+                Direct Renewal Link: <br />
+                <a href="${renewUrl}" style="color: #0284c7; word-break: break-all;">${renewUrl}</a>
+              </p>
+            </div>
+            <div class="footer">
+              &copy; ${new Date().getFullYear()} PharmaBiz SaaS Platform &bull; Automated Subscription Management System
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+
+    console.log(`\n========================================================`);
+    console.log(`📧 [EMAIL SERVICE] DISPATCHING AUTOMATED 2-DAY EXPIRY REMINDER`);
+    console.log(`   FROM (System Sender) : ${senderEmail}`);
+    console.log(`   TO (Pharmacy Owner)  : ${recipientEmail}`);
+    console.log(`   PHARMACY             : ${companyName} (${name})`);
+    console.log(`   CURRENT PLAN         : ${planName} (${planTier})`);
+    console.log(`   EXPIRY DATE          : ${formattedExpiry}`);
+    console.log(`   RENEWAL URL          : ${renewUrl}`);
+    console.log(`========================================================\n`);
+
+    try {
+      const transporter = getMailTransporter();
+      if (transporter) {
+        const info = await transporter.sendMail({
+          from: `"PharmaBiz Subscriptions" <${senderEmail}>`,
+          to: recipientEmail,
+          subject,
+          html,
+        });
+        console.log(`✓ [EMAIL SERVICE] Expiry reminder delivered to ${recipientEmail} (MsgID: ${info.messageId})`);
+        return { success: true, messageId: info.messageId };
+      }
+      return { success: true, messageId: `local_${Date.now()}` };
+    } catch (err: any) {
+      console.error(`❌ [EMAIL SERVICE] Failed to send Expiry Reminder email to ${recipientEmail}:`, err.message);
       return { success: false, error: err.message };
     }
   }

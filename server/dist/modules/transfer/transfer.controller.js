@@ -7,10 +7,20 @@ class TransferController {
         try {
             const tenantId = req.user.tenantId;
             const userId = req.user.id;
+            const userRole = req.user.role;
+            const userBranchId = req.user.branchId;
+            // Enforce branch manager can only transfer from their assigned branch
+            if (userRole === "BRANCH_MANAGER" && userBranchId && req.body.fromBranchId !== userBranchId) {
+                res.status(403).json({
+                    success: false,
+                    message: "Branch Managers can only dispatch stock transfers from their assigned branch.",
+                });
+                return;
+            }
             const transfer = await transfer_service_1.TransferService.createTransfer(tenantId, userId, req.body);
             res.status(201).json({
                 success: true,
-                message: "Inter-branch transfer request created successfully",
+                message: "Inter-branch stock transfer dispatched successfully",
                 data: transfer,
             });
         }
@@ -42,53 +52,68 @@ class TransferController {
             res.status(404).json({ success: false, message: error.message });
         }
     }
-    static async approveTransfer(req, res) {
+    static async receiveTransfer(req, res) {
         try {
             const { id } = req.params;
             const tenantId = req.user.tenantId;
-            const approverId = req.user.id;
-            const updated = await transfer_service_1.TransferService.approveTransfer(id, tenantId, approverId);
+            const userId = req.user.id;
+            const result = await transfer_service_1.TransferService.receiveTransfer(id, tenantId, userId, req.body);
             res.status(200).json({
                 success: true,
-                message: "Transfer approved successfully",
-                data: updated,
+                message: "Stock shipment received and verified successfully",
+                data: result,
             });
         }
         catch (error) {
             res.status(400).json({ success: false, message: error.message });
         }
     }
-    static async rejectTransfer(req, res) {
+    static async settleTransfer(req, res) {
         try {
             const { id } = req.params;
             const tenantId = req.user.tenantId;
             const userId = req.user.id;
-            const { reason } = req.body;
-            const updated = await transfer_service_1.TransferService.rejectTransfer(id, tenantId, userId, reason);
+            const result = await transfer_service_1.TransferService.settleTransfer(id, tenantId, userId, req.body);
             res.status(200).json({
                 success: true,
-                message: "Transfer rejected",
-                data: updated,
+                message: "Inter-branch payment settlement recorded successfully",
+                data: result,
             });
         }
         catch (error) {
             res.status(400).json({ success: false, message: error.message });
         }
     }
-    static async completeTransfer(req, res) {
+    static async cancelTransfer(req, res) {
         try {
             const { id } = req.params;
             const tenantId = req.user.tenantId;
             const userId = req.user.id;
-            const completed = await transfer_service_1.TransferService.completeTransfer(id, tenantId, userId);
+            const result = await transfer_service_1.TransferService.cancelTransfer(id, tenantId, userId);
             res.status(200).json({
                 success: true,
-                message: "Transfer completed and stock successfully adjusted in both branches",
-                data: completed,
+                message: "Transfer cancelled and stock returned to source branch",
+                data: result,
             });
         }
         catch (error) {
             res.status(400).json({ success: false, message: error.message });
+        }
+    }
+    static async getDamagedProducts(req, res) {
+        try {
+            const tenantId = req.user.tenantId;
+            const userRole = req.user.role;
+            const userBranchId = req.user.branchId;
+            const query = {
+                branchId: req.query.branchId,
+                search: req.query.search,
+            };
+            const result = await transfer_service_1.TransferService.getDamagedProducts(tenantId, userRole, userBranchId, query);
+            res.status(200).json({ success: true, ...result });
+        }
+        catch (error) {
+            res.status(500).json({ success: false, message: error.message });
         }
     }
 }

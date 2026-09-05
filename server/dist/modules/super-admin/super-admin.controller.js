@@ -145,7 +145,54 @@ class SuperAdminController {
             res.status(500).json({ success: false, message: error.message });
         }
     }
-    // ==================== PLATFORM STAFF (CTO / PROJECT MANAGER) ====================
+    // ==================== PLATFORM DYNAMIC ROLES ====================
+    static async listRoles(req, res) {
+        try {
+            const roles = await super_admin_service_1.SuperAdminService.listRoles();
+            res.status(200).json({ success: true, data: roles });
+        }
+        catch (error) {
+            res.status(500).json({ success: false, message: error.message });
+        }
+    }
+    static async createRole(req, res) {
+        try {
+            const role = await super_admin_service_1.SuperAdminService.createRole(req.body);
+            res.status(201).json({
+                success: true,
+                message: `Custom role "${role.name}" created successfully`,
+                data: role,
+            });
+        }
+        catch (error) {
+            res.status(400).json({ success: false, message: error.message });
+        }
+    }
+    static async updateRole(req, res) {
+        try {
+            const id = req.params.id;
+            const updated = await super_admin_service_1.SuperAdminService.updateRole(id, req.body);
+            res.status(200).json({
+                success: true,
+                message: `Role "${updated.name}" updated successfully`,
+                data: updated,
+            });
+        }
+        catch (error) {
+            res.status(400).json({ success: false, message: error.message });
+        }
+    }
+    static async deleteRole(req, res) {
+        try {
+            const id = req.params.id;
+            const result = await super_admin_service_1.SuperAdminService.deleteRole(id);
+            res.status(200).json(result);
+        }
+        catch (error) {
+            res.status(400).json({ success: false, message: error.message });
+        }
+    }
+    // ==================== PLATFORM STAFF ====================
     static async listPlatformStaff(req, res) {
         try {
             const staff = await super_admin_service_1.SuperAdminService.listPlatformStaff();
@@ -162,7 +209,7 @@ class SuperAdminController {
             const staff = await super_admin_service_1.SuperAdminService.createPlatformStaff(creatorId, creatorRole, req.body);
             res.status(201).json({
                 success: true,
-                message: `Platform staff member (${staff.role}) created successfully`,
+                message: `Platform staff member "${staff.name}" (${staff.customRoleName || staff.role}) created successfully`,
                 data: staff,
             });
         }
@@ -231,6 +278,78 @@ class SuperAdminController {
             res.status(200).json({
                 success: true,
                 message: `Platform permissions for ${role} updated successfully`,
+                data: result,
+            });
+        }
+        catch (error) {
+            res.status(400).json({ success: false, message: error.message });
+        }
+    }
+    /**
+     * GET /api/super-admin/verifications
+     */
+    static async listPharmacyVerifications(req, res) {
+        try {
+            const { status, search, page, limit } = req.query;
+            const result = await super_admin_service_1.SuperAdminService.listPharmacyVerifications({
+                status: status,
+                search: search,
+                page: page ? parseInt(page) : undefined,
+                limit: limit ? parseInt(limit) : undefined,
+            });
+            res.status(200).json({
+                success: true,
+                data: result.data,
+                metrics: result.metrics,
+                pagination: result.pagination,
+            });
+        }
+        catch (error) {
+            res.status(500).json({ success: false, message: error.message });
+        }
+    }
+    /**
+     * GET /api/super-admin/verifications/:id
+     */
+    static async getPharmacyVerification(req, res) {
+        try {
+            const id = req.params.id;
+            const result = await super_admin_service_1.SuperAdminService.getPharmacyVerification(id);
+            res.status(200).json({ success: true, data: result });
+        }
+        catch (error) {
+            res.status(400).json({ success: false, message: error.message });
+        }
+    }
+    /**
+     * POST /api/super-admin/verifications/:id/approve
+     */
+    static async approvePharmacyVerification(req, res) {
+        try {
+            const id = req.params.id;
+            const adminUserId = req.user.id;
+            const result = await super_admin_service_1.SuperAdminService.approvePharmacyVerification(id, adminUserId, req.body);
+            res.status(200).json({
+                success: true,
+                message: result.message,
+                data: result,
+            });
+        }
+        catch (error) {
+            res.status(400).json({ success: false, message: error.message });
+        }
+    }
+    /**
+     * POST /api/super-admin/verifications/:id/reject
+     */
+    static async rejectPharmacyVerification(req, res) {
+        try {
+            const id = req.params.id;
+            const adminUserId = req.user.id;
+            const result = await super_admin_service_1.SuperAdminService.rejectPharmacyVerification(id, adminUserId, req.body);
+            res.status(200).json({
+                success: true,
+                message: result.message,
                 data: result,
             });
         }

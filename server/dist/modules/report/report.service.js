@@ -553,28 +553,105 @@ class ReportService {
     }
     /**
      * Comprehensive Owner/Manager Dashboard Analytics
+     * Supports: Today, Yesterday, Last 7 Days, Last 30 Days, Custom Range, and All-Time.
+     * Scoped to assigned branch for Branch Managers, or company-wide / selectable for Pharmacy Owner.
      */
-    static async getDashboardMetrics(tenantId, branchId, userRole, userBranchId) {
-        const effectiveBranchId = ["BRANCH_MANAGER", "CASHIER"].includes(userRole || "") && userBranchId
-            ? userBranchId
-            : branchId;
+    static async getDashboardMetrics(tenantId, branchId, userRole, userBranchId, userId, period, startDate, endDate) {
+        const isBranchRestricted = ["BRANCH_MANAGER", "MANAGER", "CASHIER", "INVENTORY_EXECUTIVE"].includes(userRole || "");
+        let effectiveBranchId = undefined;
+        if (isBranchRestricted) {
+            if (userBranchId) {
+                effectiveBranchId = userBranchId;
+            }
+            else if (userId) {
+                const dbUser = await prisma_1.prisma.user.findUnique({
+                    where: { id: userId },
+                    select: { branchId: true },
+                });
+                if (dbUser?.branchId) {
+                    effectiveBranchId = dbUser.branchId;
+                }
+            }
+        }
+        else {
+            effectiveBranchId = branchId && branchId !== "all" ? branchId : undefined;
+        }
+        const now = new Date();
+        let rangeStart;
+        let rangeEnd;
+        const activePeriod = period || (startDate || endDate ? "custom" : "30d");
+        if (activePeriod === "today") {
+            rangeStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+            rangeEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+        }
+        else if (activePeriod === "yesterday") {
+            rangeStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 0, 0, 0, 0);
+            rangeEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 59, 59, 999);
+        }
+        else if (activePeriod === "7d") {
+            rangeStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6, 0, 0, 0, 0);
+            rangeEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+        }
+        else if (activePeriod === "30d") {
+            rangeStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29, 0, 0, 0, 0);
+            rangeEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+        }
+        else if (activePeriod === "custom") {
+            if (startDate) {
+                rangeStart = new Date(startDate);
+                rangeStart.setHours(0, 0, 0, 0);
+            }
+            if (endDate) {
+                rangeEnd = new Date(endDate);
+                rangeEnd.setHours(23, 59, 59, 999);
+            }
+        }
         const saleWhere = {
             tenantId,
             status: "COMPLETED",
         };
         if (effectiveBranchId)
             saleWhere.branchId = effectiveBranchId;
+        if (rangeStart || rangeEnd) {
+            saleWhere.createdAt = {};
+            if (rangeStart)
+                saleWhere.createdAt.gte = rangeStart;
+            if (rangeEnd)
+                saleWhere.createdAt.lte = rangeEnd;
+        }
         const inventoryWhere = {
-            product: { tenantId, isActive: true },
-            branch: { tenantId, isActive: true },
+            branch: { tenantId },
         };
         if (effectiveBranchId)
             inventoryWhere.branchId = effectiveBranchId;
-        const now = new Date();
-        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
-        const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        // Build transfer loss filter atomically to avoid branch filter being overwritten by date range
+        const transferLossWhere = {
+            product: { tenantId },
+            OR: [
+                { damagedQuantity: { gt: 0 } },
+                { missingQuantity: { gt: 0 } },
+            ],
+        };
+        const transferDateFilter = (rangeStart || rangeEnd) ? {
+            createdAt: {
+                ...(rangeStart ? { gte: rangeStart } : {}),
+                ...(rangeEnd ? { lte: rangeEnd } : {}),
+            },
+        } : {};
+        if (effectiveBranchId) {
+            transferLossWhere.transfer = {
+                OR: [
+                    { toBranchId: effectiveBranchId },
+                    { fromBranchId: effectiveBranchId },
+                ],
+                ...transferDateFilter,
+            };
+        }
+        else if (rangeStart || rangeEnd) {
+            transferLossWhere.transfer = transferDateFilter;
+        }
         const ninetyDaysFuture = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
-        const [sales, inventories, accounts, suppliers] = await Promise.all([
+        const [sales, inventories, accounts, suppliers, allBranches, transferLossItems, directDamageMovements] = await Promise.all([
             prisma_1.prisma.sale.findMany({
                 where: saleWhere,
                 include: {
@@ -608,6 +685,7 @@ class ReportService {
                             basePrice: true,
                         },
                     },
+                    branch: { select: { id: true, name: true, location: true } },
                 },
             }),
             prisma_1.prisma.financialAccount.findMany({
@@ -617,14 +695,44 @@ class ReportService {
                 where: { tenantId, isActive: true },
                 select: { totalDue: true },
             }),
+            prisma_1.prisma.branch.findMany({
+                where: { tenantId, isActive: true },
+                select: { id: true, name: true, location: true },
+            }),
+            prisma_1.prisma.transferItem.findMany({
+                where: transferLossWhere,
+                include: {
+                    transfer: {
+                        select: {
+                            id: true,
+                            fromBranchId: true,
+                            toBranchId: true,
+                            transferDate: true,
+                            createdAt: true,
+                        },
+                    },
+                },
+            }),
+            prisma_1.prisma.stockMovement.findMany({
+                where: {
+                    type: "DAMAGE",
+                    // Scope to tenant's branches to prevent cross-tenant leakage
+                    ...(effectiveBranchId
+                        ? { branchId: effectiveBranchId }
+                        : { inventory: { branch: { tenantId } } }),
+                    ...(rangeStart || rangeEnd ? {
+                        createdAt: {
+                            ...(rangeStart ? { gte: rangeStart } : {}),
+                            ...(rangeEnd ? { lte: rangeEnd } : {}),
+                        },
+                    } : {}),
+                },
+            }).catch(() => []),
         ]);
-        // Financial calculations
-        let totalRevenue = 0;
-        let totalCost = 0;
-        let todaySales = 0;
-        let todayTransactions = 0;
-        let weeklySales = 0;
-        let monthlySales = 0;
+        const activeBranch = effectiveBranchId ? allBranches.find((b) => b.id === effectiveBranchId) : null;
+        // Financial & Sales Calculations
+        let totalSalesRevenue = 0;
+        let totalCostOfSold = 0;
         const paymentBreakdown = {
             CASH: 0,
             BKASH: 0,
@@ -634,71 +742,111 @@ class ReportService {
         };
         const categoryMap = {};
         const productSalesMap = {};
-        // 7-Day & 30-Day Daily Trend Maps
-        const dailyTrend7Map = {};
-        const dailyTrend30Map = {};
-        for (let i = 6; i >= 0; i--) {
-            const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
-            const dateStr = d.toISOString().split("T")[0];
-            const label = d.toLocaleDateString("en-US", { weekday: "short" });
-            dailyTrend7Map[dateStr] = { date: dateStr, label, sales: 0, revenue: 0, profit: 0 };
+        // Dynamic Trend Map according to activePeriod
+        const dynamicTrendMap = {};
+        if (activePeriod === "today" || activePeriod === "yesterday") {
+            // 24 Hourly buckets
+            for (let h = 0; h < 24; h++) {
+                const hourStr = String(h).padStart(2, "0");
+                const hourLabel = h === 0 ? "12 AM" : h < 12 ? `${h} AM` : h === 12 ? "12 PM" : `${h - 12} PM`;
+                dynamicTrendMap[hourStr] = { key: hourStr, label: hourLabel, sales: 0, revenue: 0, profit: 0 };
+            }
         }
-        for (let i = 29; i >= 0; i--) {
-            const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
-            const dateStr = d.toISOString().split("T")[0];
-            const label = `${d.getDate()} ${d.toLocaleDateString("en-US", { month: "short" })}`;
-            dailyTrend30Map[dateStr] = { date: dateStr, label, sales: 0, revenue: 0, profit: 0 };
+        else if (activePeriod === "7d") {
+            for (let i = 6; i >= 0; i--) {
+                const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+                const dateStr = d.toISOString().split("T")[0];
+                const label = d.toLocaleDateString("en-US", { weekday: "short" });
+                dynamicTrendMap[dateStr] = { key: dateStr, label, sales: 0, revenue: 0, profit: 0 };
+            }
         }
-        // 6-Month Monthly Trend Map
-        const monthlyTrendMap = {};
-        for (let i = 5; i >= 0; i--) {
-            const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-            const label = d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
-            monthlyTrendMap[key] = { month: key, label, sales: 0, revenue: 0, profit: 0 };
+        else if (activePeriod === "30d") {
+            for (let i = 29; i >= 0; i--) {
+                const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+                const dateStr = d.toISOString().split("T")[0];
+                const label = `${d.getDate()} ${d.toLocaleDateString("en-US", { month: "short" })}`;
+                dynamicTrendMap[dateStr] = { key: dateStr, label, sales: 0, revenue: 0, profit: 0 };
+            }
         }
-        sales.forEach((s) => {
-            const saleAmount = Number(s.totalAmount || 0);
-            totalRevenue += saleAmount;
-            const saleDate = new Date(s.createdAt);
-            if (saleDate >= todayStart) {
-                todaySales += saleAmount;
-                todayTransactions += 1;
-            }
-            if (saleDate >= new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)) {
-                weeklySales += saleAmount;
-            }
-            if (saleDate >= thirtyDaysAgo) {
-                monthlySales += saleAmount;
-            }
-            // Payment method normalization
-            const rawMethod = String(s.paymentMethod || "CASH").toUpperCase();
-            if (rawMethod === "CASH") {
-                paymentBreakdown.CASH += saleAmount;
-            }
-            else if (rawMethod === "BKASH") {
-                paymentBreakdown.BKASH += saleAmount;
-            }
-            else if (rawMethod === "NAGAD") {
-                paymentBreakdown.NAGAD += saleAmount;
-            }
-            else if (rawMethod === "CARD" || rawMethod === "POS") {
-                paymentBreakdown.CARD += saleAmount;
-            }
-            else if (rawMethod === "MOBILE") {
-                paymentBreakdown.BKASH += saleAmount;
+        else if (activePeriod === "custom" && rangeStart && rangeEnd) {
+            const diffDays = Math.ceil((rangeEnd.getTime() - rangeStart.getTime()) / (1000 * 60 * 60 * 24));
+            if (diffDays <= 2) {
+                for (let h = 0; h < 24; h++) {
+                    const hourStr = String(h).padStart(2, "0");
+                    const hourLabel = h === 0 ? "12 AM" : h < 12 ? `${h} AM` : h === 12 ? "12 PM" : `${h - 12} PM`;
+                    dynamicTrendMap[hourStr] = { key: hourStr, label: hourLabel, sales: 0, revenue: 0, profit: 0 };
+                }
             }
             else {
-                paymentBreakdown.OTHER += saleAmount;
+                const stepDays = Math.min(diffDays, 60);
+                for (let i = stepDays; i >= 0; i--) {
+                    const d = new Date(rangeEnd.getTime() - i * 24 * 60 * 60 * 1000);
+                    if (d >= rangeStart) {
+                        const dateStr = d.toISOString().split("T")[0];
+                        const label = `${d.getDate()} ${d.toLocaleDateString("en-US", { month: "short" })}`;
+                        dynamicTrendMap[dateStr] = { key: dateStr, label, sales: 0, revenue: 0, profit: 0 };
+                    }
+                }
             }
-            // Items calculation for profit, categories, top products
+        }
+        else {
+            // All-time or 6-Month Monthly Trend
+            for (let i = 5; i >= 0; i--) {
+                const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+                const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+                const label = d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+                dynamicTrendMap[key] = { key, label, sales: 0, revenue: 0, profit: 0 };
+            }
+        }
+        // Branch performance tracker
+        const branchStatsMap = {};
+        allBranches.forEach((b) => {
+            branchStatsMap[b.id] = {
+                branchId: b.id,
+                branchName: b.name,
+                location: b.location || "Default",
+                stockUnits: 0,
+                inventoryValue: 0,
+                salesRevenue: 0,
+                ordersCount: 0,
+                costOfSold: 0,
+                grossProfit: 0,
+                damagedMissingLoss: 0,
+                netProfit: 0,
+            };
+        });
+        sales.forEach((s) => {
+            const saleAmount = Number(s.totalAmount || 0);
+            totalSalesRevenue += saleAmount;
+            if (s.branchId && branchStatsMap[s.branchId]) {
+                branchStatsMap[s.branchId].salesRevenue += saleAmount;
+                branchStatsMap[s.branchId].ordersCount += 1;
+            }
+            // Payment method
+            const rawMethod = String(s.paymentMethod || "CASH").toUpperCase();
+            if (rawMethod === "CASH")
+                paymentBreakdown.CASH += saleAmount;
+            else if (rawMethod === "BKASH")
+                paymentBreakdown.BKASH += saleAmount;
+            else if (rawMethod === "NAGAD")
+                paymentBreakdown.NAGAD += saleAmount;
+            else if (rawMethod === "CARD" || rawMethod === "POS")
+                paymentBreakdown.CARD += saleAmount;
+            else if (rawMethod === "MOBILE")
+                paymentBreakdown.BKASH += saleAmount;
+            else
+                paymentBreakdown.OTHER += saleAmount;
+            // Items calculation for COGS, category, and top products
             let saleCost = 0;
             (s.items || []).forEach((item) => {
                 const itemSub = Number(item.subTotal || item.totalPrice || 0);
                 const itemQty = Number(item.quantity || 0);
-                const purchaseP = Number(item.purchasePrice || (item.product?.basePrice ? Number(item.product.basePrice) * 0.8 : 0));
-                saleCost += purchaseP * itemQty;
-                // Category resolution
+                // Use lowestUnitQuantity (actual base units deducted) for accurate COGS.
+                // purchasePrice is stored per base unit (e.g. per tablet); quantity is package count (strips/boxes).
+                // Fallback: if lowestUnitQuantity not set, derive from quantity × unitMultiplier.
+                const baseUnits = Number(item.lowestUnitQuantity || (itemQty * Number(item.unitMultiplier || 1)));
+                const purchaseP = Number(item.purchasePrice ?? (item.product?.basePrice ?? 0));
+                saleCost += purchaseP * baseUnits;
                 const catName = item.product?.categoryRef?.name ||
                     (typeof item.product?.category === "string" ? item.product.category : null) ||
                     "Medicine";
@@ -707,7 +855,6 @@ class ReportService {
                 }
                 categoryMap[catName].revenue += itemSub;
                 categoryMap[catName].count += itemQty;
-                // Top products
                 const pId = item.productId || (item.product?.id || `prod_${item.id}`);
                 const pName = item.product?.name || "Product";
                 if (!productSalesMap[pId]) {
@@ -716,30 +863,40 @@ class ReportService {
                 productSalesMap[pId].quantity += itemQty;
                 productSalesMap[pId].revenue += itemSub;
             });
-            totalCost += saleCost;
-            const dateKey = saleDate.toISOString().split("T")[0];
-            const monthKey = `${saleDate.getFullYear()}-${String(saleDate.getMonth() + 1).padStart(2, "0")}`;
+            totalCostOfSold += saleCost;
+            if (s.branchId && branchStatsMap[s.branchId]) {
+                branchStatsMap[s.branchId].costOfSold += saleCost;
+            }
+            const saleDate = new Date(s.createdAt);
             const profit = Math.max(0, saleAmount - saleCost);
-            if (dailyTrend7Map[dateKey]) {
-                dailyTrend7Map[dateKey].sales += 1;
-                dailyTrend7Map[dateKey].revenue += saleAmount;
-                dailyTrend7Map[dateKey].profit += profit;
+            if (activePeriod === "today" || activePeriod === "yesterday" || (activePeriod === "custom" && Object.keys(dynamicTrendMap).length === 24)) {
+                const hourStr = String(saleDate.getHours()).padStart(2, "0");
+                if (dynamicTrendMap[hourStr]) {
+                    dynamicTrendMap[hourStr].sales += 1;
+                    dynamicTrendMap[hourStr].revenue += saleAmount;
+                    dynamicTrendMap[hourStr].profit += profit;
+                }
             }
-            if (dailyTrend30Map[dateKey]) {
-                dailyTrend30Map[dateKey].sales += 1;
-                dailyTrend30Map[dateKey].revenue += saleAmount;
-                dailyTrend30Map[dateKey].profit += profit;
+            else if (activePeriod === "all") {
+                const monthKey = `${saleDate.getFullYear()}-${String(saleDate.getMonth() + 1).padStart(2, "0")}`;
+                if (dynamicTrendMap[monthKey]) {
+                    dynamicTrendMap[monthKey].sales += 1;
+                    dynamicTrendMap[monthKey].revenue += saleAmount;
+                    dynamicTrendMap[monthKey].profit += profit;
+                }
             }
-            if (monthlyTrendMap[monthKey]) {
-                monthlyTrendMap[monthKey].sales += 1;
-                monthlyTrendMap[monthKey].revenue += saleAmount;
-                monthlyTrendMap[monthKey].profit += profit;
+            else {
+                const dateKey = saleDate.toISOString().split("T")[0];
+                if (dynamicTrendMap[dateKey]) {
+                    dynamicTrendMap[dateKey].sales += 1;
+                    dynamicTrendMap[dateKey].revenue += saleAmount;
+                    dynamicTrendMap[dateKey].profit += profit;
+                }
             }
         });
-        const totalProfit = Math.max(0, totalRevenue - totalCost);
-        // Inventory calculations
+        // Current Inventory Calculations across relevant branches
         let totalStockUnits = 0;
-        let totalInventoryValue = 0;
+        let totalInventoryCostValue = 0;
         let lowStockCount = 0;
         let nearExpiryCount = 0;
         let expiredCount = 0;
@@ -748,8 +905,13 @@ class ReportService {
         inventories.forEach((inv) => {
             const qty = Number(inv.quantity || 0);
             totalStockUnits += qty;
-            const unitVal = Number(inv.purchasePrice || inv.product?.basePrice || 0);
-            totalInventoryValue += qty * unitVal;
+            const unitVal = Number(inv.purchasePrice ?? inv.product?.basePrice ?? 0);
+            const lineVal = qty * unitVal;
+            totalInventoryCostValue += lineVal;
+            if (inv.branchId && branchStatsMap[inv.branchId]) {
+                branchStatsMap[inv.branchId].stockUnits += qty;
+                branchStatsMap[inv.branchId].inventoryValue += lineVal;
+            }
             const threshold = inv.lowStockThreshold || 10;
             if (qty <= threshold) {
                 lowStockCount += 1;
@@ -760,7 +922,7 @@ class ReportService {
                         batchNumber: inv.batchNumber || "BATCH-01",
                         quantity: qty,
                         threshold,
-                        rackLocation: inv.rackLocation || "Rack A-1",
+                        rackLocation: inv.shelfLocation || "Shelf A",
                     });
                 }
             }
@@ -778,13 +940,57 @@ class ReportService {
                             batchNumber: inv.batchNumber || "BATCH-01",
                             expiryDate: inv.expiryDate,
                             quantity: qty,
-                            rackLocation: inv.rackLocation || "Rack A-1",
+                            rackLocation: inv.shelfLocation || "Shelf A",
                         });
                     }
                 }
             }
         });
-        // Balances
+        // Total Damaged & Missing Stock Loss calculations for period
+        let totalDamagedMissingLoss = 0;
+        let damagedMissingUnitsCount = 0;
+        transferLossItems.forEach((item) => {
+            const lineLoss = Number(item.damagedValue || 0) + Number(item.missingValue || 0);
+            const lineUnits = Number(item.damagedQuantity || 0) + Number(item.missingQuantity || 0);
+            totalDamagedMissingLoss += lineLoss;
+            damagedMissingUnitsCount += lineUnits;
+            const targetBranchId = item.transfer?.toBranchId || item.transfer?.fromBranchId;
+            if (targetBranchId && branchStatsMap[targetBranchId]) {
+                branchStatsMap[targetBranchId].damagedMissingLoss += lineLoss;
+            }
+        });
+        directDamageMovements.forEach((mov) => {
+            const lineLoss = Math.abs(Number(mov.quantity || 0)) * Number(mov.unitPrice || 0);
+            totalDamagedMissingLoss += lineLoss;
+            damagedMissingUnitsCount += Math.abs(Number(mov.quantity || 0));
+            if (mov.branchId && branchStatsMap[mov.branchId]) {
+                branchStatsMap[mov.branchId].damagedMissingLoss += lineLoss;
+            }
+        });
+        // Compute Gross Profit & Net Profit:
+        // Sales Revenue − Purchase/Cost of Sold Products = Gross Profit
+        // Gross Profit − Damaged/Missing Stock Loss = Net Profit
+        const totalGrossProfit = Math.max(0, totalSalesRevenue - totalCostOfSold);
+        const netProfitAfterLoss = Math.round((totalGrossProfit - totalDamagedMissingLoss) * 100) / 100;
+        const grossMargin = totalSalesRevenue > 0 ? Math.round((totalGrossProfit / totalSalesRevenue) * 1000) / 10 : 0;
+        const netMargin = totalSalesRevenue > 0 ? Math.round((netProfitAfterLoss / totalSalesRevenue) * 1000) / 10 : 0;
+        // Finalize branch stats matrix
+        const branchWiseList = Object.values(branchStatsMap).map((b) => {
+            const gross = Math.max(0, b.salesRevenue - b.costOfSold);
+            const net = Math.round((gross - b.damagedMissingLoss) * 100) / 100;
+            const margin = b.salesRevenue > 0 ? Math.round((gross / b.salesRevenue) * 1000) / 10 : 0;
+            return {
+                ...b,
+                inventoryValue: Math.round(b.inventoryValue * 100) / 100,
+                salesRevenue: Math.round(b.salesRevenue * 100) / 100,
+                costOfSold: Math.round(b.costOfSold * 100) / 100,
+                grossProfit: Math.round(gross * 100) / 100,
+                damagedMissingLoss: Math.round(b.damagedMissingLoss * 100) / 100,
+                netProfit: net,
+                profitMargin: margin,
+            };
+        });
+        // Accounts Balances
         let cashBalance = 0;
         let bankBalance = 0;
         let digitalWalletBalance = 0;
@@ -805,27 +1011,49 @@ class ReportService {
             .sort((a, b) => b.revenue - a.revenue);
         return {
             summary: {
-                totalSales: sales.length,
-                totalRevenue: Math.round(totalRevenue * 100) / 100,
-                todaySales: Math.round(todaySales * 100) / 100,
-                todayTransactions,
-                weeklySales: Math.round(weeklySales * 100) / 100,
-                monthlySales: Math.round(monthlySales * 100) / 100,
-                totalProfit: Math.round(totalProfit * 100) / 100,
-                totalInventoryValue: Math.round(totalInventoryValue * 100) / 100,
+                activePeriod,
+                dateRange: {
+                    startDate: rangeStart ? rangeStart.toISOString() : null,
+                    endDate: rangeEnd ? rangeEnd.toISOString() : null,
+                },
+                effectiveBranchId: effectiveBranchId || null,
+                branchName: activeBranch ? activeBranch.name : "All Branches (Company-Wide)",
+                isBranchRestricted,
+                // 1. Current Live Inventory & Purchase Cost Valuation
                 totalStockUnits,
+                totalStockCostValue: Math.round(totalInventoryCostValue * 100) / 100,
+                totalInventoryValue: Math.round(totalInventoryCostValue * 100) / 100,
+                totalPurchaseCostValue: Math.round(totalInventoryCostValue * 100) / 100,
+                // 2. Sales Revenue in Period
+                totalSalesRevenue: Math.round(totalSalesRevenue * 100) / 100,
+                totalRevenue: Math.round(totalSalesRevenue * 100) / 100,
+                totalSalesCount: sales.length,
+                totalTransactions: sales.length,
+                // 3. Cost of Sold Products (COGS) in Period
+                totalCostOfSold: Math.round(totalCostOfSold * 100) / 100,
+                // 4. Gross Profit in Period
+                totalGrossProfit: Math.round(totalGrossProfit * 100) / 100,
+                totalProfit: Math.round(totalGrossProfit * 100) / 100,
+                grossMargin,
+                // 5. Damaged & Missing Stock Loss in Period
+                totalDamagedMissingLoss: Math.round(totalDamagedMissingLoss * 100) / 100,
+                damagedMissingUnitsCount,
+                // 6. Net Realized Profit After Loss
+                netProfitAfterLoss,
+                netMargin,
+                // Alerts & Stock Counts
                 lowStockCount,
                 nearExpiryCount,
                 expiredCount,
+                // Financial Liquidity
                 supplierDues: Math.round(totalSupplierDues * 100) / 100,
                 cashBalance: Math.round(cashBalance * 100) / 100,
                 bankBalance: Math.round(bankBalance * 100) / 100,
                 digitalWalletBalance: Math.round(digitalWalletBalance * 100) / 100,
             },
+            branchWisePerformance: branchWiseList,
             charts: {
-                dailySalesTrend: Object.values(dailyTrend7Map),
-                dailyTrend30: Object.values(dailyTrend30Map),
-                monthlySalesTrend: Object.values(monthlyTrendMap),
+                dailySalesTrend: Object.values(dynamicTrendMap),
                 paymentBreakdown,
                 categoryDistribution,
                 topSellingProducts,

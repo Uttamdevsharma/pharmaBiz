@@ -79,6 +79,16 @@ model StockTransfer {
   transferDate       DateTime         @default(now())
   receivedDate       DateTime?
   settlementDate     DateTime?
+
+  // Professional Courier Logistics & Dispatch Information
+  courierName           String?          // e.g. Steadfast, Pathao, RedX, Sundarban, Internal Rider
+  courierHub            String?          // Hub / Branch of courier service
+  trackingId            String?          // Waybill / Consignment / Tracking ID
+  deliveryPersonName    String?          // Rider / Delivery Person Name
+  deliveryPersonContact String?          // Rider Phone / Contact Number
+  dispatchDate          DateTime?        // Dispatch Date & Time
+  deliveryNote          String?          // Special delivery or handling instructions
+
   createdAt          DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
 

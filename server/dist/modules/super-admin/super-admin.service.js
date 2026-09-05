@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SuperAdminService = void 0;
 const prisma_1 = require("../../app/lib/prisma");
+const email_service_1 = require("../../app/lib/email.service");
 class SuperAdminService {
     /**
      * Plans Management
@@ -371,33 +372,147 @@ class SuperAdminService {
         };
     }
     /**
-     * ==================== PLATFORM STAFF (CTO / PROJECT MANAGER) MANAGEMENT ====================
+     * ==================== PLATFORM DYNAMIC ROLES & PERMISSIONS ====================
      */
-    static async listPlatformStaff() {
-        return await prisma_1.prisma.user.findMany({
-            where: {
-                role: { in: ["SUPER_ADMIN", "CTO", "PROJECT_MANAGER"] },
-            },
+    static async listRoles() {
+        const roles = await prisma_1.prisma.platformRole.findMany({
             orderBy: { createdAt: "asc" },
-            select: {
-                id: true,
-                name: true,
-                email: true,
-                username: true,
-                phone: true,
-                role: true,
-                isActive: true,
-                createdAt: true,
-                updatedAt: true,
+            include: {
+                _count: {
+                    select: { users: true },
+                },
+            },
+        });
+        return roles.map((r) => ({
+            id: r.id,
+            name: r.name,
+            description: r.description,
+            permissions: r.permissions || [],
+            isSystem: r.isSystem,
+            userCount: r._count?.users || 0,
+            createdAt: r.createdAt,
+            updatedAt: r.updatedAt,
+        }));
+    }
+    static async createRole(data) {
+        const nameTrimmed = data.name.trim();
+        if (!nameTrimmed) {
+            throw new Error("Role name is required");
+        }
+        if (nameTrimmed.toUpperCase() === "SUPER_ADMIN" || nameTrimmed.toUpperCase() === "SUPER ADMIN") {
+            throw new Error("Cannot create a role with Super Admin name. Super Admin is root protected.");
+        }
+        const existing = await prisma_1.prisma.platformRole.findFirst({
+            where: { name: { equals: nameTrimmed, mode: "insensitive" } },
+        });
+        if (existing) {
+            throw new Error(`Role "${nameTrimmed}" already exists`);
+        }
+        const id = nameTrimmed.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+        return await prisma_1.prisma.platformRole.create({
+            data: {
+                id,
+                name: nameTrimmed,
+                description: data.description || null,
+                permissions: data.permissions || [],
+                isSystem: false,
             },
         });
     }
-    static async createPlatformStaff(creatorId, creatorRole, data) {
-        if (creatorRole !== "SUPER_ADMIN" && data.role === "SUPER_ADMIN") {
-            throw new Error("Delegated platform staff cannot create a Super Admin account.");
+    static async updateRole(id, data) {
+        const role = await prisma_1.prisma.platformRole.findUnique({ where: { id } });
+        if (!role) {
+            throw new Error("Role not found");
         }
-        if (!["CTO", "PROJECT_MANAGER"].includes(data.role)) {
-            throw new Error("Can only create CTO or Project Manager platform staff accounts.");
+        const updateData = {};
+        if (data.name !== undefined) {
+            const nameTrimmed = data.name.trim();
+            if (nameTrimmed.toUpperCase() === "SUPER_ADMIN") {
+                throw new Error("Cannot rename role to Super Admin.");
+            }
+            updateData.name = nameTrimmed;
+        }
+        if (data.description !== undefined) {
+            updateData.description = data.description;
+        }
+        if (data.permissions !== undefined) {
+            updateData.permissions = data.permissions;
+        }
+        return await prisma_1.prisma.platformRole.update({
+            where: { id },
+            data: updateData,
+        });
+    }
+    static async deleteRole(id) {
+        const role = await prisma_1.prisma.platformRole.findUnique({
+            where: { id },
+            include: { _count: { select: { users: true } } },
+        });
+        if (!role) {
+            throw new Error("Role not found");
+        }
+        if (role.isSystem) {
+            throw new Error("Protected system roles cannot be deleted.");
+        }
+        if (role._count?.users > 0) {
+            throw new Error(`Cannot delete role "${role.name}" because ${role._count.users} staff member(s) are currently assigned to it. Please reassign their roles first.`);
+        }
+        await prisma_1.prisma.platformRole.delete({ where: { id } });
+        return { success: true, message: `Role "${role.name}" removed successfully` };
+    }
+    /**
+     * ==================== PLATFORM STAFF MANAGEMENT ====================
+     */
+    static async listPlatformStaff() {
+        // Return all platform staff (Super Admin + any staff under Platform HQ tenant or with custom roles)
+        let systemTenant = await prisma_1.prisma.tenant.findFirst({
+            where: { name: "Platform HQ" },
+        });
+        const whereClause = systemTenant
+            ? {
+                OR: [
+                    { tenantId: systemTenant.id },
+                    { role: "SUPER_ADMIN" },
+                    { customRoleId: { not: null } },
+                    { role: { in: ["CTO", "PROJECT_MANAGER"] } },
+                ],
+            }
+            : {
+                OR: [
+                    { role: "SUPER_ADMIN" },
+                    { customRoleId: { not: null } },
+                    { role: { in: ["CTO", "PROJECT_MANAGER"] } },
+                ],
+            };
+        const users = await prisma_1.prisma.user.findMany({
+            where: whereClause,
+            orderBy: { createdAt: "asc" },
+            include: {
+                customRole: true,
+            },
+        });
+        return users.map((u) => ({
+            id: u.id,
+            name: u.name,
+            email: u.email,
+            username: u.username,
+            phone: u.phone,
+            role: u.role,
+            customRoleId: u.customRoleId,
+            customRoleName: u.customRole?.name || u.customRoleName || (u.role === "SUPER_ADMIN" ? "Super Admin" : u.role),
+            customRole: u.customRole,
+            permissions: u.role === "SUPER_ADMIN" ? ["*"] : (u.permissions?.length ? u.permissions : u.customRole?.permissions || []),
+            isActive: u.isActive,
+            createdAt: u.createdAt,
+            updatedAt: u.updatedAt,
+        }));
+    }
+    static async createPlatformStaff(creatorId, creatorRole, data) {
+        if (creatorRole !== "SUPER_ADMIN") {
+            throw new Error("Only Super Admin can create new platform staff members.");
+        }
+        if (data.role === "SUPER_ADMIN" || data.role?.toUpperCase() === "SUPER_ADMIN") {
+            throw new Error("Cannot create additional Super Admin root accounts. Please assign a custom role.");
         }
         // Find or create Platform HQ System Tenant
         let systemTenant = await prisma_1.prisma.tenant.findFirst({
@@ -410,89 +525,168 @@ class SuperAdminService {
                     tier: "ENTERPRISE",
                     email: "admin@platform.system",
                     phone: "01700000000",
-                    address: "Dhaka, Bangladesh",
+                    address: "Platform Control Center",
                     isActive: true,
                 },
             });
         }
-        const existing = await prisma_1.prisma.user.findUnique({
-            where: { username: data.username },
-        });
-        if (existing) {
-            throw new Error("Username is already taken");
+        const identifier = (data.username || data.email || "").trim();
+        if (!identifier) {
+            throw new Error("Email or username is required");
         }
+        const existingUser = await prisma_1.prisma.user.findFirst({
+            where: {
+                OR: [
+                    { email: data.email },
+                    { username: data.username || data.email },
+                ],
+            },
+        });
+        if (existingUser) {
+            throw new Error("A user with this email or username already exists");
+        }
+        // Resolve Custom Role if provided by id or name
+        let matchedRole = null;
+        if (data.role) {
+            matchedRole = await prisma_1.prisma.platformRole.findFirst({
+                where: {
+                    OR: [
+                        { id: data.role },
+                        { name: { equals: data.role, mode: "insensitive" } },
+                    ],
+                },
+            });
+        }
+        // If role doesn't exist yet in PlatformRole table, create it dynamically
+        if (!matchedRole && data.role) {
+            const roleName = data.role.trim();
+            const roleId = roleName.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+            matchedRole = await prisma_1.prisma.platformRole.create({
+                data: {
+                    id: roleId,
+                    name: roleName,
+                    description: `Custom ${roleName} platform role`,
+                    permissions: data.permissions || [],
+                    isSystem: false,
+                },
+            });
+        }
+        // Resolve permissions: either custom passed in, or role's permissions
+        const assignedPermissions = Array.isArray(data.permissions) && data.permissions.length > 0
+            ? data.permissions
+            : matchedRole?.permissions || [];
         const bcrypt = require("bcryptjs");
         const passwordHash = await bcrypt.hash(data.password, 10);
+        // Map Prisma enum role
+        const enumRole = matchedRole?.name === "CTO" ? "CTO" : matchedRole?.name === "Project Manager" ? "PROJECT_MANAGER" : "PROJECT_MANAGER";
         const staff = await prisma_1.prisma.user.create({
             data: {
                 tenantId: systemTenant.id,
                 name: data.name,
                 email: data.email,
-                username: data.username,
+                username: data.username || data.email,
                 phone: data.phone || null,
                 passwordHash,
-                role: data.role, // "CTO" or "PROJECT_MANAGER"
+                role: enumRole,
+                customRoleId: matchedRole?.id || null,
+                customRoleName: matchedRole?.name || data.role,
+                permissions: assignedPermissions,
                 isActive: true,
             },
-            select: {
-                id: true,
-                name: true,
-                email: true,
-                username: true,
-                phone: true,
-                role: true,
-                isActive: true,
-                createdAt: true,
+            include: {
+                customRole: true,
             },
         });
-        return staff;
+        return {
+            id: staff.id,
+            name: staff.name,
+            email: staff.email,
+            username: staff.username,
+            phone: staff.phone,
+            role: staff.role,
+            customRoleId: staff.customRoleId,
+            customRoleName: staff.customRole?.name || staff.customRoleName,
+            permissions: staff.permissions,
+            isActive: staff.isActive,
+            createdAt: staff.createdAt,
+        };
     }
     static async updatePlatformStaff(id, updaterId, updaterRole, data) {
-        const targetUser = await prisma_1.prisma.user.findUnique({ where: { id } });
+        const targetUser = await prisma_1.prisma.user.findUnique({
+            where: { id },
+            include: { customRole: true },
+        });
         if (!targetUser) {
             throw new Error("Platform staff member not found");
         }
-        // Security Invariant: Super Admin cannot be modified, replaced, or degraded by delegates
+        // Security Invariant: Super Admin master account cannot be modified, downgraded, or re-assigned by delegated staff
         if (targetUser.role === "SUPER_ADMIN") {
-            if (updaterRole !== "SUPER_ADMIN" || updaterId !== targetUser.id) {
-                throw new Error("CTO / Project Manager cannot modify, reassign, or alter the Super Admin master account.");
+            if (updaterRole !== "SUPER_ADMIN") {
+                throw new Error("Delegated staff cannot modify or alter the Super Admin master account.");
             }
             if (data.role && data.role !== "SUPER_ADMIN") {
                 throw new Error("Cannot change Super Admin role.");
             }
             if (data.isActive === false) {
-                throw new Error("Super Admin account cannot be disabled.");
+                throw new Error("Super Admin master account cannot be deactivated.");
             }
         }
         // Delegates cannot elevate any account to Super Admin
-        if (updaterRole !== "SUPER_ADMIN" && data.role === "SUPER_ADMIN") {
+        if (updaterRole !== "SUPER_ADMIN" && (data.role === "SUPER_ADMIN" || data.customRoleName === "SUPER_ADMIN")) {
             throw new Error("Delegated platform staff cannot promote accounts to Super Admin.");
+        }
+        let customRoleId = targetUser.customRoleId;
+        let customRoleName = targetUser.customRoleName;
+        if (data.role && targetUser.role !== "SUPER_ADMIN") {
+            let matchedRole = await prisma_1.prisma.platformRole.findFirst({
+                where: {
+                    OR: [
+                        { id: data.role },
+                        { name: { equals: data.role, mode: "insensitive" } },
+                    ],
+                },
+            });
+            if (matchedRole) {
+                customRoleId = matchedRole.id;
+                customRoleName = matchedRole.name;
+            }
+            else {
+                customRoleName = data.role;
+            }
         }
         const updateData = {
             ...(data.name !== undefined && { name: data.name }),
             ...(data.email !== undefined && { email: data.email }),
             ...(data.phone !== undefined && { phone: data.phone }),
-            ...(data.role !== undefined && { role: data.role }),
+            ...(data.permissions !== undefined && { permissions: data.permissions }),
+            ...(customRoleId !== undefined && { customRoleId }),
+            ...(customRoleName !== undefined && { customRoleName }),
             ...(data.isActive !== undefined && { isActive: data.isActive }),
         };
         if (data.password) {
             const bcrypt = require("bcryptjs");
             updateData.passwordHash = await bcrypt.hash(data.password, 10);
         }
-        return await prisma_1.prisma.user.update({
+        const updated = await prisma_1.prisma.user.update({
             where: { id },
             data: updateData,
-            select: {
-                id: true,
-                name: true,
-                email: true,
-                username: true,
-                phone: true,
-                role: true,
-                isActive: true,
-                updatedAt: true,
+            include: {
+                customRole: true,
             },
         });
+        return {
+            id: updated.id,
+            name: updated.name,
+            email: updated.email,
+            username: updated.username,
+            phone: updated.phone,
+            role: updated.role,
+            customRoleId: updated.customRoleId,
+            customRoleName: updated.customRole?.name || updated.customRoleName,
+            permissions: updated.role === "SUPER_ADMIN" ? ["*"] : updated.permissions,
+            isActive: updated.isActive,
+            updatedAt: updated.updatedAt,
+        };
     }
     static async updatePlatformStaffStatus(id, updaterId, updaterRole, isActive) {
         const targetUser = await prisma_1.prisma.user.findUnique({ where: { id } });
@@ -500,10 +694,10 @@ class SuperAdminService {
             throw new Error("Platform staff member not found");
         }
         if (targetUser.role === "SUPER_ADMIN") {
-            throw new Error("Super Admin account cannot be deactivated or disabled.");
+            throw new Error("Super Admin master account cannot be deactivated or disabled.");
         }
         if (targetUser.id === updaterId && !isActive) {
-            throw new Error("You cannot deactivate your own platform staff account.");
+            throw new Error("You cannot deactivate your own staff account.");
         }
         return await prisma_1.prisma.user.update({
             where: { id },
@@ -522,77 +716,362 @@ class SuperAdminService {
             throw new Error("Platform staff member not found");
         }
         if (targetUser.role === "SUPER_ADMIN") {
-            throw new Error("Super Admin account cannot be deleted or removed under any circumstance.");
+            throw new Error("Super Admin master account cannot be deleted or removed under any circumstance.");
         }
         if (targetUser.id === updaterId) {
-            throw new Error("You cannot delete your own platform staff account.");
+            throw new Error("You cannot delete your own staff account.");
         }
         await prisma_1.prisma.user.delete({ where: { id } });
         return { success: true, message: `Platform staff account ${targetUser.username} removed.` };
     }
     static async getPlatformPermissionsHierarchy() {
-        const roles = [
-            {
-                role: "CTO",
-                name: "Chief Technology Officer (Platform CTO)",
-                description: "Technical administration, platform telemetry, system logs, plans, tenants, and delegated platform management.",
-            },
-            {
-                role: "PROJECT_MANAGER",
-                name: "Platform Project Manager",
-                description: "Tenant onboarding assistance, support analytics, payment logs, plans, and platform operations oversight.",
-            },
-        ];
-        const dbPermissions = await prisma_1.prisma.rolePermission.findMany({
-            where: {
-                role: { in: ["CTO", "PROJECT_MANAGER"] },
-            },
-        });
-        const permissionMap = {};
-        dbPermissions.forEach((p) => {
-            if (!permissionMap[p.role])
-                permissionMap[p.role] = [];
-            permissionMap[p.role].push(p.permission);
-        });
+        const roles = await this.listRoles();
         const availablePermissions = [
-            { id: "platform.view", label: "View Platform Console & Overview", category: "Platform Core" },
-            { id: "platform.analytics", label: "View Platform Revenue & MRR Analytics", category: "Analytics" },
-            { id: "platform.tenants", label: "Manage Pharmacies & Tenant Statuses", category: "Operations" },
-            { id: "platform.plans", label: "Manage Subscription Plans & Tiers", category: "Operations" },
-            { id: "platform.support", label: "View Subscriptions & Tenant History", category: "Operations" },
-            { id: "platform.payments", label: "View Payment Transactions & Invoices", category: "Operations" },
-            { id: "platform.staff", label: "Manage CTO & PM Platform Delegates", category: "Platform Core" },
-            { id: "platform.logs", label: "View System Telemetry & Audit Logs", category: "Technical" },
-            { id: "platform.tech_settings", label: "Configure Platform Theme & Branding", category: "Technical" },
+            {
+                id: "pharmacies.manage",
+                name: "Manage Pharmacies",
+                category: "Pharmacies & Tenants",
+                description: "View, inspect, activate, and suspend pharmacy tenant accounts.",
+            },
+            {
+                id: "subscriptions.manage",
+                name: "Manage Subscriptions",
+                category: "Subscriptions & Billing",
+                description: "Manage tenant subscription lifecycle, renewals, and statuses.",
+            },
+            {
+                id: "plans.manage",
+                name: "Manage Plans",
+                category: "Subscriptions & Billing",
+                description: "Create, configure, update, and manage pricing tiers and feature limits.",
+            },
+            {
+                id: "payments.view",
+                name: "View Payments",
+                category: "Subscriptions & Billing",
+                description: "Inspect revenue transactions, payment statuses, and invoice records.",
+            },
+            {
+                id: "reports.view",
+                name: "View Reports",
+                category: "Analytics & Telemetry",
+                description: "Access platform MRR, revenue growth analytics, and tenant reports.",
+            },
+            {
+                id: "staff.create",
+                name: "Create Staff",
+                category: "Staff & Access Control",
+                description: "Create new platform staff members and assign roles and permissions.",
+            },
+            {
+                id: "staff.manage",
+                name: "Manage Staff",
+                category: "Staff & Access Control",
+                description: "Edit staff profiles, update permission matrix, toggle status, and delete staff.",
+            },
+            {
+                id: "roles.manage",
+                name: "Manage Roles & Permissions",
+                category: "Staff & Access Control",
+                description: "Create dynamic custom roles, edit permissions, and manage role assignments.",
+            },
+            {
+                id: "settings.manage",
+                name: "Manage System Settings",
+                category: "Platform Administration",
+                description: "Configure platform branding, landing page content, and global settings.",
+            },
+            {
+                id: "platform.data",
+                name: "Manage Platform Data",
+                category: "Platform Administration",
+                description: "Access system telemetry, audit logs, and platform diagnostic data.",
+            },
         ];
         return {
             roles,
-            activePermissions: permissionMap,
             availablePermissions,
         };
     }
-    static async updatePlatformRolePermissions(role, permissions) {
-        if (!["CTO", "PROJECT_MANAGER"].includes(role)) {
-            throw new Error("Can only customize permissions for CTO and Project Manager roles.");
-        }
-        // Filter out forbidden / root destructive permissions
-        const sanitizedPermissions = permissions.filter((p) => !p.startsWith("platform.destroy") &&
-            !p.startsWith("platform.owner") &&
-            !p.startsWith("platform.super_admin"));
-        await prisma_1.prisma.$transaction(async (tx) => {
-            await tx.rolePermission.deleteMany({
-                where: { role: role },
-            });
-            if (sanitizedPermissions.length > 0) {
-                await tx.rolePermission.createMany({
-                    data: sanitizedPermissions.map((p) => ({
-                        role: role,
-                        permission: p,
-                    })),
-                });
-            }
+    static async updatePlatformRolePermissions(roleIdentifier, permissions) {
+        // Find role by id or name
+        let role = await prisma_1.prisma.platformRole.findFirst({
+            where: {
+                OR: [
+                    { id: roleIdentifier },
+                    { name: { equals: roleIdentifier, mode: "insensitive" } },
+                ],
+            },
         });
-        return { success: true, role, permissions: sanitizedPermissions };
+        if (!role) {
+            throw new Error(`Role "${roleIdentifier}" not found.`);
+        }
+        const updated = await prisma_1.prisma.platformRole.update({
+            where: { id: role.id },
+            data: { permissions },
+        });
+        return { success: true, role: updated.name, permissions: updated.permissions };
+    }
+    /**
+     * List Pharmacy Verification Applications with filtering & metrics
+     */
+    static async listPharmacyVerifications(query) {
+        const page = Math.max(1, Number(query?.page) || 1);
+        const limit = Math.max(1, Math.min(100, Number(query?.limit) || 20));
+        const skip = (page - 1) * limit;
+        const where = {};
+        if (query?.status && query.status !== "ALL") {
+            where.verificationStatus = query.status;
+        }
+        if (query?.search) {
+            const search = query.search.trim();
+            where.OR = [
+                { name: { contains: search, mode: "insensitive" } },
+                { email: { contains: search, mode: "insensitive" } },
+                { phone: { contains: search, mode: "insensitive" } },
+                { nidNumber: { contains: search, mode: "insensitive" } },
+                { tradeLicenseNumber: { contains: search, mode: "insensitive" } },
+                { drugLicenseNumber: { contains: search, mode: "insensitive" } },
+                { users: { some: { name: { contains: search, mode: "insensitive" }, role: "COMPANY_OWNER" } } },
+            ];
+        }
+        const [tenants, total, pendingCount, approvedCount, rejectedCount, activeCount] = await Promise.all([
+            prisma_1.prisma.tenant.findMany({
+                where,
+                skip,
+                take: limit,
+                orderBy: { createdAt: "desc" },
+                include: {
+                    users: {
+                        where: { role: "COMPANY_OWNER" },
+                        select: { id: true, name: true, email: true, phone: true, username: true, createdAt: true },
+                        take: 1,
+                    },
+                    subscriptions: {
+                        orderBy: { createdAt: "desc" },
+                        take: 1,
+                        include: { plan: true },
+                    },
+                },
+            }),
+            prisma_1.prisma.tenant.count({ where }),
+            prisma_1.prisma.tenant.count({ where: { verificationStatus: "PENDING_APPROVAL" } }),
+            prisma_1.prisma.tenant.count({ where: { verificationStatus: "APPROVED_PENDING_PAYMENT" } }),
+            prisma_1.prisma.tenant.count({ where: { verificationStatus: "REJECTED" } }),
+            prisma_1.prisma.tenant.count({ where: { verificationStatus: "ACTIVE" } }),
+        ]);
+        const formatted = tenants.map((t) => {
+            const owner = t.users?.[0] || null;
+            const latestSub = t.subscriptions?.[0] || null;
+            return {
+                id: t.id,
+                name: t.name,
+                email: t.email,
+                phone: t.phone,
+                address: t.address,
+                tier: t.tier,
+                isActive: t.isActive,
+                verificationStatus: t.verificationStatus,
+                nidNumber: t.nidNumber,
+                nidDocUrl: t.nidDocUrl,
+                nidFrontUrl: t.nidFrontUrl || t.nidDocUrl,
+                nidBackUrl: t.nidBackUrl,
+                tradeLicenseNumber: t.tradeLicenseNumber,
+                tradeLicenseDocUrl: t.tradeLicenseDocUrl,
+                tradeLicenseFrontUrl: t.tradeLicenseFrontUrl || t.tradeLicenseDocUrl,
+                tradeLicenseBackUrl: t.tradeLicenseBackUrl,
+                drugLicenseNumber: t.drugLicenseNumber,
+                drugLicenseDocUrl: t.drugLicenseDocUrl,
+                drugLicenseFrontUrl: t.drugLicenseFrontUrl || t.drugLicenseDocUrl,
+                drugLicenseBackUrl: t.drugLicenseBackUrl,
+                otpVerifiedAt: t.otpVerifiedAt,
+                approvedAt: t.approvedAt,
+                approvedBy: t.approvedBy,
+                approvalNotes: t.approvalNotes,
+                rejectedAt: t.rejectedAt,
+                rejectedBy: t.rejectedBy,
+                rejectionReason: t.rejectionReason,
+                pendingPlanId: t.pendingPlanId,
+                pendingBillingCycle: t.pendingBillingCycle,
+                createdAt: t.createdAt,
+                owner,
+                subscription: latestSub,
+            };
+        });
+        return {
+            data: formatted,
+            metrics: {
+                total,
+                pendingReview: pendingCount,
+                approved: approvedCount,
+                rejected: rejectedCount,
+                active: activeCount,
+            },
+            pagination: {
+                page,
+                limit,
+                totalPages: Math.ceil(total / limit),
+            },
+        };
+    }
+    /**
+     * Get single pharmacy verification application details
+     */
+    static async getPharmacyVerification(id) {
+        const tenant = await prisma_1.prisma.tenant.findUnique({
+            where: { id },
+            include: {
+                users: {
+                    where: { role: "COMPANY_OWNER" },
+                    take: 1,
+                },
+                subscriptions: {
+                    orderBy: { createdAt: "desc" },
+                    include: { plan: true, payments: true },
+                },
+            },
+        });
+        if (!tenant) {
+            throw new Error("Pharmacy application record not found.");
+        }
+        return tenant;
+    }
+    /**
+     * Approve pharmacy application and dispatch approval email with payment checkout URL
+     */
+    static async approvePharmacyVerification(id, adminUserId, data) {
+        const tenant = await prisma_1.prisma.tenant.findUnique({
+            where: { id },
+            include: {
+                users: { where: { role: "COMPANY_OWNER" }, take: 1 },
+                subscriptions: { orderBy: { createdAt: "desc" }, take: 1, include: { plan: true } },
+            },
+        });
+        if (!tenant) {
+            throw new Error("Pharmacy application not found.");
+        }
+        const owner = tenant.users?.[0];
+        if (!owner) {
+            throw new Error("Owner user not found for this pharmacy application.");
+        }
+        // Resolve subscription plan
+        let planId = data?.planId || tenant.pendingPlanId || tenant.subscriptions?.[0]?.planId;
+        let plan = planId ? await prisma_1.prisma.subscriptionPlan.findUnique({ where: { id: planId } }) : null;
+        if (!plan) {
+            plan = await prisma_1.prisma.subscriptionPlan.findFirst({ where: { tier: "STARTER" } }) ||
+                await prisma_1.prisma.subscriptionPlan.findFirst();
+        }
+        const billingCycle = data?.billingCycle || tenant.pendingBillingCycle || "MONTHLY";
+        const durationDays = billingCycle === "YEARLY" ? 365 : 30;
+        const startDate = new Date();
+        const endDate = new Date(startDate.getTime() + durationDays * 24 * 60 * 60 * 1000);
+        const basePrice = Number(plan.price);
+        const amount = billingCycle === "YEARLY" ? Math.round(basePrice * 12 * 0.85) : basePrice;
+        // Update Tenant to APPROVED_PENDING_PAYMENT
+        const updatedTenant = await prisma_1.prisma.tenant.update({
+            where: { id: tenant.id },
+            data: {
+                verificationStatus: "APPROVED_PENDING_PAYMENT",
+                approvedAt: new Date(),
+                approvedBy: adminUserId,
+                approvalNotes: data?.notes || "Approved by Super Admin",
+                pendingPlanId: plan.id,
+                pendingBillingCycle: billingCycle,
+                tier: plan.tier,
+            },
+        });
+        // Update or create pending subscription
+        let subscription = tenant.subscriptions?.[0];
+        if (subscription) {
+            subscription = await prisma_1.prisma.subscription.update({
+                where: { id: subscription.id },
+                data: {
+                    planId: plan.id,
+                    status: "PENDING",
+                    startDate,
+                    endDate,
+                },
+                include: { plan: true },
+            });
+        }
+        else {
+            subscription = await prisma_1.prisma.subscription.create({
+                data: {
+                    tenantId: tenant.id,
+                    planId: plan.id,
+                    status: "PENDING",
+                    startDate,
+                    endDate,
+                },
+                include: { plan: true },
+            });
+        }
+        // Build payment checkout URL
+        const clientUrl = process.env.CLIENT_URL || "http://localhost:3000";
+        const paymentUrl = `${clientUrl}/verification-status?tenantId=${tenant.id}&email=${encodeURIComponent(owner.email || tenant.email || "")}`;
+        // Send Approval Email
+        const emailRecipient = owner.email || tenant.email;
+        if (emailRecipient) {
+            await email_service_1.EmailService.sendApprovalEmail({
+                to: emailRecipient,
+                name: owner.name || tenant.name,
+                companyName: tenant.name,
+                planName: plan.name,
+                planTier: plan.tier,
+                billingCycle,
+                price: amount,
+                paymentUrl,
+            });
+        }
+        return {
+            success: true,
+            message: `Pharmacy "${tenant.name}" application approved. Approval email with payment instructions dispatched to ${emailRecipient}.`,
+            tenant: updatedTenant,
+            subscription,
+            paymentUrl,
+        };
+    }
+    /**
+     * Reject pharmacy application with reason and notify applicant
+     */
+    static async rejectPharmacyVerification(id, adminUserId, data) {
+        if (!data.reason || !data.reason.trim()) {
+            throw new Error("A clear rejection reason is required.");
+        }
+        const tenant = await prisma_1.prisma.tenant.findUnique({
+            where: { id },
+            include: {
+                users: { where: { role: "COMPANY_OWNER" }, take: 1 },
+            },
+        });
+        if (!tenant) {
+            throw new Error("Pharmacy application not found.");
+        }
+        const owner = tenant.users?.[0];
+        const updatedTenant = await prisma_1.prisma.tenant.update({
+            where: { id: tenant.id },
+            data: {
+                verificationStatus: "REJECTED",
+                rejectedAt: new Date(),
+                rejectedBy: adminUserId,
+                rejectionReason: data.reason.trim(),
+                isActive: false,
+            },
+        });
+        const emailRecipient = owner?.email || tenant.email;
+        if (emailRecipient) {
+            await email_service_1.EmailService.sendRejectionEmail({
+                to: emailRecipient,
+                name: owner?.name || tenant.name,
+                companyName: tenant.name,
+                reason: data.reason.trim(),
+            });
+        }
+        return {
+            success: true,
+            message: `Pharmacy application rejected and notification sent to ${emailRecipient}.`,
+            tenant: updatedTenant,
+        };
     }
 }
 exports.SuperAdminService = SuperAdminService;

@@ -112,9 +112,22 @@ export class ReportController {
       const tenantId = req.user!.tenantId;
       const userRole = req.user!.role;
       const userBranchId = req.user!.branchId;
+      const userId = req.user!.id;
       const branchId = req.query.branchId as string | undefined;
+      const period = req.query.period as string | undefined;
+      const startDate = req.query.startDate as string | undefined;
+      const endDate = req.query.endDate as string | undefined;
 
-      const dashboard = await ReportService.getDashboardMetrics(tenantId, branchId, userRole, userBranchId);
+      const dashboard = await ReportService.getDashboardMetrics(
+        tenantId,
+        branchId,
+        userRole,
+        userBranchId,
+        userId,
+        period,
+        startDate,
+        endDate
+      );
       res.status(200).json({ success: true, data: dashboard });
     } catch (error: any) {
       res.status(500).json({ success: false, message: error.message });

@@ -142,5 +142,47 @@ class SettingsService {
         });
         return saved.value;
     }
+    /**
+     * Get tenant-specific VAT & Tax configuration
+     */
+    static async getTenantVatSettings(tenantId) {
+        const key = `vat_settings_${tenantId}`;
+        const setting = await prisma_1.prisma.platformSetting.findUnique({
+            where: { key },
+        });
+        if (!setting) {
+            return {
+                vatPercent: 0,
+                isVatEnabled: false,
+                vatNumber: "",
+                taxType: "EXCLUSIVE",
+            };
+        }
+        return setting.value;
+    }
+    /**
+     * Update tenant-specific VAT & Tax configuration
+     */
+    static async updateTenantVatSettings(tenantId, userId, data) {
+        const key = `vat_settings_${tenantId}`;
+        const vatPercent = typeof data.vatPercent === "number" ? Math.max(0, data.vatPercent) : Number(data.vatPercent) || 0;
+        const isVatEnabled = Boolean(data.isVatEnabled);
+        const vatNumber = typeof data.vatNumber === "string" ? data.vatNumber.trim() : "";
+        const taxType = data.taxType === "INCLUSIVE" ? "INCLUSIVE" : "EXCLUSIVE";
+        const value = {
+            vatPercent,
+            isVatEnabled,
+            vatNumber,
+            taxType,
+            updatedAt: new Date().toISOString(),
+            updatedBy: userId,
+        };
+        const setting = await prisma_1.prisma.platformSetting.upsert({
+            where: { key },
+            create: { key, value },
+            update: { value },
+        });
+        return setting.value;
+    }
 }
 exports.SettingsService = SettingsService;

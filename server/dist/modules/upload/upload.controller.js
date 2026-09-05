@@ -11,10 +11,17 @@ class UploadController {
             const fileData = req.file?.buffer || req.body.image || req.body.file;
             const folder = req.body.folder || "pharmacy_saas/general";
             const oldPublicId = req.body.oldPublicId;
+            // if (!fileData) {
+            //   res.status(400).json({
+            //     success: false,
+            //     message: "No image file provided. Send base64 data URI or multipart file.",
+            //   });
+            //   return;
+            // }
             if (!fileData) {
                 res.status(400).json({
                     success: false,
-                    message: "No image file provided. Send base64 data URI or multipart file.",
+                    message: "No image file provided. Send base64 data URI or multipart file."
                 });
                 return;
             }

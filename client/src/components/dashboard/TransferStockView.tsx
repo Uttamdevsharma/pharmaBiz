@@ -25,6 +25,13 @@ import {
   FileSpreadsheet,
   AlertTriangle,
   Info,
+  Truck,
+  Phone,
+  MapPin,
+  User,
+  Clock,
+  FileText,
+  Building,
 } from "lucide-react";
 
 interface TransferStockViewProps {
@@ -82,6 +89,16 @@ export function TransferStockView({ onNavigate }: TransferStockViewProps) {
   const [toBranchId, setToBranchId] = useState<string>("");
   const [notes, setNotes] = useState<string>("");
   const [selectedItems, setSelectedItems] = useState<SelectedTransferItem[]>([]);
+
+  // Courier Logistics State
+  const [courierName, setCourierName] = useState<string>("Steadfast");
+  const [customCourierName, setCustomCourierName] = useState<string>("");
+  const [courierHub, setCourierHub] = useState<string>("");
+  const [trackingId, setTrackingId] = useState<string>("");
+  const [deliveryPersonName, setDeliveryPersonName] = useState<string>("");
+  const [deliveryPersonContact, setDeliveryPersonContact] = useState<string>("");
+  const [dispatchDate, setDispatchDate] = useState<string>(() => new Date().toISOString().slice(0, 16));
+  const [deliveryNote, setDeliveryNote] = useState<string>("");
 
   // Load branches
   useEffect(() => {
@@ -326,10 +343,19 @@ export function TransferStockView({ onNavigate }: TransferStockViewProps) {
 
     try {
       setSubmitting(true);
+      const finalCourierName = courierName === "Other" ? customCourierName : courierName;
+
       const payload = {
         fromBranchId,
         toBranchId,
         notes: notes.trim() || undefined,
+        courierName: finalCourierName.trim() || undefined,
+        courierHub: courierHub.trim() || undefined,
+        trackingId: trackingId.trim() || undefined,
+        deliveryPersonName: deliveryPersonName.trim() || undefined,
+        deliveryPersonContact: deliveryPersonContact.trim() || undefined,
+        dispatchDate: dispatchDate ? new Date(dispatchDate).toISOString() : undefined,
+        deliveryNote: deliveryNote.trim() || undefined,
         items: selectedItems.map((i) => ({
           productId: i.productId,
           inventoryId: i.inventoryId,
@@ -417,6 +443,30 @@ export function TransferStockView({ onNavigate }: TransferStockViewProps) {
                 <strong className="text-brand-primary font-black text-sm">৳{totalTransferValue.toFixed(2)}</strong>
               </div>
             </div>
+
+            {/* Courier Shipment Summary */}
+            {(dispatchedTransfer.courierName || dispatchedTransfer.trackingId || dispatchedTransfer.deliveryPersonName) && (
+              <div className="pt-3 border-t border-slate-200/80 dark:border-slate-700/80 grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-[11px]">
+                {dispatchedTransfer.courierName && (
+                  <div>
+                    <span className="text-slate-400 block">Courier</span>
+                    <strong className="text-slate-800 dark:text-slate-200">{dispatchedTransfer.courierName} {dispatchedTransfer.courierHub ? `(${dispatchedTransfer.courierHub})` : ""}</strong>
+                  </div>
+                )}
+                {dispatchedTransfer.trackingId && (
+                  <div>
+                    <span className="text-slate-400 block">Tracking ID</span>
+                    <strong className="font-mono text-brand-primary font-bold">{dispatchedTransfer.trackingId}</strong>
+                  </div>
+                )}
+                {dispatchedTransfer.deliveryPersonName && (
+                  <div>
+                    <span className="text-slate-400 block">Rider / Contact</span>
+                    <strong className="text-slate-800 dark:text-slate-200">{dispatchedTransfer.deliveryPersonName} {dispatchedTransfer.deliveryPersonContact ? `(${dispatchedTransfer.deliveryPersonContact})` : ""}</strong>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
@@ -669,6 +719,140 @@ export function TransferStockView({ onNavigate }: TransferStockViewProps) {
                   ))
                 )}
               </select>
+            </div>
+          </div>
+
+          {/* ========================================================================= */}
+          {/* PROFESSIONAL COURIER & DISPATCH LOGISTICS SECTION */}
+          {/* ========================================================================= */}
+          <div className="p-5 rounded-2xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/80 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200/80 dark:border-slate-700/60">
+              <div className="flex items-center gap-2">
+                <Truck className="h-4 w-4 text-brand-primary" />
+                <h4 className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-white">
+                  Courier Logistics & Delivery Details
+                </h4>
+              </div>
+              <span className="text-[10px] font-bold text-slate-400">Inter-Branch Parcel Dispatch</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {/* Courier Company */}
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                  Courier / Delivery Company
+                </label>
+                <select
+                  value={courierName}
+                  onChange={(e) => setCourierName(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none cursor-pointer"
+                >
+                  <option value="Steadfast">Steadfast Courier</option>
+                  <option value="Pathao">Pathao Courier</option>
+                  <option value="RedX">RedX Express</option>
+                  <option value="Sundarban">Sundarban Courier</option>
+                  <option value="SA Parivahan">SA Parivahan</option>
+                  <option value="Internal Rider">Internal Rider / Self Delivery</option>
+                  <option value="Other">Other Courier Service</option>
+                </select>
+                {courierName === "Other" && (
+                  <input
+                    type="text"
+                    placeholder="Enter Courier Service Name"
+                    value={customCourierName}
+                    onChange={(e) => setCustomCourierName(e.target.value)}
+                    className="w-full mt-1 px-3.5 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none"
+                  />
+                )}
+              </div>
+
+              {/* Courier Branch / Hub */}
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                  <Building className="h-3 w-3 text-slate-400" />
+                  <span>Courier Hub / Branch</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Dhanmondi Hub, Uttara Branch"
+                  value={courierHub}
+                  onChange={(e) => setCourierHub(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none font-medium"
+                />
+              </div>
+
+              {/* Courier Tracking / Consignment ID */}
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                  <FileText className="h-3 w-3 text-slate-400" />
+                  <span>Tracking / Waybill ID</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. CN-984723910, SDFC-4821"
+                  value={trackingId}
+                  onChange={(e) => setTrackingId(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono font-bold outline-none"
+                />
+              </div>
+
+              {/* Delivery Person Name */}
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                  <User className="h-3 w-3 text-slate-400" />
+                  <span>Delivery Person / Rider Name</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Mohammad Rafiq"
+                  value={deliveryPersonName}
+                  onChange={(e) => setDeliveryPersonName(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none font-medium"
+                />
+              </div>
+
+              {/* Delivery Person Contact */}
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                  <Phone className="h-3 w-3 text-slate-400" />
+                  <span>Rider Contact Number</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. 01712345678"
+                  value={deliveryPersonContact}
+                  onChange={(e) => setDeliveryPersonContact(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono font-bold outline-none"
+                />
+              </div>
+
+              {/* Dispatch Date & Time */}
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                  <Clock className="h-3 w-3 text-slate-400" />
+                  <span>Dispatch Date & Time</span>
+                </label>
+                <input
+                  type="datetime-local"
+                  value={dispatchDate}
+                  onChange={(e) => setDispatchDate(e.target.value)}
+                  className="w-full px-3.5 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold outline-none"
+                />
+              </div>
+            </div>
+
+            {/* Optional Delivery Note */}
+            <div className="space-y-1.5">
+              <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                Delivery & Handling Instructions (Optional)
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. Keep cold chain boxes upright, handle fragile saline bottles with care"
+                value={deliveryNote}
+                onChange={(e) => setDeliveryNote(e.target.value)}
+                className="w-full px-3.5 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none"
+              />
             </div>
           </div>
 

@@ -14,7 +14,7 @@ class CloudinaryService {
         let apiKey = process.env.CLOUDINARY_API_KEY?.trim();
         let apiSecret = process.env.CLOUDINARY_API_SECRET?.trim();
         if (!cloudName || !apiKey || !apiSecret) {
-            // Attempt explicit dotenv reloading from root or server directory
+            // Attemp explicitly have point
             dotenv_1.default.config({ path: path_1.default.resolve(process.cwd(), ".env") });
             cloudName = process.env.CLOUDINARY_CLOUD_NAME?.trim();
             apiKey = process.env.CLOUDINARY_API_KEY?.trim();
@@ -47,7 +47,7 @@ class CloudinaryService {
         try {
             const result = await cloudinary_1.v2.uploader.upload(filePayload, {
                 folder,
-                resource_type: "image",
+                resource_type: "auto",
             });
             return {
                 url: result.url,

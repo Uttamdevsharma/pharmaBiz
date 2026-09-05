@@ -29,6 +29,7 @@ import { StockHistoryView } from "@/components/dashboard/StockHistoryView";
 import { TransferStockView } from "@/components/dashboard/TransferStockView";
 import { TransferHistoryView } from "@/components/dashboard/TransferHistoryView";
 import { StockReceiveView } from "@/components/dashboard/StockReceiveView";
+import { StockInspectionView } from "@/components/dashboard/StockInspectionView";
 import { DamagedProductsView } from "@/components/dashboard/DamagedProductsView";
 import { SuppliersView } from "@/components/dashboard/SuppliersView";
 import { PurchaseHistoryView } from "@/components/dashboard/PurchaseHistoryView";
@@ -77,6 +78,7 @@ export default function RoleBasedDashboard() {
 
   const [activeModule, setActiveModule] = useState<OwnerModule>(getDefaultModuleForRole(user?.role));
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [inspectionTransferId, setInspectionTransferId] = useState<string>("");
   const [tenantProfile, setTenantProfile] = useState<any>(null);
   const [currentSub, setCurrentSub] = useState<any>(null);
   const [branches, setBranches] = useState<any[]>([]);
@@ -503,7 +505,26 @@ export default function RoleBasedDashboard() {
         if (!isOwner && !hasPermission("stock.manage")) {
           return <TenantAccessRestricted moduleName="Stock Receive" requiredPerm="stock.manage" />;
         }
-        return <StockReceiveView onNavigate={setActiveModule} />;
+        return (
+          <StockReceiveView
+            onNavigate={setActiveModule}
+            onInspectTransfer={(transferId) => {
+              setInspectionTransferId(transferId);
+              setActiveModule("stock_inspection");
+            }}
+          />
+        );
+
+      case "stock_inspection":
+        if (!isOwner && !hasPermission("stock.manage")) {
+          return <TenantAccessRestricted moduleName="Stock Receiving & Inspection" requiredPerm="stock.manage" />;
+        }
+        return (
+          <StockInspectionView
+            transferId={inspectionTransferId}
+            onNavigate={setActiveModule}
+          />
+        );
 
       case "stock_damaged_products":
         if (!isOwner && !hasPermission("stock.manage")) {

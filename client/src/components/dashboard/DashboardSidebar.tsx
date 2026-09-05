@@ -59,6 +59,7 @@ export type OwnerModule =
   | "stock_transfer_stock"
   | "stock_transfer_history"
   | "stock_stock_receive"
+  | "stock_inspection"
   | "stock_damaged_products"
   | "sup_suppliers"
   | "sup_purchase_history"
