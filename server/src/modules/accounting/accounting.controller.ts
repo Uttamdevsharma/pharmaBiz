@@ -7,7 +7,9 @@ export class AccountingController {
   static async listAccounts(req: Request, res: Response): Promise<void> {
     try {
       const tenantId = req.user!.tenantId;
-      const branchId = req.query.branchId as string | undefined;
+      const user = req.user!;
+      const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN";
+      const branchId = isOwner ? (req.query.branchId as string | undefined) : (user.branchId || (req.query.branchId as string | undefined));
       const accounts = await AccountingService.listAccounts(tenantId, branchId);
       res.json({ success: true, data: accounts });
     } catch (err: any) {
@@ -223,7 +225,9 @@ export class AccountingController {
   static async listBranchStaffSalaries(req: Request, res: Response): Promise<void> {
     try {
       const tenantId = req.user!.tenantId;
-      const branchId = (req.query.branchId as string) || req.user!.branchId;
+      const user = req.user!;
+      const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN";
+      const branchId = isOwner ? ((req.query.branchId as string) || user.branchId || "") : (user.branchId || (req.query.branchId as string) || "");
       const month = (req.query.month as string) || new Date().toISOString().slice(0, 7);
       const includeInactive = req.query.includeInactive === "true" || req.query.includeInactive === "1";
 
@@ -247,7 +251,10 @@ export class AccountingController {
       const isBranchManager =
         user.role === "BRANCH_MANAGER" ||
         user.pharmacyRoleName?.toLowerCase().includes("branch manager") ||
-        user.customRoleName?.toLowerCase().includes("branch manager");
+        user.customRoleName?.toLowerCase().includes("branch manager") ||
+        user.permissions?.includes("salaries.base_salary.edit") ||
+        user.permissions?.includes("accounts.salaries") ||
+        user.permissions?.includes("*");
 
       // Only Pharmacy Owner and Branch Manager can set or update Base Salary
       if (!isOwner && !isBranchManager) {
@@ -270,7 +277,12 @@ export class AccountingController {
         }
       }
 
-      const result = await AccountingService.setSalaryConfig(tenantId, req.body);
+      const branchId = isOwner ? (req.body.branchId || user.branchId) : (user.branchId || req.body.branchId);
+
+      const result = await AccountingService.setSalaryConfig(tenantId, {
+        ...req.body,
+        branchId,
+      });
       res.json({ success: true, message: "Salary configuration saved successfully", data: result });
     } catch (err: any) {
       res.status(400).json({ success: false, message: err.message });
@@ -279,9 +291,23 @@ export class AccountingController {
 
   static async disburseSalary(req: Request, res: Response): Promise<void> {
     try {
-      const tenantId = req.user!.tenantId;
-      const disbursedById = req.user!.id;
-      const result = await AccountingService.disburseSalary(tenantId, disbursedById, req.body);
+      const user = req.user!;
+      const tenantId = user.tenantId;
+      const disbursedById = user.id;
+      const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN";
+      const branchId = isOwner ? ((req.body.branchId as string) || user.branchId || "") : (user.branchId || (req.body.branchId as string) || "");
+
+      if (!branchId) {
+        res.status(400).json({ success: false, message: "Branch ID is required" });
+        return;
+      }
+
+      const payload = {
+        ...req.body,
+        branchId,
+      };
+
+      const result = await AccountingService.disburseSalary(tenantId, disbursedById, payload);
       res.status(201).json({ success: true, data: result, message: "Salary paid successfully and financial account debited" });
     } catch (err: any) {
       res.status(400).json({ success: false, message: err.message });
@@ -291,7 +317,9 @@ export class AccountingController {
   static async getBranchSalaryHistory(req: Request, res: Response): Promise<void> {
     try {
       const tenantId = req.user!.tenantId;
-      const branchId = (req.query.branchId as string) || req.user!.branchId;
+      const user = req.user!;
+      const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN";
+      const branchId = isOwner ? ((req.query.branchId as string) || user.branchId || "") : (user.branchId || (req.query.branchId as string) || "");
       const month = req.query.month as string | undefined;
       const userId = req.query.userId as string | undefined;
       const page = req.query.page ? parseInt(req.query.page as string, 10) : 1;

@@ -436,7 +436,10 @@ export function DashboardSidebar({
   ].filter((item) => item.visible);
 
   // 7. Employee & Salary Section
-  const isBranchManager = user?.role === "BRANCH_MANAGER" || user?.pharmacyRoleName?.toLowerCase().includes("branch manager");
+  const isBranchManager =
+    user?.role === "BRANCH_MANAGER" ||
+    user?.pharmacyRoleName?.toLowerCase().includes("branch manager") ||
+    user?.customRoleName?.toLowerCase().includes("branch manager");
   const hasSalaryPerm = isOwner || hasPermission("accounts.salaries") || hasPermission("accounts.manage");
   const hasAttendancePerm = isOwner || isBranchManager || hasPermission("attendance.manage");
   const hasOffDaysPerm = isOwner || isBranchManager || hasPermission("attendance.offdays") || hasPermission("attendance.manage");

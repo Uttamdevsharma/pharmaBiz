@@ -117,7 +117,7 @@ const PERMISSION_ALIASES: Record<string, string[]> = {
   "accounts.manage": ["accounts.view", "accounts.transfer"],
   "accounts.transfer": ["accounts.manage", "stock.manage"],
   "accounts.expenses": ["accounts.manage"],
-  "accounts.salaries": ["accounts.manage"],
+  "accounts.salaries": ["accounts.manage", "attendance.manage", "staff.manage"],
   "staff.manage": ["user.create", "user.view", "user.update", "user.manage"],
   "attendance.manage": ["accounts.salaries", "staff.manage", "accounts.manage"],
   "attendance.offdays": ["attendance.manage", "accounts.salaries"],

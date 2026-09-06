@@ -1268,12 +1268,12 @@ export class AccountingService {
   }
 
   static async disburseSalary(tenantId: string, disbursedById: string, data: DisburseSalaryInput) {
-    // 1. Verify employee
+    // 1. Verify employee belongs to tenant & branch
     const employee = await (prisma as any).user.findFirst({
-      where: { id: data.userId, tenantId },
+      where: { id: data.userId, tenantId, branchId: data.branchId },
       include: { salaryConfig: true },
     });
-    if (!employee) throw new Error("Employee not found in this pharmacy.");
+    if (!employee) throw new Error("Employee not found in this branch.");
 
     // 2. Verify financial account belongs to branch & has funds
     const account = await (prisma as any).financialAccount.findFirst({

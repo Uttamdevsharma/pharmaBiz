@@ -37,7 +37,13 @@ export class AttendanceController {
     try {
       const user = req.user!;
       const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN";
-      const isBranchManager = user.role === "BRANCH_MANAGER";
+      const isBranchManager =
+        user.role === "BRANCH_MANAGER" ||
+        user.pharmacyRoleName?.toLowerCase().includes("branch manager") ||
+        user.customRoleName?.toLowerCase().includes("branch manager") ||
+        user.permissions?.includes("attendance.manage") ||
+        user.permissions?.includes("*");
+
       if (!isOwner && !isBranchManager) {
         res.status(403).json({ success: false, message: "Forbidden: Only Branch Manager and Pharmacy Owner can configure monthly off-days." });
         return;
@@ -91,7 +97,13 @@ export class AttendanceController {
     try {
       const user = req.user!;
       const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN";
-      const isBranchManager = user.role === "BRANCH_MANAGER";
+      const isBranchManager =
+        user.role === "BRANCH_MANAGER" ||
+        user.pharmacyRoleName?.toLowerCase().includes("branch manager") ||
+        user.customRoleName?.toLowerCase().includes("branch manager") ||
+        user.permissions?.includes("attendance.manage") ||
+        user.permissions?.includes("*");
+
       if (!isOwner && !isBranchManager) {
         res.status(403).json({ success: false, message: "Forbidden: Only Branch Manager and Pharmacy Owner can mark employee attendance. Employees cannot mark their own attendance." });
         return;
@@ -143,7 +155,10 @@ export class AttendanceController {
         actorRole === "BRANCH_MANAGER" ||
         actorRole === "ACCOUNTS" ||
         user.pharmacyRoleName?.toLowerCase().includes("branch manager") ||
-        user.customRoleName?.toLowerCase().includes("branch manager");
+        user.customRoleName?.toLowerCase().includes("branch manager") ||
+        user.permissions?.includes("attendance.manage") ||
+        user.permissions?.includes("accounts.salaries") ||
+        user.permissions?.includes("*");
 
       if (!isManagerOrAccounts && user.id !== userId) {
         res.status(403).json({ success: false, message: "Forbidden: You can only view your own attendance history." });

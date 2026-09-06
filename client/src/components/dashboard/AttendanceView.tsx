@@ -105,14 +105,15 @@ export function AttendanceView({
   onSelectEmployee,
   initialTab,
 }: AttendanceViewProps) {
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
   const isManager =
     user?.role === "BRANCH_MANAGER" ||
     user?.role === "MANAGER" ||
     user?.role === "COMPANY_OWNER" ||
     user?.role === "SUPER_ADMIN" ||
     (user?.pharmacyRoleName ? user.pharmacyRoleName.toLowerCase().includes("branch manager") : false) ||
-    (user?.customRoleName ? user.customRoleName.toLowerCase().includes("branch manager") : false);
+    (user?.customRoleName ? user.customRoleName.toLowerCase().includes("branch manager") : false) ||
+    hasPermission("attendance.manage");
 
   const [activeTab, setActiveTab] = useState<"daily" | "offdays" | "summary" | "my_history">(
     initialTab || (isManager ? "daily" : "my_history")

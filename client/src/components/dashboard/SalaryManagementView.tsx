@@ -100,7 +100,10 @@ export function SalaryManagementView({
 }: SalaryManagementViewProps) {
   const { user, hasPermission } = useAuth();
   const isOwner = user?.role === "COMPANY_OWNER" || user?.role === "SUPER_ADMIN";
-  const isBranchManager = user?.role === "BRANCH_MANAGER" || user?.pharmacyRoleName?.toLowerCase().includes("branch manager");
+  const isBranchManager =
+    user?.role === "BRANCH_MANAGER" ||
+    user?.pharmacyRoleName?.toLowerCase().includes("branch manager") ||
+    user?.customRoleName?.toLowerCase().includes("branch manager");
   const canSetBaseSalary = isOwner || isBranchManager || (hasPermission ? hasPermission("salaries.base_salary.edit") : false);
 
   const [currentMonth, setCurrentMonth] = useState<string>(() => new Date().toISOString().slice(0, 7));
