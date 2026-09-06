@@ -3,6 +3,7 @@ import { AuditService } from "../../app/lib/audit";
 import {
   CreateAccountInput,
   UpdateAccountInput,
+  DepositFundsInput,
   TransferFundsInput,
   RecordTransactionInput,
   ListTransactionsQuery,
@@ -153,6 +154,69 @@ export class AccountingService {
     });
 
     return deactivated;
+  }
+
+  /**
+   * Deposit money into a financial account (atomic balance increment + transaction entry)
+   */
+  static async depositFunds(tenantId: string, userId: string, data: DepositFundsInput) {
+    const account = await (prisma as any).financialAccount.findFirst({
+      where: { id: data.accountId, tenantId, isActive: true },
+    });
+
+    if (!account) {
+      throw new Error("Financial account not found or inactive");
+    }
+
+    const depositAmount = Number(data.amount);
+    if (isNaN(depositAmount) || depositAmount <= 0) {
+      throw new Error("Deposit amount must be greater than 0");
+    }
+
+    const noteText = data.description?.trim() || `Deposit into ${account.name}`;
+    const refCode = `DEP-${Date.now().toString().slice(-6)}`;
+
+    const result = await (prisma as any).$transaction(async (tx: any) => {
+      // 1. Increment financial account balance
+      const updatedAccount = await tx.financialAccount.update({
+        where: { id: account.id },
+        data: { balance: { increment: depositAmount } },
+        include: {
+          branch: { select: { id: true, name: true } },
+        },
+      });
+
+      // 2. Create financial transaction record in ledger
+      const transaction = await tx.financialTransaction.create({
+        data: {
+          tenantId,
+          branchId: account.branchId,
+          destinationAccountId: account.id,
+          amount: depositAmount,
+          type: "INCOME",
+          reference: refCode,
+          note: noteText,
+          userId,
+        },
+      });
+
+      return { account: updatedAccount, transaction };
+    });
+
+    await AuditService.log({
+      tenantId,
+      branchId: account.branchId,
+      userId,
+      action: "ACCOUNT_DEPOSIT",
+      details: {
+        accountId: account.id,
+        accountName: account.name,
+        amount: depositAmount,
+        note: noteText,
+      },
+    });
+
+    return result.account;
   }
 
   /**
@@ -427,17 +491,6 @@ export class AccountingService {
 
     const totalLiquidity = accounts.reduce((sum: number, a: any) => sum + Number(a.balance || 0), 0);
 
-    // Fetch total supplier dues from Supplier model
-    const supplierWhere: any = { tenantId, isActive: true };
-    const suppliers = await (prisma as any).supplier.findMany({
-      where: supplierWhere,
-      select: { totalDue: true, dueBalance: true },
-    });
-    const totalSupplierDues = suppliers.reduce(
-      (sum: number, s: any) => sum + Number(s.totalDue ?? s.dueBalance ?? 0),
-      0
-    );
-
     // Compute period date bounds
     const now = new Date();
     let periodStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
@@ -465,6 +518,40 @@ export class AccountingService {
     } else if (options?.period === "thisYear") {
       periodStart = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
       periodEnd = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
+    }
+
+    // Dynamically calculate total supplier dues from actual purchase/due records for active branch and selected period
+    const purchaseWhere: any = {
+      tenantId,
+      dueAmount: { gt: 0 },
+    };
+    if (branchId) {
+      purchaseWhere.branchId = branchId;
+    }
+    if (options?.startDate || options?.endDate || options?.period) {
+      purchaseWhere.purchaseDate = { gte: periodStart, lte: periodEnd };
+    }
+
+    const unpaidPurchases = await (prisma as any).purchase.findMany({
+      where: purchaseWhere,
+      select: { dueAmount: true },
+    });
+
+    let totalSupplierDues = unpaidPurchases.reduce(
+      (sum: number, p: any) => sum + Number(p.dueAmount || 0),
+      0
+    );
+
+    // Fallback if no purchase records found and no specific branch/period filter was applied
+    if (totalSupplierDues === 0 && !branchId && !options?.startDate && !options?.endDate && !options?.period) {
+      const suppliers = await (prisma as any).supplier.findMany({
+        where: { tenantId, isActive: true },
+        select: { totalDue: true, dueBalance: true },
+      });
+      totalSupplierDues = suppliers.reduce(
+        (sum: number, s: any) => sum + Number(s.totalDue ?? s.dueBalance ?? 0),
+        0
+      );
     }
 
     // Query sales for selected period
@@ -1318,7 +1405,7 @@ export class AccountingService {
     });
   }
 
-  static async getEmployeeSalaryHistory(tenantId: string, userId: string) {
+  static async getEmployeeSalaryHistory(tenantId: string, userId: string, requestingUser?: any) {
     const employee = await (prisma as any).user.findFirst({
       where: { id: userId, tenantId },
       select: {
@@ -1332,11 +1419,31 @@ export class AccountingService {
         pharmacyRoleName: true,
         avatarUrl: true,
         createdAt: true,
+        branchId: true,
         branch: { select: { id: true, name: true } },
         salaryConfig: true,
       },
     });
     if (!employee) throw new Error("Employee not found.");
+
+    if (requestingUser) {
+      const isOwnerOrAdmin =
+        requestingUser.role === "COMPANY_OWNER" ||
+        requestingUser.role === "SUPER_ADMIN" ||
+        requestingUser.role === "REGIONAL_ADMIN";
+
+      const isBranchManager =
+        requestingUser.role === "BRANCH_MANAGER" ||
+        requestingUser.pharmacyRoleName?.toLowerCase().includes("branch manager") ||
+        requestingUser.customRoleName?.toLowerCase().includes("branch manager");
+
+      if (isBranchManager && !isOwnerOrAdmin) {
+        const reqBranchId = requestingUser.branchId;
+        if (reqBranchId && employee.branchId && employee.branchId !== reqBranchId) {
+          throw new Error("Access denied: You can only view details of employees assigned to your branch.");
+        }
+      }
+    }
 
     const disbursements = await (prisma as any).salaryDisbursement.findMany({
       where: { tenantId, userId },

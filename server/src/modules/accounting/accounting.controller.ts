@@ -51,6 +51,21 @@ export class AccountingController {
     }
   }
 
+  static async depositFunds(req: Request, res: Response): Promise<void> {
+    try {
+      const tenantId = req.user!.tenantId;
+      const userId = req.user!.id;
+      const account = await AccountingService.depositFunds(tenantId, userId, req.body);
+      res.json({
+        success: true,
+        message: `Successfully deposited funds into ${account.name}`,
+        data: account,
+      });
+    } catch (err: any) {
+      res.status(400).json({ success: false, message: err.message });
+    }
+  }
+
   static async transferFunds(req: Request, res: Response): Promise<void> {
     try {
       const tenantId = req.user!.tenantId;
@@ -229,7 +244,10 @@ export class AccountingController {
       const user = req.user!;
       const tenantId = user.tenantId;
       const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN";
-      const isBranchManager = user.role === "BRANCH_MANAGER";
+      const isBranchManager =
+        user.role === "BRANCH_MANAGER" ||
+        user.pharmacyRoleName?.toLowerCase().includes("branch manager") ||
+        user.customRoleName?.toLowerCase().includes("branch manager");
 
       // Only Pharmacy Owner and Branch Manager can set or update Base Salary
       if (!isOwner && !isBranchManager) {
@@ -243,17 +261,17 @@ export class AccountingController {
         });
 
         const incomingBase = Number(req.body.baseSalary);
-        if (!existing || Number(existing.baseSalary) !== incomingBase) {
+        if (existing && existing.baseSalary !== incomingBase) {
           res.status(403).json({
             success: false,
-            message: "Forbidden: Only Pharmacy Owner and Branch Manager can set or update Base Salary. Accounts Manager cannot modify Base Salary.",
+            message: "Forbidden: Only Pharmacy Owner and Branch Manager can set or update Base Salary.",
           });
           return;
         }
       }
 
-      const config = await AccountingService.setSalaryConfig(tenantId, req.body);
-      res.json({ success: true, data: config, message: "Salary configuration saved successfully" });
+      const result = await AccountingService.setSalaryConfig(tenantId, req.body);
+      res.json({ success: true, message: "Salary configuration saved successfully", data: result });
     } catch (err: any) {
       res.status(400).json({ success: false, message: err.message });
     }
@@ -295,19 +313,23 @@ export class AccountingController {
     try {
       const tenantId = req.user!.tenantId;
       const userId = req.params.userId;
-      const actorRole = req.user!.role;
+      const user = req.user!;
+      const actorRole = user.role;
       const isManagerOrAccounts =
         actorRole === "COMPANY_OWNER" ||
         actorRole === "SUPER_ADMIN" ||
+        actorRole === "REGIONAL_ADMIN" ||
         actorRole === "BRANCH_MANAGER" ||
-        actorRole === "ACCOUNTS";
+        actorRole === "ACCOUNTS" ||
+        user.pharmacyRoleName?.toLowerCase().includes("branch manager") ||
+        user.customRoleName?.toLowerCase().includes("branch manager");
 
-      if (!isManagerOrAccounts && req.user!.id !== userId) {
+      if (!isManagerOrAccounts && user.id !== userId) {
         res.status(403).json({ success: false, message: "Forbidden: You can only view your own salary history." });
         return;
       }
 
-      const history = await AccountingService.getEmployeeSalaryHistory(tenantId, userId);
+      const history = await AccountingService.getEmployeeSalaryHistory(tenantId, userId, user);
       res.json({ success: true, data: history });
     } catch (err: any) {
       res.status(400).json({ success: false, message: err.message });

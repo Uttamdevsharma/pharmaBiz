@@ -520,6 +520,32 @@ export class SupplierService {
     const newDue = Math.max(0, Number(supplier.totalDue) - payAmount);
     const newPaid = Number(supplier.totalPaid) + payAmount;
 
+    // Reduce due amounts on open purchases for this supplier
+    const openPurchases = await (prisma as any).purchase.findMany({
+      where: { tenantId, supplierId, dueAmount: { gt: 0 } },
+      orderBy: { purchaseDate: "asc" },
+    });
+    let remainingPay = payAmount;
+    for (const p of openPurchases) {
+      if (remainingPay <= 0) break;
+      const pDue = Number(p.dueAmount || 0);
+      const pPaid = Number(p.paidAmount || 0);
+      const chunk = Math.min(pDue, remainingPay);
+      const nextDue = pDue - chunk;
+      const nextPaid = pPaid + chunk;
+      const status = nextDue === 0 ? "PAID" : "PARTIAL";
+
+      await (prisma as any).purchase.update({
+        where: { id: p.id },
+        data: {
+          dueAmount: nextDue,
+          paidAmount: nextPaid,
+          paymentStatus: status,
+        },
+      });
+      remainingPay -= chunk;
+    }
+
     // Atomic update of supplier dues & financial account balance
     const [updated] = await (prisma as any).$transaction([
       (prisma as any).supplier.update({

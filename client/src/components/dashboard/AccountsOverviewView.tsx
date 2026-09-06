@@ -335,8 +335,8 @@ export function AccountsOverviewView({ onNavigate }: AccountsOverviewViewProps =
         </div>
       ) : (
         <>
-          {/* 6 EXECUTIVE SUMMARY KPI CARDS */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 2xl:grid-cols-6 gap-4 2xl:gap-5">
+          {/* 5 EXECUTIVE SUMMARY KPI CARDS */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-5 gap-4 2xl:gap-5">
             {/* Total Liquid Funds */}
             <div className="p-5 xl:p-6 rounded-3xl bg-gradient-to-br from-emerald-600 to-teal-700 text-white shadow-lg space-y-1 relative overflow-hidden">
               <div className="flex items-center justify-between opacity-80 text-[10px] xl:text-xs font-black uppercase tracking-wider">
@@ -347,18 +347,6 @@ export function AccountsOverviewView({ onNavigate }: AccountsOverviewViewProps =
                 ৳{totalBalance.toLocaleString("en-BD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
               <div className="text-[10px] xl:text-xs opacity-85 font-medium">Drawer + Banks + Wallets</div>
-            </div>
-
-            {/* Total Sales (Selected Period) */}
-            <div className="p-5 xl:p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
-              <div className="flex items-center justify-between text-slate-400 text-[10px] xl:text-xs font-black uppercase tracking-wider">
-                <span>Period Revenue</span>
-                <TrendingUp className="h-4 w-4 text-emerald-500" />
-              </div>
-              <div className="text-xl xl:text-2xl 2xl:text-3xl font-black text-slate-900 dark:text-white font-mono">
-                ৳{(summary.totalSales || 0).toLocaleString("en-BD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </div>
-              <div className="text-[10px] xl:text-xs text-slate-400 font-medium">{summary.totalTransactions} transactions</div>
             </div>
 
             {/* Cash in Drawer */}

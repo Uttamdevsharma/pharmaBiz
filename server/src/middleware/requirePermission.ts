@@ -119,6 +119,8 @@ const PERMISSION_ALIASES: Record<string, string[]> = {
   "accounts.expenses": ["accounts.manage"],
   "accounts.salaries": ["accounts.manage"],
   "staff.manage": ["user.create", "user.view", "user.update", "user.manage"],
+  "attendance.manage": ["accounts.salaries", "staff.manage", "accounts.manage"],
+  "attendance.offdays": ["attendance.manage", "accounts.salaries"],
 };
 
 function hasMatchingPermission(userPerms: string[], requiredPerm: string): boolean {
@@ -209,8 +211,16 @@ export const requirePermission = (permissionString: string) => {
         return;
       }
 
-      // 4. Check static default fallback matrix for legacy roles
-      const defaultPerms = DEFAULT_ROLE_PERMISSIONS[role] || [];
+      // 4. Check static default fallback matrix for legacy/assigned roles
+      const isBranchManager =
+        role === "BRANCH_MANAGER" ||
+        req.user.pharmacyRoleName?.toLowerCase().includes("branch manager") ||
+        req.user.customRoleName?.toLowerCase().includes("branch manager") ||
+        dbUser?.pharmacyRole?.name?.toLowerCase().includes("branch manager") ||
+        dbUser?.customRole?.name?.toLowerCase().includes("branch manager");
+
+      const effectiveRoleKey = isBranchManager ? "BRANCH_MANAGER" : role;
+      const defaultPerms = DEFAULT_ROLE_PERMISSIONS[effectiveRoleKey] || DEFAULT_ROLE_PERMISSIONS[role] || [];
       if (hasMatchingPermission(defaultPerms, permissionString)) {
         next();
         return;

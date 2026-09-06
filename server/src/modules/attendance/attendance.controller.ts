@@ -134,19 +134,23 @@ export class AttendanceController {
         return;
       }
 
-      const actorRole = req.user!.role;
+      const user = req.user!;
+      const actorRole = user.role;
       const isManagerOrAccounts =
         actorRole === "COMPANY_OWNER" ||
         actorRole === "SUPER_ADMIN" ||
+        actorRole === "REGIONAL_ADMIN" ||
         actorRole === "BRANCH_MANAGER" ||
-        actorRole === "ACCOUNTS";
+        actorRole === "ACCOUNTS" ||
+        user.pharmacyRoleName?.toLowerCase().includes("branch manager") ||
+        user.customRoleName?.toLowerCase().includes("branch manager");
 
-      if (!isManagerOrAccounts && req.user!.id !== userId) {
+      if (!isManagerOrAccounts && user.id !== userId) {
         res.status(403).json({ success: false, message: "Forbidden: You can only view your own attendance history." });
         return;
       }
 
-      const history = await AttendanceService.getEmployeeAttendanceHistory(tenantId, userId, month);
+      const history = await AttendanceService.getEmployeeAttendanceHistory(tenantId, userId, month, user);
       res.json({ success: true, data: history });
     } catch (err: any) {
       res.status(400).json({ success: false, message: err.message });

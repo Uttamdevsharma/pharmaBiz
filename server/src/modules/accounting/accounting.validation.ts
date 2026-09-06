@@ -24,6 +24,14 @@ export const updateAccountSchema = z.object({
   isActive: z.boolean().optional(),
 });
 
+export const depositFundsSchema = z.object({
+  accountId: z.string().uuid("Invalid account ID"),
+  amount: z.number().positive("Deposit amount must be greater than 0"),
+  description: z.string().optional().nullable(),
+});
+
+export type DepositFundsInput = z.infer<typeof depositFundsSchema>;
+
 export const transferFundsSchema = z.object({
   branchId: z.string().uuid("Invalid branch ID"),
   sourceAccountId: z.string().uuid("Invalid source account ID"),

@@ -270,7 +270,7 @@ export class AttendanceService {
   /**
    * 5. Get complete attendance history for a single employee in a month
    */
-  static async getEmployeeAttendanceHistory(tenantId: string, userId: string, month: string) {
+  static async getEmployeeAttendanceHistory(tenantId: string, userId: string, month: string, requestingUser?: any) {
     const employee = await (prisma as any).user.findFirst({
       where: { id: userId, tenantId },
       include: {
@@ -280,6 +280,25 @@ export class AttendanceService {
     });
 
     if (!employee) throw new Error("Employee not found.");
+
+    if (requestingUser) {
+      const isOwnerOrAdmin =
+        requestingUser.role === "COMPANY_OWNER" ||
+        requestingUser.role === "SUPER_ADMIN" ||
+        requestingUser.role === "REGIONAL_ADMIN";
+
+      const isBranchManager =
+        requestingUser.role === "BRANCH_MANAGER" ||
+        requestingUser.pharmacyRoleName?.toLowerCase().includes("branch manager") ||
+        requestingUser.customRoleName?.toLowerCase().includes("branch manager");
+
+      if (isBranchManager && !isOwnerOrAdmin) {
+        const reqBranchId = requestingUser.branchId;
+        if (reqBranchId && employee.branchId && employee.branchId !== reqBranchId) {
+          throw new Error("Access denied: You can only view attendance history of employees in your branch.");
+        }
+      }
+    }
 
     const branchId = employee.branchId;
     if (!branchId) throw new Error("Employee is not assigned to a branch.");

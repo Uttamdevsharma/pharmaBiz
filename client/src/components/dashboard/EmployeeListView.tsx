@@ -335,7 +335,6 @@ export function EmployeeListView({
                   <th className="py-3.5 px-4">Status</th>
                   <th className="py-3.5 px-4">Contact Info</th>
                   <th className="py-3.5 px-4">Salary Package</th>
-                  <th className="py-3.5 px-4">Payment Method</th>
                   <th className="py-3.5 px-4 text-right">Actions</th>
                 </tr>
               </thead>
@@ -427,17 +426,6 @@ export function EmployeeListView({
                           <span className="text-xs font-semibold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded">
                             Not Configured
                           </span>
-                        )}
-                      </td>
-
-                      <td className="py-3.5 px-4">
-                        <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                          {cfg?.paymentMethod || "CASH"}
-                        </span>
-                        {cfg?.paymentDetails && (
-                          <div className="text-[10px] text-slate-400 truncate max-w-[140px]">
-                            {cfg.paymentDetails}
-                          </div>
                         )}
                       </td>
 

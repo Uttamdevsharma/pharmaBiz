@@ -128,7 +128,10 @@ export function DashboardSidebar({
     activeModule === "pos" ||
     activeModule === "pos_sale" ||
     activeModule === "pos_history" ||
-    activeModule === "pos_vat";
+    activeModule === "pos_vat" ||
+    activeModule === "acc_payment_sales" ||
+    activeModule === "acc_product_sales" ||
+    activeModule === "reports";
 
   const isExpensesActive =
     activeModule === "exp_list" ||
@@ -150,8 +153,9 @@ export function DashboardSidebar({
   const isAccountsActive =
     activeModule === "acc_overview" ||
     activeModule === "accounts" ||
-    (activeModule.startsWith("acc_") && !isExpensesActive && !isSalaryActive) ||
-    activeModule === "reports" ||
+    activeModule === "acc_financial_accounts" ||
+    activeModule === "acc_fund_transfer" ||
+    activeModule === "acc_transaction_history" ||
     activeModule === "sup_payments_due";
 
   const isStaffActive =
@@ -177,7 +181,10 @@ export function DashboardSidebar({
       activeModule === "pos" ||
       activeModule === "pos_sale" ||
       activeModule === "pos_history" ||
-      activeModule === "pos_vat"
+      activeModule === "pos_vat" ||
+      activeModule === "acc_payment_sales" ||
+      activeModule === "acc_product_sales" ||
+      activeModule === "reports"
     ) {
       setOpenParents((prev) => ({ ...prev, sales_pos: true }));
     } else if (
@@ -204,8 +211,9 @@ export function DashboardSidebar({
     } else if (
       activeModule === "acc_overview" ||
       activeModule === "accounts" ||
-      activeModule.startsWith("acc_") ||
-      activeModule === "reports" ||
+      activeModule === "acc_financial_accounts" ||
+      activeModule === "acc_fund_transfer" ||
+      activeModule === "acc_transaction_history" ||
       activeModule === "sup_payments_due"
     ) {
       setOpenParents((prev) => ({ ...prev, accounts: true }));
@@ -244,6 +252,24 @@ export function DashboardSidebar({
       label: "Sales History",
       icon: History,
       visible: isOwner || hasPermission("pos.history"),
+    },
+    {
+      id: "acc_payment_sales" as OwnerModule,
+      label: "Payment Method Sales",
+      icon: CreditCard,
+      visible: isOwner || hasPermission("accounts.payment_sales") || hasPermission("pos.history"),
+    },
+    {
+      id: "acc_product_sales" as OwnerModule,
+      label: "Product-Wise Sales",
+      icon: Package,
+      visible: isOwner || hasPermission("accounts.product_sales") || hasPermission("pos.history"),
+    },
+    {
+      id: "reports" as OwnerModule,
+      label: "Sales Reports",
+      icon: BarChart3,
+      visible: isOwner || hasPermission("accounts.reports") || hasPermission("pos.history"),
     },
     {
       id: "pos_vat" as OwnerModule,
@@ -371,24 +397,6 @@ export function DashboardSidebar({
       label: "Fund Transfer",
       icon: ArrowLeftRight,
       visible: isOwner || hasPermission("accounts.fund_transfer"),
-    },
-    {
-      id: "acc_payment_sales" as OwnerModule,
-      label: "Payment Method Sales",
-      icon: CreditCard,
-      visible: isOwner || hasPermission("accounts.payment_sales"),
-    },
-    {
-      id: "acc_product_sales" as OwnerModule,
-      label: "Product-Wise Sales",
-      icon: Package,
-      visible: isOwner || hasPermission("accounts.product_sales"),
-    },
-    {
-      id: "reports" as OwnerModule,
-      label: "Sales Reports",
-      icon: BarChart3,
-      visible: isOwner || hasPermission("accounts.reports"),
     },
     {
       id: "sup_payments_due" as OwnerModule,

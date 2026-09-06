@@ -9,6 +9,7 @@ import {
   Smartphone,
   Banknote,
   Plus,
+  PlusCircle,
   ArrowLeftRight,
   TrendingUp,
   CreditCard,
@@ -20,7 +21,6 @@ import {
   Trash2,
   RefreshCw,
   Landmark,
-  FileText,
   Copy,
   Check,
 } from "lucide-react";
@@ -75,6 +75,13 @@ export function FinancialAccountsView({ onNavigate }: FinancialAccountsViewProps
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  // Deposit Modal state
+  const [accountToDeposit, setAccountToDeposit] = useState<FinancialAccount | null>(null);
+  const [depositAmount, setDepositAmount] = useState<string>("");
+  const [depositDescription, setDepositDescription] = useState<string>("");
+  const [depositing, setDepositing] = useState(false);
+  const [depositError, setDepositError] = useState<string | null>(null);
 
   // Delete Confirmation Modal state
   const [accountToDelete, setAccountToDelete] = useState<FinancialAccount | null>(null);
@@ -168,6 +175,50 @@ export function FinancialAccountsView({ onNavigate }: FinancialAccountsViewProps
     });
     setIsModalOpen(true);
     setError(null);
+  };
+
+  const handleOpenDeposit = (acc: FinancialAccount) => {
+    setAccountToDeposit(acc);
+    setDepositAmount("");
+    setDepositDescription("");
+    setDepositError(null);
+  };
+
+  const handleConfirmDeposit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!accountToDeposit) return;
+    const amt = parseFloat(depositAmount);
+    if (isNaN(amt) || amt <= 0) {
+      setDepositError("Please enter a valid deposit amount greater than 0");
+      return;
+    }
+
+    try {
+      setDepositing(true);
+      setDepositError(null);
+
+      const res = await fetchApi("/accounting/accounts/deposit", {
+        method: "POST",
+        body: JSON.stringify({
+          accountId: accountToDeposit.id,
+          amount: amt,
+          description: depositDescription.trim() || undefined,
+        }),
+      });
+
+      if (!res.success) {
+        throw new Error(res.message || "Failed to record deposit");
+      }
+
+      setSuccessMsg(`Successfully deposited ৳${amt.toLocaleString("en-BD", { minimumFractionDigits: 2 })} into "${accountToDeposit.name}"`);
+      setAccountToDeposit(null);
+      loadAccounts();
+      setTimeout(() => setSuccessMsg(null), 4000);
+    } catch (err: any) {
+      setDepositError(err.message || "Deposit failed");
+    } finally {
+      setDepositing(false);
+    }
   };
 
   const handleQuickTemplate = (presetType: "CASH" | "BKASH" | "NAGAD" | "DBBL" | "CITY" | "BRAC") => {
@@ -343,17 +394,6 @@ export function FinancialAccountsView({ onNavigate }: FinancialAccountsViewProps
       acc.type?.toLowerCase().includes(q)
     );
   });
-
-  const totalBalance = accounts.reduce((sum, a) => sum + Number(a.balance || 0), 0);
-  const totalCash = accounts
-    .filter((a) => a.type === "CASH")
-    .reduce((sum, a) => sum + Number(a.balance || 0), 0);
-  const totalBank = accounts
-    .filter((a) => a.type === "BANK" || a.type === "CARD_SETTLEMENT")
-    .reduce((sum, a) => sum + Number(a.balance || 0), 0);
-  const totalMobile = accounts
-    .filter((a) => a.type === "BKASH" || a.type === "NAGAD" || a.type === "MOBILE")
-    .reduce((sum, a) => sum + Number(a.balance || 0), 0);
 
   const getAccountTheme = (type: string, name: string) => {
     const t = String(type).toUpperCase();
@@ -560,7 +600,7 @@ export function FinancialAccountsView({ onNavigate }: FinancialAccountsViewProps
               >
                 {/* Upper Content */}
                 <div>
-                  {/* Card Header: Icon, Name, Badges, Status & Quick Edit/Delete */}
+                  {/* Card Header: Icon, Name, Badges, Status & Quick Action Buttons */}
                   <div className="flex items-start justify-between gap-2 mb-3">
                     <div className="flex items-center gap-3 min-w-0">
                       <div className={`p-2.5 rounded-xl ${theme.iconBg} shrink-0`}>
@@ -597,8 +637,15 @@ export function FinancialAccountsView({ onNavigate }: FinancialAccountsViewProps
                       </div>
                     </div>
 
-                    {/* Action Buttons: Edit and Delete */}
+                    {/* Action Buttons: Deposit, Edit and Delete */}
                     <div className="flex items-center gap-0.5 shrink-0 opacity-80 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={() => handleOpenDeposit(acc)}
+                        className="p-1.5 rounded-lg text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/50 transition font-bold"
+                        title="Deposit Money into Account"
+                      >
+                        <PlusCircle className="h-4 w-4" />
+                      </button>
                       <button
                         onClick={() => handleOpenEdit(acc)}
                         className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 dark:hover:text-slate-200 transition"
@@ -682,21 +729,125 @@ export function FinancialAccountsView({ onNavigate }: FinancialAccountsViewProps
                   )}
                 </div>
 
-                {/* Transfer Funds CTA */}
-                {onNavigate && (
-                  <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800/80">
+                {/* Card Action Buttons (Deposit & Transfer) */}
+                <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800/80 flex items-center gap-2">
+                  <button
+                    onClick={() => handleOpenDeposit(acc)}
+                    className="flex-1 py-1.5 px-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all duration-150 flex items-center justify-center gap-1 shadow-2xs active:scale-95"
+                  >
+                    <TrendingUp className="h-3.5 w-3.5" />
+                    <span>+ Deposit</span>
+                  </button>
+
+                  {onNavigate && (
                     <button
                       onClick={() => onNavigate("acc_fund_transfer")}
-                      className="w-full py-1.5 px-3 rounded-lg bg-slate-100 hover:bg-emerald-600 text-slate-700 hover:text-white dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-emerald-600 dark:hover:text-white text-xs font-bold transition-all duration-150 flex items-center justify-center gap-1.5"
+                      className="flex-1 py-1.5 px-2.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 text-xs font-bold transition-all duration-150 flex items-center justify-center gap-1"
                     >
-                      <ArrowLeftRight className="h-3.5 w-3.5" />
-                      <span>Transfer Funds</span>
+                      <ArrowLeftRight className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                      <span>Transfer</span>
                     </button>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Deposit Modal */}
+      {accountToDeposit && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 sm:p-8 max-w-md w-full shadow-2xl space-y-5 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/50">
+                  <TrendingUp className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 className="text-base font-black text-slate-900 dark:text-white">Deposit Money</h2>
+                  <p className="text-xs text-slate-400 font-medium">{accountToDeposit.name}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setAccountToDeposit(null)}
+                className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 text-sm font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Current Balance Box */}
+            <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700/80 flex items-center justify-between">
+              <div>
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Target Account</span>
+                <div className="text-xs font-bold text-slate-800 dark:text-slate-200">{accountToDeposit.name}</div>
+              </div>
+              <div className="text-right">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Current Balance</span>
+                <div className="text-sm font-black font-mono text-emerald-600 dark:text-emerald-400">
+                  ৳{Number(accountToDeposit.balance || 0).toLocaleString("en-BD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+              </div>
+            </div>
+
+            {depositError && (
+              <div className="p-3 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-900/60 rounded-xl text-xs font-bold flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" />
+                <span>{depositError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleConfirmDeposit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Deposit Amount (৳) *
+                </label>
+                <input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  placeholder="Enter amount (e.g. 5000)"
+                  value={depositAmount}
+                  onChange={(e) => setDepositAmount(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-mono font-bold text-slate-900 dark:text-white outline-none focus:border-emerald-500"
+                  autoFocus
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Description / Remarks (Optional)
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Vault cash deposit, Capital addition"
+                  value={depositDescription}
+                  onChange={(e) => setDepositDescription(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-200 outline-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setAccountToDeposit(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={depositing}
+                  className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm transition active:scale-95 disabled:opacity-50 flex items-center gap-2"
+                >
+                  {depositing && <Loader2 className="h-4 w-4 animate-spin" />}
+                  Confirm Deposit
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 
@@ -709,12 +860,28 @@ export function FinancialAccountsView({ onNavigate }: FinancialAccountsViewProps
                 <Landmark className="h-5 w-5 text-emerald-600" />
                 {editingAccount ? "Edit Financial Account" : "Add New Financial Account / Bank"}
               </h2>
-              <button
-                onClick={() => setIsModalOpen(false)}
-                className="text-slate-400 hover:text-slate-700 text-sm font-bold"
-              >
-                ✕
-              </button>
+              <div className="flex items-center gap-2">
+                {editingAccount && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const acc = editingAccount;
+                      setIsModalOpen(false);
+                      handleOpenDeposit(acc);
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 text-xs font-bold hover:bg-emerald-100 transition flex items-center gap-1"
+                  >
+                    <TrendingUp className="h-3.5 w-3.5 text-emerald-600" />
+                    <span>+ Deposit</span>
+                  </button>
+                )}
+                <button
+                  onClick={() => setIsModalOpen(false)}
+                  className="text-slate-400 hover:text-slate-700 text-sm font-bold"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
 
             {error && (
@@ -864,7 +1031,7 @@ export function FinancialAccountsView({ onNavigate }: FinancialAccountsViewProps
                 </div>
               )}
 
-              {!editingAccount && (
+              {!editingAccount ? (
                 <div>
                   <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                     Opening Initial Balance (৳)
@@ -878,6 +1045,13 @@ export function FinancialAccountsView({ onNavigate }: FinancialAccountsViewProps
                     onChange={(e) => setFormData({ ...formData, initialBalance: parseFloat(e.target.value) || 0 })}
                     className="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none dark:text-white font-mono font-bold"
                   />
+                </div>
+              ) : (
+                <div className="p-3 bg-slate-50 dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-700 text-xs flex justify-between items-center">
+                  <span className="text-slate-500 font-medium">Current Balance (Read-Only)</span>
+                  <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400 text-sm">
+                    ৳{Number(editingAccount.balance).toLocaleString("en-BD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
                 </div>
               )}
 

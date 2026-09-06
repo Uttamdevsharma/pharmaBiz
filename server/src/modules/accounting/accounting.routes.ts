@@ -7,6 +7,7 @@ import { requireActiveSubscription } from "../../middleware/planLimiter";
 import {
   createAccountSchema,
   updateAccountSchema,
+  depositFundsSchema,
   transferFundsSchema,
   recordTransactionSchema,
   listTransactionsQuerySchema,
@@ -48,6 +49,13 @@ router.patch(
   requirePermission("accounts.manage"),
   validateRequest({ body: updateAccountSchema }),
   AccountingController.updateAccount
+);
+
+router.post(
+  "/accounts/deposit",
+  requirePermission("accounts.manage"),
+  validateRequest({ body: depositFundsSchema }),
+  AccountingController.depositFunds
 );
 
 router.delete(
