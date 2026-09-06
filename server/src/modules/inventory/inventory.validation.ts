@@ -18,6 +18,7 @@ export const inwardStockSchema = z.object({
   sellingPrice: z.number().nonnegative().optional().nullable(),
   shelfLocation: z.string().optional().nullable(),
   paidAmount: z.number().nonnegative().optional().default(0),
+  financialAccountId: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
 });
 

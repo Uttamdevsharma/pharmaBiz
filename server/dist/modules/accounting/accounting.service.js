@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.AccountingService = void 0;
 const prisma_1 = require("../../app/lib/prisma");
 const audit_1 = require("../../app/lib/audit");
+const attendance_service_1 = require("../attendance/attendance.service");
 class AccountingService {
     /**
      * List all financial accounts for a tenant / branch with live metadata.
@@ -673,6 +674,628 @@ class AccountingService {
                 branchId: a.branchId,
                 branchNameStr: a.branch?.name,
             })),
+        };
+    }
+    // ==========================================
+    // 🏢 RECURRING EXPENSE BILLS (RENT, ELECTRICITY, ETC)
+    // ==========================================
+    static async listRecurringExpenses(tenantId, branchId, includeInactive = false) {
+        const where = { tenantId };
+        if (!includeInactive) {
+            where.isActive = true;
+        }
+        if (branchId)
+            where.branchId = branchId;
+        return prisma_1.prisma.recurringExpenseConfig.findMany({
+            where,
+            orderBy: [{ dueDay: "asc" }, { createdAt: "asc" }],
+            include: {
+                branch: { select: { id: true, name: true } },
+            },
+        });
+    }
+    static async createRecurringExpense(tenantId, data) {
+        return prisma_1.prisma.recurringExpenseConfig.create({
+            data: {
+                tenantId,
+                branchId: data.branchId,
+                category: data.category,
+                title: data.title.trim(),
+                estimatedAmount: data.estimatedAmount || 0,
+                dueDay: data.dueDay || null,
+                notes: data.notes?.trim() || null,
+                isActive: true,
+            },
+            include: {
+                branch: { select: { id: true, name: true } },
+            },
+        });
+    }
+    static async updateRecurringExpense(tenantId, id, data) {
+        const existing = await prisma_1.prisma.recurringExpenseConfig.findFirst({
+            where: { id, tenantId },
+        });
+        if (!existing)
+            throw new Error("Recurring expense configuration not found");
+        return prisma_1.prisma.recurringExpenseConfig.update({
+            where: { id },
+            data: {
+                ...(data.category && { category: data.category }),
+                ...(data.title && { title: data.title.trim() }),
+                ...(data.estimatedAmount !== undefined && { estimatedAmount: data.estimatedAmount }),
+                ...(data.dueDay !== undefined && { dueDay: data.dueDay }),
+                ...(data.notes !== undefined && { notes: data.notes?.trim() || null }),
+                ...(data.isActive !== undefined && { isActive: data.isActive }),
+            },
+        });
+    }
+    static async deleteRecurringExpense(tenantId, id) {
+        const existing = await prisma_1.prisma.recurringExpenseConfig.findFirst({
+            where: { id, tenantId },
+        });
+        if (!existing)
+            throw new Error("Recurring expense configuration not found");
+        try {
+            return await prisma_1.prisma.recurringExpenseConfig.delete({
+                where: { id },
+            });
+        }
+        catch {
+            return prisma_1.prisma.recurringExpenseConfig.update({
+                where: { id },
+                data: { isActive: false },
+            });
+        }
+    }
+    // ==========================================
+    // 💸 ACTUAL MONTHLY EXPENSE PAYMENTS
+    // ==========================================
+    static async listExpenses(tenantId, query) {
+        const where = { tenantId };
+        const isVal = (val) => val !== undefined && val !== null && String(val).trim() !== "" && String(val) !== "undefined" && String(val) !== "null" && String(val) !== "ALL";
+        if (isVal(query.branchId))
+            where.branchId = query.branchId;
+        if (isVal(query.category))
+            where.category = query.category;
+        if (isVal(query.recurringConfigId))
+            where.recurringConfigId = query.recurringConfigId;
+        if (isVal(query.financialAccountId))
+            where.financialAccountId = query.financialAccountId;
+        if (isVal(query.expenseMonth))
+            where.expenseMonth = query.expenseMonth;
+        if (isVal(query.startDate) || isVal(query.endDate)) {
+            where.paymentDate = {};
+            if (isVal(query.startDate))
+                where.paymentDate.gte = new Date(query.startDate);
+            if (isVal(query.endDate)) {
+                const end = new Date(query.endDate);
+                end.setHours(23, 59, 59, 999);
+                where.paymentDate.lte = end;
+            }
+        }
+        const page = query.page || 1;
+        const limit = query.limit || 100;
+        const skip = (page - 1) * limit;
+        const [items, total] = await Promise.all([
+            prisma_1.prisma.branchExpense.findMany({
+                where,
+                skip,
+                take: limit,
+                orderBy: { paymentDate: "desc" },
+                include: {
+                    branch: { select: { id: true, name: true } },
+                    financialAccount: { select: { id: true, name: true, type: true, accountNumber: true, bankName: true } },
+                    recordedBy: { select: { id: true, name: true, username: true } },
+                    recurringConfig: { select: { id: true, title: true, estimatedAmount: true } },
+                },
+            }),
+            prisma_1.prisma.branchExpense.count({ where }),
+        ]);
+        return {
+            items,
+            pagination: {
+                page,
+                limit,
+                total,
+                totalPages: Math.ceil(total / limit),
+            },
+        };
+    }
+    static async recordExpense(tenantId, userId, data) {
+        // 1. Verify financial account belongs to this branch and tenant
+        const account = await prisma_1.prisma.financialAccount.findFirst({
+            where: { id: data.financialAccountId, branchId: data.branchId, tenantId, isActive: true },
+        });
+        if (!account) {
+            throw new Error("Invalid or inactive financial account selected for this branch.");
+        }
+        if (Number(account.balance) < data.amount) {
+            throw new Error(`Insufficient balance in financial account "${account.name}". Current Balance: ৳${Number(account.balance).toLocaleString()}, Required: ৳${data.amount.toLocaleString()}`);
+        }
+        return prisma_1.prisma.$transaction(async (tx) => {
+            // 2. Decrement account balance
+            await tx.financialAccount.update({
+                where: { id: data.financialAccountId },
+                data: {
+                    balance: { decrement: data.amount },
+                },
+            });
+            const configId = (data.recurringConfigId && data.recurringConfigId.trim() !== "") ? data.recurringConfigId : null;
+            // 3. Create expense record
+            const expense = await tx.branchExpense.create({
+                data: {
+                    tenantId,
+                    branchId: data.branchId,
+                    financialAccountId: data.financialAccountId,
+                    recurringConfigId: configId,
+                    category: data.category,
+                    title: data.title.trim(),
+                    expenseMonth: data.expenseMonth,
+                    amount: data.amount,
+                    voucherNo: data.voucherNo?.trim() || null,
+                    reference: data.reference?.trim() || null,
+                    notes: data.notes?.trim() || null,
+                    recordedById: userId,
+                    paymentDate: data.paymentDate ? new Date(data.paymentDate) : new Date(),
+                },
+                include: {
+                    financialAccount: true,
+                    branch: true,
+                },
+            });
+            // 4. Create financial transaction
+            await tx.financialTransaction.create({
+                data: {
+                    tenantId,
+                    branchId: data.branchId,
+                    sourceAccountId: data.financialAccountId,
+                    amount: data.amount,
+                    type: "EXPENSE",
+                    reference: data.voucherNo || data.reference || expense.id,
+                    note: `[Expense: ${data.category.replace(/_/g, " ")}] ${data.title} (${data.expenseMonth}) paid from ${account.name}`,
+                    userId,
+                },
+            });
+            await audit_1.AuditService.log({
+                tenantId,
+                branchId: data.branchId,
+                userId,
+                action: "EXPENSE_RECORDED",
+                details: {
+                    expenseId: expense.id,
+                    branchId: data.branchId,
+                    category: data.category,
+                    title: data.title,
+                    amount: data.amount,
+                    account: account.name,
+                    month: data.expenseMonth,
+                },
+            });
+            return expense;
+        });
+    }
+    static async getExpenseSummary(tenantId, branchId, month) {
+        const where = { tenantId };
+        if (branchId)
+            where.branchId = branchId;
+        if (month)
+            where.expenseMonth = month;
+        const expenses = await prisma_1.prisma.branchExpense.findMany({
+            where,
+            select: {
+                category: true,
+                title: true,
+                amount: true,
+                recurringConfigId: true,
+            },
+        });
+        let shopRent = 0;
+        let electricityBill = 0;
+        let employeeSalary = 0;
+        let otherExpenses = 0;
+        let totalExpenses = 0;
+        const categoryBreakdown = {};
+        const billWiseBreakdown = {};
+        for (const exp of expenses) {
+            const amt = Number(exp.amount || 0);
+            totalExpenses += amt;
+            categoryBreakdown[exp.category] = (categoryBreakdown[exp.category] || 0) + amt;
+            if (exp.category === "SHOP_RENT")
+                shopRent += amt;
+            else if (exp.category === "ELECTRICITY_BILL")
+                electricityBill += amt;
+            else if (exp.category === "EMPLOYEE_SALARY")
+                employeeSalary += amt;
+            else
+                otherExpenses += amt;
+            const key = exp.title.trim();
+            if (!billWiseBreakdown[key]) {
+                billWiseBreakdown[key] = { title: exp.title, category: exp.category, totalAmount: 0, count: 0 };
+            }
+            billWiseBreakdown[key].totalAmount += amt;
+            billWiseBreakdown[key].count += 1;
+        }
+        return {
+            shopRent,
+            electricityBill,
+            employeeSalary,
+            otherExpenses,
+            totalExpenses,
+            categoryBreakdown,
+            billWiseBreakdown: Object.values(billWiseBreakdown),
+            count: expenses.length,
+        };
+    }
+    // ==========================================
+    // 👥 STAFF SALARY MANAGEMENT & PAYROLL
+    // ==========================================
+    static async listBranchStaffSalaries(tenantId, branchId, month, includeInactive = false) {
+        // Fetch branch-assigned staff only, explicitly excluding Company Owner and Super Admin
+        const where = {
+            tenantId,
+            branchId,
+            role: {
+                notIn: ["COMPANY_OWNER", "SUPER_ADMIN"],
+            },
+        };
+        if (!includeInactive) {
+            where.isActive = true;
+        }
+        const users = await prisma_1.prisma.user.findMany({
+            where,
+            select: {
+                id: true,
+                name: true,
+                username: true,
+                email: true,
+                phone: true,
+                role: true,
+                customRoleName: true,
+                pharmacyRoleName: true,
+                avatarUrl: true,
+                createdAt: true,
+                branchId: true,
+                branch: { select: { id: true, name: true } },
+                salaryConfig: true,
+                isActive: true,
+                resignationDate: true,
+                resignationReason: true,
+                deactivatedAt: true,
+                salaryDisbursements: {
+                    where: { month },
+                    include: {
+                        financialAccount: { select: { id: true, name: true, type: true } },
+                        disbursedBy: { select: { id: true, name: true, username: true } },
+                    },
+                    orderBy: { paymentDate: "desc" },
+                },
+            },
+            orderBy: [{ name: "asc" }, { username: "asc" }],
+        });
+        return Promise.all(users.map(async (u) => {
+            let calc = null;
+            try {
+                calc = await attendance_service_1.AttendanceService.calculateMonthlySalary(tenantId, branchId, u.id, month);
+            }
+            catch {
+                // fallback
+            }
+            const config = u.salaryConfig;
+            const baseSalary = calc ? calc.metrics.baseSalary : Number(config?.baseSalary || 0);
+            const allowances = calc ? calc.metrics.totalAllowances : Number(config?.allowances || 0);
+            const deductions = calc ? calc.metrics.totalDeductions : Number(config?.deductions || 0);
+            const netSalary = calc ? calc.metrics.finalPayable : Number(config?.netSalary || (baseSalary + allowances - deductions));
+            const disbursements = u.salaryDisbursements || [];
+            const paidAmount = disbursements.reduce((sum, d) => sum + Number(d.paidAmount || 0), 0);
+            const dueAmount = Math.max(0, Number((netSalary - paidAmount).toFixed(2)));
+            let status = "DUE";
+            if (netSalary > 0 && paidAmount >= netSalary) {
+                status = "PAID";
+            }
+            else if (paidAmount > 0) {
+                status = "PARTIAL";
+            }
+            else {
+                status = "DUE";
+            }
+            return {
+                id: u.id,
+                name: u.name,
+                username: u.username,
+                email: u.email,
+                phone: u.phone,
+                role: u.role,
+                customRoleName: u.customRoleName,
+                pharmacyRoleName: u.pharmacyRoleName,
+                avatarUrl: u.avatarUrl,
+                branchId: u.branchId,
+                branchName: u.branch?.name,
+                createdAt: u.createdAt,
+                isActive: u.isActive,
+                resignationDate: u.resignationDate,
+                resignationReason: u.resignationReason,
+                deactivatedAt: u.deactivatedAt,
+                salaryConfig: config
+                    ? {
+                        id: config.id,
+                        baseSalary,
+                        allowances,
+                        deductions,
+                        netSalary,
+                        paymentMethod: config.paymentMethod,
+                        paymentDetails: config.paymentDetails,
+                        effectiveDate: config.effectiveDate,
+                        notes: config.notes,
+                    }
+                    : null,
+                attendanceMetrics: calc?.metrics || null,
+                monthStatus: {
+                    month,
+                    netSalary,
+                    paidAmount,
+                    dueAmount,
+                    status,
+                    disbursements,
+                },
+            };
+        }));
+    }
+    static async setSalaryConfig(tenantId, data) {
+        const netSalary = data.baseSalary + (data.allowances || 0) - (data.deductions || 0);
+        const user = await prisma_1.prisma.user.findFirst({
+            where: { id: data.userId, tenantId },
+        });
+        if (!user)
+            throw new Error("Staff member not found in this pharmacy.");
+        return prisma_1.prisma.employeeSalaryConfig.upsert({
+            where: { userId: data.userId },
+            update: {
+                branchId: data.branchId,
+                baseSalary: data.baseSalary,
+                allowances: data.allowances || 0,
+                deductions: data.deductions || 0,
+                netSalary,
+                paymentMethod: data.paymentMethod || null,
+                paymentDetails: data.paymentDetails?.trim() || null,
+                effectiveDate: data.effectiveDate ? new Date(data.effectiveDate) : null,
+                notes: data.notes?.trim() || null,
+            },
+            create: {
+                tenantId,
+                branchId: data.branchId,
+                userId: data.userId,
+                baseSalary: data.baseSalary,
+                allowances: data.allowances || 0,
+                deductions: data.deductions || 0,
+                netSalary,
+                paymentMethod: data.paymentMethod || null,
+                paymentDetails: data.paymentDetails?.trim() || null,
+                effectiveDate: data.effectiveDate ? new Date(data.effectiveDate) : null,
+                notes: data.notes?.trim() || null,
+            },
+        });
+    }
+    static async disburseSalary(tenantId, disbursedById, data) {
+        // 1. Verify employee
+        const employee = await prisma_1.prisma.user.findFirst({
+            where: { id: data.userId, tenantId },
+            include: { salaryConfig: true },
+        });
+        if (!employee)
+            throw new Error("Employee not found in this pharmacy.");
+        // 2. Verify financial account belongs to branch & has funds
+        const account = await prisma_1.prisma.financialAccount.findFirst({
+            where: { id: data.financialAccountId, branchId: data.branchId, tenantId, isActive: true },
+        });
+        if (!account)
+            throw new Error("Invalid or inactive financial account selected for salary payment.");
+        if (Number(account.balance) < data.paidAmount) {
+            throw new Error(`Insufficient balance in account "${account.name}". Current Balance: ৳${Number(account.balance).toLocaleString()}, Required: ৳${data.paidAmount.toLocaleString()}`);
+        }
+        // 3. Compute salary figures with attendance calculation
+        let calc = null;
+        try {
+            calc = await attendance_service_1.AttendanceService.calculateMonthlySalary(tenantId, data.branchId, data.userId, data.month);
+        }
+        catch (e) {
+            console.error("Attendance calculation error during disbursement", e);
+        }
+        const config = employee.salaryConfig;
+        const baseAmount = calc ? calc.metrics.baseSalary : Number(config?.baseSalary || data.paidAmount);
+        const allowances = calc ? calc.metrics.totalAllowances : Number(config?.allowances || 0);
+        const deductions = calc ? calc.metrics.totalDeductions : Number(config?.deductions || 0);
+        const netPayable = calc ? calc.metrics.finalPayable : Number(config?.netSalary || (baseAmount + allowances - deductions));
+        // Previous payments this month
+        const previousDisbursements = await prisma_1.prisma.salaryDisbursement.findMany({
+            where: { tenantId, userId: data.userId, month: data.month },
+        });
+        const priorPaid = previousDisbursements.reduce((sum, d) => sum + Number(d.paidAmount || 0), 0);
+        const totalPaidNow = priorPaid + data.paidAmount;
+        const dueAmount = Math.max(0, Number((netPayable - totalPaidNow).toFixed(2)));
+        const status = dueAmount === 0 ? "PAID" : "PARTIAL";
+        return prisma_1.prisma.$transaction(async (tx) => {
+            // Debit account
+            await tx.financialAccount.update({
+                where: { id: data.financialAccountId },
+                data: {
+                    balance: { decrement: data.paidAmount },
+                },
+            });
+            // Create salary disbursement record with immutable attendance snapshot
+            const disbursement = await tx.salaryDisbursement.create({
+                data: {
+                    tenantId,
+                    branchId: data.branchId,
+                    userId: data.userId,
+                    financialAccountId: data.financialAccountId,
+                    month: data.month,
+                    baseAmount,
+                    allowances,
+                    deductions,
+                    netPayable,
+                    paidAmount: data.paidAmount,
+                    dueAmount,
+                    status,
+                    totalDays: calc?.metrics.totalDays ?? null,
+                    offDays: calc?.metrics.offDays ?? null,
+                    workingDays: calc?.metrics.totalWorkingDays ?? null,
+                    presentDays: calc?.metrics.presentDays ?? null,
+                    absentDays: calc?.metrics.absentDays ?? null,
+                    paidLeaveDays: calc?.metrics.paidLeaveDays ?? null,
+                    unpaidLeaveDays: calc?.metrics.unpaidLeaveDays ?? null,
+                    dailyRate: calc?.metrics.dailyRate ?? null,
+                    attendanceDeduction: calc?.metrics.attendanceDeduction ?? null,
+                    allowanceBreakdown: calc?.monthlyAllowances ?? null,
+                    paymentRef: data.paymentRef?.trim() || null,
+                    notes: data.notes?.trim() || null,
+                    disbursedById,
+                    paymentDate: new Date(),
+                },
+                include: {
+                    financialAccount: true,
+                    user: true,
+                },
+            });
+            // Also record as expense under BranchExpense so monthly expenses include salary
+            await tx.branchExpense.create({
+                data: {
+                    tenantId,
+                    branchId: data.branchId,
+                    financialAccountId: data.financialAccountId,
+                    category: "EMPLOYEE_SALARY",
+                    title: `Salary - ${employee.name || employee.username}`,
+                    expenseMonth: data.month,
+                    amount: data.paidAmount,
+                    voucherNo: data.paymentRef || disbursement.id,
+                    notes: `Monthly payroll payment for ${data.month}`,
+                    recordedById: disbursedById,
+                    paymentDate: new Date(),
+                },
+            });
+            // Financial transaction audit ledger
+            await tx.financialTransaction.create({
+                data: {
+                    tenantId,
+                    branchId: data.branchId,
+                    sourceAccountId: data.financialAccountId,
+                    amount: data.paidAmount,
+                    type: "EXPENSE",
+                    reference: data.paymentRef || disbursement.id,
+                    note: `[Salary Payment] ${employee.name || employee.username} for ${data.month} paid from ${account.name}`,
+                    userId: disbursedById,
+                },
+            });
+            await audit_1.AuditService.log({
+                tenantId,
+                branchId: data.branchId,
+                userId: disbursedById,
+                action: "SALARY_DISBURSED",
+                details: {
+                    disbursementId: disbursement.id,
+                    employeeId: data.userId,
+                    employeeName: employee.name || employee.username,
+                    month: data.month,
+                    paidAmount: data.paidAmount,
+                    account: account.name,
+                },
+            });
+            return disbursement;
+        });
+    }
+    static async getEmployeeSalaryHistory(tenantId, userId) {
+        const employee = await prisma_1.prisma.user.findFirst({
+            where: { id: userId, tenantId },
+            select: {
+                id: true,
+                name: true,
+                username: true,
+                email: true,
+                phone: true,
+                role: true,
+                customRoleName: true,
+                pharmacyRoleName: true,
+                avatarUrl: true,
+                createdAt: true,
+                branch: { select: { id: true, name: true } },
+                salaryConfig: true,
+            },
+        });
+        if (!employee)
+            throw new Error("Employee not found.");
+        const disbursements = await prisma_1.prisma.salaryDisbursement.findMany({
+            where: { tenantId, userId },
+            orderBy: { paymentDate: "desc" },
+            include: {
+                financialAccount: { select: { id: true, name: true, type: true, accountNumber: true, bankName: true } },
+                disbursedBy: { select: { id: true, name: true, username: true } },
+                branch: { select: { id: true, name: true } },
+            },
+        });
+        const totalDisbursed = disbursements.reduce((sum, d) => sum + Number(d.paidAmount || 0), 0);
+        return {
+            employee,
+            disbursements,
+            summary: {
+                totalDisbursed,
+                totalPayments: disbursements.length,
+            },
+        };
+    }
+    static async getMySalaryHistory(tenantId, userId) {
+        return this.getEmployeeSalaryHistory(tenantId, userId);
+    }
+    static async getBranchSalaryHistory(tenantId, branchId, query) {
+        const where = { tenantId };
+        if (branchId)
+            where.branchId = branchId;
+        if (query?.month)
+            where.month = query.month;
+        if (query?.userId)
+            where.userId = query.userId;
+        const page = query?.page || 1;
+        const limit = query?.limit || 50;
+        const skip = (page - 1) * limit;
+        const [items, total] = await Promise.all([
+            prisma_1.prisma.salaryDisbursement.findMany({
+                where,
+                skip,
+                take: limit,
+                orderBy: { paymentDate: "desc" },
+                include: {
+                    user: {
+                        select: {
+                            id: true,
+                            name: true,
+                            username: true,
+                            phone: true,
+                            role: true,
+                            customRoleName: true,
+                            pharmacyRoleName: true,
+                        },
+                    },
+                    financialAccount: {
+                        select: { id: true, name: true, type: true, accountNumber: true, bankName: true },
+                    },
+                    disbursedBy: {
+                        select: { id: true, name: true, username: true },
+                    },
+                    branch: {
+                        select: { id: true, name: true },
+                    },
+                },
+            }),
+            prisma_1.prisma.salaryDisbursement.count({ where }),
+        ]);
+        const totalDisbursed = items.reduce((sum, d) => sum + Number(d.paidAmount || 0), 0);
+        return {
+            items,
+            totalDisbursed,
+            pagination: {
+                page,
+                limit,
+                total,
+                totalPages: Math.ceil(total / limit),
+            },
         };
     }
 }

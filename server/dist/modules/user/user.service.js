@@ -94,6 +94,18 @@ exports.ALL_PHARMACY_PERMISSIONS = [
         description: "Track unpaid supplier invoices, purchase dues, and record settlements.",
     },
     {
+        id: "accounts.expenses",
+        name: "Expenses & Bills",
+        category: "Accounts & Finance",
+        description: "Manage branch monthly expenses (Rent, Electricity, regular costs) and payment vouchers.",
+    },
+    {
+        id: "accounts.salaries",
+        name: "Employee Salary Management",
+        category: "Accounts & Finance",
+        description: "Configure staff salary structures and disburse monthly payroll from branch accounts.",
+    },
+    {
         id: "accounts.transaction_history",
         name: "Transaction History",
         category: "Accounts & Finance",
@@ -117,11 +129,23 @@ exports.ALL_PHARMACY_PERMISSIONS = [
         category: "Branch Network",
         description: "Configure branch locations, contact info, and branch settings.",
     },
+    {
+        id: "attendance.manage",
+        name: "Attendance Management",
+        category: "Staff Management",
+        description: "Mark and finalize daily employee attendance and configure monthly off-days.",
+    },
+    {
+        id: "salaries.base_salary.edit",
+        name: "Configure Base Salary",
+        category: "Accounts & Finance",
+        description: "Set and update employee Base Salary packages (Pharmacy Owner & Branch Manager only).",
+    },
 ];
 exports.DEFAULT_PHARMACY_ROLES = [
     {
         name: "Branch Manager",
-        description: "Full operational oversight over branch sales, stock, inventory, and staff.",
+        description: "Full operational oversight over branch sales, stock, inventory, expenses, salaries, attendance, and staff.",
         isSystem: true,
         permissions: [
             "dashboard.view",
@@ -132,8 +156,12 @@ exports.DEFAULT_PHARMACY_ROLES = [
             "stock.manage",
             "suppliers.manage",
             "accounts.manage",
+            "accounts.expenses",
+            "accounts.salaries",
             "accounts.reports",
             "staff.manage",
+            "attendance.manage",
+            "salaries.base_salary.edit",
         ],
     },
     {
@@ -150,7 +178,7 @@ exports.DEFAULT_PHARMACY_ROLES = [
     },
     {
         name: "Accounts Manager",
-        description: "Financial accounts, fund transfers, revenue ledgers, supplier dues, and sales reports.",
+        description: "Financial accounts, fund transfers, revenue ledgers, supplier dues, expenses, salaries, and reports.",
         isSystem: true,
         permissions: [
             "accounts.manage",
@@ -158,6 +186,8 @@ exports.DEFAULT_PHARMACY_ROLES = [
             "accounts.fund_transfer",
             "accounts.payment_sales",
             "accounts.product_sales",
+            "accounts.expenses",
+            "accounts.salaries",
             "accounts.reports",
             "accounts.supplier_due",
             "accounts.transaction_history",
@@ -685,6 +715,47 @@ class UserService {
             activePermissions: permissionMap,
             allPermissions: exports.ALL_PHARMACY_PERMISSIONS,
         };
+    }
+    static async changePassword(userId, data) {
+        const user = await prisma_1.prisma.user.findUnique({
+            where: { id: userId },
+        });
+        if (!user) {
+            throw new Error("User not found.");
+        }
+        const isValid = await bcryptjs_1.default.compare(data.currentPassword, user.passwordHash);
+        if (!isValid) {
+            throw new Error("Current password does not match.");
+        }
+        const newHash = await bcryptjs_1.default.hash(data.newPassword, 10);
+        await prisma_1.prisma.user.update({
+            where: { id: userId },
+            data: { passwordHash: newHash },
+        });
+        return { success: true, message: "Password updated successfully." };
+    }
+    static async updateProfile(userId, data) {
+        const updated = await prisma_1.prisma.user.update({
+            where: { id: userId },
+            data: {
+                ...(data.name !== undefined && { name: data.name }),
+                ...(data.phone !== undefined && { phone: data.phone }),
+                ...(data.email !== undefined && { email: data.email }),
+                ...(data.avatarUrl !== undefined && { avatarUrl: data.avatarUrl }),
+            },
+            select: {
+                id: true,
+                name: true,
+                username: true,
+                email: true,
+                phone: true,
+                avatarUrl: true,
+                role: true,
+                customRoleName: true,
+                pharmacyRoleName: true,
+            },
+        });
+        return updated;
     }
 }
 exports.UserService = UserService;

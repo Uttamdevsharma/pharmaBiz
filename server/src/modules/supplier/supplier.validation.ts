@@ -44,6 +44,7 @@ export const createPurchaseSchema = z.object({
   items: z.array(purchaseItemInputSchema).min(1, "At least one item is required in purchase"),
   paidAmount: z.number().nonnegative().default(0),
   paymentMethod: z.string().default("CASH"),
+  financialAccountId: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
 });
 
@@ -60,7 +61,9 @@ export const listPurchasesQuerySchema = z.object({
 
 export const recordSupplierPaymentSchema = z.object({
   amount: z.number().positive("Payment amount must be greater than 0"),
-  paymentMethod: z.string().default("CASH"),
+  branchId: z.string().optional().nullable(),
+  financialAccountId: z.string().min(1, "Financial account is required"),
+  paymentMethod: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
 });
 

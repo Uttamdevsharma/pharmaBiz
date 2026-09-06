@@ -27,6 +27,8 @@ export interface AuthenticatedUser {
   name?: string | null;
   username?: string | null;
   email?: string | null;
+  phone?: string | null;
+  avatarUrl?: string | null;
   verificationStatus?: string | null;
   rejectionReason?: string | null;
   requiresOtp?: boolean;

@@ -42,6 +42,19 @@ import { FundTransferView } from "@/components/dashboard/FundTransferView";
 import { TransactionHistoryView } from "@/components/dashboard/TransactionHistoryView";
 import { SalesHistoryView } from "@/components/dashboard/SalesHistoryView";
 import { VatSettingsView } from "@/components/dashboard/VatSettingsView";
+import { ExpensesManagementView } from "@/components/dashboard/ExpensesManagementView";
+import { BillListView } from "@/components/dashboard/BillListView";
+import { PayBillView } from "@/components/dashboard/PayBillView";
+import { BillHistoryView } from "@/components/dashboard/BillHistoryView";
+import { ExpensesRecurringView, RecurringConfig } from "@/components/dashboard/ExpensesRecurringView";
+import { ExpensesMonthlyView } from "@/components/dashboard/ExpensesMonthlyView";
+import { BillSettingsView } from "@/components/dashboard/BillSettingsView";
+import { EmployeeListView } from "@/components/dashboard/EmployeeListView";
+import { SalaryManagementView } from "@/components/dashboard/SalaryManagementView";
+import { BranchSalaryHistoryView } from "@/components/dashboard/BranchSalaryHistoryView";
+import { EmployeeDetailsView } from "@/components/dashboard/EmployeeDetailsView";
+import { AttendanceView } from "@/components/dashboard/AttendanceView";
+import { StaffSalaryHistoryView } from "@/components/dashboard/StaffSalaryHistoryView";
 import { Product } from "@/types";
 import {
   CreditCard,
@@ -83,6 +96,8 @@ export default function RoleBasedDashboard() {
   const [currentSub, setCurrentSub] = useState<any>(null);
   const [branches, setBranches] = useState<any[]>([]);
   const [selectedBranchId, setSelectedBranchId] = useState<string>(user?.branchId || "");
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("");
+  const [selectedRecurringForPay, setSelectedRecurringForPay] = useState<any | null>(null);
   const [dataLoading, setDataLoading] = useState(true);
   const [initiatingPay, setInitiatingPay] = useState(false);
   const [upgradePlanId, setUpgradePlanId] = useState<string>("");
@@ -338,6 +353,7 @@ export default function RoleBasedDashboard() {
         branches={isBranchSwitcherAllowed ? branches : []}
         selectedBranchId={selectedBranchId}
         onBranchChange={isBranchSwitcherAllowed ? setSelectedBranchId : undefined}
+        onNavigate={setActiveModule}
       />
 
       {/* Main Workspace Layout */}
@@ -364,6 +380,7 @@ export default function RoleBasedDashboard() {
 
   function renderModuleContent() {
     const isOwner = user?.role === "COMPANY_OWNER" || user?.role === "SUPER_ADMIN";
+    const isBranchManager = user?.role === "BRANCH_MANAGER" || user?.pharmacyRoleName?.toLowerCase().includes("branch manager");
 
     switch (activeModule) {
       // 📊 Overview & Dashboard
@@ -430,6 +447,144 @@ export default function RoleBasedDashboard() {
           return <TenantAccessRestricted moduleName="Transaction History" requiredPerm="accounts.transaction_history" />;
         }
         return <TransactionHistoryView onNavigate={setActiveModule} />;
+
+      // 💸 Expenses & Bills (Redesigned 3-Submenu Structure)
+      case "exp_list":
+      case "exp_recurring":
+      case "exp_settings":
+        if (!isOwner && !hasPermission("accounts.expenses") && !hasPermission("accounts.manage")) {
+          return <TenantAccessRestricted moduleName="Bill List" requiredPerm="accounts.expenses" />;
+        }
+        return (
+          <BillListView
+            selectedBranchId={selectedBranchId}
+            onNavigate={setActiveModule}
+            onSelectForPayment={(bill) => {
+              setSelectedRecurringForPay(bill);
+              setActiveModule("exp_pay");
+            }}
+          />
+        );
+
+      case "exp_pay":
+        if (!isOwner && !hasPermission("accounts.expenses") && !hasPermission("accounts.manage")) {
+          return <TenantAccessRestricted moduleName="Pay Bill" requiredPerm="accounts.expenses" />;
+        }
+        return (
+          <PayBillView
+            selectedBranchId={selectedBranchId}
+            onNavigate={setActiveModule}
+            preSelectedBill={selectedRecurringForPay}
+          />
+        );
+
+      case "exp_history":
+      case "exp_monthly":
+      case "acc_expenses":
+        if (!isOwner && !hasPermission("accounts.expenses") && !hasPermission("accounts.manage")) {
+          return <TenantAccessRestricted moduleName="Bill History" requiredPerm="accounts.expenses" />;
+        }
+        return (
+          <BillHistoryView
+            selectedBranchId={selectedBranchId}
+            onNavigate={setActiveModule}
+          />
+        );
+
+      // 👥 Employee & Salary
+      case "sal_employees":
+        if (!isOwner && !hasPermission("accounts.salaries") && !hasPermission("accounts.manage")) {
+          return <TenantAccessRestricted moduleName="Employee List" requiredPerm="accounts.salaries" />;
+        }
+        return (
+          <EmployeeListView
+            selectedBranchId={selectedBranchId}
+            onSelectEmployee={(empId) => {
+              setSelectedEmployeeId(empId);
+              setActiveModule("employee_details");
+            }}
+            onNavigate={setActiveModule}
+          />
+        );
+
+      case "sal_attendance":
+        if (!isOwner && !isBranchManager && !hasPermission("attendance.manage")) {
+          return <TenantAccessRestricted moduleName="Attendance Management" requiredPerm="attendance.manage" />;
+        }
+        return (
+          <AttendanceView
+            selectedBranchId={selectedBranchId}
+            onNavigate={setActiveModule}
+            initialTab="daily"
+            onSelectEmployee={(empId) => {
+              setSelectedEmployeeId(empId);
+              setActiveModule("employee_details");
+            }}
+          />
+        );
+
+      case "sal_offdays":
+        if (!isOwner && !isBranchManager && !hasPermission("attendance.offdays") && !hasPermission("attendance.manage")) {
+          return <TenantAccessRestricted moduleName="Off-Day Settings" requiredPerm="attendance.manage" />;
+        }
+        return (
+          <AttendanceView
+            selectedBranchId={selectedBranchId}
+            onNavigate={setActiveModule}
+            initialTab="offdays"
+            onSelectEmployee={(empId) => {
+              setSelectedEmployeeId(empId);
+              setActiveModule("employee_details");
+            }}
+          />
+        );
+
+      case "sal_management":
+      case "acc_salaries":
+        if (!isOwner && !hasPermission("accounts.salaries") && !hasPermission("accounts.manage")) {
+          return <TenantAccessRestricted moduleName="Salary Management" requiredPerm="accounts.salaries" />;
+        }
+        return (
+          <SalaryManagementView
+            selectedBranchId={selectedBranchId}
+            onSelectEmployee={(empId) => {
+              setSelectedEmployeeId(empId);
+              setActiveModule("employee_details");
+            }}
+            onNavigate={setActiveModule}
+          />
+        );
+
+      case "sal_history":
+        return (
+          <BranchSalaryHistoryView
+            selectedBranchId={selectedBranchId}
+            onNavigate={setActiveModule}
+            onSelectEmployee={(empId) => {
+              setSelectedEmployeeId(empId);
+              setActiveModule("employee_details");
+            }}
+          />
+        );
+
+      case "employee_details":
+        if (!isOwner && !hasPermission("accounts.salaries") && !hasPermission("accounts.manage")) {
+          return <TenantAccessRestricted moduleName="Employee Details & Salary History" requiredPerm="accounts.salaries" />;
+        }
+        return (
+          <EmployeeDetailsView
+            employeeId={selectedEmployeeId}
+            selectedBranchId={selectedBranchId}
+            onBack={() => setActiveModule("sal_management")}
+          />
+        );
+
+      case "staff_salary_history":
+        return (
+          <StaffSalaryHistoryView
+            onBack={() => setActiveModule("overview")}
+          />
+        );
 
       // 📦 Inventory Subpages
       case "inv_add_product":

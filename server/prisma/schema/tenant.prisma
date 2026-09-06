@@ -85,6 +85,13 @@ model Tenant {
   financialAccounts      FinancialAccount[]
   financialTransactions  FinancialTransaction[]
   pharmacyRoles          PharmacyRole[]
+  branchExpenses         BranchExpense[]
+  recurringExpenseConfigs RecurringExpenseConfig[]
+  employeeSalaryConfigs  EmployeeSalaryConfig[]
+  salaryDisbursements    SalaryDisbursement[]
+  branchOffDayConfigs    BranchOffDayConfig[]
+  employeeAttendances    EmployeeAttendance[]
+  employeeMonthlyAllowances EmployeeMonthlyAllowance[]
 
   @@index([verificationStatus])
 }
@@ -111,6 +118,13 @@ model Branch {
   notifications          Notification[]
   financialAccounts      FinancialAccount[]
   financialTransactions  FinancialTransaction[]
+  branchExpenses         BranchExpense[]
+  recurringExpenseConfigs RecurringExpenseConfig[]
+  employeeSalaryConfigs  EmployeeSalaryConfig[]
+  salaryDisbursements    SalaryDisbursement[]
+  branchOffDayConfigs    BranchOffDayConfig[]
+  employeeAttendances    EmployeeAttendance[]
+  employeeMonthlyAllowances EmployeeMonthlyAllowance[]
   
   stockTransfersFrom StockTransfer[]      @relation("TransferFrom")
   stockTransfersTo   StockTransfer[]      @relation("TransferTo")

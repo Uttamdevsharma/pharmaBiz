@@ -29,6 +29,11 @@ import {
   CheckSquare,
   Square,
   Sparkles,
+  Receipt,
+  Briefcase,
+  DollarSign,
+  CalendarCheck,
+  Lock,
 } from "lucide-react";
 
 interface PharmacyRole {
@@ -155,6 +160,20 @@ const PHARMACY_MODULE_PERMISSIONS: PermissionDef[] = [
     icon: Truck,
   },
   {
+    id: "accounts.expenses",
+    name: "Expenses & Bills",
+    category: "Accounts & Finance",
+    description: "Manage branch monthly expenses (Rent, Electricity, regular costs) and payment vouchers.",
+    icon: Receipt,
+  },
+  {
+    id: "accounts.salaries",
+    name: "Employee Salary Management",
+    category: "Accounts & Finance",
+    description: "Configure staff salary structures and disburse monthly payroll from branch accounts.",
+    icon: Briefcase,
+  },
+  {
     id: "accounts.transaction_history",
     name: "Transaction History",
     category: "Accounts & Finance",
@@ -182,6 +201,20 @@ const PHARMACY_MODULE_PERMISSIONS: PermissionDef[] = [
     category: "Branch Network",
     description: "Configure branch locations, contact info, and branch settings.",
     icon: Building2,
+  },
+  {
+    id: "attendance.manage",
+    name: "Attendance Management",
+    category: "Staff Management",
+    description: "Mark and finalize daily employee attendance and configure monthly off-days.",
+    icon: CalendarCheck,
+  },
+  {
+    id: "salaries.base_salary.edit",
+    name: "Configure Base Salary",
+    category: "Accounts & Finance",
+    description: "Set and update employee Base Salary packages (Pharmacy Owner & Branch Manager only).",
+    icon: Lock,
   },
 ];
 

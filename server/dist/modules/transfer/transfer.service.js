@@ -85,6 +85,14 @@ class TransferService {
                     remainingDue: 0,
                     settlementStatus: "UNPAID",
                     notes: data.notes || null,
+                    // Professional Courier Logistics & Delivery Details
+                    courierName: data.courierName || null,
+                    courierHub: data.courierHub || null,
+                    trackingId: data.trackingId || null,
+                    deliveryPersonName: data.deliveryPersonName || null,
+                    deliveryPersonContact: data.deliveryPersonContact || null,
+                    dispatchDate: data.dispatchDate ? new Date(data.dispatchDate) : new Date(),
+                    deliveryNote: data.deliveryNote || null,
                     items: {
                         create: validatedItems.map((item) => ({
                             productId: item.productId,

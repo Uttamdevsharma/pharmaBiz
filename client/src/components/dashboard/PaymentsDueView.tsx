@@ -16,12 +16,20 @@ import {
   DollarSign,
 } from "lucide-react";
 
+import { useAuth } from "@/context/AuthContext";
+
 interface PaymentsDueViewProps {
   onNavigate?: (module: any) => void;
 }
 
 export function PaymentsDueView({ onNavigate: _onNavigate }: PaymentsDueViewProps = {}) {
+  const { user } = useAuth();
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [branches, setBranches] = useState<any[]>([]);
+  const [selectedBranchId, setSelectedBranchId] = useState<string>(user?.branchId || "");
+  const [financialAccounts, setFinancialAccounts] = useState<any[]>([]);
+  const [selectedAccountId, setSelectedAccountId] = useState<string>("");
+
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState("");
@@ -31,7 +39,6 @@ export function PaymentsDueView({ onNavigate: _onNavigate }: PaymentsDueViewProp
   const [payModalOpen, setPayModalOpen] = useState(false);
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
   const [payAmount, setPayAmount] = useState<number>(0);
-  const [paymentMethod, setPaymentMethod] = useState<string>("CASH");
   const [payNotes, setPayNotes] = useState("");
   const [paying, setPaying] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
@@ -58,6 +65,43 @@ export function PaymentsDueView({ onNavigate: _onNavigate }: PaymentsDueViewProp
   useEffect(() => {
     loadSuppliers();
   }, []);
+
+  useEffect(() => {
+    async function loadBranches() {
+      try {
+        const res = await fetchApi<any[]>("/branches");
+        if (res.success && res.data && res.data.length > 0) {
+          setBranches(res.data);
+          if (!selectedBranchId) {
+            setSelectedBranchId(user?.branchId || res.data[0].id);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load branches", err);
+      }
+    }
+    loadBranches();
+  }, [user]);
+
+  useEffect(() => {
+    async function loadAccounts() {
+      if (!selectedBranchId) return;
+      try {
+        const res = await fetchApi<any[]>(`/accounting/accounts?branchId=${selectedBranchId}`);
+        if (res.success && res.data) {
+          setFinancialAccounts(res.data);
+          if (res.data.length > 0) {
+            setSelectedAccountId(res.data[0].id);
+          } else {
+            setSelectedAccountId("");
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load financial accounts", err);
+      }
+    }
+    loadAccounts();
+  }, [selectedBranchId]);
 
   const totalOutstandingDue = suppliers.reduce((acc, s) => acc + Number(s.totalDue || 0), 0);
   const totalPurchases = suppliers.reduce((acc, s) => acc + Number(s.totalPurchased || 0), 0);
@@ -89,13 +133,18 @@ export function PaymentsDueView({ onNavigate: _onNavigate }: PaymentsDueViewProp
   const handlePaySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedSupplier || payAmount <= 0) return;
+    if (!selectedAccountId) {
+      alert("A valid financial account created for the selected branch is required to record supplier payment.");
+      return;
+    }
     try {
       setPaying(true);
       const res = await fetchApi<any>(`/suppliers/${selectedSupplier.id}/payments`, {
         method: "POST",
         body: JSON.stringify({
           amount: Number(payAmount),
-          paymentMethod,
+          branchId: selectedBranchId,
+          financialAccountId: selectedAccountId,
           notes: payNotes || null,
         }),
       });
@@ -395,18 +444,43 @@ export function PaymentsDueView({ onNavigate: _onNavigate }: PaymentsDueViewProp
 
               <div>
                 <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 uppercase mb-1">
-                  Payment Method
+                  Select Paying Branch *
                 </label>
                 <select
-                  value={paymentMethod}
-                  onChange={(e) => setPaymentMethod(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-semibold focus:ring-2 focus:ring-emerald-500 outline-none"
+                  value={selectedBranchId}
+                  onChange={(e) => setSelectedBranchId(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-bold outline-none"
                 >
-                  <option value="CASH">Cash Drawer</option>
-                  <option value="BANK">Bank Account</option>
-                  <option value="MOBILE">Mobile Wallet (bKash/Nagad)</option>
-                  <option value="CARD">Card / POS Settlement</option>
+                  {branches.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name}
+                    </option>
+                  ))}
                 </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 uppercase mb-1">
+                  Payment Financial Account (Debited) *
+                </label>
+                {financialAccounts.length === 0 ? (
+                  <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-xl text-xs text-rose-700 dark:text-rose-300 font-bold">
+                    ⚠️ No active financial account created for this branch. Please create an account in Accounts & Finance first.
+                  </div>
+                ) : (
+                  <select
+                    required
+                    value={selectedAccountId}
+                    onChange={(e) => setSelectedAccountId(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-semibold focus:ring-2 focus:ring-emerald-500 outline-none"
+                  >
+                    {financialAccounts.map((acc) => (
+                      <option key={acc.id} value={acc.id}>
+                        {acc.name} ({acc.type}){acc.accountNumber ? ` - A/C: ${acc.accountNumber}` : ""} [Balance: ৳{Number(acc.balance).toFixed(2)}]
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
 
               <div>
@@ -432,7 +506,7 @@ export function PaymentsDueView({ onNavigate: _onNavigate }: PaymentsDueViewProp
                 </button>
                 <button
                   type="submit"
-                  disabled={paying}
+                  disabled={paying || financialAccounts.length === 0 || !selectedAccountId}
                   className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold shadow-lg transition flex items-center gap-2 disabled:opacity-50 active:scale-95"
                 >
                   {paying && <Loader2 className="h-4 w-4 animate-spin" />}

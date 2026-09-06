@@ -257,15 +257,21 @@ export class SalesService {
       if (actualPaid > 0) {
         let financialAccount: any = null;
 
-        // 1. If explicit financialAccountId passed
+        // 1. If explicit financialAccountId passed, validate it directly against tenant and branch
         if (data.financialAccountId) {
           financialAccount = await tx.financialAccount.findFirst({
-            where: { id: data.financialAccountId, tenantId, branchId: data.branchId, isActive: true },
+            where: { id: data.financialAccountId, tenantId, isActive: true },
           });
-        }
 
-        // 2. If not found or not passed, resolve by paymentMethod & metadata
-        if (!financialAccount) {
+          if (!financialAccount) {
+            throw new Error("Selected financial account is invalid or inactive.");
+          }
+
+          if (financialAccount.branchId && financialAccount.branchId !== data.branchId) {
+            throw new Error("Selected financial account does not belong to the active branch.");
+          }
+        } else {
+          // 2. If not explicitly passed, resolve matching account for this specific branch
           const pMethod = String(data.paymentMethod).toUpperCase();
           const notesLower = (data.notes || "").toLowerCase();
 
@@ -321,7 +327,7 @@ export class SalesService {
             }
           }
 
-          // Fallback to cash drawer if still not resolved
+          // Fallback to cash drawer of current branch if still not resolved
           if (!financialAccount) {
             financialAccount = await tx.financialAccount.findFirst({
               where: {
@@ -334,7 +340,7 @@ export class SalesService {
             });
           }
 
-          // Ultimate fallback: any active account
+          // Ultimate branch fallback: any active account in this branch
           if (!financialAccount) {
             financialAccount = await tx.financialAccount.findFirst({
               where: { tenantId, branchId: data.branchId, isActive: true },
@@ -342,47 +348,35 @@ export class SalesService {
           }
         }
 
-        if (financialAccount) {
-          // Increment account balance atomically
-          await tx.financialAccount.update({
-            where: { id: financialAccount.id },
-            data: { balance: { increment: actualPaid } },
-          });
-
-          // Link financialAccountId in sale record if not already set
-          await tx.sale.update({
-            where: { id: createdSale.id },
-            data: { financialAccountId: financialAccount.id },
-          });
-
-          // Create Double-Entry Ledger Entry
-          await tx.financialTransaction.create({
-            data: {
-              tenantId,
-              branchId: data.branchId,
-              destinationAccountId: financialAccount.id,
-              amount: actualPaid,
-              type: "SALE_PAYMENT",
-              reference: receiptNo,
-              note: `POS Sale Receipt #${receiptNo} via ${financialAccount.name}${data.transactionRef ? ` (Ref: ${data.transactionRef})` : ""}`,
-              userId,
-            },
-          });
-        } else {
-          // Record ledger transaction even if pharmacy has not yet created dedicated financial accounts
-          await tx.financialTransaction.create({
-            data: {
-              tenantId,
-              branchId: data.branchId,
-              destinationAccountId: null,
-              amount: actualPaid,
-              type: "SALE_PAYMENT",
-              reference: receiptNo,
-              note: `POS Sale Receipt #${receiptNo} via ${data.paymentMethod}${data.bankName ? ` (${data.bankName})` : ""}${data.transactionRef ? ` (Ref: ${data.transactionRef})` : ""}`,
-              userId,
-            },
-          });
+        if (!financialAccount) {
+          throw new Error("No active financial account exists for this branch. Please create a financial account for this branch in Accounts & Finance first.");
         }
+
+        // Increment account balance atomically
+        await tx.financialAccount.update({
+          where: { id: financialAccount.id },
+          data: { balance: { increment: actualPaid } },
+        });
+
+        // Link financialAccountId in sale record
+        await tx.sale.update({
+          where: { id: createdSale.id },
+          data: { financialAccountId: financialAccount.id },
+        });
+
+        // Create Double-Entry Ledger Entry
+        await tx.financialTransaction.create({
+          data: {
+            tenantId,
+            branchId: data.branchId,
+            destinationAccountId: financialAccount.id,
+            amount: actualPaid,
+            type: "SALE_PAYMENT",
+            reference: receiptNo,
+            note: `POS Sale Receipt #${receiptNo} via ${financialAccount.name}${data.transactionRef ? ` (Ref: ${data.transactionRef})` : ""}`,
+            userId,
+          },
+        });
       }
 
       return createdSale;

@@ -31,9 +31,14 @@ import {
   PackagePlus,
   PackageCheck,
   CalendarX2,
+  CalendarDays,
+  Sliders,
   Wallet,
   Percent,
   AlertTriangle,
+  DollarSign,
+  Briefcase,
+  CalendarCheck,
 } from "lucide-react";
 
 export type OwnerModule =
@@ -48,7 +53,23 @@ export type OwnerModule =
   | "acc_fund_transfer"
   | "acc_payment_sales"
   | "acc_product_sales"
+  | "acc_expenses"
+  | "acc_salaries"
+  | "employee_details"
+  | "staff_salary_history"
+  | "change_password"
   | "acc_transaction_history"
+  | "exp_list"
+  | "exp_pay"
+  | "exp_history"
+  | "exp_recurring"
+  | "exp_monthly"
+  | "exp_settings"
+  | "sal_employees"
+  | "sal_attendance"
+  | "sal_offdays"
+  | "sal_management"
+  | "sal_history"
   | "inv_add_product"
   | "inv_product_list"
   | "inv_variants"
@@ -109,10 +130,27 @@ export function DashboardSidebar({
     activeModule === "pos_history" ||
     activeModule === "pos_vat";
 
+  const isExpensesActive =
+    activeModule === "exp_list" ||
+    activeModule === "exp_pay" ||
+    activeModule === "exp_history" ||
+    activeModule === "exp_recurring" ||
+    activeModule === "exp_monthly" ||
+    activeModule === "exp_settings" ||
+    activeModule === "acc_expenses";
+
+  const isSalaryActive =
+    activeModule === "sal_employees" ||
+    activeModule === "sal_management" ||
+    activeModule === "sal_history" ||
+    activeModule === "acc_salaries" ||
+    activeModule === "employee_details" ||
+    activeModule === "staff_salary_history";
+
   const isAccountsActive =
     activeModule === "acc_overview" ||
     activeModule === "accounts" ||
-    activeModule.startsWith("acc_") ||
+    (activeModule.startsWith("acc_") && !isExpensesActive && !isSalaryActive) ||
     activeModule === "reports" ||
     activeModule === "sup_payments_due";
 
@@ -128,6 +166,8 @@ export function DashboardSidebar({
     stock: activeModule.startsWith("stock_"),
     supplier: activeModule.startsWith("sup_") && activeModule !== "sup_payments_due",
     accounts: isAccountsActive,
+    expenses_bills: isExpensesActive,
+    employee_salary: isSalaryActive,
     staff_mgmt: isStaffActive,
   });
 
@@ -140,6 +180,27 @@ export function DashboardSidebar({
       activeModule === "pos_vat"
     ) {
       setOpenParents((prev) => ({ ...prev, sales_pos: true }));
+    } else if (
+      activeModule === "exp_list" ||
+      activeModule === "exp_pay" ||
+      activeModule === "exp_history" ||
+      activeModule === "exp_recurring" ||
+      activeModule === "exp_monthly" ||
+      activeModule === "exp_settings" ||
+      activeModule === "acc_expenses"
+    ) {
+      setOpenParents((prev) => ({ ...prev, expenses_bills: true }));
+    } else if (
+      activeModule === "sal_employees" ||
+      activeModule === "sal_attendance" ||
+      activeModule === "sal_offdays" ||
+      activeModule === "sal_management" ||
+      activeModule === "sal_history" ||
+      activeModule === "acc_salaries" ||
+      activeModule === "employee_details" ||
+      activeModule === "staff_salary_history"
+    ) {
+      setOpenParents((prev) => ({ ...prev, employee_salary: true }));
     } else if (
       activeModule === "acc_overview" ||
       activeModule === "accounts" ||
@@ -343,7 +404,69 @@ export function DashboardSidebar({
     },
   ].filter((item) => item.visible);
 
-  // 6. Staff Management Section (Staff List, Create Staff, Roles & Permissions)
+  // 6. Expenses & Bills Section
+  const hasExpensesPerm = isOwner || hasPermission("accounts.expenses") || hasPermission("accounts.manage");
+  const expensesChildren: SubMenuItem[] = [
+    {
+      id: "exp_list" as OwnerModule,
+      label: "Bill List",
+      icon: List,
+      visible: hasExpensesPerm,
+    },
+    {
+      id: "exp_pay" as OwnerModule,
+      label: "Pay Bill",
+      icon: CreditCard,
+      visible: hasExpensesPerm,
+    },
+    {
+      id: "exp_history" as OwnerModule,
+      label: "Bill History",
+      icon: History,
+      visible: hasExpensesPerm,
+    },
+  ].filter((item) => item.visible);
+
+  // 7. Employee & Salary Section
+  const isBranchManager = user?.role === "BRANCH_MANAGER" || user?.pharmacyRoleName?.toLowerCase().includes("branch manager");
+  const hasSalaryPerm = isOwner || hasPermission("accounts.salaries") || hasPermission("accounts.manage");
+  const hasAttendancePerm = isOwner || isBranchManager || hasPermission("attendance.manage");
+  const hasOffDaysPerm = isOwner || isBranchManager || hasPermission("attendance.offdays") || hasPermission("attendance.manage");
+
+  const salaryChildren: SubMenuItem[] = [
+    {
+      id: "sal_employees" as OwnerModule,
+      label: "Employee List",
+      icon: Users,
+      visible: hasSalaryPerm,
+    },
+    {
+      id: "sal_attendance" as OwnerModule,
+      label: "Attendance Management",
+      icon: CalendarCheck,
+      visible: hasAttendancePerm,
+    },
+    {
+      id: "sal_offdays" as OwnerModule,
+      label: "Off-Day Settings",
+      icon: CalendarX2,
+      visible: hasOffDaysPerm,
+    },
+    {
+      id: "sal_management" as OwnerModule,
+      label: "Salary Management",
+      icon: Briefcase,
+      visible: hasSalaryPerm,
+    },
+    {
+      id: "sal_history" as OwnerModule,
+      label: "Salary History",
+      icon: History,
+      visible: true,
+    },
+  ].filter((item) => item.visible);
+
+  // 8. Staff Management Section (Staff List, Create Staff, Roles & Permissions)
   const hasStaffPerm = isOwner || hasPermission("staff.manage");
   const hasRolesPerm = isOwner || hasPermission("roles.manage");
   const staffChildren: SubMenuItem[] = [
@@ -403,6 +526,20 @@ export function DashboardSidebar({
       icon: Wallet,
       visible: accountsChildren.length > 0,
       children: accountsChildren,
+    },
+    {
+      id: "expenses_bills",
+      label: "Expenses & Bills",
+      icon: Receipt,
+      visible: expensesChildren.length > 0,
+      children: expensesChildren,
+    },
+    {
+      id: "employee_salary",
+      label: "Employee & Salary",
+      icon: Briefcase,
+      visible: salaryChildren.length > 0,
+      children: salaryChildren,
     },
     {
       id: "staff_mgmt",

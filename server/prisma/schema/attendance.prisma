@@ -1,0 +1,75 @@
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  PAID_LEAVE
+  UNPAID_LEAVE
+  OFF_DAY
+}
+
+model BranchOffDayConfig {
+  id              String   @id @default(uuid())
+  tenantId        String
+  branchId        String
+  month           String   // "YYYY-MM", e.g. "2026-09"
+  weeklyOffDays   String[] @default(["FRIDAY"]) // ["FRIDAY", "SATURDAY", etc.]
+  customOffDates  String[] @default([]) // ["2026-09-15"]
+  notes           String?
+  createdById     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch          Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@unique([branchId, month])
+  @@index([tenantId])
+  @@index([branchId])
+  @@index([month])
+}
+
+model EmployeeAttendance {
+  id              String           @id @default(uuid())
+  tenantId        String
+  branchId        String
+  userId          String           // Employee receiving attendance
+  date            String           // "YYYY-MM-DD"
+  status          AttendanceStatus
+  notes           String?
+  markedById      String?          // Manager who marked
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch          Branch           @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  user            User             @relation("EmployeeAttendances", fields: [userId], references: [id], onDelete: Cascade)
+  markedBy        User?            @relation("MarkedAttendances", fields: [markedById], references: [id], onDelete: SetNull)
+
+  @@unique([userId, date])
+  @@index([tenantId])
+  @@index([branchId])
+  @@index([userId])
+  @@index([date])
+}
+
+model EmployeeMonthlyAllowance {
+  id              String   @id @default(uuid())
+  tenantId        String
+  branchId        String
+  userId          String
+  month           String   // "YYYY-MM"
+  title           String   // e.g. "Performance Bonus", "Transport Allowance", "Food Allowance", "Overtime"
+  amount          Decimal  @default(0) @db.Decimal(15, 2)
+  notes           String?
+  createdById     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch          Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([branchId])
+  @@index([userId])
+  @@index([month])
+}

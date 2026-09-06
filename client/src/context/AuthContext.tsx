@@ -30,6 +30,8 @@ export interface User {
   name?: string;
   username?: string;
   email?: string;
+  phone?: string | null;
+  avatarUrl?: string | null;
   verificationStatus?: string | null;
   requiresOtp?: boolean;
   paymentRequired?: boolean;

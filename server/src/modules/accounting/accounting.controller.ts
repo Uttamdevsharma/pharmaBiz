@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { AccountingService } from "./accounting.service";
 import { ReportService } from "../report/report.service";
+import { prisma } from "../../app/lib/prisma";
 
 export class AccountingController {
   static async listAccounts(req: Request, res: Response): Promise<void> {
@@ -117,6 +118,210 @@ export class AccountingController {
       res.status(200).json({ success: true, data: report });
     } catch (error: any) {
       res.status(500).json({ success: false, message: error.message });
+    }
+  }
+
+  // ==========================================
+  // 🏢 RECURRING EXPENSES
+  // ==========================================
+  static async listRecurringExpenses(req: Request, res: Response): Promise<void> {
+    try {
+      const tenantId = req.user!.tenantId;
+      const branchId = req.query.branchId as string | undefined;
+      const includeInactive = req.query.includeInactive === "true" || req.query.includeInactive === "1";
+      const data = await AccountingService.listRecurringExpenses(tenantId, branchId, includeInactive);
+      res.json({ success: true, data });
+    } catch (err: any) {
+      res.status(400).json({ success: false, message: err.message });
+    }
+  }
+
+  static async createRecurringExpense(req: Request, res: Response): Promise<void> {
+    try {
+      const tenantId = req.user!.tenantId;
+      const data = await AccountingService.createRecurringExpense(tenantId, req.body);
+      res.status(201).json({ success: true, data, message: "Recurring bill configured successfully" });
+    } catch (err: any) {
+      res.status(400).json({ success: false, message: err.message });
+    }
+  }
+
+  static async updateRecurringExpense(req: Request, res: Response): Promise<void> {
+    try {
+      const tenantId = req.user!.tenantId;
+      const data = await AccountingService.updateRecurringExpense(tenantId, req.params.id, req.body);
+      res.json({ success: true, data, message: "Recurring bill updated successfully" });
+    } catch (err: any) {
+      res.status(400).json({ success: false, message: err.message });
+    }
+  }
+
+  static async deleteRecurringExpense(req: Request, res: Response): Promise<void> {
+    try {
+      const tenantId = req.user!.tenantId;
+      await AccountingService.deleteRecurringExpense(tenantId, req.params.id);
+      res.json({ success: true, message: "Recurring bill removed" });
+    } catch (err: any) {
+      res.status(400).json({ success: false, message: err.message });
+    }
+  }
+
+  // ==========================================
+  // 💸 ACTUAL MONTHLY EXPENSE PAYMENTS
+  // ==========================================
+  static async listExpenses(req: Request, res: Response): Promise<void> {
+    try {
+      const tenantId = req.user!.tenantId;
+      const result = await AccountingService.listExpenses(tenantId, req.query as any);
+      res.json({ success: true, data: result });
+    } catch (err: any) {
+      res.status(400).json({ success: false, message: err.message });
+    }
+  }
+
+  static async recordExpense(req: Request, res: Response): Promise<void> {
+    try {
+      const tenantId = req.user!.tenantId;
+      const userId = req.user!.id;
+      const expense = await AccountingService.recordExpense(tenantId, userId, req.body);
+      res.status(201).json({ success: true, data: expense, message: "Expense payment recorded and account debited" });
+    } catch (err: any) {
+      res.status(400).json({ success: false, message: err.message });
+    }
+  }
+
+  static async getExpenseSummary(req: Request, res: Response): Promise<void> {
+    try {
+      const tenantId = req.user!.tenantId;
+      const branchId = req.query.branchId as string | undefined;
+      const month = req.query.month as string | undefined;
+      const summary = await AccountingService.getExpenseSummary(tenantId, branchId, month);
+      res.json({ success: true, data: summary });
+    } catch (err: any) {
+      res.status(400).json({ success: false, message: err.message });
+    }
+  }
+
+  // ==========================================
+  // 👥 STAFF SALARY MANAGEMENT
+  // ==========================================
+  static async listBranchStaffSalaries(req: Request, res: Response): Promise<void> {
+    try {
+      const tenantId = req.user!.tenantId;
+      const branchId = (req.query.branchId as string) || req.user!.branchId;
+      const month = (req.query.month as string) || new Date().toISOString().slice(0, 7);
+      const includeInactive = req.query.includeInactive === "true" || req.query.includeInactive === "1";
+
+      if (!branchId) {
+        res.status(400).json({ success: false, message: "Branch ID is required" });
+        return;
+      }
+
+      const employees = await AccountingService.listBranchStaffSalaries(tenantId, branchId, month, includeInactive);
+      res.json({ success: true, data: employees });
+    } catch (err: any) {
+      res.status(400).json({ success: false, message: err.message });
+    }
+  }
+
+  static async setSalaryConfig(req: Request, res: Response): Promise<void> {
+    try {
+      const user = req.user!;
+      const tenantId = user.tenantId;
+      const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN";
+      const isBranchManager = user.role === "BRANCH_MANAGER";
+
+      // Only Pharmacy Owner and Branch Manager can set or update Base Salary
+      if (!isOwner && !isBranchManager) {
+        const existing = await (prisma as any).employeeSalaryConfig.findUnique({
+          where: {
+            tenantId_userId: {
+              tenantId,
+              userId: req.body.userId,
+            },
+          },
+        });
+
+        const incomingBase = Number(req.body.baseSalary);
+        if (!existing || Number(existing.baseSalary) !== incomingBase) {
+          res.status(403).json({
+            success: false,
+            message: "Forbidden: Only Pharmacy Owner and Branch Manager can set or update Base Salary. Accounts Manager cannot modify Base Salary.",
+          });
+          return;
+        }
+      }
+
+      const config = await AccountingService.setSalaryConfig(tenantId, req.body);
+      res.json({ success: true, data: config, message: "Salary configuration saved successfully" });
+    } catch (err: any) {
+      res.status(400).json({ success: false, message: err.message });
+    }
+  }
+
+  static async disburseSalary(req: Request, res: Response): Promise<void> {
+    try {
+      const tenantId = req.user!.tenantId;
+      const disbursedById = req.user!.id;
+      const result = await AccountingService.disburseSalary(tenantId, disbursedById, req.body);
+      res.status(201).json({ success: true, data: result, message: "Salary paid successfully and financial account debited" });
+    } catch (err: any) {
+      res.status(400).json({ success: false, message: err.message });
+    }
+  }
+
+  static async getBranchSalaryHistory(req: Request, res: Response): Promise<void> {
+    try {
+      const tenantId = req.user!.tenantId;
+      const branchId = (req.query.branchId as string) || req.user!.branchId;
+      const month = req.query.month as string | undefined;
+      const userId = req.query.userId as string | undefined;
+      const page = req.query.page ? parseInt(req.query.page as string, 10) : 1;
+      const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 50;
+
+      const data = await AccountingService.getBranchSalaryHistory(tenantId, branchId, {
+        month,
+        userId,
+        page,
+        limit,
+      });
+      res.json({ success: true, data });
+    } catch (err: any) {
+      res.status(400).json({ success: false, message: err.message });
+    }
+  }
+
+  static async getEmployeeSalaryHistory(req: Request, res: Response): Promise<void> {
+    try {
+      const tenantId = req.user!.tenantId;
+      const userId = req.params.userId;
+      const actorRole = req.user!.role;
+      const isManagerOrAccounts =
+        actorRole === "COMPANY_OWNER" ||
+        actorRole === "SUPER_ADMIN" ||
+        actorRole === "BRANCH_MANAGER" ||
+        actorRole === "ACCOUNTS";
+
+      if (!isManagerOrAccounts && req.user!.id !== userId) {
+        res.status(403).json({ success: false, message: "Forbidden: You can only view your own salary history." });
+        return;
+      }
+
+      const history = await AccountingService.getEmployeeSalaryHistory(tenantId, userId);
+      res.json({ success: true, data: history });
+    } catch (err: any) {
+      res.status(400).json({ success: false, message: err.message });
+    }
+  }
+
+  static async getMySalaryHistory(req: Request, res: Response): Promise<void> {
+    try {
+      const tenantId = req.user!.tenantId;
+      const userId = req.user!.id;
+      const history = await AccountingService.getMySalaryHistory(tenantId, userId);
+      res.json({ success: true, data: history });
+    } catch (err: any) {
+      res.status(400).json({ success: false, message: err.message });
     }
   }
 }

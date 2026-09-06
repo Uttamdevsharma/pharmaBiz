@@ -300,6 +300,35 @@ export class SupplierService {
         });
       }
 
+      // Update Financial Account Balance if paidAmount > 0
+      if (paidAmount > 0) {
+        if (!data.financialAccountId) {
+          throw new Error("A valid financial account for the selected branch is required when paying a purchase invoice.");
+        }
+        const finAcc = await tx.financialAccount.findFirst({
+          where: { id: data.financialAccountId, tenantId, branchId: data.branchId, isActive: true },
+        });
+        if (!finAcc) {
+          throw new Error("Selected financial account does not exist or does not belong to this branch.");
+        }
+        await tx.financialAccount.update({
+          where: { id: finAcc.id },
+          data: { balance: { decrement: paidAmount } },
+        });
+        await tx.financialTransaction.create({
+          data: {
+            tenantId,
+            branchId: data.branchId,
+            sourceAccountId: finAcc.id,
+            amount: paidAmount,
+            type: "PURCHASE_PAYMENT",
+            reference: purchase.invoiceNo,
+            note: `Purchase invoice #${purchase.invoiceNo} via ${finAcc.name}`,
+            userId,
+          },
+        });
+      }
+
       // Upsert Inventory Batches and Record Stock Movements
       for (const item of preparedItems) {
         let existingInventory = null;
@@ -475,56 +504,48 @@ export class SupplierService {
       throw new Error("Supplier not found");
     }
 
+    if (!data.financialAccountId) {
+      throw new Error("Financial account is required for recording supplier payment.");
+    }
+
+    const financialAcc = await (prisma as any).financialAccount.findFirst({
+      where: { id: data.financialAccountId, tenantId, isActive: true },
+    });
+
+    if (!financialAcc) {
+      throw new Error("Selected financial account does not exist or is inactive.");
+    }
+
     const payAmount = Number(data.amount);
     const newDue = Math.max(0, Number(supplier.totalDue) - payAmount);
     const newPaid = Number(supplier.totalPaid) + payAmount;
 
-    const updated = await (prisma as any).supplier.update({
-      where: { id: supplierId },
-      data: {
-        totalPaid: newPaid,
-        totalDue: newDue,
-      },
-    });
-
-    // Synchronize with Financial Accounts ledger
-    try {
-      const targetType =
-        data.paymentMethod === "BANK"
-          ? "BANK"
-          : data.paymentMethod === "CARD"
-          ? "CARD_SETTLEMENT"
-          : data.paymentMethod === "MOBILE"
-          ? "MOBILE"
-          : "CASH";
-
-      const financialAcc = await (prisma as any).financialAccount.findFirst({
-        where: { tenantId, type: targetType, isActive: true },
-        orderBy: { createdAt: "asc" },
-      });
-
-      if (financialAcc) {
-        await (prisma as any).financialAccount.update({
-          where: { id: financialAcc.id },
-          data: { balance: { decrement: payAmount } },
-        });
-
-        await (prisma as any).financialTransaction.create({
-          data: {
-            tenantId,
-            branchId: financialAcc.branchId,
-            sourceAccountId: financialAcc.id,
-            amount: payAmount,
-            type: "PURCHASE_PAYMENT",
-            reference: `PAY-${supplier.name.slice(0, 15)}`,
-            note: data.notes || `Supplier payment for ${supplier.name}`,
-            userId,
-          },
-        });
-      }
-    } catch (finErr) {
-      console.error("Failed to sync supplier payment with financial account", finErr);
-    }
+    // Atomic update of supplier dues & financial account balance
+    const [updated] = await (prisma as any).$transaction([
+      (prisma as any).supplier.update({
+        where: { id: supplierId },
+        data: {
+          totalPaid: newPaid,
+          totalDue: newDue,
+        },
+      }),
+      (prisma as any).financialAccount.update({
+        where: { id: financialAcc.id },
+        data: { balance: { decrement: payAmount } },
+      }),
+      (prisma as any).financialTransaction.create({
+        data: {
+          tenantId,
+          branchId: financialAcc.branchId,
+          sourceAccountId: financialAcc.id,
+          amount: payAmount,
+          type: "PURCHASE_PAYMENT",
+          reference: `PAY-${supplier.name.slice(0, 15)}`,
+          note: data.notes || `Supplier payment for ${supplier.name} via ${financialAcc.name}`,
+          userId,
+        },
+      }),
+    ]);
 
     await AuditService.log({
       tenantId,

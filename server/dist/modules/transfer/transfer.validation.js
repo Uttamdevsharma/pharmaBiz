@@ -17,6 +17,14 @@ exports.createTransferSchema = zod_1.z.object({
     fromBranchId: zod_1.z.string().uuid("Valid source branch ID required"),
     toBranchId: zod_1.z.string().uuid("Valid destination branch ID required"),
     notes: zod_1.z.string().optional().nullable(),
+    // Courier Logistics Information
+    courierName: zod_1.z.string().optional().nullable(),
+    courierHub: zod_1.z.string().optional().nullable(),
+    trackingId: zod_1.z.string().optional().nullable(),
+    deliveryPersonName: zod_1.z.string().optional().nullable(),
+    deliveryPersonContact: zod_1.z.string().optional().nullable(),
+    dispatchDate: zod_1.z.string().optional().nullable(),
+    deliveryNote: zod_1.z.string().optional().nullable(),
     items: zod_1.z.array(exports.transferItemInputSchema).min(1, "At least one product item must be included in transfer"),
 });
 exports.receiveItemInputSchema = zod_1.z.object({

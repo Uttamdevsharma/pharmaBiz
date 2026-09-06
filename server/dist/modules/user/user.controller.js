@@ -180,5 +180,25 @@ class UserController {
             res.status(400).json({ success: false, message: error.message });
         }
     }
+    static async changePassword(req, res) {
+        try {
+            const userId = req.user.id;
+            const result = await user_service_1.UserService.changePassword(userId, req.body);
+            res.status(200).json(result);
+        }
+        catch (error) {
+            res.status(400).json({ success: false, message: error.message });
+        }
+    }
+    static async updateProfile(req, res) {
+        try {
+            const userId = req.user.id;
+            const updated = await user_service_1.UserService.updateProfile(userId, req.body);
+            res.status(200).json({ success: true, data: updated, message: "Profile updated successfully" });
+        }
+        catch (error) {
+            res.status(400).json({ success: false, message: error.message });
+        }
+    }
 }
 exports.UserController = UserController;

@@ -60,8 +60,23 @@ export const listUsersQuerySchema = z.object({
   isActive: z.union([z.string(), z.boolean()]).optional().transform(v => (v === "true" || v === true ? true : v === "false" || v === false ? false : undefined)),
 });
 
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, "Current password is required"),
+  newPassword: z.string().min(6, "New password must be at least 6 characters"),
+});
+
+export const updateProfileSchema = z.object({
+  name: z.string().min(2).optional(),
+  phone: z.string().optional().nullable(),
+  email: z.string().email().optional().nullable(),
+  avatarUrl: z.string().optional().nullable(),
+});
+
 export type CreateUserInput = z.infer<typeof createUserSchema>;
 export type UpdateUserInput = z.infer<typeof updateUserSchema>;
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
+export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
+
 export type CreatePharmacyRoleInput = z.infer<typeof createPharmacyRoleSchema>;
 export type UpdatePharmacyRoleInput = z.infer<typeof updatePharmacyRoleSchema>;
 export type UpdateRolePermissionsInput = z.infer<typeof updateRolePermissionsSchema>;

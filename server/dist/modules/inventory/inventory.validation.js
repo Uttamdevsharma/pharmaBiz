@@ -20,6 +20,7 @@ exports.inwardStockSchema = zod_1.z.object({
     sellingPrice: zod_1.z.number().nonnegative().optional().nullable(),
     shelfLocation: zod_1.z.string().optional().nullable(),
     paidAmount: zod_1.z.number().nonnegative().optional().default(0),
+    financialAccountId: zod_1.z.string().optional().nullable(),
     notes: zod_1.z.string().optional().nullable(),
 });
 exports.adjustStockSchema = zod_1.z.object({

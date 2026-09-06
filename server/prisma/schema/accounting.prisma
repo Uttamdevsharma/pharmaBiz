@@ -17,6 +17,22 @@ enum TransactionType {
   REFUND
 }
 
+enum ExpenseCategory {
+  SHOP_RENT
+  ELECTRICITY_BILL
+  INTERNET_BILL
+  SECURITY_GUARD
+  MAINTENANCE
+  EMPLOYEE_SALARY
+  OTHER
+}
+
+enum SalaryStatus {
+  PAID
+  PARTIAL
+  DUE
+}
+
 model FinancialAccount {
   id            String      @id @default(uuid())
   tenantId      String
@@ -37,11 +53,13 @@ model FinancialAccount {
   tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   branch      Branch      @relation(fields: [branchId], references: [id], onDelete: Cascade)
 
-  transactionsOut FinancialTransaction[] @relation("SourceAccount")
-  transactionsIn  FinancialTransaction[] @relation("DestinationAccount")
-  sales           Sale[]
-  settlementsOut  TransferSettlement[]   @relation("SettlementSourceAccount")
-  settlementsIn   TransferSettlement[]   @relation("SettlementDestAccount")
+  transactionsOut     FinancialTransaction[] @relation("SourceAccount")
+  transactionsIn      FinancialTransaction[] @relation("DestinationAccount")
+  sales               Sale[]
+  settlementsOut      TransferSettlement[]   @relation("SettlementSourceAccount")
+  settlementsIn       TransferSettlement[]   @relation("SettlementDestAccount")
+  expenses            BranchExpense[]
+  salaryDisbursements SalaryDisbursement[]
 
   @@index([tenantId])
   @@index([branchId])
@@ -74,4 +92,125 @@ model FinancialTransaction {
   @@index([sourceAccountId])
   @@index([destinationAccountId])
   @@index([createdAt])
+}
+
+model RecurringExpenseConfig {
+  id              String          @id @default(uuid())
+  tenantId        String
+  branchId        String
+  category        ExpenseCategory @default(OTHER)
+  title           String
+  estimatedAmount Decimal         @db.Decimal(15, 2)
+  dueDay          Int?            // e.g. 5th of month
+  notes           String?
+  isActive        Boolean         @default(true)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  tenant          Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch          Branch          @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  expenses        BranchExpense[]
+
+  @@index([tenantId])
+  @@index([branchId])
+  @@index([category])
+}
+
+model BranchExpense {
+  id                  String                  @id @default(uuid())
+  tenantId            String
+  branchId            String
+  financialAccountId  String
+  recurringConfigId   String?
+  category            ExpenseCategory         @default(OTHER)
+  title               String
+  expenseMonth        String                  // e.g. "2026-09"
+  amount              Decimal                 @db.Decimal(15, 2)
+  paymentDate         DateTime                @default(now())
+  voucherNo           String?
+  reference           String?
+  notes               String?
+  recordedById        String?
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+
+  tenant              Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch              Branch                  @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  financialAccount    FinancialAccount        @relation(fields: [financialAccountId], references: [id])
+  recurringConfig     RecurringExpenseConfig? @relation(fields: [recurringConfigId], references: [id], onDelete: SetNull)
+  recordedBy          User?                   @relation(fields: [recordedById], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([branchId])
+  @@index([financialAccountId])
+  @@index([expenseMonth])
+  @@index([category])
+}
+
+model EmployeeSalaryConfig {
+  id              String    @id @default(uuid())
+  tenantId        String
+  branchId        String
+  userId          String    @unique
+  baseSalary      Decimal   @default(0) @db.Decimal(15, 2)
+  allowances      Decimal   @default(0) @db.Decimal(15, 2)
+  deductions      Decimal   @default(0) @db.Decimal(15, 2)
+  netSalary       Decimal   @default(0) @db.Decimal(15, 2)
+  paymentMethod   String?   // "CASH", "BANK", "BKASH", "NAGAD"
+  paymentDetails  String?   // Account number, bKash wallet number, etc.
+  effectiveDate   DateTime?
+  notes           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch          Branch    @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([branchId])
+}
+
+model SalaryDisbursement {
+  id                  String           @id @default(uuid())
+  tenantId            String
+  branchId            String
+  userId              String           // Employee receiving salary
+  financialAccountId  String           // Paid from branch financial account
+  month               String           // e.g. "2026-09"
+  baseAmount          Decimal          @default(0) @db.Decimal(15, 2)
+  allowances          Decimal          @default(0) @db.Decimal(15, 2)
+  deductions          Decimal          @default(0) @db.Decimal(15, 2)
+  netPayable          Decimal          @default(0) @db.Decimal(15, 2)
+  paidAmount          Decimal          @default(0) @db.Decimal(15, 2)
+  dueAmount           Decimal          @default(0) @db.Decimal(15, 2)
+  status              SalaryStatus     @default(PAID)
+  totalDays           Int?
+  offDays             Int?
+  workingDays         Int?
+  presentDays         Int?
+  absentDays          Int?
+  paidLeaveDays       Int?
+  unpaidLeaveDays     Int?
+  dailyRate           Decimal?         @db.Decimal(15, 2)
+  attendanceDeduction Decimal?         @db.Decimal(15, 2)
+  allowanceBreakdown  Json?
+  paymentDate         DateTime         @default(now())
+  paymentRef          String?          // Txn or voucher reference
+  notes               String?
+  disbursedById       String?          // Manager who recorded disbursement
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  tenant              Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch              Branch           @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  user                User             @relation("EmployeeSalaryDisbursements", fields: [userId], references: [id], onDelete: Cascade)
+  financialAccount    FinancialAccount @relation(fields: [financialAccountId], references: [id])
+  disbursedBy         User?            @relation("DisbursedBySalaries", fields: [disbursedById], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([branchId])
+  @@index([userId])
+  @@index([month])
+  @@index([financialAccountId])
 }

@@ -185,4 +185,24 @@ export class UserController {
       res.status(400).json({ success: false, message: error.message });
     }
   }
+
+  static async changePassword(req: Request, res: Response): Promise<void> {
+    try {
+      const userId = req.user!.id;
+      const result = await UserService.changePassword(userId, req.body);
+      res.status(200).json(result);
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  }
+
+  static async updateProfile(req: Request, res: Response): Promise<void> {
+    try {
+      const userId = req.user!.id;
+      const updated = await UserService.updateProfile(userId, req.body);
+      res.status(200).json({ success: true, data: updated, message: "Profile updated successfully" });
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  }
 }

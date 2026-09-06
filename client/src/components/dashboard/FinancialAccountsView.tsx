@@ -355,37 +355,60 @@ export function FinancialAccountsView({ onNavigate }: FinancialAccountsViewProps
     .filter((a) => a.type === "BKASH" || a.type === "NAGAD" || a.type === "MOBILE")
     .reduce((sum, a) => sum + Number(a.balance || 0), 0);
 
-  const getAccountBadge = (type: string, name: string) => {
+  const getAccountTheme = (type: string, name: string) => {
     const t = String(type).toUpperCase();
     const n = name.toLowerCase();
     if (t === "CASH") {
       return {
         label: "Cash Drawer",
-        bg: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300",
-        border: "border-emerald-200 dark:border-emerald-800/40",
+        badge: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 dark:border-emerald-800/50",
+        borderAccent: "border-l-4 border-l-emerald-500",
+        balanceBg: "bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-100 dark:border-emerald-900/40",
+        balanceText: "text-emerald-700 dark:text-emerald-400",
+        iconBg: "bg-emerald-600 text-white shadow-sm shadow-emerald-600/20",
         icon: Banknote,
       };
     }
     if (t === "BKASH" || (t === "MOBILE" && n.includes("bkash"))) {
       return {
         label: "bKash Wallet",
-        bg: "bg-pink-50 text-pink-700 dark:bg-pink-950/40 dark:text-pink-300",
-        border: "border-pink-200 dark:border-pink-800/40",
+        badge: "bg-pink-100 text-pink-800 dark:bg-pink-950/80 dark:text-pink-300 dark:border-pink-800/50",
+        borderAccent: "border-l-4 border-l-pink-500",
+        balanceBg: "bg-pink-50/70 dark:bg-pink-950/30 border-pink-100 dark:border-pink-900/40",
+        balanceText: "text-pink-700 dark:text-pink-400",
+        iconBg: "bg-pink-600 text-white shadow-sm shadow-pink-600/20",
         icon: Smartphone,
       };
     }
     if (t === "NAGAD" || (t === "MOBILE" && n.includes("nagad"))) {
       return {
         label: "Nagad Wallet",
-        bg: "bg-orange-50 text-orange-700 dark:bg-orange-950/40 dark:text-orange-300",
-        border: "border-orange-200 dark:border-orange-800/40",
+        badge: "bg-orange-100 text-orange-800 dark:bg-orange-950/80 dark:text-orange-300 dark:border-orange-800/50",
+        borderAccent: "border-l-4 border-l-orange-500",
+        balanceBg: "bg-orange-50/70 dark:bg-orange-950/30 border-orange-100 dark:border-orange-900/40",
+        balanceText: "text-orange-700 dark:text-orange-400",
+        iconBg: "bg-orange-600 text-white shadow-sm shadow-orange-600/20",
         icon: Smartphone,
+      };
+    }
+    if (t === "CARD_SETTLEMENT") {
+      return {
+        label: "Card / Settlement",
+        badge: "bg-purple-100 text-purple-800 dark:bg-purple-950/80 dark:text-purple-300 dark:border-purple-800/50",
+        borderAccent: "border-l-4 border-l-purple-500",
+        balanceBg: "bg-purple-50/70 dark:bg-purple-950/30 border-purple-100 dark:border-purple-900/40",
+        balanceText: "text-purple-700 dark:text-purple-400",
+        iconBg: "bg-purple-600 text-white shadow-sm shadow-purple-600/20",
+        icon: CreditCard,
       };
     }
     return {
       label: "Bank Account",
-      bg: "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300",
-      border: "border-blue-200 dark:border-blue-800/40",
+      badge: "bg-indigo-100 text-indigo-800 dark:bg-indigo-950/80 dark:text-indigo-300 dark:border-indigo-800/50",
+      borderAccent: "border-l-4 border-l-indigo-500",
+      balanceBg: "bg-indigo-50/70 dark:bg-indigo-950/30 border-indigo-100 dark:border-indigo-900/40",
+      balanceText: "text-indigo-700 dark:text-indigo-400",
+      iconBg: "bg-indigo-600 text-white shadow-sm shadow-indigo-600/20",
       icon: Building2,
     };
   };
@@ -524,128 +547,153 @@ export function FinancialAccountsView({ onNavigate }: FinancialAccountsViewProps
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 2xl:gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 xl:gap-5">
           {filteredAccounts.map((acc) => {
-            const badge = getAccountBadge(acc.type, acc.name);
-            const BadgeIcon = badge.icon;
+            const theme = getAccountTheme(acc.type, acc.name);
+            const ThemeIcon = theme.icon;
             const balanceNum = Number(acc.balance || 0);
 
             return (
               <div
                 key={acc.id}
-                className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-5 shadow-xs hover:shadow-md transition flex flex-col justify-between group relative overflow-hidden"
+                className={`bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-4 xl:p-5 shadow-xs hover:shadow-md transition-all duration-200 flex flex-col justify-between group relative overflow-hidden ${theme.borderAccent}`}
               >
+                {/* Upper Content */}
                 <div>
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <div className={`p-3 rounded-2xl ${badge.bg}`}>
-                        <BadgeIcon className="h-5 w-5" />
+                  {/* Card Header: Icon, Name, Badges, Status & Quick Edit/Delete */}
+                  <div className="flex items-start justify-between gap-2 mb-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className={`p-2.5 rounded-xl ${theme.iconBg} shrink-0`}>
+                        <ThemeIcon className="h-4.5 w-4.5" />
                       </div>
-                      <div>
-                        <div className="flex items-center gap-1.5">
-                          <h3 className="font-black text-sm text-slate-900 dark:text-white leading-tight">
-                            {acc.name}
-                          </h3>
-                        </div>
-                        <div className="flex items-center gap-1.5 mt-1">
-                          <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-md ${badge.bg}`}>
-                            {badge.label}
+                      <div className="min-w-0">
+                        <h3 className="font-extrabold text-sm text-slate-900 dark:text-white truncate leading-tight" title={acc.name}>
+                          {acc.name}
+                        </h3>
+                        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                          <span className={`inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-md border ${theme.badge}`}>
+                            {theme.label}
                           </span>
                           {acc.isDefault && (
-                            <span className="text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold px-1.5 py-0.5 rounded">
+                            <span className="text-[10px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 font-bold px-1.5 py-0.5 rounded-md border border-emerald-500/20">
                               Default
                             </span>
                           )}
+                          <span
+                            className={`inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md ${
+                              acc.isActive !== false
+                                ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400"
+                                : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
+                            }`}
+                          >
+                            <span
+                              className={`h-1.5 w-1.5 rounded-full ${
+                                acc.isActive !== false ? "bg-emerald-500 animate-pulse" : "bg-slate-400"
+                              }`}
+                            />
+                            {acc.isActive !== false ? "Active" : "Inactive"}
+                          </span>
                         </div>
                       </div>
                     </div>
 
-                    {/* Action buttons: Edit and Delete */}
-                    <div className="flex items-center gap-1">
+                    {/* Action Buttons: Edit and Delete */}
+                    <div className="flex items-center gap-0.5 shrink-0 opacity-80 group-hover:opacity-100 transition-opacity">
                       <button
                         onClick={() => handleOpenEdit(acc)}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 dark:hover:text-slate-200 transition"
                         title="Edit Account Details"
                       >
-                        <Edit2 className="h-4 w-4" />
+                        <Edit2 className="h-3.5 w-3.5" />
                       </button>
                       <button
                         onClick={() => {
                           setAccountToDelete(acc);
                           setDeleteError(null);
                         }}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition"
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition"
                         title="Remove Account"
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     </div>
                   </div>
 
-                  {/* Account Metadata details */}
-                  <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 space-y-1.5 text-xs text-slate-500">
-                    {acc.bankName && (
-                      <div className="flex justify-between items-center">
-                        <span className="text-slate-400 text-[11px]">Bank:</span>
-                        <span className="font-semibold text-slate-700 dark:text-slate-300">{acc.bankName}</span>
-                      </div>
-                    )}
-                    {acc.accountNumber && (
-                      <div className="flex justify-between items-center">
-                        <span className="text-slate-400 text-[11px]">Account / No:</span>
-                        <div className="flex items-center gap-1">
-                          <span className="font-mono font-bold text-slate-800 dark:text-slate-200">{acc.accountNumber}</span>
-                          <button
-                            onClick={() => handleCopy(acc.accountNumber!, acc.id)}
-                            className="p-0.5 text-slate-400 hover:text-slate-600 transition"
-                            title="Copy Account Number"
-                          >
-                            {copiedId === acc.id ? (
-                              <Check className="h-3 w-3 text-emerald-600" />
-                            ) : (
-                              <Copy className="h-3 w-3" />
-                            )}
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                    {acc.branchName && (
-                      <div className="flex justify-between items-center">
-                        <span className="text-slate-400 text-[11px]">Branch:</span>
-                        <span className="font-medium text-slate-600 dark:text-slate-400">{acc.branchName}</span>
-                      </div>
-                    )}
-                    {acc.routingNumber && (
-                      <div className="flex justify-between items-center">
-                        <span className="text-slate-400 text-[11px]">Routing No:</span>
-                        <span className="font-mono text-slate-600 dark:text-slate-400">{acc.routingNumber}</span>
-                      </div>
-                    )}
-                    {acc.description && (
-                      <div className="text-[11px] text-slate-400 italic pt-1 truncate">{acc.description}</div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Balance & Transfer CTA */}
-                <div className="mt-5 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
-                  <div>
-                    <div className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Current Balance</div>
-                    <div className="text-xl font-black text-slate-900 dark:text-white font-mono">
+                  {/* Focus Balance Box */}
+                  <div className={`p-3 rounded-xl border ${theme.balanceBg} my-3 transition-colors`}>
+                    <div className="text-[10px] uppercase font-extrabold tracking-wider text-slate-400 dark:text-slate-500">
+                      Current Balance
+                    </div>
+                    <div className={`text-xl xl:text-2xl font-black font-mono tracking-tight mt-0.5 ${theme.balanceText}`}>
                       ৳{balanceNum.toLocaleString("en-BD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </div>
                   </div>
 
-                  {onNavigate && (
-                    <button
-                      onClick={() => onNavigate("acc_fund_transfer")}
-                      className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold hover:bg-emerald-600 hover:text-white transition flex items-center gap-1"
-                    >
-                      <ArrowLeftRight className="h-3.5 w-3.5" />
-                      Transfer
-                    </button>
+                  {/* Compact Metadata Details Grid */}
+                  {(acc.bankName || acc.accountNumber || acc.branchName || acc.routingNumber || acc.description) && (
+                    <div className="space-y-1.5 text-xs text-slate-500 dark:text-slate-400 pt-1 pb-1">
+                      {acc.bankName && (
+                        <div className="flex justify-between items-center text-[11px]">
+                          <span className="text-slate-400 dark:text-slate-500 font-medium">Bank</span>
+                          <span className="font-semibold text-slate-700 dark:text-slate-300 truncate max-w-[170px] text-right" title={acc.bankName}>
+                            {acc.bankName}
+                          </span>
+                        </div>
+                      )}
+                      {acc.accountNumber && (
+                        <div className="flex justify-between items-center text-[11px]">
+                          <span className="text-slate-400 dark:text-slate-500 font-medium">Account / No</span>
+                          <div className="flex items-center gap-1">
+                            <span className="font-mono font-bold text-slate-800 dark:text-slate-200">{acc.accountNumber}</span>
+                            <button
+                              onClick={() => handleCopy(acc.accountNumber!, acc.id)}
+                              className="p-0.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition"
+                              title="Copy Account Number"
+                            >
+                              {copiedId === acc.id ? (
+                                <Check className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                              ) : (
+                                <Copy className="h-3 w-3" />
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                      {acc.branchName && (
+                        <div className="flex justify-between items-center text-[11px]">
+                          <span className="text-slate-400 dark:text-slate-500 font-medium">Branch</span>
+                          <span className="font-medium text-slate-600 dark:text-slate-400 truncate max-w-[170px] text-right" title={acc.branchName}>
+                            {acc.branchName}
+                          </span>
+                        </div>
+                      )}
+                      {acc.routingNumber && (
+                        <div className="flex justify-between items-center text-[11px]">
+                          <span className="text-slate-400 dark:text-slate-500 font-medium">Routing No</span>
+                          <span className="font-mono text-slate-600 dark:text-slate-400">{acc.routingNumber}</span>
+                        </div>
+                      )}
+                      {acc.description && (
+                        <div className="text-[11px] text-slate-400 dark:text-slate-500 italic pt-1 truncate border-t border-slate-100 dark:border-slate-800/60 mt-1" title={acc.description}>
+                          {acc.description}
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
+
+                {/* Transfer Funds CTA */}
+                {onNavigate && (
+                  <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800/80">
+                    <button
+                      onClick={() => onNavigate("acc_fund_transfer")}
+                      className="w-full py-1.5 px-3 rounded-lg bg-slate-100 hover:bg-emerald-600 text-slate-700 hover:text-white dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-emerald-600 dark:hover:text-white text-xs font-bold transition-all duration-150 flex items-center justify-center gap-1.5"
+                    >
+                      <ArrowLeftRight className="h-3.5 w-3.5" />
+                      <span>Transfer Funds</span>
+                    </button>
+                  </div>
+                )}
               </div>
             );
           })}

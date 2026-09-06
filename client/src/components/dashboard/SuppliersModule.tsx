@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { fetchApi } from "@/lib/api";
 import { Supplier } from "@/types";
+import { useAuth } from "@/context/AuthContext";
 import {
   Truck,
   Plus,
@@ -16,6 +17,7 @@ import {
   X,
   CreditCard,
   History,
+  Store,
 } from "lucide-react";
 
 interface SuppliersModuleProps {
@@ -23,7 +25,13 @@ interface SuppliersModuleProps {
 }
 
 export function SuppliersModule({ subAction }: SuppliersModuleProps = {}) {
+  const { user } = useAuth();
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [branches, setBranches] = useState<any[]>([]);
+  const [selectedBranchId, setSelectedBranchId] = useState<string>(user?.branchId || "");
+  const [financialAccounts, setFinancialAccounts] = useState<any[]>([]);
+  const [selectedAccountId, setSelectedAccountId] = useState<string>("");
+
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
@@ -157,6 +165,43 @@ export function SuppliersModule({ subAction }: SuppliersModuleProps = {}) {
     }
   };
 
+  useEffect(() => {
+    async function loadBranches() {
+      try {
+        const res = await fetchApi<any[]>("/branches");
+        if (res.success && res.data && res.data.length > 0) {
+          setBranches(res.data);
+          if (!selectedBranchId) {
+            setSelectedBranchId(user?.branchId || res.data[0].id);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load branches", err);
+      }
+    }
+    loadBranches();
+  }, [user]);
+
+  useEffect(() => {
+    async function loadAccounts() {
+      if (!selectedBranchId) return;
+      try {
+        const res = await fetchApi<any[]>(`/accounting/accounts?branchId=${selectedBranchId}`);
+        if (res.success && res.data) {
+          setFinancialAccounts(res.data);
+          if (res.data.length > 0) {
+            setSelectedAccountId(res.data[0].id);
+          } else {
+            setSelectedAccountId("");
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load financial accounts", err);
+      }
+    }
+    loadAccounts();
+  }, [selectedBranchId]);
+
   const handleOpenPayment = (s: Supplier) => {
     setSelectedSupplier(s);
     setPayAmount(Number(s.totalDue) || 0);
@@ -167,12 +212,18 @@ export function SuppliersModule({ subAction }: SuppliersModuleProps = {}) {
   const handleRecordPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedSupplier || payAmount <= 0) return;
+    if (!selectedAccountId) {
+      alert("A valid financial account created for the selected branch is required to record supplier payment.");
+      return;
+    }
     try {
       setPaying(true);
       const res = await fetchApi(`/suppliers/${selectedSupplier.id}/payments`, {
         method: "POST",
         body: JSON.stringify({
           amount: Number(payAmount),
+          branchId: selectedBranchId,
+          financialAccountId: selectedAccountId,
           notes: payNotes || "Due balance payment",
         }),
       });
@@ -638,6 +689,47 @@ export function SuppliersModule({ subAction }: SuppliersModuleProps = {}) {
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Select Paying Branch *
+                </label>
+                <select
+                  value={selectedBranchId}
+                  onChange={(e) => setSelectedBranchId(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none"
+                >
+                  {branches.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Select Payment Account (Debited) *
+                </label>
+                {financialAccounts.length === 0 ? (
+                  <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-xl text-xs text-rose-700 dark:text-rose-300 font-bold">
+                    ⚠️ No active financial account created for this branch. Please create an account in Accounts & Finance first.
+                  </div>
+                ) : (
+                  <select
+                    required
+                    value={selectedAccountId}
+                    onChange={(e) => setSelectedAccountId(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none"
+                  >
+                    {financialAccounts.map((acc) => (
+                      <option key={acc.id} value={acc.id}>
+                        {acc.name} ({acc.type}){acc.accountNumber ? ` - A/C: ${acc.accountNumber}` : ""} [Balance: ৳{Number(acc.balance).toFixed(2)}]
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                   Payment Amount ৳ *
                 </label>
                 <input
@@ -674,7 +766,7 @@ export function SuppliersModule({ subAction }: SuppliersModuleProps = {}) {
                 </button>
                 <button
                   type="submit"
-                  disabled={paying || payAmount <= 0}
+                  disabled={paying || payAmount <= 0 || financialAccounts.length === 0 || !selectedAccountId}
                   className="flex items-center gap-2 bg-emerald-600 text-white px-5 py-2 rounded-xl text-xs font-bold shadow-sm hover:opacity-90 disabled:opacity-50"
                 >
                   {paying && <Loader2 className="h-3.5 w-3.5 animate-spin" />}

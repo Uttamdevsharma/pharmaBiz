@@ -11,11 +11,25 @@ import {
   createPharmacyRoleSchema,
   updatePharmacyRoleSchema,
   updateRolePermissionsSchema,
+  changePasswordSchema,
+  updateProfileSchema,
 } from "./user.validation";
 
 const router = Router();
 
 router.use(authenticate, requireActiveSubscription);
+
+// User Personal Self-Service Actions
+router.post(
+  "/change-password",
+  validateRequest({ body: changePasswordSchema }),
+  UserController.changePassword
+);
+router.patch(
+  "/profile",
+  validateRequest({ body: updateProfileSchema }),
+  UserController.updateProfile
+);
 
 // Dynamic Pharmacy Roles CRUD
 router.get("/roles", UserController.listRoles);

@@ -11,6 +11,9 @@ const user_validation_1 = require("./user.validation");
 const router = (0, express_1.Router)();
 exports.userRoutes = router;
 router.use(authenticate_1.authenticate, planLimiter_1.requireActiveSubscription);
+// User Personal Self-Service Actions
+router.post("/change-password", (0, validate_1.validateRequest)({ body: user_validation_1.changePasswordSchema }), user_controller_1.UserController.changePassword);
+router.patch("/profile", (0, validate_1.validateRequest)({ body: user_validation_1.updateProfileSchema }), user_controller_1.UserController.updateProfile);
 // Dynamic Pharmacy Roles CRUD
 router.get("/roles", user_controller_1.UserController.listRoles);
 router.post("/roles", (0, authorize_1.authorize)(["COMPANY_OWNER", "SUPER_ADMIN"]), (0, validate_1.validateRequest)({ body: user_validation_1.createPharmacyRoleSchema }), user_controller_1.UserController.createRole);

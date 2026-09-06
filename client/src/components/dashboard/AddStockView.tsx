@@ -29,6 +29,7 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
   const [products, setProducts] = useState<Product[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [financialAccounts, setFinancialAccounts] = useState<any[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -50,6 +51,7 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
     unitPurchasePrice: 1.5,
     unitSellingPrice: 2.5,
     paidAmount: 1500,
+    financialAccountId: "",
     shelfLocation: "Rack A-1",
     notes: "Direct distributor shipment",
   });
@@ -94,6 +96,26 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
     }
     loadData();
   }, [user]);
+
+  useEffect(() => {
+    async function loadBranchAccounts() {
+      if (!selectedBranchId) return;
+      try {
+        const res = await fetchApi<any>(`/accounting/accounts?branchId=${selectedBranchId}`);
+        if (res.success && res.data) {
+          setFinancialAccounts(res.data);
+          if (res.data.length > 0) {
+            setFormData((prev) => ({ ...prev, financialAccountId: res.data[0].id }));
+          } else {
+            setFormData((prev) => ({ ...prev, financialAccountId: "" }));
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load branch financial accounts", err);
+      }
+    }
+    loadBranchAccounts();
+  }, [selectedBranchId]);
 
   const handleSelectProduct = (prod: Product) => {
     setSelectedProduct(prod);
@@ -154,6 +176,11 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
       return;
     }
 
+    if (Number(formData.paidAmount || 0) > 0 && !formData.financialAccountId) {
+      setError("A valid financial account for the selected branch is required when making a payment to a supplier.");
+      return;
+    }
+
     try {
       setSubmitting(true);
       setError(null);
@@ -179,6 +206,7 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
         purchasePrice: Number(formData.unitPurchasePrice),
         sellingPrice: Number(formData.unitSellingPrice),
         paidAmount: Number(formData.paidAmount || 0),
+        financialAccountId: Number(formData.paidAmount || 0) > 0 ? formData.financialAccountId || null : null,
         shelfLocation: formData.shelfLocation || null,
         notes: formData.notes || null,
       };
@@ -582,6 +610,32 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
               )}
             </div>
           </div>
+
+          {formData.paidAmount > 0 && (
+            <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                Select Branch Payment Account (Debited) *
+              </label>
+              {financialAccounts.length === 0 ? (
+                <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-xl text-xs text-rose-700 dark:text-rose-300 font-bold">
+                  ⚠️ No active financial account created for this branch. Please create an account in Accounts & Finance first before completing supplier payments.
+                </div>
+              ) : (
+                <select
+                  required
+                  value={formData.financialAccountId}
+                  onChange={(e) => setFormData({ ...formData, financialAccountId: e.target.value })}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none"
+                >
+                  {financialAccounts.map((acc) => (
+                    <option key={acc.id} value={acc.id}>
+                      {acc.name} ({acc.type}){acc.accountNumber ? ` - A/C: ${acc.accountNumber}` : ""} [Balance: ৳{Number(acc.balance).toFixed(2)}]
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Submit Action */}

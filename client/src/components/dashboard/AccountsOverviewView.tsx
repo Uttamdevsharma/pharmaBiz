@@ -229,7 +229,23 @@ export function AccountsOverviewView({ onNavigate }: AccountsOverviewViewProps =
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
+          {onNavigate && (
+            <>
+              <button
+                onClick={() => onNavigate("acc_expenses")}
+                className="px-3.5 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 text-slate-700 dark:text-slate-200 text-xs font-bold transition flex items-center gap-1.5 shadow-xs"
+              >
+                <span>Expenses & Bills</span>
+              </button>
+              <button
+                onClick={() => onNavigate("acc_salaries")}
+                className="px-3.5 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 text-slate-700 dark:text-slate-200 text-xs font-bold transition flex items-center gap-1.5 shadow-xs"
+              >
+                <span>Salary Management</span>
+              </button>
+            </>
+          )}
           <button
             onClick={() => loadFinancialOverview(true)}
             disabled={refreshing}

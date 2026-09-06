@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.AccountingController = void 0;
 const accounting_service_1 = require("./accounting.service");
 const report_service_1 = require("../report/report.service");
+const prisma_1 = require("../../app/lib/prisma");
 class AccountingController {
     static async listAccounts(req, res) {
         try {
@@ -117,6 +118,201 @@ class AccountingController {
         }
         catch (error) {
             res.status(500).json({ success: false, message: error.message });
+        }
+    }
+    // ==========================================
+    // 🏢 RECURRING EXPENSES
+    // ==========================================
+    static async listRecurringExpenses(req, res) {
+        try {
+            const tenantId = req.user.tenantId;
+            const branchId = req.query.branchId;
+            const includeInactive = req.query.includeInactive === "true" || req.query.includeInactive === "1";
+            const data = await accounting_service_1.AccountingService.listRecurringExpenses(tenantId, branchId, includeInactive);
+            res.json({ success: true, data });
+        }
+        catch (err) {
+            res.status(400).json({ success: false, message: err.message });
+        }
+    }
+    static async createRecurringExpense(req, res) {
+        try {
+            const tenantId = req.user.tenantId;
+            const data = await accounting_service_1.AccountingService.createRecurringExpense(tenantId, req.body);
+            res.status(201).json({ success: true, data, message: "Recurring bill configured successfully" });
+        }
+        catch (err) {
+            res.status(400).json({ success: false, message: err.message });
+        }
+    }
+    static async updateRecurringExpense(req, res) {
+        try {
+            const tenantId = req.user.tenantId;
+            const data = await accounting_service_1.AccountingService.updateRecurringExpense(tenantId, req.params.id, req.body);
+            res.json({ success: true, data, message: "Recurring bill updated successfully" });
+        }
+        catch (err) {
+            res.status(400).json({ success: false, message: err.message });
+        }
+    }
+    static async deleteRecurringExpense(req, res) {
+        try {
+            const tenantId = req.user.tenantId;
+            await accounting_service_1.AccountingService.deleteRecurringExpense(tenantId, req.params.id);
+            res.json({ success: true, message: "Recurring bill removed" });
+        }
+        catch (err) {
+            res.status(400).json({ success: false, message: err.message });
+        }
+    }
+    // ==========================================
+    // 💸 ACTUAL MONTHLY EXPENSE PAYMENTS
+    // ==========================================
+    static async listExpenses(req, res) {
+        try {
+            const tenantId = req.user.tenantId;
+            const result = await accounting_service_1.AccountingService.listExpenses(tenantId, req.query);
+            res.json({ success: true, data: result });
+        }
+        catch (err) {
+            res.status(400).json({ success: false, message: err.message });
+        }
+    }
+    static async recordExpense(req, res) {
+        try {
+            const tenantId = req.user.tenantId;
+            const userId = req.user.id;
+            const expense = await accounting_service_1.AccountingService.recordExpense(tenantId, userId, req.body);
+            res.status(201).json({ success: true, data: expense, message: "Expense payment recorded and account debited" });
+        }
+        catch (err) {
+            res.status(400).json({ success: false, message: err.message });
+        }
+    }
+    static async getExpenseSummary(req, res) {
+        try {
+            const tenantId = req.user.tenantId;
+            const branchId = req.query.branchId;
+            const month = req.query.month;
+            const summary = await accounting_service_1.AccountingService.getExpenseSummary(tenantId, branchId, month);
+            res.json({ success: true, data: summary });
+        }
+        catch (err) {
+            res.status(400).json({ success: false, message: err.message });
+        }
+    }
+    // ==========================================
+    // 👥 STAFF SALARY MANAGEMENT
+    // ==========================================
+    static async listBranchStaffSalaries(req, res) {
+        try {
+            const tenantId = req.user.tenantId;
+            const branchId = req.query.branchId || req.user.branchId;
+            const month = req.query.month || new Date().toISOString().slice(0, 7);
+            const includeInactive = req.query.includeInactive === "true" || req.query.includeInactive === "1";
+            if (!branchId) {
+                res.status(400).json({ success: false, message: "Branch ID is required" });
+                return;
+            }
+            const employees = await accounting_service_1.AccountingService.listBranchStaffSalaries(tenantId, branchId, month, includeInactive);
+            res.json({ success: true, data: employees });
+        }
+        catch (err) {
+            res.status(400).json({ success: false, message: err.message });
+        }
+    }
+    static async setSalaryConfig(req, res) {
+        try {
+            const user = req.user;
+            const tenantId = user.tenantId;
+            const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN";
+            const isBranchManager = user.role === "BRANCH_MANAGER";
+            // Only Pharmacy Owner and Branch Manager can set or update Base Salary
+            if (!isOwner && !isBranchManager) {
+                const existing = await prisma_1.prisma.employeeSalaryConfig.findUnique({
+                    where: {
+                        tenantId_userId: {
+                            tenantId,
+                            userId: req.body.userId,
+                        },
+                    },
+                });
+                const incomingBase = Number(req.body.baseSalary);
+                if (!existing || Number(existing.baseSalary) !== incomingBase) {
+                    res.status(403).json({
+                        success: false,
+                        message: "Forbidden: Only Pharmacy Owner and Branch Manager can set or update Base Salary. Accounts Manager cannot modify Base Salary.",
+                    });
+                    return;
+                }
+            }
+            const config = await accounting_service_1.AccountingService.setSalaryConfig(tenantId, req.body);
+            res.json({ success: true, data: config, message: "Salary configuration saved successfully" });
+        }
+        catch (err) {
+            res.status(400).json({ success: false, message: err.message });
+        }
+    }
+    static async disburseSalary(req, res) {
+        try {
+            const tenantId = req.user.tenantId;
+            const disbursedById = req.user.id;
+            const result = await accounting_service_1.AccountingService.disburseSalary(tenantId, disbursedById, req.body);
+            res.status(201).json({ success: true, data: result, message: "Salary paid successfully and financial account debited" });
+        }
+        catch (err) {
+            res.status(400).json({ success: false, message: err.message });
+        }
+    }
+    static async getBranchSalaryHistory(req, res) {
+        try {
+            const tenantId = req.user.tenantId;
+            const branchId = req.query.branchId || req.user.branchId;
+            const month = req.query.month;
+            const userId = req.query.userId;
+            const page = req.query.page ? parseInt(req.query.page, 10) : 1;
+            const limit = req.query.limit ? parseInt(req.query.limit, 10) : 50;
+            const data = await accounting_service_1.AccountingService.getBranchSalaryHistory(tenantId, branchId, {
+                month,
+                userId,
+                page,
+                limit,
+            });
+            res.json({ success: true, data });
+        }
+        catch (err) {
+            res.status(400).json({ success: false, message: err.message });
+        }
+    }
+    static async getEmployeeSalaryHistory(req, res) {
+        try {
+            const tenantId = req.user.tenantId;
+            const userId = req.params.userId;
+            const actorRole = req.user.role;
+            const isManagerOrAccounts = actorRole === "COMPANY_OWNER" ||
+                actorRole === "SUPER_ADMIN" ||
+                actorRole === "BRANCH_MANAGER" ||
+                actorRole === "ACCOUNTS";
+            if (!isManagerOrAccounts && req.user.id !== userId) {
+                res.status(403).json({ success: false, message: "Forbidden: You can only view your own salary history." });
+                return;
+            }
+            const history = await accounting_service_1.AccountingService.getEmployeeSalaryHistory(tenantId, userId);
+            res.json({ success: true, data: history });
+        }
+        catch (err) {
+            res.status(400).json({ success: false, message: err.message });
+        }
+    }
+    static async getMySalaryHistory(req, res) {
+        try {
+            const tenantId = req.user.tenantId;
+            const userId = req.user.id;
+            const history = await accounting_service_1.AccountingService.getMySalaryHistory(tenantId, userId);
+            res.json({ success: true, data: history });
+        }
+        catch (err) {
+            res.status(400).json({ success: false, message: err.message });
         }
     }
 }

@@ -26,6 +26,7 @@ const settings_routes_1 = require("./modules/settings/settings.routes");
 const upload_routes_1 = require("./modules/upload/upload.routes");
 const supplier_routes_1 = require("./modules/supplier/supplier.routes");
 const accounting_routes_1 = require("./modules/accounting/accounting.routes");
+const attendance_routes_1 = require("./modules/attendance/attendance.routes");
 const payment_controller_1 = require("./modules/payment/payment.controller");
 const app = (0, express_1.default)();
 const port = process.env.PORT || 3000;
@@ -76,6 +77,7 @@ app.use("/api/settings", settings_routes_1.settingsRoutes);
 app.use("/api/upload", upload_routes_1.uploadRoutes);
 app.use("/api/suppliers", supplier_routes_1.supplierRoutes);
 app.use("/api/accounting", accounting_routes_1.accountingRoutes);
+app.use("/api/attendance", attendance_routes_1.attendanceRoutes);
 // Fallback & direct gateway callbacks on root /payment/* (Supports both GET and POST)
 app.all("/payment/success", payment_controller_1.PaymentController.handleSuccess);
 app.all("/payment/fail", payment_controller_1.PaymentController.handleFail);
@@ -95,9 +97,11 @@ app.use((err, req, res, next) => {
         message: err.message || "Internal server error",
     });
 });
-// Start Server and trigger Admin seeding
+const subscription_expiry_service_1 = require("./modules/subscription/subscription-expiry.service");
+// Start Server and trigger Admin seeding & automated subscription expiry scheduler
 app.listen(port, async () => {
     console.log(`Pharmacy Management SaaS API listening on port ${port}`);
     await (0, seedAdmin_1.seedSuperAdmin)();
+    subscription_expiry_service_1.SubscriptionExpiryService.initAutomatedScheduler();
 });
 exports.default = app;

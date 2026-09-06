@@ -22,6 +22,7 @@ import { settingsRoutes } from "./modules/settings/settings.routes";
 import { uploadRoutes } from "./modules/upload/upload.routes";
 import { supplierRoutes } from "./modules/supplier/supplier.routes";
 import { accountingRoutes } from "./modules/accounting/accounting.routes";
+import { attendanceRoutes } from "./modules/attendance/attendance.routes";
 import { PaymentController } from "./modules/payment/payment.controller";
 
 const app = express();
@@ -79,6 +80,7 @@ app.use("/api/settings", settingsRoutes);
 app.use("/api/upload", uploadRoutes);
 app.use("/api/suppliers", supplierRoutes);
 app.use("/api/accounting", accountingRoutes);
+app.use("/api/attendance", attendanceRoutes);
 
 // Fallback & direct gateway callbacks on root /payment/* (Supports both GET and POST)
 app.all("/payment/success", PaymentController.handleSuccess);

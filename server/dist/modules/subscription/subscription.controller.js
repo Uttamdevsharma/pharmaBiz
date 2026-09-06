@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SubscriptionController = void 0;
 const subscription_service_1 = require("./subscription.service");
+const subscription_expiry_service_1 = require("./subscription-expiry.service");
 class SubscriptionController {
     static async listPlans(req, res) {
         try {
@@ -96,6 +97,19 @@ class SubscriptionController {
         }
         catch (error) {
             res.status(400).json({ success: false, message: error.message });
+        }
+    }
+    static async triggerExpiryCheck(req, res) {
+        try {
+            const summary = await subscription_expiry_service_1.SubscriptionExpiryService.checkAndSendExpiryReminders();
+            res.status(200).json({
+                success: true,
+                message: `Automated expiry scan completed. Reminders sent: ${summary.sentCount}, Errors: ${summary.errorsCount}`,
+                data: summary,
+            });
+        }
+        catch (error) {
+            res.status(500).json({ success: false, message: error.message });
         }
     }
 }

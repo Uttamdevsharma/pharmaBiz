@@ -27,7 +27,12 @@ model User {
   name             String?
   email            String?
   phone            String?
+  avatarUrl        String?
   isActive         Boolean       @default(true)
+  resignationDate  DateTime?
+  resignationReason String?
+  deactivatedAt    DateTime?
+  deactivatedById  String?
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 
@@ -37,6 +42,13 @@ model User {
   pharmacyRole     PharmacyRole? @relation(fields: [pharmacyRoleId], references: [id], onDelete: SetNull)
   sales            Sale[]
   financialTransactions FinancialTransaction[]
+  salaryConfig     EmployeeSalaryConfig?
+  salaryDisbursements SalaryDisbursement[] @relation("EmployeeSalaryDisbursements")
+  disbursedSalaries   SalaryDisbursement[] @relation("DisbursedBySalaries")
+  branchExpenses      BranchExpense[]
+  attendances         EmployeeAttendance[] @relation("EmployeeAttendances")
+  markedAttendances   EmployeeAttendance[] @relation("MarkedAttendances")
+  monthlyAllowances   EmployeeMonthlyAllowance[]
 
   @@index([tenantId])
   @@index([branchId])

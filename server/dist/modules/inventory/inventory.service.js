@@ -196,10 +196,45 @@ class InventoryService {
                     performedBy: userId,
                 },
             });
-            // 3. Update Supplier Financials if supplier & purchase price provided
+            // 3. Update Financial Account & Supplier Financials
+            const paid = Number(data.paidAmount || 0);
+            let financialAccount = null;
+            if (paid > 0) {
+                if (!data.financialAccountId) {
+                    throw new Error("A valid financial account for the selected branch is required when paying a supplier.");
+                }
+                financialAccount = await tx.financialAccount.findFirst({
+                    where: {
+                        id: data.financialAccountId,
+                        tenantId,
+                        branchId: data.branchId,
+                        isActive: true,
+                    },
+                });
+                if (!financialAccount) {
+                    throw new Error("Selected financial account does not exist or does not belong to this branch.");
+                }
+                // Debit the selected financial account
+                await tx.financialAccount.update({
+                    where: { id: financialAccount.id },
+                    data: { balance: { decrement: paid } },
+                });
+                // Record Financial Transaction
+                await tx.financialTransaction.create({
+                    data: {
+                        tenantId,
+                        branchId: data.branchId,
+                        sourceAccountId: financialAccount.id,
+                        amount: paid,
+                        type: "PURCHASE_PAYMENT",
+                        reference: `INWARD-${inventory.batchNumber || inventory.id.substring(0, 8)}`,
+                        note: data.notes || `Stock Inward supplier payment via ${financialAccount.name}`,
+                        userId,
+                    },
+                });
+            }
             if (data.supplierId && supplier && data.purchasePrice) {
                 const totalPurchaseValue = Number(data.purchasePrice) * data.quantity;
-                const paid = Number(data.paidAmount || 0);
                 const due = Math.max(0, totalPurchaseValue - paid);
                 await tx.supplier.update({
                     where: { id: data.supplierId },

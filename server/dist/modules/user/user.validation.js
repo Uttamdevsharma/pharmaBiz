@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.listUsersQuerySchema = exports.updateRolePermissionsSchema = exports.updatePharmacyRoleSchema = exports.createPharmacyRoleSchema = exports.updateUserSchema = exports.createUserSchema = exports.RoleEnum = void 0;
+exports.updateProfileSchema = exports.changePasswordSchema = exports.listUsersQuerySchema = exports.updateRolePermissionsSchema = exports.updatePharmacyRoleSchema = exports.createPharmacyRoleSchema = exports.updateUserSchema = exports.createUserSchema = exports.RoleEnum = void 0;
 const zod_1 = require("zod");
 exports.RoleEnum = zod_1.z.enum([
     "SUPER_ADMIN",
@@ -54,4 +54,14 @@ exports.listUsersQuerySchema = zod_1.z.object({
     role: zod_1.z.string().optional(),
     branchId: zod_1.z.string().optional().transform(v => (v === "" || v === "null" || v === "undefined" ? undefined : v)),
     isActive: zod_1.z.union([zod_1.z.string(), zod_1.z.boolean()]).optional().transform(v => (v === "true" || v === true ? true : v === "false" || v === false ? false : undefined)),
+});
+exports.changePasswordSchema = zod_1.z.object({
+    currentPassword: zod_1.z.string().min(1, "Current password is required"),
+    newPassword: zod_1.z.string().min(6, "New password must be at least 6 characters"),
+});
+exports.updateProfileSchema = zod_1.z.object({
+    name: zod_1.z.string().min(2).optional(),
+    phone: zod_1.z.string().optional().nullable(),
+    email: zod_1.z.string().email().optional().nullable(),
+    avatarUrl: zod_1.z.string().optional().nullable(),
 });

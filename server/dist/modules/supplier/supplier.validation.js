@@ -42,6 +42,7 @@ exports.createPurchaseSchema = zod_1.z.object({
     items: zod_1.z.array(exports.purchaseItemInputSchema).min(1, "At least one item is required in purchase"),
     paidAmount: zod_1.z.number().nonnegative().default(0),
     paymentMethod: zod_1.z.string().default("CASH"),
+    financialAccountId: zod_1.z.string().optional().nullable(),
     notes: zod_1.z.string().optional().nullable(),
 });
 exports.listPurchasesQuerySchema = zod_1.z.object({
@@ -56,6 +57,8 @@ exports.listPurchasesQuerySchema = zod_1.z.object({
 });
 exports.recordSupplierPaymentSchema = zod_1.z.object({
     amount: zod_1.z.number().positive("Payment amount must be greater than 0"),
-    paymentMethod: zod_1.z.string().default("CASH"),
+    branchId: zod_1.z.string().optional().nullable(),
+    financialAccountId: zod_1.z.string().min(1, "Financial account is required"),
+    paymentMethod: zod_1.z.string().optional().nullable(),
     notes: zod_1.z.string().optional().nullable(),
 });
