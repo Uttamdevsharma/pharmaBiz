@@ -188,62 +188,7 @@ export function BranchSalaryHistoryView({
         </div>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-              Total Salary Disbursed {currentMonth ? `(${currentMonth})` : "(All Time)"}
-            </span>
-            <div className="p-2 bg-emerald-500/10 text-emerald-600 rounded-lg">
-              <DollarSign className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-3xl font-bold text-slate-900 dark:text-white">
-              ৳{totalDisbursed.toLocaleString()}
-            </span>
-            <span className="text-xs text-slate-500">debited</span>
-          </div>
-        </div>
 
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-              Total Disbursements
-            </span>
-            <div className="p-2 bg-purple-500/10 text-purple-600 rounded-lg">
-              <Receipt className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-3xl font-bold text-slate-900 dark:text-white">
-              {disbursements.length}
-            </span>
-            <span className="text-xs text-slate-500">voucher transactions</span>
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-              Average Payment
-            </span>
-            <div className="p-2 bg-blue-500/10 text-blue-600 rounded-lg">
-              <Users className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-3xl font-bold text-blue-600 dark:text-blue-400">
-              ৳
-              {disbursements.length > 0
-                ? Math.round(totalDisbursed / disbursements.length).toLocaleString()
-                : "0"}
-            </span>
-            <span className="text-xs text-slate-500">per voucher</span>
-          </div>
-        </div>
-      </div>
 
       {/* Search Bar */}
       <div className="flex items-center justify-between gap-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm">
