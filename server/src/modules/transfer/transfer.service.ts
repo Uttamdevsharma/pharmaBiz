@@ -344,6 +344,7 @@ export class TransferService {
               data: {
                 quantity: { increment: iu.receivedQuantity },
                 purchasePrice: iu.costPrice,
+                receivedDate: new Date(),
               },
             });
           } else {
@@ -357,6 +358,7 @@ export class TransferService {
                 expiryDate: iu.expiryDate,
                 packageType: iu.packageType,
                 purchasePrice: iu.costPrice,
+                receivedDate: new Date(),
                 minStockLevel: 10,
                 lowStockThreshold: 5,
               },

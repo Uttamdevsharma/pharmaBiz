@@ -3,6 +3,7 @@ import { z } from "zod";
 export const saleItemInputSchema = z.object({
   productId: z.string().min(1, "Product ID is required"),
   inventoryId: z.string().optional().nullable(),
+  inventoryLocationId: z.string().optional().nullable(),
   batchNumber: z.string().optional().nullable(),
   unitType: z.string().default("PIECE"), // e.g. "TABLET", "STRIP", "BOX", "BOTTLE", "PIECE"
   unitMultiplier: z.number().int().positive().default(1),

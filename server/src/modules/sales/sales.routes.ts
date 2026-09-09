@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { SalesController } from "./sales.controller";
 import { authenticate } from "../../middleware/authenticate";
-import { authorize } from "../../middleware/authorize";
+import { requirePermission } from "../../middleware/requirePermission";
 import { validateRequest } from "../../middleware/validate";
 import { requireActiveSubscription } from "../../middleware/planLimiter";
 import {
@@ -18,27 +18,32 @@ router.use(authenticate, requireActiveSubscription);
 // POS Checkout
 router.post(
   "/",
-  authorize(["COMPANY_OWNER", "REGIONAL_ADMIN", "BRANCH_MANAGER", "CASHIER", "SUPER_ADMIN"]),
+  requirePermission("pos.manage"),
   validateRequest({ body: createSaleSchema }),
   SalesController.createSale
 );
 
 // Sales Listing & Details
-router.get("/", validateRequest({ query: listSalesQuerySchema }), SalesController.listSales);
-router.get("/:id", SalesController.getSaleById);
-router.get("/:id/receipt", SalesController.getReceipt);
+router.get(
+  "/",
+  requirePermission("pos.history"),
+  validateRequest({ query: listSalesQuerySchema }),
+  SalesController.listSales
+);
+router.get("/:id", requirePermission("pos.history"), SalesController.getSaleById);
+router.get("/:id/receipt", requirePermission("pos.history"), SalesController.getReceipt);
 
-// Refund & Void (Manager Authorization Required)
+// Refund & Void
 router.post(
   "/:id/refund",
-  authorize(["COMPANY_OWNER", "REGIONAL_ADMIN", "BRANCH_MANAGER", "SUPER_ADMIN"]),
+  requirePermission("pos.manage"),
   validateRequest({ body: refundSaleSchema }),
   SalesController.refundSale
 );
 
 router.post(
   "/:id/void",
-  authorize(["COMPANY_OWNER", "REGIONAL_ADMIN", "BRANCH_MANAGER", "SUPER_ADMIN"]),
+  requirePermission("pos.manage"),
   validateRequest({ body: voidSaleSchema }),
   SalesController.voidSale
 );

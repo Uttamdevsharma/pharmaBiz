@@ -82,6 +82,17 @@ model Product {
   imageUrl             String?
   size                 String?         // e.g. "500mg", "100ml", "1000ml", "Standard"
   defaultPackType      String?         @default("PIECE") // e.g. "BOX", "STRIP", "TABLET", "BOTTLE", "PIECE"
+  
+  // Hierarchical Packaging Fields
+  packLevel1           String?         // e.g. "Carton"
+  packLevel2           String?         // e.g. "Box"
+  packLevel3           String?         // e.g. "Strip"
+  packLevel4           String?         // e.g. "Tablet"
+  qtyPerLevel2         Int?            // e.g. 10 (1 Carton = 10 Boxes)
+  qtyPerLevel3         Int?            // e.g. 10 (1 Box = 10 Strips)
+  qtyPerLevel4         Int?            // e.g. 10 (1 Strip = 10 Tablets)
+
+  // Legacy fields (kept for backward compatibility)
   stripsPerBox         Int?            @default(10)
   tabletsPerStrip      Int?            @default(10)
 

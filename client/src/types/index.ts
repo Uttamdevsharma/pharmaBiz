@@ -113,6 +113,7 @@ export interface Product {
   unit: string;
   size?: string | null;
   defaultPackType?: string | null;
+  qtyPerLevel2?: number | null;
   stripsPerBox?: number | null;
   tabletsPerStrip?: number | null;
   shelfLocation?: string | null;
@@ -128,6 +129,41 @@ export interface Product {
   unitRef?: Unit;
 }
 
+export interface SupplierContact {
+  id: string;
+  tenantId?: string;
+  supplierId: string;
+  name: string;
+  phone: string;
+  email?: string | null;
+  designation?: string | null;
+  isPrimary?: boolean;
+  isActive: boolean;
+  createdAt?: string;
+}
+
+export interface SupplierPayment {
+  id: string;
+  tenantId: string;
+  supplierId: string;
+  branchId?: string | null;
+  purchaseId?: string | null;
+  financialAccountId?: string | null;
+  amount: number;
+  previousDue: number;
+  remainingDue: number;
+  paymentMethod?: string | null;
+  reference?: string | null;
+  notes?: string | null;
+  paidBy?: string | null;
+  paymentDate: string;
+  createdAt?: string;
+  supplier?: { id: string; name: string; company?: string | null; phone: string };
+  branch?: { id: string; name: string };
+  purchase?: { id: string; invoiceNo?: string | null; totalAmount: number };
+  financialAccount?: { id: string; name: string; type: string };
+}
+
 export interface Supplier {
   id: string;
   name: string;
@@ -140,8 +176,10 @@ export interface Supplier {
   totalPaid: number;
   totalDue: number;
   isActive: boolean;
-  _count?: { purchases: number; inventories: number };
+  contacts?: SupplierContact[];
+  _count?: { purchases: number; inventories: number; contacts?: number };
   purchases?: any[];
+  payments?: SupplierPayment[];
 }
 
 export interface InventoryItem {
@@ -168,13 +206,56 @@ export interface InventoryItem {
   batchNumber?: string | null;
   mfgDate?: string | null;
   expiryDate?: string | null;
+  receivedDate?: string | null;
+  createdAt?: string;
   packageType?: string | null;
+  cartonQuantity?: number | null;
+  boxesPerCarton?: number | null;
   boxQuantity?: number | null;
   stripsPerBox?: number | null;
   tabletsPerStrip?: number | null;
+  cartonsReceived?: number | null;
+  looseBoxesReceived?: number | null;
+  allocatedCartons?: number | null;
+  allocatedLooseBoxes?: number | null;
+  fullCartons?: number | null;
+  boxesInsideCartons?: number | null;
+  remainingLooseBoxes?: number | null;
+  totalEquivalentBoxes?: number | null;
+  totalStrips?: number | null;
+  totalTablets?: number | null;
   shelfLocation?: string | null;
   isLowStock: boolean;
   isExpired: boolean;
   daysUntilExpiry?: number | null;
   supplier?: { id: string; name: string; phone: string } | null;
+  locations?: any[];
+  receivingRecords?: BatchReceivingRecord[];
 }
+
+export interface BatchReceivingRecord {
+  id: string;
+  inventoryId: string;
+  branchId: string;
+  productId: string;
+  supplierId?: string | null;
+  batchNumber?: string | null;
+  receivingUnit: "CARTON" | "BOX";
+  cartonsReceived?: number | null;
+  boxesPerCarton?: number | null;
+  boxesReceived: number;
+  stripsPerBox?: number | null;
+  tabletsPerStrip?: number | null;
+  totalQuantity: number;
+  purchasePrice?: number | string | null;
+  sellingPrice?: number | string | null;
+  receivedDate: string;
+  expiryDate?: string | null;
+  mfgDate?: string | null;
+  invoiceNo?: string | null;
+  notes?: string | null;
+  receivedBy?: string | null;
+  createdAt: string;
+  supplier?: { id: string; name: string; phone: string } | null;
+}
+

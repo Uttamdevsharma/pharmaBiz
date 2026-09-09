@@ -11,7 +11,7 @@ exports.setBranchOffDayConfigSchema = zod_1.z.object({
 });
 exports.attendanceItemSchema = zod_1.z.object({
     userId: zod_1.z.string().uuid("Invalid user ID"),
-    status: zod_1.z.enum(["PRESENT", "ABSENT", "PAID_LEAVE", "UNPAID_LEAVE", "OFF_DAY"]),
+    status: zod_1.z.enum(["PRESENT", "ABSENT", "LATE", "PAID_LEAVE", "UNPAID_LEAVE", "OFF_DAY"]),
     notes: zod_1.z.string().optional().nullable(),
 });
 exports.markBulkDailyAttendanceSchema = zod_1.z.object({

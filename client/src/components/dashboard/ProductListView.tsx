@@ -157,7 +157,7 @@ export function ProductListView({ onNavigate, onEditProduct }: ProductListViewPr
             }}
             className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 outline-none"
           >
-            <option value="">All Categories (5)</option>
+            <option value="">All Categories ({categories.length})</option>
             {categories.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}

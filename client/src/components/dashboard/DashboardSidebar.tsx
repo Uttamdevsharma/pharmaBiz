@@ -39,6 +39,9 @@ import {
   DollarSign,
   Briefcase,
   CalendarCheck,
+  Archive,
+  Layers,
+  MapPin,
 } from "lucide-react";
 
 export type OwnerModule =
@@ -68,20 +71,28 @@ export type OwnerModule =
   | "sal_employees"
   | "sal_attendance"
   | "sal_offdays"
+  | "sal_deduction_rules"
   | "sal_management"
   | "sal_history"
   | "inv_add_product"
   | "inv_product_list"
   | "inv_variants"
   | "inv_expired_products"
+  | "cat_create"
+  | "cat_list"
   | "stock_add_stock"
   | "stock_stock_list"
   | "stock_stock_history"
+  | "stock_stock_allocation"
+  | "stock_allocation_history"
   | "stock_transfer_stock"
   | "stock_transfer_history"
   | "stock_stock_receive"
   | "stock_inspection"
   | "stock_damaged_products"
+  | "loc_create_rack"
+  | "loc_rack_list"
+  | "sup_create_supplier"
   | "sup_suppliers"
   | "sup_purchase_history"
   | "sup_payments_due"
@@ -95,10 +106,11 @@ export type OwnerModule =
   | "settings";
 
 interface SubMenuItem {
-  id: OwnerModule;
+  id: OwnerModule | string;
   label: string;
   icon: React.ElementType;
   visible?: boolean;
+  children?: SubMenuItem[];
 }
 
 interface ParentMenuItem {
@@ -146,6 +158,7 @@ export function DashboardSidebar({
     activeModule === "sal_employees" ||
     activeModule === "sal_management" ||
     activeModule === "sal_history" ||
+    activeModule === "sal_deduction_rules" ||
     activeModule === "acc_salaries" ||
     activeModule === "employee_details" ||
     activeModule === "staff_salary_history";
@@ -163,11 +176,15 @@ export function DashboardSidebar({
     activeModule === "staff_create" ||
     activeModule === "roles";
 
+  const isLocationActive = activeModule.startsWith("loc_");
+
   // Collapsible state for parent groups
   const [openParents, setOpenParents] = useState<Record<string, boolean>>({
     sales_pos: isSalesPosActive,
+    category_mgmt: activeModule.startsWith("cat_"),
     inventory: activeModule.startsWith("inv_"),
     stock: activeModule.startsWith("stock_"),
+    location_mgmt: isLocationActive,
     supplier: activeModule.startsWith("sup_") && activeModule !== "sup_payments_due",
     accounts: isAccountsActive,
     expenses_bills: isExpensesActive,
@@ -175,8 +192,38 @@ export function DashboardSidebar({
     staff_mgmt: isStaffActive,
   });
 
+  const [openSubgroups, setOpenSubgroups] = useState<Record<string, boolean>>({
+    allocate_product_group: true,
+  });
+
+  const toggleSubgroup = (subgroupId: string) => {
+    setOpenSubgroups((prev) => ({
+      ...prev,
+      [subgroupId]: !prev[subgroupId],
+    }));
+  };
+
   // Auto-expand parent when activeModule changes
   useEffect(() => {
+    if (isSalesPosActive) {
+      setOpenParents((prev) => ({ ...prev, sales_pos: true }));
+    }
+    if (activeModule.startsWith("cat_")) {
+      setOpenParents((prev) => ({ ...prev, category_mgmt: true }));
+    }
+    if (activeModule.startsWith("inv_")) {
+      setOpenParents((prev) => ({ ...prev, inventory: true }));
+    }
+    if (activeModule.startsWith("stock_")) {
+      setOpenParents((prev) => ({ ...prev, stock: true }));
+    }
+    if (activeModule.startsWith("loc_")) {
+      setOpenParents((prev) => ({ ...prev, location_mgmt: true }));
+    }
+    if (activeModule === "stock_stock_allocation" || activeModule === "stock_allocation_history") {
+      setOpenSubgroups((prev) => ({ ...prev, allocate_product_group: true }));
+    }
+
     if (
       activeModule === "pos" ||
       activeModule === "pos_sale" ||
@@ -201,6 +248,7 @@ export function DashboardSidebar({
       activeModule === "sal_employees" ||
       activeModule === "sal_attendance" ||
       activeModule === "sal_offdays" ||
+      activeModule === "sal_deduction_rules" ||
       activeModule === "sal_management" ||
       activeModule === "sal_history" ||
       activeModule === "acc_salaries" ||
@@ -257,19 +305,19 @@ export function DashboardSidebar({
       id: "acc_payment_sales" as OwnerModule,
       label: "Payment Method Sales",
       icon: CreditCard,
-      visible: isOwner || hasPermission("accounts.payment_sales") || hasPermission("pos.history"),
+      visible: isOwner || hasPermission("accounts.payment_sales"),
     },
     {
       id: "acc_product_sales" as OwnerModule,
       label: "Product-Wise Sales",
       icon: Package,
-      visible: isOwner || hasPermission("accounts.product_sales") || hasPermission("pos.history"),
+      visible: isOwner || hasPermission("accounts.product_sales"),
     },
     {
       id: "reports" as OwnerModule,
       label: "Sales Reports",
       icon: BarChart3,
-      visible: isOwner || hasPermission("accounts.reports") || hasPermission("pos.history"),
+      visible: isOwner || hasPermission("accounts.reports"),
     },
     {
       id: "pos_vat" as OwnerModule,
@@ -279,102 +327,153 @@ export function DashboardSidebar({
     },
   ].filter((item) => item.visible);
 
+  // Category Management Section
+  const categoryChildren: SubMenuItem[] = [
+    {
+      id: "cat_create" as OwnerModule,
+      label: "Manage Categories",
+      icon: PlusCircle,
+      visible: isOwner || hasPermission("category.manage"),
+    },
+    {
+      id: "cat_list" as OwnerModule,
+      label: "Manage Subcategories",
+      icon: List,
+      visible: isOwner || hasPermission("category.subcategories") || hasPermission("category.manage"),
+    },
+  ].filter((item) => item.visible);
+
   // 2. Inventory Section
-  const hasInventoryPerm = isOwner || hasPermission("inventory.manage");
   const inventoryChildren: SubMenuItem[] = [
     {
       id: "inv_add_product" as OwnerModule,
       label: "Add Product",
       icon: PlusCircle,
-      visible: hasInventoryPerm,
+      visible: isOwner || hasPermission("inventory.add_product"),
     },
     {
       id: "inv_product_list" as OwnerModule,
       label: "Product List",
       icon: List,
-      visible: hasInventoryPerm,
-    },
-    {
-      id: "inv_variants" as OwnerModule,
-      label: "Categories",
-      icon: FolderTree,
-      visible: hasInventoryPerm,
-    },
-    {
-      id: "inv_expired_products" as OwnerModule,
-      label: "Expired Products",
-      icon: CalendarX2,
-      visible: hasInventoryPerm,
+      visible: isOwner || hasPermission("inventory.product_list"),
     },
   ].filter((item) => item.visible);
 
   // 3. Stock Management Section
-  const hasStockPerm = isOwner || hasPermission("stock.manage");
+  const hasAllocationPerm = isOwner || hasPermission("stock.allocation");
+  const hasAllocationHistPerm = isOwner || hasPermission("stock.allocation_history");
+  const allocationGroupVisible = hasAllocationPerm || hasAllocationHistPerm;
+
   const stockChildren: SubMenuItem[] = [
     {
       id: "stock_add_stock" as OwnerModule,
       label: "Add Stock",
       icon: PackagePlus,
-      visible: hasStockPerm,
+      visible: isOwner || hasPermission("stock.add_stock"),
     },
     {
       id: "stock_stock_list" as OwnerModule,
       label: "Stock List",
       icon: PackageCheck,
-      visible: hasStockPerm,
+      visible: isOwner || hasPermission("stock.stock_list"),
     },
     {
       id: "stock_stock_history" as OwnerModule,
       label: "Stock History",
       icon: History,
-      visible: hasStockPerm,
+      visible: isOwner || hasPermission("stock.stock_history"),
     },
+    ...(allocationGroupVisible
+      ? [
+          {
+            id: "allocate_product_group",
+            label: "Allocate Product",
+            icon: MapPin,
+            visible: true,
+            children: [
+              {
+                id: "stock_stock_allocation" as OwnerModule,
+                label: "Stock Allocation",
+                icon: Layers,
+                visible: hasAllocationPerm,
+              },
+              {
+                id: "stock_allocation_history" as OwnerModule,
+                label: "Allocation History",
+                icon: History,
+                visible: hasAllocationHistPerm,
+              },
+            ].filter((c) => c.visible),
+          },
+        ]
+      : []),
     {
       id: "stock_transfer_stock" as OwnerModule,
       label: "Transfer Stock",
       icon: ArrowLeftRight,
-      visible: hasStockPerm,
+      visible: isOwner || hasPermission("stock.transfer"),
     },
     {
       id: "stock_transfer_history" as OwnerModule,
       label: "Transfer History",
       icon: FileSpreadsheet,
-      visible: hasStockPerm,
+      visible: isOwner || hasPermission("stock.transfer_history"),
     },
     {
       id: "stock_stock_receive" as OwnerModule,
       label: "Stock Receive",
       icon: Inbox,
-      visible: hasStockPerm,
+      visible: isOwner || hasPermission("stock.receive"),
     },
     {
       id: "stock_damaged_products" as OwnerModule,
       label: "Damaged Products",
       icon: AlertTriangle,
-      visible: hasStockPerm,
+      visible: isOwner || hasPermission("stock.damaged"),
+    },
+  ].filter((item) => item.visible);
+
+  // Location Management Section
+  const locationChildren: SubMenuItem[] = [
+    {
+      id: "loc_create_rack" as OwnerModule,
+      label: "Create Rack",
+      icon: PlusCircle,
+      visible: isOwner || hasPermission("location.create_rack"),
+    },
+    {
+      id: "loc_rack_list" as OwnerModule,
+      label: "Rack List",
+      icon: List,
+      visible: isOwner || hasPermission("location.rack_list"),
     },
   ].filter((item) => item.visible);
 
   // 4. Supplier Management Section
-  const hasSupplierPerm = isOwner || hasPermission("suppliers.manage");
   const supplierChildren: SubMenuItem[] = [
+    {
+      id: "sup_create_supplier" as OwnerModule,
+      label: "Create Supplier",
+      icon: PlusCircle,
+      visible: isOwner || hasPermission("supplier.manage"),
+    },
     {
       id: "sup_suppliers" as OwnerModule,
       label: "Suppliers",
       icon: Truck,
-      visible: hasSupplierPerm,
+      visible: isOwner || hasPermission("supplier.view"),
     },
     {
       id: "sup_purchase_history" as OwnerModule,
       label: "Purchase History",
       icon: Receipt,
-      visible: hasSupplierPerm,
+      visible: isOwner || hasPermission("supplier.purchase_history"),
     },
     {
       id: "sup_payments_due" as OwnerModule,
       label: "Payments / Due",
       icon: CreditCard,
-      visible: hasSupplierPerm,
+      visible: isOwner || hasPermission("supplier.payments_due"),
     },
   ].filter((item) => item.visible);
 
@@ -384,7 +483,7 @@ export function DashboardSidebar({
       id: "acc_overview" as OwnerModule,
       label: "Overview",
       icon: LayoutDashboard,
-      visible: isOwner || hasPermission("accounts.manage"),
+      visible: isOwner || hasPermission("accounts.overview"),
     },
     {
       id: "acc_financial_accounts" as OwnerModule,
@@ -413,91 +512,86 @@ export function DashboardSidebar({
   ].filter((item) => item.visible);
 
   // 6. Expenses & Bills Section
-  const hasExpensesPerm = isOwner || hasPermission("accounts.expenses") || hasPermission("accounts.manage");
   const expensesChildren: SubMenuItem[] = [
     {
       id: "exp_list" as OwnerModule,
       label: "Bill List",
       icon: List,
-      visible: hasExpensesPerm,
+      visible: isOwner || hasPermission("expenses.list"),
     },
     {
       id: "exp_pay" as OwnerModule,
       label: "Pay Bill",
       icon: CreditCard,
-      visible: hasExpensesPerm,
+      visible: isOwner || hasPermission("expenses.pay"),
     },
     {
       id: "exp_history" as OwnerModule,
       label: "Bill History",
       icon: History,
-      visible: hasExpensesPerm,
+      visible: isOwner || hasPermission("expenses.history"),
     },
   ].filter((item) => item.visible);
 
   // 7. Employee & Salary Section
-  const isBranchManager =
-    user?.role === "BRANCH_MANAGER" ||
-    user?.pharmacyRoleName?.toLowerCase().includes("branch manager") ||
-    user?.customRoleName?.toLowerCase().includes("branch manager");
-  const hasSalaryPerm = isOwner || hasPermission("accounts.salaries") || hasPermission("accounts.manage");
-  const hasAttendancePerm = isOwner || isBranchManager || hasPermission("attendance.manage");
-  const hasOffDaysPerm = isOwner || isBranchManager || hasPermission("attendance.offdays") || hasPermission("attendance.manage");
-
   const salaryChildren: SubMenuItem[] = [
     {
       id: "sal_employees" as OwnerModule,
       label: "Employee List",
       icon: Users,
-      visible: hasSalaryPerm,
+      visible: isOwner || hasPermission("employee.view"),
     },
     {
       id: "sal_attendance" as OwnerModule,
       label: "Attendance Management",
       icon: CalendarCheck,
-      visible: hasAttendancePerm,
+      visible: isOwner || hasPermission("attendance.manage"),
     },
     {
       id: "sal_offdays" as OwnerModule,
       label: "Off-Day Settings",
       icon: CalendarX2,
-      visible: hasOffDaysPerm,
+      visible: isOwner || hasPermission("attendance.offdays"),
+    },
+    {
+      id: "sal_deduction_rules" as OwnerModule,
+      label: "Salary Deduction Rules",
+      icon: Sliders,
+      visible: isOwner || hasPermission("salary.deductions"),
     },
     {
       id: "sal_management" as OwnerModule,
       label: "Salary Management",
       icon: Briefcase,
-      visible: hasSalaryPerm,
+      visible: isOwner || hasPermission("salary.manage"),
     },
     {
       id: "sal_history" as OwnerModule,
       label: "Salary History",
       icon: History,
-      visible: true,
+      visible: isOwner || hasPermission("salary.history"),
     },
   ].filter((item) => item.visible);
 
   // 8. Staff Management Section (Staff List, Create Staff, Roles & Permissions)
-  const hasStaffPerm = isOwner || hasPermission("staff.manage");
-  const hasRolesPerm = isOwner || hasPermission("roles.manage");
   const staffChildren: SubMenuItem[] = [
     {
       id: "staff" as OwnerModule,
       label: "Staff List",
       icon: Users,
-      visible: hasStaffPerm,
+      visible: isOwner || hasPermission("staff.view"),
     },
     {
       id: "staff_create" as OwnerModule,
       label: "Create Staff",
       icon: UserPlus,
-      visible: hasStaffPerm,
+      visible: isOwner || hasPermission("staff.create"),
     },
     {
       id: "roles" as OwnerModule,
       label: "Roles & Permissions",
       icon: KeyRound,
-      visible: hasRolesPerm,
+      visible: isOwner || hasPermission("roles.manage"),
     },
   ].filter((item) => item.visible);
 
@@ -509,6 +603,13 @@ export function DashboardSidebar({
       icon: ShoppingCart,
       visible: salesChildren.length > 0,
       children: salesChildren,
+    },
+    {
+      id: "category_mgmt",
+      label: "Category Management",
+      icon: FolderTree,
+      visible: categoryChildren.length > 0,
+      children: categoryChildren,
     },
     {
       id: "inventory",
@@ -523,6 +624,13 @@ export function DashboardSidebar({
       icon: RefreshCw,
       visible: stockChildren.length > 0,
       children: stockChildren,
+    },
+    {
+      id: "location_mgmt",
+      label: "Location Management",
+      icon: Archive,
+      visible: locationChildren.length > 0,
+      children: locationChildren,
     },
     {
       id: "supplier",
@@ -587,7 +695,7 @@ export function DashboardSidebar({
       id: "profile" as OwnerModule,
       label: "Pharmacy Profile",
       icon: Building,
-      visible: isOwner,
+      visible: isOwner || hasPermission("settings.manage"),
     },
     {
       id: "subscription" as OwnerModule,
@@ -599,7 +707,7 @@ export function DashboardSidebar({
       id: "settings" as OwnerModule,
       label: "Settings",
       icon: Settings,
-      visible: isOwner,
+      visible: isOwner || hasPermission("settings.manage"),
     },
   ];
 
@@ -684,11 +792,67 @@ export function DashboardSidebar({
                     <div className="pl-3 xl:pl-4 pr-1 py-1 space-y-0.5 border-l-2 border-slate-100 dark:border-slate-800 ml-3.5 xl:ml-4 mt-1">
                       {section.children.map((child) => {
                         const ChildIcon = child.icon;
+
+                        // Check if item is a subgroup with nested children (e.g. Allocate Product)
+                        if (child.children && child.children.length > 0) {
+                          const isSubgroupOpen = openSubgroups[child.id] ?? true;
+                          const hasActiveGrandchild = child.children.some(
+                            (gc) => gc.id === activeModule
+                          );
+                          return (
+                            <div key={child.id} className="space-y-0.5 pt-0.5">
+                              <button
+                                onClick={() => toggleSubgroup(child.id)}
+                                className={`w-full flex items-center justify-between px-2.5 py-1.5 xl:px-3 xl:py-2 2xl:px-3.5 2xl:py-2.5 rounded-lg xl:rounded-xl text-[11px] xl:text-xs 2xl:text-sm font-bold transition-all ${
+                                  hasActiveGrandchild
+                                    ? "text-brand-primary bg-slate-100/70 dark:bg-slate-800/80 font-black"
+                                    : "text-slate-600 dark:text-slate-400 hover:bg-slate-100/50 dark:hover:bg-slate-800/40 hover:text-slate-900 dark:hover:text-white"
+                                }`}
+                              >
+                                <div className="flex items-center gap-2 xl:gap-2.5 truncate">
+                                  <ChildIcon className="h-3.5 w-3.5 xl:h-4 xl:w-4 shrink-0" />
+                                  <span className="truncate">{child.label}</span>
+                                </div>
+                                {isSubgroupOpen ? (
+                                  <ChevronDown className="h-3.5 w-3.5 xl:h-4 xl:w-4 shrink-0 opacity-70" />
+                                ) : (
+                                  <ChevronRight className="h-3.5 w-3.5 xl:h-4 xl:w-4 shrink-0 opacity-70" />
+                                )}
+                              </button>
+
+                              {isSubgroupOpen && (
+                                <div className="pl-2.5 py-0.5 space-y-0.5 border-l-2 border-slate-200 dark:border-slate-700 ml-3.5 my-0.5">
+                                  {child.children.map((grandchild) => {
+                                    const GrandIcon = grandchild.icon;
+                                    const isGrandActive = activeModule === grandchild.id;
+                                    return (
+                                      <button
+                                        key={grandchild.id}
+                                        onClick={() =>
+                                          onModuleChange(grandchild.id as OwnerModule)
+                                        }
+                                        className={`w-full flex items-center gap-2 xl:gap-2.5 px-2.5 py-1.5 xl:px-3 xl:py-2 2xl:px-3.5 2xl:py-2.5 rounded-lg xl:rounded-xl text-[11px] xl:text-xs 2xl:text-sm font-bold transition-all ${
+                                          isGrandActive
+                                            ? "bg-brand-primary text-white shadow-xs"
+                                            : "text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white"
+                                        }`}
+                                      >
+                                        <GrandIcon className="h-3.5 w-3.5 xl:h-4 xl:w-4 shrink-0" />
+                                        <span className="truncate">{grandchild.label}</span>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        }
+
                         const isChildActive = activeModule === child.id;
                         return (
                           <button
                             key={child.id}
-                            onClick={() => onModuleChange(child.id)}
+                            onClick={() => onModuleChange(child.id as OwnerModule)}
                             className={`w-full flex items-center gap-2 xl:gap-2.5 px-2.5 py-1.5 xl:px-3 xl:py-2 2xl:px-3.5 2xl:py-2.5 rounded-lg xl:rounded-xl text-[11px] xl:text-xs 2xl:text-sm font-bold transition-all ${
                               isChildActive
                                 ? "bg-brand-primary text-white shadow-xs"

@@ -10,6 +10,7 @@ const prisma_1 = require("../../app/lib/prisma");
 const product_service_1 = require("../product/product.service");
 const upload_service_1 = require("../upload/upload.service");
 const email_service_1 = require("../../app/lib/email.service");
+const requirePermission_1 = require("../../middleware/requirePermission");
 class AuthService {
     /**
      * Log in via username or email
@@ -84,6 +85,9 @@ class AuthService {
             catch (e) {
                 // Fallback
             }
+        }
+        else if (effectivePermissions.length === 0 && requirePermission_1.DEFAULT_ROLE_PERMISSIONS[user.role]) {
+            effectivePermissions = requirePermission_1.DEFAULT_ROLE_PERMISSIONS[user.role] || [];
         }
         const tenantVerificationStatus = user.tenant?.verificationStatus || "ACTIVE";
         const requiresOtp = user.role === "COMPANY_OWNER" && tenantVerificationStatus === "PENDING_OTP";
@@ -170,6 +174,9 @@ class AuthService {
                 }
             }
             catch (e) { }
+        }
+        else if (effectivePermissions.length === 0 && requirePermission_1.DEFAULT_ROLE_PERMISSIONS[user.role]) {
+            effectivePermissions = requirePermission_1.DEFAULT_ROLE_PERMISSIONS[user.role] || [];
         }
         const tenantVerificationStatus = user.tenant?.verificationStatus || "ACTIVE";
         const requiresOtp = user.role === "COMPANY_OWNER" && tenantVerificationStatus === "PENDING_OTP";

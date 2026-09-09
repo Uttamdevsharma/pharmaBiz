@@ -42,7 +42,7 @@ interface RosterItem {
   role: string;
   avatarUrl?: string;
   phone?: string;
-  status: "PRESENT" | "ABSENT";
+  status: "PRESENT" | "ABSENT" | "LATE";
   hasSavedRecord: boolean;
   notes?: string;
   markedBy?: { name?: string; username: string } | null;
@@ -256,7 +256,7 @@ export function AttendanceView({
   // Handle individual status change
   const handleStatusChange = (
     empId: string,
-    status: "PRESENT" | "ABSENT"
+    status: "PRESENT" | "ABSENT" | "LATE"
   ) => {
     setRoster((prev) =>
       prev.map((emp) => (emp.id === empId ? { ...emp, status } : emp))
@@ -604,6 +604,20 @@ export function AttendanceView({
                                 >
                                   <XCircle className="w-3.5 h-3.5" />
                                   <span>Absent</span>
+                                </button>
+
+                                {/* LATE */}
+                                <button
+                                  type="button"
+                                  onClick={() => handleStatusChange(emp.id, "LATE")}
+                                  className={`px-4 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+                                    emp.status === "LATE"
+                                      ? "bg-amber-500 text-white shadow-xs"
+                                      : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200"
+                                  }`}
+                                >
+                                  <Clock className="w-3.5 h-3.5" />
+                                  <span>Late</span>
                                 </button>
                               </div>
                             </td>

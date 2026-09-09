@@ -33,7 +33,11 @@ class AttendanceController {
         try {
             const user = req.user;
             const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN";
-            const isBranchManager = user.role === "BRANCH_MANAGER";
+            const isBranchManager = user.role === "BRANCH_MANAGER" ||
+                user.pharmacyRoleName?.toLowerCase().includes("branch manager") ||
+                user.customRoleName?.toLowerCase().includes("branch manager") ||
+                user.permissions?.includes("attendance.manage") ||
+                user.permissions?.includes("*");
             if (!isOwner && !isBranchManager) {
                 res.status(403).json({ success: false, message: "Forbidden: Only Branch Manager and Pharmacy Owner can configure monthly off-days." });
                 return;
@@ -76,7 +80,11 @@ class AttendanceController {
         try {
             const user = req.user;
             const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN";
-            const isBranchManager = user.role === "BRANCH_MANAGER";
+            const isBranchManager = user.role === "BRANCH_MANAGER" ||
+                user.pharmacyRoleName?.toLowerCase().includes("branch manager") ||
+                user.customRoleName?.toLowerCase().includes("branch manager") ||
+                user.permissions?.includes("attendance.manage") ||
+                user.permissions?.includes("*");
             if (!isOwner && !isBranchManager) {
                 res.status(403).json({ success: false, message: "Forbidden: Only Branch Manager and Pharmacy Owner can mark employee attendance. Employees cannot mark their own attendance." });
                 return;
@@ -108,16 +116,23 @@ class AttendanceController {
                 res.status(400).json({ success: false, message: "User ID is required" });
                 return;
             }
-            const actorRole = req.user.role;
+            const user = req.user;
+            const actorRole = user.role;
             const isManagerOrAccounts = actorRole === "COMPANY_OWNER" ||
                 actorRole === "SUPER_ADMIN" ||
+                actorRole === "REGIONAL_ADMIN" ||
                 actorRole === "BRANCH_MANAGER" ||
-                actorRole === "ACCOUNTS";
-            if (!isManagerOrAccounts && req.user.id !== userId) {
+                actorRole === "ACCOUNTS" ||
+                user.pharmacyRoleName?.toLowerCase().includes("branch manager") ||
+                user.customRoleName?.toLowerCase().includes("branch manager") ||
+                user.permissions?.includes("attendance.manage") ||
+                user.permissions?.includes("accounts.salaries") ||
+                user.permissions?.includes("*");
+            if (!isManagerOrAccounts && user.id !== userId) {
                 res.status(403).json({ success: false, message: "Forbidden: You can only view your own attendance history." });
                 return;
             }
-            const history = await attendance_service_1.AttendanceService.getEmployeeAttendanceHistory(tenantId, userId, month);
+            const history = await attendance_service_1.AttendanceService.getEmployeeAttendanceHistory(tenantId, userId, month, user);
             res.json({ success: true, data: history });
         }
         catch (err) {

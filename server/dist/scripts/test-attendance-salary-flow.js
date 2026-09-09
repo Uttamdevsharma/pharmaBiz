@@ -55,7 +55,7 @@ async function runTest() {
                 email: `teststaff_${Date.now()}@pharmabiz.local`,
                 name: "Test Pharmacist",
                 passwordHash: "dummyhash",
-                role: "PHARMACIST",
+                role: "STAFF",
                 isActive: true,
             },
         });
@@ -124,7 +124,9 @@ async function runTest() {
     // 3. Configure Monthly Off-Days: Friday (5) & Saturday (6)
     await attendance_service_1.AttendanceService.setBranchOffDayConfig(tenant.id, branch.id, testMonth, {
         branchId: branch.id,
+        month: testMonth,
         weeklyOffDays: ["FRIDAY", "SATURDAY"],
+        customOffDates: [],
         notes: "Standard weekend off-days",
     }, manager.id);
     console.log(`✓ Configured Weekly Off-Days (Friday & Saturday) for ${testMonth}`);

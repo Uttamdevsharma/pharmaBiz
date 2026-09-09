@@ -10,21 +10,33 @@ model Inventory {
   mfgDate           DateTime?
   expiryDate        DateTime?
   packageType       String?         @default("PIECE")
+  cartonQuantity    Int?
+  boxesPerCarton    Int?
   boxQuantity       Int?
   stripsPerBox      Int?
   tabletsPerStrip   Int?
+  cartonsReceived   Int?            @default(0)
+  looseBoxesReceived Int?           @default(0)
+  allocatedCartons  Int?            @default(0)
+  allocatedLooseBoxes Int?          @default(0)
+  boxesAllocatedFromCarton Int?    @default(0)
   purchasePrice     Decimal?        @db.Decimal(10, 2)
   sellingPrice      Decimal?        @db.Decimal(10, 2)
+  boxPurchasePrice  Decimal?        @db.Decimal(10, 2)
+  boxSellingPrice   Decimal?        @db.Decimal(10, 2)
   shelfLocation     String?
   minStockLevel     Int             @default(10)
   lowStockThreshold Int             @default(5)
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
+  receivedDate      DateTime?       @default(now())
 
   branch            Branch          @relation(fields: [branchId], references: [id], onDelete: Cascade)
   product           Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
   supplier          Supplier?       @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   stockMovements    StockMovement[]
+  locations         InventoryLocation[]
+  receivingRecords  BatchReceivingRecord[]
 
   @@index([branchId])
   @@index([productId])
@@ -33,6 +45,73 @@ model Inventory {
   @@index([barcode])
   @@index([expiryDate])
   @@index([quantity])
+  @@index([receivedDate])
+}
+
+model InventoryLocation {
+  id          String    @id @default(uuid())
+  inventoryId String
+  rackId      String?
+  shelfId     String?
+  binId       String?
+  quantity    Int       @default(0) // Quantity in lowest unit at this location
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  inventory   Inventory @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+  rack        Rack?     @relation(fields: [rackId], references: [id], onDelete: SetNull)
+  shelf       Shelf?    @relation(fields: [shelfId], references: [id], onDelete: SetNull)
+  bin         Bin?      @relation(fields: [binId], references: [id], onDelete: SetNull)
+  
+  movementsFrom StockMovement[] @relation("MovementFromLocation")
+  movementsTo   StockMovement[] @relation("MovementToLocation")
+  saleItems   SaleItem[]
+
+  @@index([inventoryId])
+  @@index([rackId, shelfId, binId])
+}
+
+model Rack {
+  id        String   @id @default(uuid())
+  branchId  String
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  shelves   Shelf[]
+  inventoryLocations InventoryLocation[]
+  
+  @@index([branchId])
+}
+
+model Shelf {
+  id        String   @id @default(uuid())
+  rackId    String
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  rack      Rack     @relation(fields: [rackId], references: [id], onDelete: Cascade)
+  bins      Bin[]
+  inventoryLocations InventoryLocation[]
+  
+  @@index([rackId])
+}
+
+model Bin {
+  id        String   @id @default(uuid())
+  shelfId   String
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  shelf     Shelf    @relation(fields: [shelfId], references: [id], onDelete: Cascade)
+  inventoryLocations InventoryLocation[]
+  
+  @@index([shelfId])
 }
 
 enum TransferStatus {
@@ -178,6 +257,8 @@ enum MovementType {
   TRANSFER_OUT
   DAMAGE
   RETURN
+  ALLOCATION
+  LOCATION_TRANSFER
 }
 
 model StockMovement {
@@ -193,13 +274,59 @@ model StockMovement {
   reason            String?
   performedBy       String?      // User ID
   referenceId       String?      // Sale ID, Purchase ID, Transfer ID, etc.
+  fromLocationId    String?      // InventoryLocation ID
+  toLocationId      String?      // InventoryLocation ID
   createdAt         DateTime     @default(now())
 
   inventory         Inventory?   @relation(fields: [inventoryId], references: [id], onDelete: SetNull)
+  fromLocation      InventoryLocation? @relation("MovementFromLocation", fields: [fromLocationId], references: [id], onDelete: SetNull)
+  toLocation        InventoryLocation? @relation("MovementToLocation", fields: [toLocationId], references: [id], onDelete: SetNull)
 
   @@index([branchId])
   @@index([productId])
   @@index([inventoryId])
   @@index([type])
   @@index([createdAt])
+}
+
+model BatchReceivingRecord {
+  id              String    @id @default(uuid())
+  inventoryId     String
+  branchId        String
+  productId       String
+  supplierId      String?
+  batchNumber     String?
+  receivingUnit   String    @default("CARTON") // "CARTON" | "BOX"
+  cartonsReceived Int?      @default(0)
+  boxesPerCarton  Int?      @default(10)
+  boxesReceived   Int       @default(0)
+  stripsPerBox    Int?      @default(10)
+  tabletsPerStrip Int?      @default(10)
+  totalQuantity   Int       @default(0) // Lowest sellable unit count (tablets, etc.)
+  purchasePrice   Decimal?  @db.Decimal(10, 2)
+  sellingPrice    Decimal?  @db.Decimal(10, 2)
+  boxPurchasePrice Decimal? @db.Decimal(10, 2)
+  boxSellingPrice  Decimal? @db.Decimal(10, 2)
+  receivedDate    DateTime  @default(now())
+  expiryDate      DateTime?
+  mfgDate         DateTime?
+  invoiceNo       String?
+  notes           String?
+  receivedBy      String?   // User ID
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  inventory       Inventory @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+  supplier        Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  contactPersonId String?
+  contactPersonName String?
+  contactPerson   SupplierContact? @relation(fields: [contactPersonId], references: [id], onDelete: SetNull)
+
+  @@index([inventoryId])
+  @@index([branchId])
+  @@index([productId])
+  @@index([supplierId])
+  @@index([contactPersonId])
+  @@index([batchNumber])
+  @@index([receivedDate])
 }

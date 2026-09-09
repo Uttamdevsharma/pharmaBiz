@@ -7,6 +7,9 @@ import {
   CreatePurchaseInput,
   ListPurchasesQuery,
   RecordSupplierPaymentInput,
+  ContactPersonInput,
+  ListSupplierPaymentsQuery,
+  SupplierDueSummaryQuery,
 } from "./supplier.validation";
 
 export class SupplierService {
@@ -36,8 +39,13 @@ export class SupplierService {
         take: limit,
         orderBy: { name: "asc" },
         include: {
+          contacts: {
+            where: { isActive: true },
+            take: 10,
+            orderBy: { createdAt: "desc" },
+          },
           _count: {
-            select: { purchases: true, inventories: true },
+            select: { purchases: true, inventories: true, contacts: true },
           },
         },
       }),
@@ -56,23 +64,49 @@ export class SupplierService {
   }
 
   /**
-   * Get single supplier with purchase history and financial summary
+   * Get single supplier with contacts, purchase history, and payments
    */
-  static async getSupplierById(id: string, tenantId: string) {
+  static async getSupplierById(id: string, tenantId: string, options?: { startDate?: string; endDate?: string }) {
+    const purchaseWhere: any = {};
+    if (options?.startDate || options?.endDate) {
+      if (options.startDate) purchaseWhere.purchaseDate = { gte: new Date(options.startDate) };
+      if (options.endDate) {
+        const end = new Date(options.endDate);
+        end.setHours(23, 59, 59, 999);
+        purchaseWhere.purchaseDate = { ...(purchaseWhere.purchaseDate || {}), lte: end };
+      }
+    }
+
     const supplier = await (prisma as any).supplier.findFirst({
       where: { id, tenantId },
       include: {
+        contacts: {
+          orderBy: { createdAt: "desc" },
+        },
         purchases: {
+          where: purchaseWhere,
           orderBy: { purchaseDate: "desc" },
-          take: 20,
+          take: 100,
           include: {
             branch: { select: { id: true, name: true } },
+            contactPerson: { select: { id: true, name: true, phone: true, designation: true } },
             items: {
               include: {
                 product: { select: { id: true, name: true, sku: true, unit: true } },
               },
             },
           },
+        },
+        payments: {
+          orderBy: { paymentDate: "desc" },
+          take: 50,
+          include: {
+            branch: { select: { id: true, name: true } },
+            financialAccount: { select: { id: true, name: true, type: true } },
+          },
+        },
+        _count: {
+          select: { purchases: true, contacts: true, inventories: true },
         },
       },
     });
@@ -85,24 +119,53 @@ export class SupplierService {
   }
 
   /**
-   * Create new supplier
+   * Create new supplier and optional initial contacts
    */
   static async createSupplier(tenantId: string, userId: string, data: CreateSupplierInput) {
     const supplierName = data.name.trim();
-    const supplier = await (prisma as any).supplier.create({
-      data: {
-        tenantId,
-        name: supplierName,
-        phone: data.phone.trim(),
-        email: data.email?.trim() || null,
-        address: data.address?.trim() || null,
-        company: data.company?.trim() || supplierName,
-        contactPerson: data.contactPerson?.trim() || null,
-        totalPurchased: 0,
-        totalPaid: 0,
-        totalDue: 0,
-        isActive: true,
-      },
+    const primaryPhone =
+      data.phone?.trim() ||
+      (data.contacts && data.contacts.length > 0 ? data.contacts[0].phone.trim() : "—");
+    const primaryContact =
+      data.contactPerson?.trim() ||
+      (data.contacts && data.contacts.length > 0 ? data.contacts[0].name.trim() : null);
+
+    const supplier = await (prisma as any).$transaction(async (tx: any) => {
+      const sup = await tx.supplier.create({
+        data: {
+          tenantId,
+          name: supplierName,
+          phone: primaryPhone,
+          email: data.email?.trim() || null,
+          address: data.address?.trim() || null,
+          company: data.company?.trim() || supplierName,
+          contactPerson: primaryContact,
+          totalPurchased: 0,
+          totalPaid: 0,
+          totalDue: 0,
+          isActive: true,
+        },
+      });
+
+      if (data.contacts && data.contacts.length > 0) {
+        for (const c of data.contacts) {
+          if (c.name && c.phone) {
+            await tx.supplierContact.create({
+              data: {
+                tenantId,
+                supplierId: sup.id,
+                name: c.name.trim(),
+                phone: c.phone.trim(),
+                email: c.email?.trim() || null,
+                designation: c.designation?.trim() || null,
+                isActive: c.isActive !== undefined ? c.isActive : true,
+              },
+            });
+          }
+        }
+      }
+
+      return sup;
     });
 
     await AuditService.log({
@@ -113,6 +176,88 @@ export class SupplierService {
     });
 
     return supplier;
+  }
+
+  /**
+   * Contact Person management methods
+   */
+  static async listContacts(supplierId: string, tenantId: string) {
+    const supplier = await (prisma as any).supplier.findFirst({
+      where: { id: supplierId, tenantId },
+    });
+    if (!supplier) throw new Error("Supplier not found");
+
+    return (prisma as any).supplierContact.findMany({
+      where: { supplierId, tenantId },
+      orderBy: { createdAt: "desc" },
+    });
+  }
+
+  static async createContact(supplierId: string, tenantId: string, data: ContactPersonInput) {
+    const supplier = await (prisma as any).supplier.findFirst({
+      where: { id: supplierId, tenantId },
+    });
+    if (!supplier) throw new Error("Supplier not found");
+
+    const contact = await (prisma as any).supplierContact.create({
+      data: {
+        tenantId,
+        supplierId,
+        name: data.name.trim(),
+        phone: data.phone.trim(),
+        email: data.email?.trim() || null,
+        designation: data.designation?.trim() || null,
+        isActive: data.isActive !== undefined ? data.isActive : true,
+      },
+    });
+
+    // If supplier doesn't have a contactPerson or phone set, update it as default
+    if (!supplier.contactPerson || supplier.phone === "—") {
+      await (prisma as any).supplier.update({
+        where: { id: supplierId },
+        data: {
+          contactPerson: supplier.contactPerson || contact.name,
+          phone: supplier.phone === "—" ? contact.phone : supplier.phone,
+        },
+      });
+    }
+
+    return contact;
+  }
+
+  static async updateContact(contactId: string, supplierId: string, tenantId: string, data: Partial<ContactPersonInput>) {
+    const contact = await (prisma as any).supplierContact.findFirst({
+      where: { id: contactId, supplierId, tenantId },
+    });
+    if (!contact) throw new Error("Contact person not found");
+
+    const updated = await (prisma as any).supplierContact.update({
+      where: { id: contactId },
+      data: {
+        ...(data.name && { name: data.name.trim() }),
+        ...(data.phone && { phone: data.phone.trim() }),
+        ...(data.email !== undefined && { email: data.email?.trim() || null }),
+        ...(data.designation !== undefined && { designation: data.designation?.trim() || null }),
+        ...(data.isActive !== undefined && { isActive: data.isActive }),
+      },
+    });
+
+    return updated;
+  }
+
+  static async deleteContact(contactId: string, supplierId: string, tenantId: string) {
+    const contact = await (prisma as any).supplierContact.findFirst({
+      where: { id: contactId, supplierId, tenantId },
+    });
+    if (!contact) throw new Error("Contact person not found");
+
+    // Toggle/set inactive status
+    const updated = await (prisma as any).supplierContact.update({
+      where: { id: contactId },
+      data: { isActive: false },
+    });
+
+    return { message: "Contact deactivated successfully", contact: updated };
   }
 
   /**
@@ -258,12 +403,27 @@ export class SupplierService {
 
     // 4. Execute atomic transaction
     const result = await (prisma as any).$transaction(async (tx: any) => {
+      // Resolve contact person if ID provided
+      let contactPersonName = data.contactPersonName || null;
+      if (data.contactPersonId) {
+        const cp = await (prisma as any).supplierContact.findFirst({
+          where: { id: data.contactPersonId, tenantId },
+        });
+        if (cp) {
+          contactPersonName = cp.name;
+        }
+      } else if (supplier && supplier.contactPerson) {
+        contactPersonName = supplier.contactPerson;
+      }
+
       // Create Purchase Record
       const purchase = await tx.purchase.create({
         data: {
           tenantId,
           branchId: data.branchId,
           supplierId: data.supplierId || null,
+          contactPersonId: data.contactPersonId || null,
+          contactPersonName,
           invoiceNo: data.invoiceNo || `PUR-${Date.now().toString().slice(-6)}`,
           purchaseDate,
           totalAmount: totalPurchaseAmount,
@@ -284,6 +444,7 @@ export class SupplierService {
             },
           },
           supplier: true,
+          contactPerson: true,
           branch: { select: { id: true, name: true } },
         },
       });
@@ -327,6 +488,27 @@ export class SupplierService {
             userId,
           },
         });
+
+        // Record SupplierPayment history
+        if (data.supplierId) {
+          await tx.supplierPayment.create({
+            data: {
+              tenantId,
+              supplierId: data.supplierId,
+              branchId: data.branchId,
+              purchaseId: purchase.id,
+              financialAccountId: finAcc.id,
+              amount: paidAmount,
+              previousDue: Number(supplier ? supplier.totalDue : 0),
+              remainingDue: Math.max(0, Number(supplier ? supplier.totalDue : 0) + dueAmount),
+              paymentMethod: data.paymentMethod || finAcc.type || "CASH",
+              reference: purchase.invoiceNo,
+              notes: `Initial payment at purchase for invoice #${purchase.invoiceNo}`,
+              paidBy: userId,
+              paymentDate: purchaseDate,
+            },
+          });
+        }
       }
 
       // Upsert Inventory Batches and Record Stock Movements
@@ -353,6 +535,7 @@ export class SupplierService {
               sellingPrice: item.unitSellingPrice,
               supplierId: data.supplierId || existingInventory.supplierId,
               shelfLocation: item.shelfLocation || existingInventory.shelfLocation,
+              receivedDate: data.purchaseDate ? new Date(data.purchaseDate) : existingInventory.receivedDate || new Date(),
             },
           });
           inventoryId = updatedInv.id;
@@ -368,6 +551,7 @@ export class SupplierService {
               barcode: item.barcode,
               mfgDate: item.mfgDate,
               expiryDate: item.expiryDate,
+              receivedDate: data.purchaseDate ? new Date(data.purchaseDate) : new Date(),
               packageType: item.packageType,
               boxQuantity: item.boxQuantity,
               stripsPerBox: item.stripsPerBox,
@@ -421,7 +605,7 @@ export class SupplierService {
    */
   static async listPurchases(tenantId: string, query: ListPurchasesQuery, userRole: string, userBranchId?: string | null) {
     const page = Math.max(1, query.page || 1);
-    const limit = Math.max(1, Math.min(100, query.limit || 20));
+    const limit = Math.max(1, Math.min(100, query.limit || 50));
     const skip = (page - 1) * limit;
 
     const where: any = { tenantId };
@@ -434,6 +618,10 @@ export class SupplierService {
 
     if (query.supplierId) {
       where.supplierId = query.supplierId;
+    }
+
+    if (query.contactPersonId) {
+      where.contactPersonId = query.contactPersonId;
     }
 
     if (query.paymentStatus) {
@@ -453,7 +641,9 @@ export class SupplierService {
     if (query.search) {
       where.OR = [
         { invoiceNo: { contains: query.search, mode: "insensitive" } },
+        { contactPersonName: { contains: query.search, mode: "insensitive" } },
         { supplier: { name: { contains: query.search, mode: "insensitive" } } },
+        { contactPerson: { name: { contains: query.search, mode: "insensitive" } } },
       ];
     }
 
@@ -464,7 +654,8 @@ export class SupplierService {
         take: limit,
         orderBy: { purchaseDate: "desc" },
         include: {
-          supplier: { select: { id: true, name: true, phone: true } },
+          supplier: { select: { id: true, name: true, phone: true, company: true } },
+          contactPerson: { select: { id: true, name: true, phone: true, designation: true } },
           branch: { select: { id: true, name: true } },
           items: {
             include: {
@@ -519,6 +710,7 @@ export class SupplierService {
     const payAmount = Number(data.amount);
     const newDue = Math.max(0, Number(supplier.totalDue) - payAmount);
     const newPaid = Number(supplier.totalPaid) + payAmount;
+    const paymentDate = data.paymentDate ? new Date(data.paymentDate) : new Date();
 
     // Reduce due amounts on open purchases for this supplier
     const openPurchases = await (prisma as any).purchase.findMany({
@@ -546,32 +738,54 @@ export class SupplierService {
       remainingPay -= chunk;
     }
 
-    // Atomic update of supplier dues & financial account balance
-    const [updated] = await (prisma as any).$transaction([
-      (prisma as any).supplier.update({
+    // Atomic update of supplier dues, supplierPayment record & financial account balance
+    const [updated, paymentRecord] = await (prisma as any).$transaction(async (tx: any) => {
+      const sup = await tx.supplier.update({
         where: { id: supplierId },
         data: {
           totalPaid: newPaid,
           totalDue: newDue,
         },
-      }),
-      (prisma as any).financialAccount.update({
-        where: { id: financialAcc.id },
-        data: { balance: { decrement: payAmount } },
-      }),
-      (prisma as any).financialTransaction.create({
+      });
+
+      const pRecord = await tx.supplierPayment.create({
         data: {
           tenantId,
-          branchId: financialAcc.branchId,
+          supplierId,
+          branchId: data.branchId || financialAcc.branchId,
+          purchaseId: data.purchaseId || null,
+          financialAccountId: financialAcc.id,
+          amount: payAmount,
+          previousDue: Number(supplier.totalDue || 0),
+          remainingDue: newDue,
+          paymentMethod: data.paymentMethod || financialAcc.type || "CASH",
+          reference: data.reference || `PAY-${supplier.name.slice(0, 12)}-${Date.now().toString().slice(-4)}`,
+          notes: data.notes || `Supplier payment for ${supplier.name} via ${financialAcc.name}`,
+          paidBy: userId,
+          paymentDate,
+        },
+      });
+
+      await tx.financialAccount.update({
+        where: { id: financialAcc.id },
+        data: { balance: { decrement: payAmount } },
+      });
+
+      await tx.financialTransaction.create({
+        data: {
+          tenantId,
+          branchId: data.branchId || financialAcc.branchId,
           sourceAccountId: financialAcc.id,
           amount: payAmount,
           type: "PURCHASE_PAYMENT",
-          reference: `PAY-${supplier.name.slice(0, 15)}`,
-          note: data.notes || `Supplier payment for ${supplier.name} via ${financialAcc.name}`,
+          reference: pRecord.reference,
+          note: pRecord.notes,
           userId,
         },
-      }),
-    ]);
+      });
+
+      return [sup, pRecord];
+    });
 
     await AuditService.log({
       tenantId,
@@ -586,6 +800,137 @@ export class SupplierService {
       },
     });
 
-    return updated;
+    return { ...updated, payment: paymentRecord };
+  }
+
+  /**
+   * List recorded supplier settlement payments
+   */
+  static async listSupplierPayments(tenantId: string, query: ListSupplierPaymentsQuery) {
+    const page = Math.max(1, query.page || 1);
+    const limit = Math.max(1, Math.min(100, query.limit || 50));
+    const skip = (page - 1) * limit;
+
+    const where: any = { tenantId };
+    if (query.supplierId) where.supplierId = query.supplierId;
+    if (query.branchId) where.branchId = query.branchId;
+
+    if (query.startDate || query.endDate) {
+      where.paymentDate = {};
+      if (query.startDate) where.paymentDate.gte = new Date(query.startDate);
+      if (query.endDate) {
+        const end = new Date(query.endDate);
+        end.setHours(23, 59, 59, 999);
+        where.paymentDate.lte = end;
+      }
+    }
+
+    if (query.search) {
+      where.OR = [
+        { reference: { contains: query.search, mode: "insensitive" } },
+        { notes: { contains: query.search, mode: "insensitive" } },
+        { supplier: { name: { contains: query.search, mode: "insensitive" } } },
+      ];
+    }
+
+    const [payments, total] = await Promise.all([
+      (prisma as any).supplierPayment.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { paymentDate: "desc" },
+        include: {
+          supplier: { select: { id: true, name: true, phone: true, company: true } },
+          branch: { select: { id: true, name: true } },
+          purchase: { select: { id: true, invoiceNo: true, totalAmount: true } },
+          financialAccount: { select: { id: true, name: true, type: true } },
+        },
+      }),
+      (prisma as any).supplierPayment.count({ where }),
+    ]);
+
+    return {
+      data: payments,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  /**
+   * Summary metrics for supplier dues and purchases across filters
+   */
+  static async getSupplierDueSummary(tenantId: string, query: SupplierDueSummaryQuery) {
+    const purchaseWhere: any = { tenantId };
+    const paymentWhere: any = { tenantId };
+    const supplierWhere: any = { tenantId, isActive: true };
+
+    if (query.supplierId) {
+      purchaseWhere.supplierId = query.supplierId;
+      paymentWhere.supplierId = query.supplierId;
+      supplierWhere.id = query.supplierId;
+    }
+    if (query.branchId) {
+      purchaseWhere.branchId = query.branchId;
+      paymentWhere.branchId = query.branchId;
+    }
+
+    if (query.startDate || query.endDate) {
+      purchaseWhere.purchaseDate = {};
+      paymentWhere.paymentDate = {};
+      if (query.startDate) {
+        const start = new Date(query.startDate);
+        purchaseWhere.purchaseDate.gte = start;
+        paymentWhere.paymentDate.gte = start;
+      }
+      if (query.endDate) {
+        const end = new Date(query.endDate);
+        end.setHours(23, 59, 59, 999);
+        purchaseWhere.purchaseDate.lte = end;
+        paymentWhere.paymentDate.lte = end;
+      }
+    }
+
+    const [purchases, payments, suppliers] = await Promise.all([
+      (prisma as any).purchase.findMany({
+        where: purchaseWhere,
+        select: { totalAmount: true, paidAmount: true, dueAmount: true },
+      }),
+      (prisma as any).supplierPayment.findMany({
+        where: paymentWhere,
+        select: { amount: true },
+      }),
+      (prisma as any).supplier.findMany({
+        where: supplierWhere,
+        select: { id: true, totalPurchased: true, totalPaid: true, totalDue: true },
+      }),
+    ]);
+
+    const totalPurchase = purchases.reduce((acc: number, p: any) => acc + Number(p.totalAmount || 0), 0);
+    const totalPaidInPeriod = payments.reduce((acc: number, p: any) => acc + Number(p.amount || 0), 0) +
+      purchases.reduce((acc: number, p: any) => acc + Number(p.paidAmount || 0), 0);
+    const totalDueInPeriod = purchases.reduce((acc: number, p: any) => acc + Number(p.dueAmount || 0), 0);
+
+    const lifetimePurchases = suppliers.reduce((acc: number, s: any) => acc + Number(s.totalPurchased || 0), 0);
+    const lifetimePaid = suppliers.reduce((acc: number, s: any) => acc + Number(s.totalPaid || 0), 0);
+    const lifetimeDue = suppliers.reduce((acc: number, s: any) => acc + Number(s.totalDue || 0), 0);
+
+    return {
+      filtered: {
+        totalPurchase,
+        totalPaid: totalPaidInPeriod,
+        totalDue: totalDueInPeriod,
+        count: purchases.length,
+      },
+      overall: {
+        totalPurchase: lifetimePurchases,
+        totalPaid: lifetimePaid,
+        totalDue: lifetimeDue,
+        supplierCount: suppliers.length,
+      },
+    };
   }
 }

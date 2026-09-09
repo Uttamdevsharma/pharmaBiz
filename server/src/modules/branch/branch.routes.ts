@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { BranchController } from "./branch.controller";
 import { authenticate } from "../../middleware/authenticate";
-import { authorize } from "../../middleware/authorize";
+import { requirePermission } from "../../middleware/requirePermission";
 import { validateRequest } from "../../middleware/validate";
 import { requireActiveSubscription, checkBranchLimit } from "../../middleware/planLimiter";
 import { createBranchSchema, updateBranchSchema } from "./branch.validation";
@@ -15,7 +15,7 @@ router.get("/:id", BranchController.getBranchDetails);
 
 router.post(
   "/",
-  authorize(["COMPANY_OWNER", "SUPER_ADMIN"]),
+  requirePermission("branches.manage"),
   checkBranchLimit,
   validateRequest({ body: createBranchSchema }),
   BranchController.createBranch
@@ -23,14 +23,14 @@ router.post(
 
 router.patch(
   "/:id",
-  authorize(["COMPANY_OWNER", "REGIONAL_ADMIN", "SUPER_ADMIN"]),
+  requirePermission("branches.manage"),
   validateRequest({ body: updateBranchSchema }),
   BranchController.updateBranch
 );
 
 router.delete(
   "/:id",
-  authorize(["COMPANY_OWNER", "SUPER_ADMIN"]),
+  requirePermission("branches.manage"),
   BranchController.deleteBranch
 );
 

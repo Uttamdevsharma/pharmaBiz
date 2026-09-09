@@ -19,25 +19,25 @@ router.use(authenticate, requireActiveSubscription);
 // List & Details
 router.get(
   "/damaged-products",
-  requirePermission("stock.manage"),
+  requirePermission("stock.damaged"),
   TransferController.getDamagedProducts
 );
 router.get(
   "/",
-  requirePermission("stock.manage"),
+  requirePermission("stock.transfer_history"),
   validateRequest({ query: listTransfersQuerySchema }),
   TransferController.listTransfers
 );
 router.get(
   "/:id",
-  requirePermission("stock.manage"),
+  requirePermission("stock.transfer_history"),
   TransferController.getTransferDetails
 );
 
 // Create & Dispatch Transfer
 router.post(
   "/",
-  requirePermission("stock.manage"),
+  requirePermission("stock.transfer"),
   validateRequest({ body: createTransferSchema }),
   TransferController.createTransfer
 );
@@ -45,7 +45,7 @@ router.post(
 // Receive Shipment (with damaged/missing quantities & optional immediate settlement)
 router.post(
   "/:id/receive",
-  requirePermission("stock.manage"),
+  requirePermission("stock.receive"),
   validateRequest({ body: receiveTransferSchema }),
   TransferController.receiveTransfer
 );
@@ -53,7 +53,7 @@ router.post(
 // Settle Transfer Payable (Pay destination payable to source branch account)
 router.post(
   "/:id/settle",
-  requirePermission("stock.manage"),
+  requirePermission("stock.receive"),
   validateRequest({ body: settleTransferSchema }),
   TransferController.settleTransfer
 );
@@ -61,7 +61,7 @@ router.post(
 // Cancel Transfer (Returns stock to source branch)
 router.post(
   "/:id/cancel",
-  requirePermission("stock.manage"),
+  requirePermission("stock.transfer"),
   TransferController.cancelTransfer
 );
 

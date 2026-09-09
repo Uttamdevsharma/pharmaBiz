@@ -21,6 +21,9 @@ import {
   Search,
   Layers,
   X,
+  Power,
+  Check,
+  Sparkles,
 } from "lucide-react";
 
 export function VariantsView() {
@@ -37,24 +40,29 @@ export function VariantsView() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>("ALL");
 
-  // Create Subcategory Form
+  // Create Main Category Modal (ONLY Category Name)
+  const [mainCatModalOpen, setMainCatModalOpen] = useState(false);
+  const [newMainName, setNewMainName] = useState("");
+
+  // Edit Main Category Modal (ONLY Category Name)
+  const [editingMainCat, setEditingMainCat] = useState<Category | null>(null);
+  const [editMainName, setEditMainName] = useState("");
+
+  // Delete Main Category Modal
+  const [deletingMainCat, setDeletingMainCat] = useState<Category | null>(null);
+
+  // Create Subcategory Form (Select Main Category + Subcategory Name)
   const [selectedParentId, setSelectedParentId] = useState("");
   const [newSubcategoryName, setNewSubcategoryName] = useState("");
-  const [newSubcategoryUnit, setNewSubcategoryUnit] = useState("tablet");
-  const [newSubcategoryDesc, setNewSubcategoryDesc] = useState("");
 
-  // Edit Subcategory Modal
+  // Edit Subcategory Modal (ONLY Subcategory Name)
   const [editingSubcategory, setEditingSubcategory] = useState<{
     id: string;
     name: string;
     parentId: string;
     parentName: string;
-    defaultUnit: string;
-    description: string;
   } | null>(null);
   const [editName, setEditName] = useState("");
-  const [editUnit, setEditUnit] = useState("");
-  const [editDesc, setEditDesc] = useState("");
 
   // Delete Subcategory Modal / Confirmation
   const [deletingSubcategory, setDeletingSubcategory] = useState<{ id: string; name: string } | null>(null);
@@ -90,15 +98,116 @@ export function VariantsView() {
 
   const handleParentChange = (parentId: string) => {
     setSelectedParentId(parentId);
-    const parent = categories.find((c) => c.id === parentId);
-    if (!parent) return;
-    if (parent.name === "Medicine") setNewSubcategoryUnit("tablet");
-    else if (parent.name === "Syrup") setNewSubcategoryUnit("bottle");
-    else if (parent.name === "Medical Equipment") setNewSubcategoryUnit("piece");
-    else if (parent.name.includes("Saline")) setNewSubcategoryUnit("bag");
-    else setNewSubcategoryUnit("piece");
   };
 
+  // Create Main Category (ONLY Category Name)
+  const handleCreateMainCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newMainName.trim()) return;
+    try {
+      setSaving(true);
+      setError(null);
+      setSuccess(null);
+
+      const res = await fetchApi("/products/variants/categories", {
+        method: "POST",
+        body: JSON.stringify({
+          name: newMainName.trim(),
+          parentId: null,
+          isActive: true,
+        }),
+      });
+
+      if (!res.success) throw new Error(res.message || "Failed to create Main Category");
+
+      setSuccess(`Main Category "${newMainName.trim()}" created successfully!`);
+      setNewMainName("");
+      setMainCatModalOpen(false);
+      await loadData();
+      setTimeout(() => setSuccess(null), 3500);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Edit Main Category
+  const handleOpenEditMain = (cat: Category) => {
+    setEditingMainCat(cat);
+    setEditMainName(cat.name);
+  };
+
+  const handleSaveEditMain = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingMainCat || !editMainName.trim()) return;
+    try {
+      setSaving(true);
+      setError(null);
+      const res = await fetchApi(`/products/variants/categories/${editingMainCat.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          name: editMainName.trim(),
+        }),
+      });
+
+      if (!res.success) throw new Error(res.message || "Failed to update category");
+
+      setSuccess(`Main Category "${editMainName.trim()}" updated successfully!`);
+      setEditingMainCat(null);
+      await loadData();
+      setTimeout(() => setSuccess(null), 3500);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Delete Main Category
+  const handleConfirmDeleteMain = async () => {
+    if (!deletingMainCat) return;
+    try {
+      setSaving(true);
+      setError(null);
+      const res = await fetchApi(`/products/variants/categories/${deletingMainCat.id}`, {
+        method: "DELETE",
+      });
+
+      if (!res.success) throw new Error(res.message || "Failed to delete category");
+
+      setSuccess(`Category "${deletingMainCat.name}" removed successfully.`);
+      setDeletingMainCat(null);
+      await loadData();
+      setTimeout(() => setSuccess(null), 3500);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Toggle Active/Inactive status
+  const handleToggleActive = async (cat: Category) => {
+    try {
+      setError(null);
+      const newStatus = !(cat.isActive ?? true);
+      const res = await fetchApi(`/products/variants/categories/${cat.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ isActive: newStatus }),
+      });
+
+      if (!res.success) throw new Error(res.message || "Failed to update category status");
+
+      setSuccess(`Category "${cat.name}" is now ${newStatus ? "Active" : "Inactive"}.`);
+      await loadData();
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
+  // Create Subcategory (Select Main Category + Subcategory Name)
   const handleCreateSubcategory = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newSubcategoryName.trim() || !selectedParentId) return;
@@ -112,8 +221,7 @@ export function VariantsView() {
         body: JSON.stringify({
           name: newSubcategoryName.trim(),
           parentId: selectedParentId,
-          defaultUnit: newSubcategoryUnit || null,
-          description: newSubcategoryDesc.trim() || null,
+          isActive: true,
         }),
       });
 
@@ -121,8 +229,7 @@ export function VariantsView() {
 
       setSuccess(`Subcategory "${newSubcategoryName.trim()}" created successfully!`);
       setNewSubcategoryName("");
-      setNewSubcategoryDesc("");
-      loadData();
+      await loadData();
       setTimeout(() => setSuccess(null), 3500);
     } catch (err: any) {
       setError(err.message);
@@ -137,12 +244,8 @@ export function VariantsView() {
       name: sub.name,
       parentId: parent.id,
       parentName: parent.name,
-      defaultUnit: sub.defaultUnit || "",
-      description: sub.description || "",
     });
     setEditName(sub.name);
-    setEditUnit(sub.defaultUnit || "");
-    setEditDesc(sub.description || "");
   };
 
   const handleSaveEdit = async (e: React.FormEvent) => {
@@ -155,8 +258,6 @@ export function VariantsView() {
         method: "PATCH",
         body: JSON.stringify({
           name: editName.trim(),
-          defaultUnit: editUnit.trim() || null,
-          description: editDesc.trim() || null,
         }),
       });
 
@@ -164,7 +265,7 @@ export function VariantsView() {
 
       setSuccess(`Subcategory "${editName.trim()}" updated successfully!`);
       setEditingSubcategory(null);
-      loadData();
+      await loadData();
       setTimeout(() => setSuccess(null), 3500);
     } catch (err: any) {
       setError(err.message);
@@ -185,7 +286,7 @@ export function VariantsView() {
 
       setSuccess(`Subcategory "${deletingSubcategory.name}" removed successfully.`);
       setDeletingSubcategory(null);
-      loadData();
+      await loadData();
       setTimeout(() => setSuccess(null), 3500);
     } catch (err: any) {
       setError(err.message);
@@ -215,7 +316,7 @@ export function VariantsView() {
       setSuccess(`Brand "${newBrandName.trim()}" registered successfully!`);
       setNewBrandName("");
       setNewBrandDesc("");
-      loadData();
+      await loadData();
       setTimeout(() => setSuccess(null), 3500);
     } catch (err: any) {
       setError(err.message);
@@ -241,124 +342,109 @@ export function VariantsView() {
   };
 
   const getMainCategoryMeta = (name: string) => {
-    if (name.includes("Medicine")) {
+    const lower = name.toLowerCase();
+    if (lower.includes("med")) {
       return {
         icon: <Pill className="h-5 w-5 text-emerald-500" />,
         badgeColor: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800",
-        accent: "text-emerald-600 dark:text-emerald-400",
-        bgLight: "bg-emerald-50/50 dark:bg-emerald-950/20",
-        defaultUnits: ["tablet", "capsule", "tube", "strip", "box"],
       };
-    }
-    if (name.includes("Syrup")) {
+    } else if (lower.includes("syrup") || lower.includes("liquid")) {
       return {
         icon: <Droplets className="h-5 w-5 text-blue-500" />,
         badgeColor: "bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300 border-blue-200 dark:border-blue-800",
-        accent: "text-blue-600 dark:text-blue-400",
-        bgLight: "bg-blue-50/50 dark:bg-blue-950/20",
-        defaultUnits: ["bottle", "ml", "suspension"],
       };
-    }
-    if (name.includes("Equipment")) {
+    } else if (lower.includes("equip") || lower.includes("device")) {
       return {
-        icon: <Stethoscope className="h-5 w-5 text-purple-500" />,
-        badgeColor: "bg-purple-50 text-purple-700 dark:bg-purple-950/50 dark:text-purple-300 border-purple-200 dark:border-purple-800",
-        accent: "text-purple-600 dark:text-purple-400",
-        bgLight: "bg-purple-50/50 dark:bg-purple-950/20",
-        defaultUnits: ["piece", "box", "set", "pack"],
+        icon: <Stethoscope className="h-5 w-5 text-indigo-500" />,
+        badgeColor: "bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800",
       };
-    }
-    if (name.includes("Saline")) {
+    } else if (lower.includes("saline") || lower.includes("iv")) {
       return {
-        icon: <Syringe className="h-5 w-5 text-cyan-500" />,
-        badgeColor: "bg-cyan-50 text-cyan-700 dark:bg-cyan-950/50 dark:text-cyan-300 border-cyan-200 dark:border-cyan-800",
-        accent: "text-cyan-600 dark:text-cyan-400",
-        bgLight: "bg-cyan-50/50 dark:bg-cyan-950/20",
-        defaultUnits: ["bag", "bottle", "ml"],
+        icon: <Syringe className="h-5 w-5 text-amber-500" />,
+        badgeColor: "bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300 border-amber-200 dark:border-amber-800",
       };
     }
     return {
-      icon: <Package className="h-5 w-5 text-amber-500" />,
-      badgeColor: "bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300 border-amber-200 dark:border-amber-800",
-      accent: "text-amber-600 dark:text-amber-400",
-      bgLight: "bg-amber-50/50 dark:bg-amber-950/20",
-      defaultUnits: ["piece", "pack", "tin", "tube", "bottle"],
+      icon: <Package className="h-5 w-5 text-purple-500" />,
+      badgeColor: "bg-purple-50 text-purple-700 dark:bg-purple-950/50 dark:text-purple-300 border-purple-200 dark:border-purple-800",
     };
   };
 
-  const totalSubcategories = categories.reduce((acc, c) => acc + (c.subcategories?.length || 0), 0);
-
-  // Filtered categories based on Search & Selected Category
+  // Filter Categories
   const filteredCategories = useMemo(() => {
     return categories
-      .filter((c) => (selectedCategoryFilter === "ALL" ? true : c.id === selectedCategoryFilter))
-      .map((c) => {
-        if (!searchQuery.trim()) return c;
-        const q = searchQuery.toLowerCase();
-        const matchesCategory = c.name.toLowerCase().includes(q) || (c.description || "").toLowerCase().includes(q);
-        const matchedSubcategories = (c.subcategories || []).filter(
-          (sub) => sub.name.toLowerCase().includes(q) || (sub.description || "").toLowerCase().includes(q)
-        );
-        if (matchesCategory) return c;
-        return {
-          ...c,
-          subcategories: matchedSubcategories,
-        };
+      .filter((cat) => {
+        if (selectedCategoryFilter !== "ALL" && cat.id !== selectedCategoryFilter) {
+          return false;
+        }
+        return true;
       })
-      .filter((c) => {
-        if (!searchQuery.trim()) return true;
+      .map((cat) => {
+        if (!searchQuery.trim()) return cat;
         const q = searchQuery.toLowerCase();
-        return (
-          c.name.toLowerCase().includes(q) ||
-          (c.description || "").toLowerCase().includes(q) ||
-          (c.subcategories && c.subcategories.length > 0)
+        const mainMatches = cat.name.toLowerCase().includes(q);
+        const filteredSubs = (cat.subcategories || []).filter((sub) =>
+          sub.name.toLowerCase().includes(q)
         );
-      });
+        if (mainMatches) return cat;
+        if (filteredSubs.length > 0) return { ...cat, subcategories: filteredSubs };
+        return null;
+      })
+      .filter(Boolean) as Category[];
   }, [categories, selectedCategoryFilter, searchQuery]);
 
   return (
-    <div className="space-y-6 max-w-6xl">
-      {/* Header & Tabs */}
+    <div className="space-y-6">
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
         <div>
           <div className="flex items-center gap-2 text-xs text-slate-400 mb-1">
             <span>Inventory</span>
             <span>/</span>
-            <span className="text-brand-primary font-bold">Category Management</span>
+            <span className="text-brand-primary font-bold">Categories & Taxonomy</span>
           </div>
           <h2 className="text-xl font-black text-slate-900 dark:text-white flex items-center gap-2">
             <FolderTree className="h-6 w-6 text-brand-primary" />
-            Category & Subcategory Management
+            Dynamic Categories & Brands
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Organize catalog under the 5 standard Main Categories and create optional subcategories (e.g. Antibiotics, Antipyretics, Eye Drops).
+            Create and manage Main Categories, custom Subcategories, and pharmaceutical manufacturers.
           </p>
         </div>
 
-        {/* Tab Switcher */}
-        <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+        {/* Action Controls */}
+        <div className="flex items-center gap-2 flex-wrap">
           <button
-            onClick={() => setActiveTab("categories")}
-            className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition ${
-              activeTab === "categories"
-                ? "bg-white dark:bg-slate-900 text-brand-primary shadow-xs"
-                : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
-            }`}
+            onClick={() => setMainCatModalOpen(true)}
+            className="px-4 py-2 bg-brand-primary hover:bg-brand-primary-hover text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm"
           >
-            <Layers className="h-3.5 w-3.5" />
-            Main Categories & Subcategories ({totalSubcategories})
+            <Plus className="h-4 w-4" />
+            New Main Category
           </button>
-          <button
-            onClick={() => setActiveTab("brands")}
-            className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition ${
-              activeTab === "brands"
-                ? "bg-white dark:bg-slate-900 text-brand-primary shadow-xs"
-                : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
-            }`}
-          >
-            <Building className="h-3.5 w-3.5" />
-            Manufacturers & Brands ({brands.length})
-          </button>
+          <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+            <button
+              onClick={() => setActiveTab("categories")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                activeTab === "categories"
+                  ? "bg-white dark:bg-slate-900 text-brand-primary shadow-xs"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
+              }`}
+            >
+              <FolderTree className="h-3.5 w-3.5" />
+              Categories ({categories.length})
+            </button>
+            <button
+              onClick={() => setActiveTab("brands")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                activeTab === "brands"
+                  ? "bg-white dark:bg-slate-900 text-brand-primary shadow-xs"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
+              }`}
+            >
+              <Building className="h-3.5 w-3.5" />
+              Brands ({brands.length})
+            </button>
+          </div>
         </div>
       </div>
 
@@ -379,38 +465,40 @@ export function VariantsView() {
       {/* TAB 1: CATEGORIES & SUBCATEGORIES */}
       {activeTab === "categories" && (
         <div className="space-y-6">
-          {/* Overview Stat Cards for the 5 Main Categories */}
+          {/* Main Category Cards */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
             {categories.map((c) => {
               const meta = getMainCategoryMeta(c.name);
               const isSelected = selectedCategoryFilter === c.id;
+              const isActive = c.isActive ?? true;
               return (
-                <button
+                <div
                   key={c.id}
                   onClick={() => setSelectedCategoryFilter(isSelected ? "ALL" : c.id)}
-                  className={`p-4 rounded-2xl border text-left transition relative overflow-hidden flex flex-col justify-between ${
+                  className={`p-3.5 rounded-2xl border text-left transition relative overflow-hidden flex flex-col justify-between cursor-pointer ${
                     isSelected
                       ? "bg-white dark:bg-slate-900 border-brand-primary ring-2 ring-brand-primary/20 shadow-sm"
                       : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700"
-                  }`}
+                  } ${!isActive ? "opacity-60" : ""}`}
                 >
                   <div className="flex items-center justify-between gap-2 mb-2">
                     <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700">
                       {meta.icon}
                     </div>
-                    <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
-                      {c.subcategories?.length || 0} sub
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isActive ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300" : "bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-400"}`}>
+                      {isActive ? "Active" : "Inactive"}
                     </span>
                   </div>
                   <div>
                     <h4 className="text-xs font-black text-slate-900 dark:text-white truncate">
                       {c.name}
                     </h4>
-                    <div className="text-[11px] text-slate-400 font-medium mt-0.5">
-                      {c._count?.products || 0} products
+                    <div className="text-[11px] text-slate-400 font-medium mt-0.5 flex items-center justify-between">
+                      <span>{c.subcategories?.length || 0} sub</span>
+                      <span>{c._count?.products || 0} items</span>
                     </div>
                   </div>
-                </button>
+                </div>
               );
             })}
           </div>
@@ -446,7 +534,7 @@ export function VariantsView() {
                   >
                     {categories.map((c) => (
                       <option key={c.id} value={c.id}>
-                        {c.name}
+                        {c.name} {c.isActive === false ? "(Inactive)" : ""}
                       </option>
                     ))}
                   </select>
@@ -459,58 +547,19 @@ export function VariantsView() {
                   <input
                     type="text"
                     required
-                    placeholder="e.g. Antibiotics, Antipyretics, Eye Drops"
+                    placeholder="e.g. Tablet, Capsule, Cream, Dry Syrup"
                     value={newSubcategoryName}
                     onChange={(e) => setNewSubcategoryName(e.target.value)}
                     className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white outline-none font-bold"
                   />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Default Unit (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. tablet, capsule, bottle, bag, piece, tube"
-                    value={newSubcategoryUnit}
-                    onChange={(e) => setNewSubcategoryUnit(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white outline-none font-medium"
-                  />
-                  <div className="flex flex-wrap gap-1.5 mt-2">
-                    {["tablet", "capsule", "bottle", "piece", "bag", "tube", "tin", "pack"].map((u) => (
-                      <button
-                        key={u}
-                        type="button"
-                        onClick={() => setNewSubcategoryUnit(u)}
-                        className={`text-[10px] px-2 py-0.5 rounded-lg border transition ${
-                          newSubcategoryUnit === u
-                            ? "bg-brand-primary text-white border-brand-primary"
-                            : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-200"
-                        }`}
-                      >
-                        {u}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Description (Optional)
-                  </label>
-                  <textarea
-                    rows={2}
-                    placeholder="Brief description of this clinical classification..."
-                    value={newSubcategoryDesc}
-                    onChange={(e) => setNewSubcategoryDesc(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white outline-none font-medium resize-none"
-                  />
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Example: Tablet, Capsule, Syrup, Drops, Injections
+                  </p>
                 </div>
 
                 <button
                   type="submit"
-                  disabled={saving || !selectedParentId}
+                  disabled={saving || !selectedParentId || !newSubcategoryName.trim()}
                   className="w-full py-2.5 bg-brand-primary hover:bg-brand-primary-hover text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm disabled:opacity-50"
                 >
                   {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
@@ -521,7 +570,7 @@ export function VariantsView() {
 
             {/* Hierarchical Categories & Subcategories List */}
             <div className="lg:col-span-8 space-y-4">
-              {/* Filter Bar */}
+              {/* Search & Filter Bar */}
               <div className="bg-white dark:bg-slate-900 p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row items-center gap-3">
                 <div className="relative flex-1 w-full">
                   <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
@@ -539,7 +588,7 @@ export function VariantsView() {
                     onClick={() => setSelectedCategoryFilter("ALL")}
                     className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold flex items-center gap-1 hover:bg-slate-200 transition shrink-0"
                   >
-                    <span>Show All (5)</span>
+                    <span>Show All</span>
                     <X className="h-3.5 w-3.5" />
                   </button>
                 )}
@@ -548,23 +597,28 @@ export function VariantsView() {
               {loading ? (
                 <div className="p-12 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 flex flex-col items-center justify-center text-slate-400">
                   <Loader2 className="h-6 w-6 animate-spin text-brand-primary mb-2" />
-                  <p className="text-xs font-medium">Loading category hierarchy...</p>
+                  <p className="text-xs font-medium">Loading categories...</p>
                 </div>
               ) : filteredCategories.length === 0 ? (
                 <div className="p-12 text-center text-slate-400 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">
                   <FolderTree className="h-8 w-8 mx-auto text-slate-300 dark:text-slate-700 mb-2" />
                   <p className="text-xs font-bold text-slate-700 dark:text-slate-300">No matching categories found</p>
-                  <p className="text-[11px] text-slate-400 mt-1">Try clearing your search query.</p>
+                  <p className="text-[11px] text-slate-400 mt-1">Try clearing your search query or create a new Main Category.</p>
                 </div>
               ) : (
                 filteredCategories.map((mainCat) => {
                   const meta = getMainCategoryMeta(mainCat.name);
                   const subcats = mainCat.subcategories || [];
+                  const isActive = mainCat.isActive ?? true;
 
                   return (
                     <div
                       key={mainCat.id}
-                      className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden"
+                      className={`bg-white dark:bg-slate-900 rounded-2xl border shadow-sm overflow-hidden transition ${
+                        isActive
+                          ? "border-slate-200 dark:border-slate-800"
+                          : "border-slate-200 dark:border-slate-800 opacity-70"
+                      }`}
                     >
                       {/* Main Category Header */}
                       <div className="p-4 bg-slate-50/75 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -580,52 +634,82 @@ export function VariantsView() {
                               <span className={`text-[10px] uppercase tracking-wider font-extrabold px-2.5 py-0.5 rounded-full border ${meta.badgeColor}`}>
                                 Main Category
                               </span>
+                              {!isActive && (
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-600 dark:bg-rose-950/50">
+                                  Inactive
+                                </span>
+                              )}
                             </div>
                             <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                              {mainCat.description || "Standard canonical core category"}
+                              {subcats.length > 0 ? `${subcats.length} subcategories` : "Main Category (No subcategories)"}
                             </p>
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-2 shrink-0">
-                          <span className="text-xs font-bold text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 px-3 py-1 rounded-lg border border-slate-200 dark:border-slate-700">
-                            {subcats.length} subcategories
-                          </span>
+                        <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
+                          <button
+                            onClick={() => handleToggleActive(mainCat)}
+                            className={`p-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 ${
+                              isActive
+                                ? "text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+                                : "text-slate-400 hover:text-emerald-600 hover:bg-slate-100"
+                            }`}
+                            title={isActive ? "Deactivate Category" : "Activate Category"}
+                          >
+                            <Power className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleOpenEditMain(mainCat)}
+                            className="p-1.5 text-slate-500 hover:text-brand-primary hover:bg-brand-primary/10 rounded-lg transition"
+                            title="Edit Main Category"
+                          >
+                            <Edit2 className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            onClick={() => setDeletingMainCat(mainCat)}
+                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg transition"
+                            title="Delete Main Category"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
                           <button
                             onClick={() => {
                               setSelectedParentId(mainCat.id);
                               handleParentChange(mainCat.id);
                             }}
-                            className="text-xs font-bold text-brand-primary hover:bg-brand-primary/10 px-2.5 py-1 rounded-lg transition flex items-center gap-1"
+                            className="text-xs font-bold text-brand-primary hover:bg-brand-primary/10 px-2.5 py-1 rounded-lg transition flex items-center gap-1 ml-1"
                           >
                             <Plus className="h-3.5 w-3.5" />
-                            Add Under {mainCat.name}
+                            Add Subcategory
                           </button>
                         </div>
                       </div>
 
                       {/* Subcategories List */}
                       {subcats.length === 0 ? (
-                        <div className="p-6 text-center text-slate-400 text-xs">
-                          No subcategories created yet under {mainCat.name}. Use the form on the left to add one.
+                        <div className="p-5 text-center text-slate-400 text-xs">
+                          No subcategories under {mainCat.name}. Main categories can exist alone, or click "Add Subcategory" to add one.
                         </div>
                       ) : (
                         <div className="divide-y divide-slate-100 dark:divide-slate-800">
                           {subcats.map((sub) => {
                             const prodCount = sub._count?.subProducts || 0;
+                            const isSubActive = sub.isActive ?? true;
                             return (
                               <div
                                 key={sub.id}
-                                className="p-3.5 pl-6 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 flex items-center justify-between transition"
+                                className={`p-3.5 pl-6 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 flex items-center justify-between transition ${
+                                  !isSubActive ? "opacity-60" : ""
+                                }`}
                               >
                                 <div className="flex items-center gap-3">
                                   <ChevronRight className="h-4 w-4 text-slate-300 dark:text-slate-600 shrink-0" />
                                   <div>
                                     <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                                      {sub.name}
-                                      {sub.defaultUnit && (
-                                        <span className="text-[10px] font-medium text-slate-500 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
-                                          unit: {sub.defaultUnit}
+                                      <span>{sub.name}</span>
+                                      {!isSubActive && (
+                                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 dark:bg-slate-800">
+                                          Inactive
                                         </span>
                                       )}
                                       {prodCount > 0 && (
@@ -634,15 +718,21 @@ export function VariantsView() {
                                         </span>
                                       )}
                                     </div>
-                                    {sub.description && (
-                                      <div className="text-[11px] text-slate-400 mt-0.5">
-                                        {sub.description}
-                                      </div>
-                                    )}
                                   </div>
                                 </div>
 
                                 <div className="flex items-center gap-1.5">
+                                  <button
+                                    onClick={() => handleToggleActive(sub)}
+                                    className={`p-1.5 rounded-lg transition ${
+                                      isSubActive
+                                        ? "text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+                                        : "text-slate-400 hover:text-emerald-600 hover:bg-slate-100"
+                                    }`}
+                                    title={isSubActive ? "Deactivate Subcategory" : "Activate Subcategory"}
+                                  >
+                                    <Power className="h-3.5 w-3.5" />
+                                  </button>
                                   <button
                                     onClick={() => handleOpenEdit(sub, mainCat)}
                                     className="p-1.5 text-slate-400 hover:text-brand-primary hover:bg-brand-primary/10 rounded-lg transition"
@@ -678,121 +768,270 @@ export function VariantsView() {
           {/* Create Brand Form */}
           <div className="lg:col-span-4 bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
             <h3 className="text-sm font-black text-slate-900 dark:text-white flex items-center gap-2">
-              <Plus className="h-4 w-4 text-brand-primary" />
-              Add Pharmaceutical Brand
+              <Building className="h-4 w-4 text-brand-primary" />
+              Register Brand / Manufacturer
             </h3>
             <form onSubmit={handleCreateBrand} className="space-y-3.5">
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Brand / Manufacturer Name *
+                  Brand Name *
                 </label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Beximco, Square Pharma, Incepta, Renata"
+                  placeholder="e.g. Square, Beximco, Incepta"
                   value={newBrandName}
                   onChange={(e) => setNewBrandName(e.target.value)}
-                  className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white outline-none font-bold"
+                  className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none"
                 />
               </div>
-
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Description / Country (Optional)
+                  Description
                 </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Local manufacturer, multinational, generic exporter"
+                <textarea
+                  rows={2}
+                  placeholder="Details about this pharmaceutical company..."
                   value={newBrandDesc}
                   onChange={(e) => setNewBrandDesc(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white outline-none font-medium"
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white outline-none resize-none font-medium"
                 />
               </div>
-
               <button
                 type="submit"
-                disabled={saving}
+                disabled={saving || !newBrandName.trim()}
                 className="w-full py-2.5 bg-brand-primary hover:bg-brand-primary-hover text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm disabled:opacity-50"
               >
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                Register Brand
+                Add Brand
               </button>
             </form>
           </div>
 
           {/* Brands List */}
-          <div className="lg:col-span-8 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-            {loading ? (
-              <div className="p-12 flex flex-col items-center justify-center text-slate-400">
-                <Loader2 className="h-6 w-6 animate-spin text-brand-primary mb-2" />
-                <p className="text-xs">Loading brands...</p>
-              </div>
-            ) : brands.length === 0 ? (
-              <div className="p-12 text-center text-slate-400">
-                <Building className="h-8 w-8 mx-auto text-slate-300 dark:text-slate-700 mb-2" />
-                <p className="text-xs font-bold">No brands registered yet</p>
-              </div>
+          <div className="lg:col-span-8 bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+            <h3 className="text-sm font-black text-slate-900 dark:text-white">
+              Registered Brands ({brands.length})
+            </h3>
+            {brands.length === 0 ? (
+              <p className="text-xs text-slate-400 py-6 text-center">No brands registered yet.</p>
             ) : (
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="bg-slate-50/75 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 text-slate-500 uppercase font-bold text-[10px]">
-                    <th className="py-3 px-4">Brand / Manufacturer Name</th>
-                    <th className="py-3 px-4">Catalog Products</th>
-                    <th className="py-3 px-4 text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
-                  {brands.map((b) => (
-                    <tr key={b.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
-                      <td className="py-3.5 px-4 font-bold text-slate-900 dark:text-white">
-                        {b.name}
-                        {b.description && (
-                          <div className="text-[11px] text-slate-400 font-normal mt-0.5">
-                            {b.description}
-                          </div>
-                        )}
-                      </td>
-                      <td className="py-3.5 px-4 text-slate-500 font-medium">
-                        {b._count?.products || 0} products
-                      </td>
-                      <td className="py-3.5 px-4 text-right">
-                        <button
-                          onClick={() => handleDeleteBrand(b.id, b.name)}
-                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg transition"
-                          title="Delete Brand"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {brands.map((b) => (
+                  <div
+                    key={b.id}
+                    className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200/80 dark:border-slate-700/80 flex items-center justify-between"
+                  >
+                    <div>
+                      <div className="text-xs font-bold text-slate-900 dark:text-white">{b.name}</div>
+                      {b.description && (
+                        <div className="text-[11px] text-slate-400 truncate max-w-xs">{b.description}</div>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => handleDeleteBrand(b.id, b.name)}
+                      className="p-1 text-slate-400 hover:text-rose-600 rounded"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         </div>
       )}
 
-      {/* Edit Subcategory Modal */}
+      {/* CREATE MAIN CATEGORY MODAL */}
+      {mainCatModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full p-6 border border-slate-200 dark:border-slate-800 shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <FolderTree className="h-5 w-5 text-brand-primary" />
+                <h3 className="text-sm font-black text-slate-900 dark:text-white">
+                  Create Main Category
+                </h3>
+              </div>
+              <button
+                onClick={() => setMainCatModalOpen(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-white rounded-lg"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateMainCategory} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Category Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  autoFocus
+                  placeholder="e.g. Medicine, Syrup, Medical Equipment, Saline, Other"
+                  value={newMainName}
+                  onChange={(e) => setNewMainName(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white font-bold outline-none focus:ring-2 focus:ring-brand-primary/20"
+                />
+                <p className="text-[11px] text-slate-400 mt-1.5">
+                  Example: Medicine, Syrup, Medical Equipment, Saline, Other
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setMainCatModalOpen(false)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving || !newMainName.trim()}
+                  className="px-4 py-2 bg-brand-primary hover:bg-brand-primary-hover text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+                >
+                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                  Create Category
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT MAIN CATEGORY MODAL */}
+      {editingMainCat && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full p-6 border border-slate-200 dark:border-slate-800 shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <Edit2 className="h-5 w-5 text-brand-primary" />
+                <h3 className="text-sm font-black text-slate-900 dark:text-white">
+                  Edit Main Category
+                </h3>
+              </div>
+              <button
+                onClick={() => setEditingMainCat(null)}
+                className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-white rounded-lg"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditMain} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Category Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  autoFocus
+                  placeholder="e.g. Medicine, Syrup, Medical Equipment, Saline, Other"
+                  value={editMainName}
+                  onChange={(e) => setEditMainName(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white font-bold outline-none focus:ring-2 focus:ring-brand-primary/20"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setEditingMainCat(null)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving || !editMainName.trim()}
+                  className="px-4 py-2 bg-brand-primary hover:bg-brand-primary-hover text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+                >
+                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* DELETE MAIN CATEGORY CONFIRM MODAL */}
+      {deletingMainCat && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full p-6 border border-slate-200 dark:border-slate-800 shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800">
+                <Trash2 className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-black text-slate-900 dark:text-white">
+                  Delete Category
+                </h3>
+                <p className="text-[11px] text-slate-400">
+                  {deletingMainCat.name}
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 dark:text-slate-400">
+              Are you sure you want to delete <strong className="text-slate-900 dark:text-white">"{deletingMainCat.name}"</strong>?
+              {deletingMainCat.subcategories && deletingMainCat.subcategories.length > 0 && (
+                <span className="block mt-1 text-rose-600 dark:text-rose-400 font-bold">
+                  ⚠️ This category contains {deletingMainCat.subcategories.length} subcategory(ies).
+                </span>
+              )}
+            </p>
+
+            <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 rounded-xl text-[11px] text-amber-800 dark:text-amber-300">
+              ℹ️ Safe Deletion Rule: If any catalog products are linked to this category or its subcategories, deletion will be safely blocked to protect your inventory data.
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setDeletingMainCat(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteMain}
+                disabled={saving}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm"
+              >
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                Confirm Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT SUBCATEGORY MODAL */}
       {editingSubcategory && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full p-6 border border-slate-200 dark:border-slate-800 shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <div className="flex items-center gap-2">
-                <Edit2 className="h-4 w-4 text-brand-primary" />
+                <Edit2 className="h-5 w-5 text-brand-primary" />
                 <h3 className="text-sm font-black text-slate-900 dark:text-white">
                   Edit Subcategory
                 </h3>
               </div>
               <button
                 onClick={() => setEditingSubcategory(null)}
-                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
+                className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-white rounded-lg"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveEdit} className="space-y-4">
+            <form onSubmit={handleSaveEdit} className="space-y-3.5">
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                   Main Category
@@ -812,34 +1051,10 @@ export function VariantsView() {
                 <input
                   type="text"
                   required
+                  autoFocus
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
-                  className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white font-bold outline-none focus:ring-2 focus:ring-brand-primary/20"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Default Unit (Optional)
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. tablet, capsule, bottle, piece, bag"
-                  value={editUnit}
-                  onChange={(e) => setEditUnit(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white outline-none font-medium"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Description (Optional)
-                </label>
-                <textarea
-                  rows={2}
-                  value={editDesc}
-                  onChange={(e) => setEditDesc(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white outline-none font-medium resize-none"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white font-bold outline-none focus:ring-2 focus:ring-brand-primary/20"
                 />
               </div>
 
@@ -865,7 +1080,7 @@ export function VariantsView() {
         </div>
       )}
 
-      {/* Delete Subcategory Confirmation Modal */}
+      {/* DELETE SUBCATEGORY CONFIRM MODAL */}
       {deletingSubcategory && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full p-6 border border-slate-200 dark:border-slate-800 shadow-2xl space-y-4 animate-in fade-in zoom-in-95">

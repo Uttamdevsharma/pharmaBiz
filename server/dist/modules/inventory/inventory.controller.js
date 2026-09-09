@@ -66,6 +66,51 @@ class InventoryController {
             res.status(400).json({ success: false, message: error.message });
         }
     }
+    static async allocateStock(req, res) {
+        try {
+            const tenantId = req.user.tenantId;
+            const userId = req.user.id;
+            const result = await inventory_service_1.InventoryService.allocateStock(tenantId, userId, req.body);
+            res.status(200).json({
+                success: true,
+                message: "Stock allocated successfully",
+                data: result,
+            });
+        }
+        catch (error) {
+            res.status(400).json({ success: false, message: error.message });
+        }
+    }
+    static async moveStock(req, res) {
+        try {
+            const tenantId = req.user.tenantId;
+            const userId = req.user.id;
+            const result = await inventory_service_1.InventoryService.moveStock(tenantId, userId, req.body);
+            res.status(200).json({
+                success: true,
+                message: "Stock moved successfully",
+                data: result,
+            });
+        }
+        catch (error) {
+            res.status(400).json({ success: false, message: error.message });
+        }
+    }
+    static async removeExpiredStock(req, res) {
+        try {
+            const tenantId = req.user.tenantId;
+            const userId = req.user.id;
+            const result = await inventory_service_1.InventoryService.removeExpiredStock(tenantId, userId, req.body);
+            res.status(200).json({
+                success: true,
+                message: "Expired stock removed successfully and logged in movement ledger",
+                data: result,
+            });
+        }
+        catch (error) {
+            res.status(400).json({ success: false, message: error.message });
+        }
+    }
     static async listMovements(req, res) {
         try {
             const tenantId = req.user.tenantId;
@@ -103,6 +148,32 @@ class InventoryController {
         }
         catch (error) {
             res.status(500).json({ success: false, message: error.message });
+        }
+    }
+    static async getPosBatches(req, res) {
+        try {
+            const { branchId, productId } = req.query;
+            const tenantId = req.user.tenantId;
+            if (!branchId || !productId) {
+                res.status(400).json({ success: false, message: "branchId and productId are required" });
+                return;
+            }
+            const batches = await inventory_service_1.InventoryService.getPosAvailableBatches(tenantId, branchId, productId);
+            res.status(200).json({ success: true, data: batches });
+        }
+        catch (error) {
+            res.status(500).json({ success: false, message: error.message });
+        }
+    }
+    static async getBatchDetails(req, res) {
+        try {
+            const { id } = req.params;
+            const tenantId = req.user.tenantId;
+            const batch = await inventory_service_1.InventoryService.getBatchDetails(tenantId, id);
+            res.status(200).json({ success: true, data: batch });
+        }
+        catch (error) {
+            res.status(404).json({ success: false, message: error.message });
         }
     }
 }

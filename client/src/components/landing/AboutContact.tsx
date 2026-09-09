@@ -77,8 +77,8 @@ export function AboutContact() {
                 </div>
                 <div>
                   <div className="text-xs text-slate-500 font-semibold uppercase">Email Us</div>
-                  <a href={`mailto:${contact.email || "support@pharmabiz.com"}`} className="text-sm font-bold text-slate-900 dark:text-white hover:text-brand-primary">
-                    {contact.email || "support@pharmabiz.com"}
+                  <a href={`mailto:${contact.email || "shameem.rml@gmail.com"}`} className="text-sm font-bold text-slate-900 dark:text-white hover:text-brand-primary">
+                    {contact.email || "shameem.rml@gmail.com"}
                   </a>
                 </div>
               </div>
@@ -89,8 +89,8 @@ export function AboutContact() {
                 </div>
                 <div>
                   <div className="text-xs text-slate-500 font-semibold uppercase">Call Support</div>
-                  <a href={`tel:${contact.phone || "+880 1700-000000"}`} className="text-sm font-bold text-slate-900 dark:text-white hover:text-brand-primary">
-                    {contact.phone || "+880 1700-000000"}
+                  <a href={`tel:${contact.phone || "01973590937"}`} className="text-sm font-bold text-slate-900 dark:text-white hover:text-brand-primary">
+                    {contact.phone || "01973590937"}
                   </a>
                 </div>
               </div>

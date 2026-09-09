@@ -23,6 +23,7 @@ import { uploadRoutes } from "./modules/upload/upload.routes";
 import { supplierRoutes } from "./modules/supplier/supplier.routes";
 import { accountingRoutes } from "./modules/accounting/accounting.routes";
 import { attendanceRoutes } from "./modules/attendance/attendance.routes";
+import locationRoutes from "./modules/location/location.routes";
 import { PaymentController } from "./modules/payment/payment.controller";
 
 const app = express();
@@ -81,6 +82,7 @@ app.use("/api/upload", uploadRoutes);
 app.use("/api/suppliers", supplierRoutes);
 app.use("/api/accounting", accountingRoutes);
 app.use("/api/attendance", attendanceRoutes);
+app.use("/api/locations", locationRoutes);
 
 // Fallback & direct gateway callbacks on root /payment/* (Supports both GET and POST)
 app.all("/payment/success", PaymentController.handleSuccess);
@@ -114,5 +116,7 @@ app.listen(port, async () => {
   await seedSuperAdmin();
   SubscriptionExpiryService.initAutomatedScheduler();
 });
+
+// Trigger backend restart for Prisma Client update
 
 export default app;

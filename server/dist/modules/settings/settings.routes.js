@@ -5,6 +5,7 @@ const express_1 = require("express");
 const settings_controller_1 = require("./settings.controller");
 const authenticate_1 = require("../../middleware/authenticate");
 const authorize_1 = require("../../middleware/authorize");
+const requirePermission_1 = require("../../middleware/requirePermission");
 const validate_1 = require("../../middleware/validate");
 const settings_validation_1 = require("./settings.validation");
 const router = (0, express_1.Router)();
@@ -16,4 +17,4 @@ router.get("/admin", authenticate_1.authenticate, (0, authorize_1.authorize)(["S
 router.patch("/admin", authenticate_1.authenticate, (0, authorize_1.authorize)(["SUPER_ADMIN", "CTO", "PROJECT_MANAGER"]), (0, validate_1.validateRequest)({ body: settings_validation_1.updatePlatformSettingsSchema }), settings_controller_1.SettingsController.updateSettings);
 // Pharmacy Tenant VAT & Tax Configuration
 router.get("/vat", authenticate_1.authenticate, settings_controller_1.SettingsController.getTenantVatSettings);
-router.put("/vat", authenticate_1.authenticate, (0, authorize_1.authorize)(["COMPANY_OWNER", "BRANCH_MANAGER", "REGIONAL_ADMIN"]), settings_controller_1.SettingsController.updateTenantVatSettings);
+router.put("/vat", authenticate_1.authenticate, (0, requirePermission_1.requirePermission)("pos.vat"), settings_controller_1.SettingsController.updateTenantVatSettings);

@@ -26,67 +26,67 @@ router.use(authenticate, requireActiveSubscription);
 // ==================== CATEGORIES ====================
 router.get(
   ["/categories", "/variants/categories"],
-  requirePermission("product.view"),
+  requirePermission("category.manage"),
   ProductController.listCategories
 );
 
 router.post(
   ["/categories", "/variants/categories"],
-  requirePermission("product.create"),
+  requirePermission("category.manage"),
   validateRequest({ body: createCategorySchema }),
   ProductController.createCategory
 );
 
 router.patch(
   ["/categories/:id", "/variants/categories/:id"],
-  requirePermission("product.update"),
+  requirePermission("category.manage"),
   validateRequest({ body: updateCategorySchema }),
   ProductController.updateCategory
 );
 
 router.delete(
   ["/categories/:id", "/variants/categories/:id"],
-  authorize(["COMPANY_OWNER", "SUPER_ADMIN"]),
+  requirePermission("category.manage"),
   ProductController.deleteCategory
 );
 
 // ==================== BRANDS ====================
 router.get(
   ["/brands", "/variants/brands"],
-  requirePermission("product.view"),
+  requirePermission("inventory.product_list"),
   ProductController.listBrands
 );
 
 router.post(
   ["/brands", "/variants/brands"],
-  requirePermission("product.create"),
+  requirePermission("inventory.add_product"),
   validateRequest({ body: createBrandSchema }),
   ProductController.createBrand
 );
 
 router.patch(
   ["/brands/:id", "/variants/brands/:id"],
-  requirePermission("product.update"),
+  requirePermission("inventory.product_list"),
   validateRequest({ body: updateBrandSchema }),
   ProductController.updateBrand
 );
 
 router.delete(
   ["/brands/:id", "/variants/brands/:id"],
-  authorize(["COMPANY_OWNER", "SUPER_ADMIN"]),
+  requirePermission("inventory.product_list"),
   ProductController.deleteBrand
 );
 
 // ==================== UNITS ====================
 router.get(
   "/units",
-  requirePermission("product.view"),
+  requirePermission("inventory.product_list"),
   ProductController.listUnits
 );
 
 router.post(
   "/units",
-  requirePermission("product.create"),
+  requirePermission("inventory.add_product"),
   validateRequest({ body: createUnitSchema }),
   ProductController.createUnit
 );
@@ -94,40 +94,40 @@ router.post(
 // ==================== PRODUCTS ====================
 router.get(
   "/",
-  requirePermission("product.view"),
+  requirePermission("inventory.product_list"),
   validateRequest({ query: listProductsQuerySchema }),
   ProductController.listProducts
 );
 
 router.get(
   "/barcode/:barcode",
-  requirePermission("product.view"),
+  requirePermission("inventory.product_list"),
   ProductController.getProductByBarcode
 );
 
 router.get(
   "/:id",
-  requirePermission("product.view"),
+  requirePermission("inventory.product_list"),
   ProductController.getProductById
 );
 
 router.post(
   "/",
-  requirePermission("product.create"),
+  requirePermission("inventory.add_product"),
   validateRequest({ body: createProductSchema }),
   ProductController.createProduct
 );
 
 router.post(
   "/bulk",
-  requirePermission("product.create"),
+  requirePermission("inventory.add_product"),
   validateRequest({ body: bulkProductSchema }),
   ProductController.bulkImport
 );
 
 router.patch(
   "/:id",
-  requirePermission("product.update"),
+  requirePermission("inventory.product_list"),
   validateRequest({ body: updateProductSchema }),
   ProductController.updateProduct
 );
@@ -140,14 +140,14 @@ router.delete(
 
 router.patch(
   "/:id/price",
-  requirePermission("product.update"),
+  requirePermission("inventory.product_list"),
   validateRequest({ body: updatePricingSchema }),
   ProductController.updatePricing
 );
 
 router.post(
   "/:id/branch-price",
-  requirePermission("product.update"),
+  requirePermission("inventory.product_list"),
   validateRequest({ body: branchPriceOverrideSchema }),
   ProductController.setBranchPriceOverride
 );

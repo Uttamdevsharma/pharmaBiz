@@ -1,0 +1,22 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const location_controller_1 = require("./location.controller");
+const authenticate_1 = require("../../middleware/authenticate");
+const requirePermission_1 = require("../../middleware/requirePermission");
+const router = (0, express_1.Router)();
+router.use(authenticate_1.authenticate);
+router.get("/", (0, requirePermission_1.requirePermission)("location.rack_list"), location_controller_1.LocationController.getLocations);
+// Batch-specific location breakdown
+router.get("/batch/:inventoryId", (0, requirePermission_1.requirePermission)("location.rack_list"), location_controller_1.LocationController.getBatchLocations);
+router.post("/quick-rack", (0, requirePermission_1.requirePermission)("location.create_rack"), location_controller_1.LocationController.quickCreateRack);
+router.post("/racks", (0, requirePermission_1.requirePermission)("location.create_rack"), location_controller_1.LocationController.createRack);
+router.patch("/racks/:id", (0, requirePermission_1.requirePermission)("location.create_rack"), location_controller_1.LocationController.updateRack);
+router.delete("/racks/:id", (0, requirePermission_1.requirePermission)("location.create_rack"), location_controller_1.LocationController.deleteRack);
+router.post("/shelves", (0, requirePermission_1.requirePermission)("location.create_rack"), location_controller_1.LocationController.createShelf);
+router.patch("/shelves/:id", (0, requirePermission_1.requirePermission)("location.create_rack"), location_controller_1.LocationController.updateShelf);
+router.delete("/shelves/:id", (0, requirePermission_1.requirePermission)("location.create_rack"), location_controller_1.LocationController.deleteShelf);
+router.post("/bins", (0, requirePermission_1.requirePermission)("location.create_rack"), location_controller_1.LocationController.createBin);
+router.patch("/bins/:id", (0, requirePermission_1.requirePermission)("location.create_rack"), location_controller_1.LocationController.updateBin);
+router.delete("/bins/:id", (0, requirePermission_1.requirePermission)("location.create_rack"), location_controller_1.LocationController.deleteBin);
+exports.default = router;

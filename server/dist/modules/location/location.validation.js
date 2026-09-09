@@ -1,0 +1,38 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.QuickCreateRackSchema = exports.UpdateBinSchema = exports.CreateBinSchema = exports.UpdateShelfSchema = exports.CreateShelfSchema = exports.UpdateRackSchema = exports.CreateRackSchema = void 0;
+const zod_1 = require("zod");
+exports.CreateRackSchema = zod_1.z.object({
+    name: zod_1.z.string().min(1, "Rack name is required"),
+    branchId: zod_1.z.string().optional(),
+    isActive: zod_1.z.boolean().optional(),
+});
+exports.UpdateRackSchema = zod_1.z.object({
+    name: zod_1.z.string().min(1, "Name cannot be empty").optional(),
+    isActive: zod_1.z.boolean().optional(),
+});
+exports.CreateShelfSchema = zod_1.z.object({
+    rackId: zod_1.z.string().min(1, "Rack ID is required"),
+    name: zod_1.z.string().min(1, "Shelf name is required"),
+    isActive: zod_1.z.boolean().optional(),
+});
+exports.UpdateShelfSchema = zod_1.z.object({
+    name: zod_1.z.string().min(1, "Name cannot be empty").optional(),
+    isActive: zod_1.z.boolean().optional(),
+});
+exports.CreateBinSchema = zod_1.z.object({
+    shelfId: zod_1.z.string().min(1, "Shelf ID is required"),
+    name: zod_1.z.string().min(1, "Bin name is required"),
+    isActive: zod_1.z.boolean().optional(),
+});
+exports.UpdateBinSchema = zod_1.z.object({
+    name: zod_1.z.string().min(1, "Name cannot be empty").optional(),
+    isActive: zod_1.z.boolean().optional(),
+});
+exports.QuickCreateRackSchema = zod_1.z.object({
+    name: zod_1.z.string().min(1, "Rack name/code is required").max(50, "Rack name is too long"),
+    branchId: zod_1.z.string().optional(),
+    numberOfShelves: zod_1.z.coerce.number().int().min(1, "At least 1 shelf is required").max(50, "Maximum 50 shelves allowed"),
+    binsPerShelf: zod_1.z.coerce.number().int().min(1, "At least 1 bin per shelf is required").max(50, "Maximum 50 bins per shelf allowed"),
+    isActive: zod_1.z.boolean().optional(),
+});

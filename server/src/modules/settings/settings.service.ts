@@ -72,8 +72,8 @@ export const DEFAULT_SETTINGS = {
     },
   ],
   contact: {
-    email: "support@pharmabiz.com",
-    phone: "+880 1700-000000",
+    email: "shameem.rml@gmail.com",
+    phone: "01973590937",
     address: "Gulshan-2, Dhaka-1212, Bangladesh",
     supportHours: "24/7 Dedicated Support",
   },

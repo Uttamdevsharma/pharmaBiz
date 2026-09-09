@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { fetchApi } from "@/lib/api";
 import { useRouter } from "next/navigation";
+import { checkUserPermission } from "@/lib/permissions";
 
 export type UserRole =
   | "SUPER_ADMIN"
@@ -206,12 +207,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     ].includes(user?.role || "");
 
   const hasPermission = (permissionKey: string): boolean => {
-    if (!user) return false;
-    // Super Admin & Pharmacy Owner have full authority within their respective scopes
-    if (user.role === "SUPER_ADMIN" || user.role === "COMPANY_OWNER") return true;
-    const perms = user.permissions || [];
-    if (perms.includes("*")) return true;
-    return perms.includes(permissionKey);
+    return checkUserPermission(user, permissionKey);
   };
 
   return (

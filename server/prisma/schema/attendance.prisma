@@ -1,6 +1,7 @@
 enum AttendanceStatus {
   PRESENT
   ABSENT
+  LATE
   PAID_LEAVE
   UNPAID_LEAVE
   OFF_DAY
@@ -72,4 +73,21 @@ model EmployeeMonthlyAllowance {
   @@index([branchId])
   @@index([userId])
   @@index([month])
+}
+
+model SalaryDeductionRule {
+  id              String   @id @default(uuid())
+  tenantId        String
+  branchId        String
+  absentRuleRatio Decimal? @db.Decimal(5, 2)
+  lateRuleRatio   Decimal? @db.Decimal(5, 2)
+  createdById     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch          Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@unique([branchId])
+  @@index([tenantId])
 }

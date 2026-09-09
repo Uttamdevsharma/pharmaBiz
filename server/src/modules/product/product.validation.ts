@@ -6,6 +6,8 @@ export const createCategorySchema = z.object({
   productType: z.enum(["MEDICINE", "SYRUP", "EQUIPMENT", "SALINE", "OTHER"]).optional().nullable(),
   defaultUnit: z.string().optional().nullable(),
   description: z.string().optional().nullable(),
+  isActive: z.boolean().optional().default(true),
+  subcategories: z.array(z.string().min(1)).optional(),
 });
 
 export const updateCategorySchema = createCategorySchema.partial().extend({
@@ -48,13 +50,13 @@ export const createProductSchema = z.object({
   manufacturer: z.string().optional().nullable(),
   unit: z.string().default("piece"),
   size: z.string().optional().nullable(),
-  defaultPackType: z.string().default("PIECE"),
+  defaultPackType: z.string().default("BOX"),
   stripsPerBox: z.number().int().positive().optional().nullable(),
   tabletsPerStrip: z.number().int().positive().optional().nullable(),
 
-  minStockAlert: z.number().int().nonnegative().default(10),
+  minStockAlert: z.number().int().nonnegative().optional().default(10),
   description: z.string().optional().nullable(),
-  isControlled: z.boolean().default(false),
+  isControlled: z.boolean().optional().default(false),
   requiresPrescription: z.boolean().default(false),
 });
 

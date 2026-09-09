@@ -286,12 +286,10 @@ class ProductService {
     }
     // ==================== CATEGORIES ====================
     static async listCategories(tenantId) {
-        // Seed and reconcile if needed
         let mainCategories = await prisma_1.prisma.category.findMany({
             where: { tenantId, parentId: null },
             include: {
                 subcategories: {
-                    where: { isActive: true },
                     orderBy: { name: "asc" },
                     include: {
                         _count: { select: { subProducts: true } },
@@ -299,6 +297,7 @@ class ProductService {
                 },
                 _count: { select: { products: true, subcategories: true } },
             },
+            orderBy: { name: "asc" },
         });
         if (mainCategories.length === 0) {
             await this.seedDefaultCatalogVariants(tenantId);
@@ -306,7 +305,6 @@ class ProductService {
                 where: { tenantId, parentId: null },
                 include: {
                     subcategories: {
-                        where: { isActive: true },
                         orderBy: { name: "asc" },
                         include: {
                             _count: { select: { subProducts: true } },
@@ -314,25 +312,9 @@ class ProductService {
                     },
                     _count: { select: { products: true, subcategories: true } },
                 },
+                orderBy: { name: "asc" },
             });
         }
-        else {
-            // Background reconciliation to keep data clean
-            this.reconcileLegacyCategories(tenantId).catch(() => { });
-        }
-        // Sort categories according to the canonical definition order
-        const canonicalOrder = exports.CANONICAL_MAIN_CATEGORIES.map((c) => c.name);
-        mainCategories.sort((a, b) => {
-            const idxA = canonicalOrder.indexOf(a.name);
-            const idxB = canonicalOrder.indexOf(b.name);
-            if (idxA !== -1 && idxB !== -1)
-                return idxA - idxB;
-            if (idxA !== -1)
-                return -1;
-            if (idxB !== -1)
-                return 1;
-            return a.name.localeCompare(b.name);
-        });
         return mainCategories;
     }
     static async createCategory(tenantId, userId, data) {
@@ -358,11 +340,30 @@ class ProductService {
                 productType: resolvedProductType,
                 defaultUnit: data.defaultUnit || parentCategory?.defaultUnit || null,
                 description: data.description || null,
+                isActive: data.isActive !== undefined ? data.isActive : true,
             },
             include: {
                 parent: true,
             },
         });
+        // Handle optional initial subcategories if provided
+        if (Array.isArray(data.subcategories) && data.subcategories.length > 0 && !data.parentId) {
+            for (const subName of data.subcategories) {
+                const trimmed = subName.trim();
+                if (trimmed) {
+                    await prisma_1.prisma.category.create({
+                        data: {
+                            tenantId,
+                            name: trimmed,
+                            parentId: category.id,
+                            productType: resolvedProductType,
+                            defaultUnit: category.defaultUnit || null,
+                            isActive: true,
+                        },
+                    });
+                }
+            }
+        }
         await audit_1.AuditService.log({
             tenantId,
             userId,
@@ -372,6 +373,7 @@ class ProductService {
                 name: category.name,
                 parentId: category.parentId,
                 isSubcategory: Boolean(category.parentId),
+                subcategoriesCount: data.subcategories?.length || 0,
             },
         });
         return category;
@@ -421,28 +423,31 @@ class ProductService {
         const category = await prisma_1.prisma.category.findFirst({
             where: { id, tenantId },
             include: {
+                subcategories: {
+                    include: {
+                        _count: { select: { subProducts: true } },
+                    },
+                },
                 _count: { select: { products: true, subProducts: true, subcategories: true } },
             },
         });
         if (!category) {
             throw new Error("Category not found");
         }
-        // Unlink products referencing this subcategory
-        if (category.parentId) {
-            await prisma_1.prisma.product.updateMany({
-                where: { subcategoryId: id },
-                data: { subcategoryId: null, subcategory: null },
-            });
+        // Safety check: Is this category directly assigned to products?
+        const directProductsCount = (category._count?.products || 0) + (category._count?.subProducts || 0);
+        if (directProductsCount > 0) {
+            throw new Error(`Cannot delete "${category.name}" because it currently has ${directProductsCount} product(s) assigned to it. Please reassign or delete these products first.`);
         }
-        else {
-            // If deleting a root category that has subcategories or products, prevent accidental wipe of canonicals
-            const isCanonical = exports.CANONICAL_MAIN_CATEGORIES.some((c) => c.name === category.name);
-            if (isCanonical) {
-                throw new Error(`Cannot delete default core category "${category.name}". You can manage subcategories under it.`);
+        // Safety check: If it has subcategories, check if any subcategory has products
+        if (category.subcategories && category.subcategories.length > 0) {
+            const subWithProducts = category.subcategories.find((s) => (s._count?.subProducts || 0) > 0);
+            if (subWithProducts) {
+                throw new Error(`Cannot delete "${category.name}" because subcategory "${subWithProducts.name}" has active products assigned to it. Please reassign them first.`);
             }
-            await prisma_1.prisma.product.updateMany({
-                where: { categoryId: id },
-                data: { categoryId: null, category: null },
+            // Safely delete subcategories first
+            await prisma_1.prisma.category.deleteMany({
+                where: { parentId: id },
             });
         }
         await prisma_1.prisma.category.delete({ where: { id } });
@@ -623,9 +628,9 @@ class ProductService {
                 manufacturer: data.manufacturer || brandName || null,
                 unit: data.unit || (isMed ? "tablet" : "piece"),
                 size: data.size || null,
-                defaultPackType: data.defaultPackType || (isMed ? "BOX" : "PIECE"),
-                stripsPerBox: isMed ? (data.stripsPerBox || 10) : null,
-                tabletsPerStrip: isMed ? (data.tabletsPerStrip || 10) : null,
+                defaultPackType: "BOX",
+                stripsPerBox: data.stripsPerBox ? Number(data.stripsPerBox) : 10,
+                tabletsPerStrip: data.tabletsPerStrip ? Number(data.tabletsPerStrip) : 10,
                 minStockAlert: data.minStockAlert !== undefined ? data.minStockAlert : 10,
                 description: data.description || null,
                 isControlled: data.isControlled || false,
@@ -714,11 +719,21 @@ class ProductService {
             includeOptions.inventories = {
                 where: { branchId: query.branchId, quantity: { gt: 0 } },
                 orderBy: { expiryDate: "asc" },
+                include: {
+                    locations: {
+                        include: { rack: true, shelf: true, bin: true }
+                    }
+                }
             };
         }
         else {
             includeOptions.inventories = {
                 where: { quantity: { gt: 0 } },
+                include: {
+                    locations: {
+                        include: { rack: true, shelf: true, bin: true }
+                    }
+                }
             };
         }
         const [total, products] = await Promise.all([
@@ -764,6 +779,9 @@ class ProductService {
                 include: {
                     branch: { select: { id: true, name: true } },
                     supplier: { select: { id: true, name: true, phone: true } },
+                    locations: {
+                        include: { rack: true, shelf: true, bin: true }
+                    }
                 },
                 orderBy: { expiryDate: "asc" },
             },
@@ -804,6 +822,9 @@ class ProductService {
                 include: {
                     branch: { select: { id: true, name: true } },
                     supplier: { select: { id: true, name: true, phone: true } },
+                    locations: {
+                        include: { rack: true, shelf: true, bin: true }
+                    }
                 },
                 orderBy: { expiryDate: "asc" },
             },
@@ -896,9 +917,9 @@ class ProductService {
                 ...(data.manufacturer !== undefined && { manufacturer: data.manufacturer }),
                 ...(data.unit !== undefined && { unit: data.unit }),
                 ...(data.size !== undefined && { size: data.size }),
-                ...(data.defaultPackType !== undefined && { defaultPackType: data.defaultPackType }),
-                stripsPerBox: isMed ? (data.stripsPerBox !== undefined ? data.stripsPerBox : product.stripsPerBox) : null,
-                tabletsPerStrip: isMed ? (data.tabletsPerStrip !== undefined ? data.tabletsPerStrip : product.tabletsPerStrip) : null,
+                defaultPackType: "BOX",
+                stripsPerBox: data.stripsPerBox !== undefined ? (data.stripsPerBox ? Number(data.stripsPerBox) : null) : product.stripsPerBox,
+                tabletsPerStrip: data.tabletsPerStrip !== undefined ? (data.tabletsPerStrip ? Number(data.tabletsPerStrip) : null) : product.tabletsPerStrip,
                 ...(data.minStockAlert !== undefined && { minStockAlert: data.minStockAlert }),
                 ...(data.description !== undefined && { description: data.description }),
                 ...(data.isControlled !== undefined && { isControlled: data.isControlled }),

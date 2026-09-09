@@ -34,6 +34,7 @@ import {
   DollarSign,
   CalendarCheck,
   Lock,
+  FolderTree,
 } from "lucide-react";
 
 interface PharmacyRole {
@@ -46,188 +47,69 @@ interface PharmacyRole {
   createdAt?: string;
 }
 
-interface PermissionDef {
-  id: string;
-  name: string;
-  category: string;
-  description: string;
-  icon: React.ComponentType<{ className?: string }>;
+import {
+  PHARMACY_MODULE_PERMISSIONS,
+  CATEGORIES,
+  CategoryType,
+  PermissionDef,
+} from "@/lib/permissions";
+
+function getPermissionIcon(permId: string, category: string): React.ComponentType<{ className?: string }> {
+  switch (category) {
+    case "Dashboard":
+      return LayoutDashboard;
+    case "Sales & POS":
+      if (permId === "pos.history") return History;
+      if (permId === "pos.vat") return Percent;
+      if (permId === "accounts.payment_sales") return Wallet;
+      if (permId === "accounts.product_sales") return Package;
+      if (permId === "accounts.reports") return LayoutDashboard;
+      return ShoppingCart;
+    case "Category Management":
+      return FolderTree;
+    case "Inventory":
+      if (permId === "inventory.add_product") return Plus;
+      return Boxes;
+    case "Stock Management":
+      if (permId.includes("history")) return History;
+      if (permId.includes("add")) return Plus;
+      if (permId.includes("damaged")) return AlertCircle;
+      if (permId.includes("transfer")) return RefreshCw;
+      return Boxes;
+    case "Location Management":
+      if (permId.includes("create")) return Plus;
+      return Boxes;
+    case "Supplier Management":
+      if (permId.includes("history")) return Receipt;
+      if (permId.includes("due") || permId.includes("payment")) return DollarSign;
+      if (permId.includes("contact")) return Users;
+      return Truck;
+    case "Accounts & Finance":
+      if (permId.includes("history")) return History;
+      if (permId.includes("transfer")) return RefreshCw;
+      if (permId.includes("due")) return DollarSign;
+      return Wallet;
+    case "Expenses & Bills":
+      if (permId.includes("history")) return History;
+      if (permId.includes("pay")) return DollarSign;
+      return Receipt;
+    case "Employee & Salary":
+      if (permId.includes("history")) return History;
+      if (permId.includes("attendance") || permId.includes("offday")) return CalendarCheck;
+      if (permId.includes("deduction")) return Percent;
+      if (permId.includes("base_salary")) return Lock;
+      if (permId.includes("manage")) return Briefcase;
+      return Users;
+    case "Staff Management":
+      if (permId.includes("role")) return KeyRound;
+      if (permId.includes("create")) return Plus;
+      return Users;
+    case "Branch Network & Settings":
+      return Building2;
+    default:
+      return Shield;
+  }
 }
-
-const PHARMACY_MODULE_PERMISSIONS: PermissionDef[] = [
-  // 1. Dashboard
-  {
-    id: "dashboard.view",
-    name: "View Dashboard",
-    category: "Dashboard",
-    description: "Access main dashboard metrics, financial summaries, and branch status.",
-    icon: LayoutDashboard,
-  },
-  // 2. Sales & POS
-  {
-    id: "pos.manage",
-    name: "Manage Sales & POS",
-    category: "Sales & POS",
-    description: "Process live checkout, scan barcodes, dispense items, and generate invoices.",
-    icon: ShoppingCart,
-  },
-  {
-    id: "pos.history",
-    name: "View Sales History",
-    category: "Sales & POS",
-    description: "Inspect customer receipts, sales invoice history, and register logs.",
-    icon: History,
-  },
-  {
-    id: "pos.vat",
-    name: "Manage VAT Settings",
-    category: "Sales & POS",
-    description: "Configure tax percentages, VAT rules, and invoice print options.",
-    icon: Percent,
-  },
-  // 3. Inventory
-  {
-    id: "inventory.manage",
-    name: "Manage Inventory",
-    category: "Inventory",
-    description: "Manage product catalog, generic drugs, categories, and expired stock.",
-    icon: Package,
-  },
-  // 4. Stock Management
-  {
-    id: "stock.manage",
-    name: "Manage Stock",
-    category: "Stock Management",
-    description: "Add stock batches, perform counts, transfer stock, and receive inward orders.",
-    icon: Boxes,
-  },
-  // 5. Supplier Management
-  {
-    id: "suppliers.manage",
-    name: "Manage Suppliers",
-    category: "Supplier Management",
-    description: "Manage vendor contacts, purchase records, and supplier orders.",
-    icon: Truck,
-  },
-  // 6. Accounts & Finance
-  {
-    id: "accounts.manage",
-    name: "Manage Accounts & Finance",
-    category: "Accounts & Finance",
-    description: "Access financial overview, balance tracking, and ledger entries.",
-    icon: Wallet,
-  },
-  {
-    id: "accounts.financial_accounts",
-    name: "Manage Financial Accounts",
-    category: "Accounts & Finance",
-    description: "Manage cash drawers, bank accounts, and digital mobile payment wallets.",
-    icon: Wallet,
-  },
-  {
-    id: "accounts.fund_transfer",
-    name: "Fund Transfer",
-    category: "Accounts & Finance",
-    description: "Execute account-to-account internal fund transfers with audit trace.",
-    icon: Wallet,
-  },
-  {
-    id: "accounts.payment_sales",
-    name: "Payment Method Sales",
-    category: "Accounts & Finance",
-    description: "Analyze revenue breakdowns by cash, card, and digital payment methods.",
-    icon: Wallet,
-  },
-  {
-    id: "accounts.product_sales",
-    name: "Product-Wise Sales",
-    category: "Accounts & Finance",
-    description: "Inspect sales velocity and revenue contributions by items and categories.",
-    icon: Package,
-  },
-  {
-    id: "accounts.reports",
-    name: "Sales Reports",
-    category: "Accounts & Finance",
-    description: "Generate sales reports, profit/loss summaries, and financial analytics.",
-    icon: LayoutDashboard,
-  },
-  {
-    id: "accounts.supplier_due",
-    name: "Supplier Payments / Due",
-    category: "Accounts & Finance",
-    description: "Track unpaid supplier invoices, purchase dues, and record settlements.",
-    icon: Truck,
-  },
-  {
-    id: "accounts.expenses",
-    name: "Expenses & Bills",
-    category: "Accounts & Finance",
-    description: "Manage branch monthly expenses (Rent, Electricity, regular costs) and payment vouchers.",
-    icon: Receipt,
-  },
-  {
-    id: "accounts.salaries",
-    name: "Employee Salary Management",
-    category: "Accounts & Finance",
-    description: "Configure staff salary structures and disburse monthly payroll from branch accounts.",
-    icon: Briefcase,
-  },
-  {
-    id: "accounts.transaction_history",
-    name: "Transaction History",
-    category: "Accounts & Finance",
-    description: "Review complete financial ledger transactions and income/expense logs.",
-    icon: History,
-  },
-  // 7. Staff & Branch Administration
-  {
-    id: "staff.manage",
-    name: "Manage Staff",
-    category: "Staff Management",
-    description: "Create and manage pharmacy staff members and assign their roles.",
-    icon: Users,
-  },
-  {
-    id: "roles.manage",
-    name: "Manage Roles & Permissions",
-    category: "Staff Management",
-    description: "Create custom roles and customize operational permissions for your pharmacy.",
-    icon: KeyRound,
-  },
-  {
-    id: "branches.manage",
-    name: "Manage Branches",
-    category: "Branch Network",
-    description: "Configure branch locations, contact info, and branch settings.",
-    icon: Building2,
-  },
-  {
-    id: "attendance.manage",
-    name: "Attendance Management",
-    category: "Staff Management",
-    description: "Mark and finalize daily employee attendance and configure monthly off-days.",
-    icon: CalendarCheck,
-  },
-  {
-    id: "salaries.base_salary.edit",
-    name: "Configure Base Salary",
-    category: "Accounts & Finance",
-    description: "Set and update employee Base Salary packages (Pharmacy Owner & Branch Manager only).",
-    icon: Lock,
-  },
-];
-
-const CATEGORIES = [
-  "Dashboard",
-  "Sales & POS",
-  "Inventory",
-  "Stock Management",
-  "Supplier Management",
-  "Accounts & Finance",
-  "Staff Management",
-  "Branch Network",
-] as const;
 
 export function RolesModule() {
   const { user } = useAuth();
@@ -708,7 +590,7 @@ export function RolesModule() {
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                             {catPerms.map((perm) => {
                               const checked = formData.permissions.includes(perm.id);
-                              const Icon = perm.icon;
+                              const Icon = getPermissionIcon(perm.id, perm.category);
                               return (
                                 <div
                                   key={perm.id}

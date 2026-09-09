@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { AttendanceController } from "./attendance.controller";
+import { DeductionRuleController } from "./deductionRule.controller";
 import { authenticate } from "../../middleware/authenticate";
 import { requirePermission } from "../../middleware/requirePermission";
 import { requireActiveSubscription } from "../../middleware/planLimiter";
@@ -21,12 +22,12 @@ router.get("/my-history", AttendanceController.getMyHistory);
 // 2. Off-Day Configuration (Branch Manager / Owner)
 router.get(
   "/off-days",
-  requirePermission("accounts.salaries"),
+  requirePermission("attendance.offdays"),
   AttendanceController.getOffDays
 );
 router.post(
   "/off-days",
-  requirePermission("attendance.manage"),
+  requirePermission("attendance.offdays"),
   validateRequest({ body: setBranchOffDayConfigSchema }),
   AttendanceController.setOffDays
 );
@@ -47,56 +48,68 @@ router.post(
 // 4. Employee Attendance History & Calculations (Branch Manager / Owner)
 router.get(
   "/employee-history/:userId",
-  requirePermission("accounts.salaries"),
+  requirePermission("attendance.manage"),
   AttendanceController.getEmployeeHistory
 );
 router.get(
   "/employee-history",
-  requirePermission("accounts.salaries"),
+  requirePermission("attendance.manage"),
   AttendanceController.getEmployeeHistory
 );
 
 router.get(
   "/salary-calc",
-  requirePermission("accounts.salaries"),
+  requirePermission("salary.manage"),
   AttendanceController.getSalaryCalc
 );
 
 router.get(
   "/summary",
-  requirePermission("accounts.salaries"),
+  requirePermission("attendance.manage"),
   AttendanceController.getBranchSummary
 );
 
 // 5. Dynamic Monthly Allowances (Branch Manager / Owner)
 router.get(
   "/allowances",
-  requirePermission("accounts.salaries"),
+  requirePermission("salary.manage"),
   AttendanceController.listAllowances
 );
 router.post(
   "/allowances",
-  requirePermission("accounts.salaries"),
+  requirePermission("salary.manage"),
   validateRequest({ body: createAllowanceSchema }),
   AttendanceController.addAllowance
 );
 router.delete(
   "/allowances/:id",
-  requirePermission("accounts.salaries"),
+  requirePermission("salary.manage"),
   AttendanceController.deleteAllowance
 );
 
 // 6. Employee Resignation / Deactivation (Branch Manager / Owner)
 router.post(
   "/employees/:id/deactivate",
-  requirePermission("accounts.salaries"),
+  requirePermission("employee.view"),
   validateRequest({ body: deactivateEmployeeSchema }),
   AttendanceController.deactivateEmployee
 );
 router.post(
   "/employees/:id/reactivate",
-  requirePermission("accounts.salaries"),
+  requirePermission("employee.view"),
   AttendanceController.reactivateEmployee
+);
+
+// 7. Salary Deduction Rules
+router.get(
+  "/deduction-rules",
+  requirePermission("salary.deductions"),
+  DeductionRuleController.getRules
+);
+router.put(
+  "/deduction-rules",
+  requirePermission("salary.deductions"),
+  DeductionRuleController.setRules
 );
 
 export const attendanceRoutes = router;

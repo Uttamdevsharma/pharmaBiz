@@ -8,6 +8,8 @@ exports.createCategorySchema = zod_1.z.object({
     productType: zod_1.z.enum(["MEDICINE", "SYRUP", "EQUIPMENT", "SALINE", "OTHER"]).optional().nullable(),
     defaultUnit: zod_1.z.string().optional().nullable(),
     description: zod_1.z.string().optional().nullable(),
+    isActive: zod_1.z.boolean().optional().default(true),
+    subcategories: zod_1.z.array(zod_1.z.string().min(1)).optional(),
 });
 exports.updateCategorySchema = exports.createCategorySchema.partial().extend({
     isActive: zod_1.z.boolean().optional(),
@@ -44,12 +46,12 @@ exports.createProductSchema = zod_1.z.object({
     manufacturer: zod_1.z.string().optional().nullable(),
     unit: zod_1.z.string().default("piece"),
     size: zod_1.z.string().optional().nullable(),
-    defaultPackType: zod_1.z.string().default("PIECE"),
+    defaultPackType: zod_1.z.string().default("BOX"),
     stripsPerBox: zod_1.z.number().int().positive().optional().nullable(),
     tabletsPerStrip: zod_1.z.number().int().positive().optional().nullable(),
-    minStockAlert: zod_1.z.number().int().nonnegative().default(10),
+    minStockAlert: zod_1.z.number().int().nonnegative().optional().default(10),
     description: zod_1.z.string().optional().nullable(),
-    isControlled: zod_1.z.boolean().default(false),
+    isControlled: zod_1.z.boolean().optional().default(false),
     requiresPrescription: zod_1.z.boolean().default(false),
 });
 exports.updateProductSchema = exports.createProductSchema.partial().extend({

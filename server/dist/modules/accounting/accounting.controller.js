@@ -8,7 +8,9 @@ class AccountingController {
     static async listAccounts(req, res) {
         try {
             const tenantId = req.user.tenantId;
-            const branchId = req.query.branchId;
+            const user = req.user;
+            const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN";
+            const branchId = isOwner ? req.query.branchId : (user.branchId || req.query.branchId);
             const accounts = await accounting_service_1.AccountingService.listAccounts(tenantId, branchId);
             res.json({ success: true, data: accounts });
         }
@@ -46,6 +48,21 @@ class AccountingController {
             const accountId = req.params.id;
             await accounting_service_1.AccountingService.deleteAccount(tenantId, accountId, userId);
             res.status(200).json({ success: true, message: "Financial account removed successfully" });
+        }
+        catch (err) {
+            res.status(400).json({ success: false, message: err.message });
+        }
+    }
+    static async depositFunds(req, res) {
+        try {
+            const tenantId = req.user.tenantId;
+            const userId = req.user.id;
+            const account = await accounting_service_1.AccountingService.depositFunds(tenantId, userId, req.body);
+            res.json({
+                success: true,
+                message: `Successfully deposited funds into ${account.name}`,
+                data: account,
+            });
         }
         catch (err) {
             res.status(400).json({ success: false, message: err.message });
@@ -207,7 +224,9 @@ class AccountingController {
     static async listBranchStaffSalaries(req, res) {
         try {
             const tenantId = req.user.tenantId;
-            const branchId = req.query.branchId || req.user.branchId;
+            const user = req.user;
+            const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN";
+            const branchId = isOwner ? (req.query.branchId || user.branchId || "") : (user.branchId || req.query.branchId || "");
             const month = req.query.month || new Date().toISOString().slice(0, 7);
             const includeInactive = req.query.includeInactive === "true" || req.query.includeInactive === "1";
             if (!branchId) {
@@ -226,7 +245,12 @@ class AccountingController {
             const user = req.user;
             const tenantId = user.tenantId;
             const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN";
-            const isBranchManager = user.role === "BRANCH_MANAGER";
+            const isBranchManager = user.role === "BRANCH_MANAGER" ||
+                user.pharmacyRoleName?.toLowerCase().includes("branch manager") ||
+                user.customRoleName?.toLowerCase().includes("branch manager") ||
+                user.permissions?.includes("salaries.base_salary.edit") ||
+                user.permissions?.includes("accounts.salaries") ||
+                user.permissions?.includes("*");
             // Only Pharmacy Owner and Branch Manager can set or update Base Salary
             if (!isOwner && !isBranchManager) {
                 const existing = await prisma_1.prisma.employeeSalaryConfig.findUnique({
@@ -238,16 +262,20 @@ class AccountingController {
                     },
                 });
                 const incomingBase = Number(req.body.baseSalary);
-                if (!existing || Number(existing.baseSalary) !== incomingBase) {
+                if (existing && existing.baseSalary !== incomingBase) {
                     res.status(403).json({
                         success: false,
-                        message: "Forbidden: Only Pharmacy Owner and Branch Manager can set or update Base Salary. Accounts Manager cannot modify Base Salary.",
+                        message: "Forbidden: Only Pharmacy Owner and Branch Manager can set or update Base Salary.",
                     });
                     return;
                 }
             }
-            const config = await accounting_service_1.AccountingService.setSalaryConfig(tenantId, req.body);
-            res.json({ success: true, data: config, message: "Salary configuration saved successfully" });
+            const branchId = isOwner ? (req.body.branchId || user.branchId) : (user.branchId || req.body.branchId);
+            const result = await accounting_service_1.AccountingService.setSalaryConfig(tenantId, {
+                ...req.body,
+                branchId,
+            });
+            res.json({ success: true, message: "Salary configuration saved successfully", data: result });
         }
         catch (err) {
             res.status(400).json({ success: false, message: err.message });
@@ -255,9 +283,20 @@ class AccountingController {
     }
     static async disburseSalary(req, res) {
         try {
-            const tenantId = req.user.tenantId;
-            const disbursedById = req.user.id;
-            const result = await accounting_service_1.AccountingService.disburseSalary(tenantId, disbursedById, req.body);
+            const user = req.user;
+            const tenantId = user.tenantId;
+            const disbursedById = user.id;
+            const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN";
+            const branchId = isOwner ? (req.body.branchId || user.branchId || "") : (user.branchId || req.body.branchId || "");
+            if (!branchId) {
+                res.status(400).json({ success: false, message: "Branch ID is required" });
+                return;
+            }
+            const payload = {
+                ...req.body,
+                branchId,
+            };
+            const result = await accounting_service_1.AccountingService.disburseSalary(tenantId, disbursedById, payload);
             res.status(201).json({ success: true, data: result, message: "Salary paid successfully and financial account debited" });
         }
         catch (err) {
@@ -267,7 +306,9 @@ class AccountingController {
     static async getBranchSalaryHistory(req, res) {
         try {
             const tenantId = req.user.tenantId;
-            const branchId = req.query.branchId || req.user.branchId;
+            const user = req.user;
+            const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN";
+            const branchId = isOwner ? (req.query.branchId || user.branchId || "") : (user.branchId || req.query.branchId || "");
             const month = req.query.month;
             const userId = req.query.userId;
             const page = req.query.page ? parseInt(req.query.page, 10) : 1;
@@ -288,16 +329,20 @@ class AccountingController {
         try {
             const tenantId = req.user.tenantId;
             const userId = req.params.userId;
-            const actorRole = req.user.role;
+            const user = req.user;
+            const actorRole = user.role;
             const isManagerOrAccounts = actorRole === "COMPANY_OWNER" ||
                 actorRole === "SUPER_ADMIN" ||
+                actorRole === "REGIONAL_ADMIN" ||
                 actorRole === "BRANCH_MANAGER" ||
-                actorRole === "ACCOUNTS";
-            if (!isManagerOrAccounts && req.user.id !== userId) {
+                actorRole === "ACCOUNTS" ||
+                user.pharmacyRoleName?.toLowerCase().includes("branch manager") ||
+                user.customRoleName?.toLowerCase().includes("branch manager");
+            if (!isManagerOrAccounts && user.id !== userId) {
                 res.status(403).json({ success: false, message: "Forbidden: You can only view your own salary history." });
                 return;
             }
-            const history = await accounting_service_1.AccountingService.getEmployeeSalaryHistory(tenantId, userId);
+            const history = await accounting_service_1.AccountingService.getEmployeeSalaryHistory(tenantId, userId, user);
             res.json({ success: true, data: history });
         }
         catch (err) {

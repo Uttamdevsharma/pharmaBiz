@@ -27,6 +27,7 @@ const upload_routes_1 = require("./modules/upload/upload.routes");
 const supplier_routes_1 = require("./modules/supplier/supplier.routes");
 const accounting_routes_1 = require("./modules/accounting/accounting.routes");
 const attendance_routes_1 = require("./modules/attendance/attendance.routes");
+const location_routes_1 = __importDefault(require("./modules/location/location.routes"));
 const payment_controller_1 = require("./modules/payment/payment.controller");
 const app = (0, express_1.default)();
 const port = process.env.PORT || 3000;
@@ -78,6 +79,7 @@ app.use("/api/upload", upload_routes_1.uploadRoutes);
 app.use("/api/suppliers", supplier_routes_1.supplierRoutes);
 app.use("/api/accounting", accounting_routes_1.accountingRoutes);
 app.use("/api/attendance", attendance_routes_1.attendanceRoutes);
+app.use("/api/locations", location_routes_1.default);
 // Fallback & direct gateway callbacks on root /payment/* (Supports both GET and POST)
 app.all("/payment/success", payment_controller_1.PaymentController.handleSuccess);
 app.all("/payment/fail", payment_controller_1.PaymentController.handleFail);
@@ -104,4 +106,5 @@ app.listen(port, async () => {
     await (0, seedAdmin_1.seedSuperAdmin)();
     subscription_expiry_service_1.SubscriptionExpiryService.initAutomatedScheduler();
 });
+// Trigger backend restart for Prisma Client update
 exports.default = app;

@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.disburseSalarySchema = exports.setSalaryConfigSchema = exports.listExpensesQuerySchema = exports.recordExpensePaymentSchema = exports.updateRecurringExpenseSchema = exports.createRecurringExpenseSchema = exports.listTransactionsQuerySchema = exports.recordTransactionSchema = exports.transferFundsSchema = exports.updateAccountSchema = exports.createAccountSchema = void 0;
+exports.disburseSalarySchema = exports.setSalaryConfigSchema = exports.listExpensesQuerySchema = exports.recordExpensePaymentSchema = exports.updateRecurringExpenseSchema = exports.createRecurringExpenseSchema = exports.listTransactionsQuerySchema = exports.recordTransactionSchema = exports.transferFundsSchema = exports.depositFundsSchema = exports.updateAccountSchema = exports.createAccountSchema = void 0;
 const zod_1 = require("zod");
 exports.createAccountSchema = zod_1.z.object({
     branchId: zod_1.z.string().uuid("Invalid branch ID"),
@@ -23,6 +23,11 @@ exports.updateAccountSchema = zod_1.z.object({
     isDefault: zod_1.z.boolean().optional(),
     description: zod_1.z.string().optional().nullable(),
     isActive: zod_1.z.boolean().optional(),
+});
+exports.depositFundsSchema = zod_1.z.object({
+    accountId: zod_1.z.string().uuid("Invalid account ID"),
+    amount: zod_1.z.number().positive("Deposit amount must be greater than 0"),
+    description: zod_1.z.string().optional().nullable(),
 });
 exports.transferFundsSchema = zod_1.z.object({
     branchId: zod_1.z.string().uuid("Invalid branch ID"),

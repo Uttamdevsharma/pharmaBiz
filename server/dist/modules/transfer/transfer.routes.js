@@ -13,14 +13,14 @@ exports.transferRoutes = router;
 // Inter-branch transfers require active subscription
 router.use(authenticate_1.authenticate, planLimiter_1.requireActiveSubscription);
 // List & Details
-router.get("/damaged-products", (0, requirePermission_1.requirePermission)("stock.manage"), transfer_controller_1.TransferController.getDamagedProducts);
-router.get("/", (0, requirePermission_1.requirePermission)("stock.manage"), (0, validate_1.validateRequest)({ query: transfer_validation_1.listTransfersQuerySchema }), transfer_controller_1.TransferController.listTransfers);
-router.get("/:id", (0, requirePermission_1.requirePermission)("stock.manage"), transfer_controller_1.TransferController.getTransferDetails);
+router.get("/damaged-products", (0, requirePermission_1.requirePermission)("stock.damaged"), transfer_controller_1.TransferController.getDamagedProducts);
+router.get("/", (0, requirePermission_1.requirePermission)("stock.transfer_history"), (0, validate_1.validateRequest)({ query: transfer_validation_1.listTransfersQuerySchema }), transfer_controller_1.TransferController.listTransfers);
+router.get("/:id", (0, requirePermission_1.requirePermission)("stock.transfer_history"), transfer_controller_1.TransferController.getTransferDetails);
 // Create & Dispatch Transfer
-router.post("/", (0, requirePermission_1.requirePermission)("stock.manage"), (0, validate_1.validateRequest)({ body: transfer_validation_1.createTransferSchema }), transfer_controller_1.TransferController.createTransfer);
+router.post("/", (0, requirePermission_1.requirePermission)("stock.transfer"), (0, validate_1.validateRequest)({ body: transfer_validation_1.createTransferSchema }), transfer_controller_1.TransferController.createTransfer);
 // Receive Shipment (with damaged/missing quantities & optional immediate settlement)
-router.post("/:id/receive", (0, requirePermission_1.requirePermission)("stock.manage"), (0, validate_1.validateRequest)({ body: transfer_validation_1.receiveTransferSchema }), transfer_controller_1.TransferController.receiveTransfer);
+router.post("/:id/receive", (0, requirePermission_1.requirePermission)("stock.receive"), (0, validate_1.validateRequest)({ body: transfer_validation_1.receiveTransferSchema }), transfer_controller_1.TransferController.receiveTransfer);
 // Settle Transfer Payable (Pay destination payable to source branch account)
-router.post("/:id/settle", (0, requirePermission_1.requirePermission)("stock.manage"), (0, validate_1.validateRequest)({ body: transfer_validation_1.settleTransferSchema }), transfer_controller_1.TransferController.settleTransfer);
+router.post("/:id/settle", (0, requirePermission_1.requirePermission)("stock.receive"), (0, validate_1.validateRequest)({ body: transfer_validation_1.settleTransferSchema }), transfer_controller_1.TransferController.settleTransfer);
 // Cancel Transfer (Returns stock to source branch)
-router.post("/:id/cancel", (0, requirePermission_1.requirePermission)("stock.manage"), transfer_controller_1.TransferController.cancelTransfer);
+router.post("/:id/cancel", (0, requirePermission_1.requirePermission)("stock.transfer"), transfer_controller_1.TransferController.cancelTransfer);

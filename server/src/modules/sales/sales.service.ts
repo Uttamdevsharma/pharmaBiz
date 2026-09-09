@@ -36,15 +36,15 @@ export class SalesService {
 
     const productMap = new Map(products.map((p: any) => [p.id, p]));
 
-    // 3. Check for Controlled or Prescription Drugs requirement
-    const controlledOrPrescriptionItems = products.filter(
-      (p: any) => p.isControlled || p.requiresPrescription
+    // 3. Check for Doctor Prescription (Rx) requirement
+    const prescriptionItems = products.filter(
+      (p: any) => p.requiresPrescription
     );
 
-    if (controlledOrPrescriptionItems.length > 0 && !data.managerApprovedBy) {
-      const names = controlledOrPrescriptionItems.map((p: any) => p.name).join(", ");
+    if (prescriptionItems.length > 0 && !data.prescriptionRef?.trim() && !data.managerApprovedBy?.trim()) {
+      const names = prescriptionItems.map((p: any) => p.name).join(", ");
       throw new Error(
-        `Sale contains controlled or prescription medication (${names}). Manager authorization or prescription reference is required.`
+        `Prescription Required: The item(s) "${names}" require a doctor prescription. Please provide the doctor prescription reference or confirmation details.`
       );
     }
 
@@ -57,6 +57,7 @@ export class SalesService {
         quantity: { gt: 0 },
         OR: [{ expiryDate: null }, { expiryDate: { gt: now } }],
       },
+      include: { locations: true },
       orderBy: [{ expiryDate: "asc" }, { createdAt: "asc" }],
     });
 
@@ -72,7 +73,7 @@ export class SalesService {
     // 5. Verify total stock per product and prepare FEFO deduction plan
     let calculatedSubTotal = 0;
     const preparedSaleItems: any[] = [];
-    const stockDeductions: Array<{ inventoryId: string; quantityToDeduct: number; productId: string }> = [];
+    const stockDeductions: Array<{ inventoryId: string; inventoryLocationId: string | null; quantityToDeduct: number; productId: string; inventoryLocationData: any }> = [];
 
     for (const item of data.items) {
       const prod: any = productMap.get(item.productId)!;
@@ -81,7 +82,6 @@ export class SalesService {
 
       const override = prod.branchOverrides && prod.branchOverrides[0];
       const baseUnitPrice = override ? Number(override.price) : Number(prod.basePrice);
-      // If client provided custom unitPrice, use it, else calculate from baseUnitPrice * multiplier
       const effectiveUnitPrice = item.unitPrice !== undefined ? Number(item.unitPrice) : baseUnitPrice * multiplier;
       const itemSubTotal = effectiveUnitPrice * item.quantity;
       calculatedSubTotal += itemSubTotal;
@@ -95,69 +95,115 @@ export class SalesService {
         );
       }
 
+      let targetBatch: any = null;
+      let targetLocation: any = null;
+
       // If a specific batch inventoryId was specified and has enough stock
       if (item.inventoryId) {
-        const targetBatch = batches.find((b) => b.id === item.inventoryId);
-        if (!targetBatch || targetBatch.quantity < totalBaseUnitsNeeded) {
-          throw new Error(
-            `Selected batch for "${prod.name}" has insufficient stock (${targetBatch?.quantity || 0} available).`
-          );
+        targetBatch = batches.find((b: any) => b.id === item.inventoryId);
+        if (!targetBatch) {
+          throw new Error(`Selected batch not found or expired for "${prod.name}"`);
         }
 
-        stockDeductions.push({
-          inventoryId: targetBatch.id,
-          quantityToDeduct: totalBaseUnitsNeeded,
-          productId: item.productId,
-        });
+        // Validate expiry at sale time
+        if (targetBatch.expiryDate && targetBatch.expiryDate <= now) {
+          throw new Error(`Batch ${targetBatch.batchNumber} for "${prod.name}" has expired and cannot be sold.`);
+        }
 
-        preparedSaleItems.push({
-          productId: item.productId,
-          inventoryId: targetBatch.id,
-          batchNumber: targetBatch.batchNumber || item.batchNumber || null,
-          expiryDate: targetBatch.expiryDate || null,
-          unitType: item.unitType || prod.defaultPackType || "PIECE",
-          unitMultiplier: multiplier,
-          quantity: item.quantity,
-          lowestUnitQuantity: totalBaseUnitsNeeded,
-          unitPrice: effectiveUnitPrice,
-          purchasePrice: targetBatch.purchasePrice || null,
-          subTotal: itemSubTotal,
-        });
+        if (!targetBatch.locations || targetBatch.locations.length === 0) {
+          targetBatch.locations = [];
+        }
+
+        if (item.inventoryLocationId) {
+          targetLocation = (targetBatch.locations || []).find((l: any) => l.id === item.inventoryLocationId);
+          if (!targetLocation || targetLocation.quantity < totalBaseUnitsNeeded) {
+            throw new Error(
+              `Selected physical location for "${prod.name}" has insufficient stock (${targetLocation?.quantity || 0} available, ${totalBaseUnitsNeeded} needed).`
+            );
+          }
+        } else {
+          // Find first location with enough stock (FEFO within batch)
+          const sortedLocations = (targetBatch.locations || []).sort((a: any, b: any) => a.quantity - b.quantity);
+          targetLocation = sortedLocations.find((l: any) => l.quantity >= totalBaseUnitsNeeded);
+          if (!targetLocation && (targetBatch.locations || []).length > 0) {
+            // Try to combine from locations
+            targetLocation = (targetBatch.locations || [])[0];
+            if (targetLocation && targetLocation.quantity < totalBaseUnitsNeeded) {
+              throw new Error(
+                `No single physical location has enough stock for "${prod.name}". Please select a specific location with sufficient quantity.`
+              );
+            }
+          }
+        }
       } else {
         // Apply FEFO allocation across batches
         let unitsRemainingToDeduct = totalBaseUnitsNeeded;
         let primaryBatch: any = null;
+        let primaryLocation: any = null;
 
         for (const batch of batches) {
           if (unitsRemainingToDeduct <= 0) break;
           if (batch.quantity <= 0) continue;
 
+          // Validate expiry
+          if (batch.expiryDate && batch.expiryDate <= now) continue;
+
           const deductFromThisBatch = Math.min(batch.quantity, unitsRemainingToDeduct);
           batch.quantity -= deductFromThisBatch;
           unitsRemainingToDeduct -= deductFromThisBatch;
 
-          if (!primaryBatch) primaryBatch = batch;
-
-          stockDeductions.push({
-            inventoryId: batch.id,
-            quantityToDeduct: deductFromThisBatch,
-            productId: item.productId,
-          });
+          if (!primaryBatch) {
+            primaryBatch = batch;
+            // Find a location in this batch with stock
+            const sortedLocs = (batch.locations || []).sort((a: any, b: any) => a.quantity - b.quantity);
+            primaryLocation = sortedLocs.length > 0 ? sortedLocs[0] : null;
+          }
         }
 
-        preparedSaleItems.push({
-          productId: item.productId,
-          inventoryId: primaryBatch?.id || null,
-          batchNumber: primaryBatch?.batchNumber || item.batchNumber || null,
-          expiryDate: primaryBatch?.expiryDate || null,
-          unitType: item.unitType || prod.defaultPackType || "PIECE",
-          unitMultiplier: multiplier,
-          quantity: item.quantity,
-          lowestUnitQuantity: totalBaseUnitsNeeded,
-          unitPrice: effectiveUnitPrice,
-          purchasePrice: primaryBatch?.purchasePrice || null,
-          subTotal: itemSubTotal,
-        });
+        if (unitsRemainingToDeduct > 0) {
+          throw new Error(
+            `Insufficient non-expired stock for "${prod.name}". Need ${totalBaseUnitsNeeded} base units.`
+          );
+        }
+
+        targetBatch = primaryBatch;
+        targetLocation = primaryLocation;
+      }
+
+      // Build stock deduction record
+      stockDeductions.push({
+        inventoryId: targetBatch.id,
+        inventoryLocationId: targetLocation ? targetLocation.id : null,
+        quantityToDeduct: totalBaseUnitsNeeded,
+        productId: item.productId,
+        inventoryLocationData: targetLocation || null,
+      });
+
+      preparedSaleItems.push({
+        productId: item.productId,
+        inventoryId: targetBatch.id,
+        inventoryLocationId: targetLocation ? targetLocation.id : null,
+        batchNumber: targetBatch.batchNumber || item.batchNumber || null,
+        expiryDate: targetBatch.expiryDate || null,
+        unitType: item.unitType || prod.defaultPackType || "PIECE",
+        unitMultiplier: multiplier,
+        quantity: item.quantity,
+        lowestUnitQuantity: totalBaseUnitsNeeded,
+        unitPrice: effectiveUnitPrice,
+        purchasePrice: targetBatch.purchasePrice || null,
+        subTotal: itemSubTotal,
+      });
+    }
+
+    // Validate all locations have enough stock before proceeding
+    for (const deduction of stockDeductions) {
+      if (deduction.inventoryLocationId && deduction.inventoryLocationData) {
+        const loc = deduction.inventoryLocationData;
+        if (loc.quantity < deduction.quantityToDeduct) {
+          throw new Error(
+            `Insufficient stock at physical location for this sale. Location has ${loc.quantity}, need ${deduction.quantityToDeduct}.`
+          );
+        }
       }
     }
 
@@ -233,19 +279,33 @@ export class SalesService {
 
       // Deduct Inventory batches & record stock movements
       for (const deduction of stockDeductions) {
+        const locData = deduction.inventoryLocationData;
+        const locLabel = locData
+          ? `${locData.rack?.name || locData.rackName || "?"} → ${locData.shelf?.name || locData.shelfName || "?"} → ${locData.bin?.name || locData.binName || "?"}`
+          : "Bulk Storage";
+
         await tx.inventory.update({
           where: { id: deduction.inventoryId },
           data: { quantity: { decrement: deduction.quantityToDeduct } },
         });
+
+        if (deduction.inventoryLocationId && locData) {
+          await tx.inventoryLocation.update({
+            where: { id: deduction.inventoryLocationId },
+            data: { quantity: { decrement: deduction.quantityToDeduct } },
+          });
+        }
 
         await tx.stockMovement.create({
           data: {
             branchId: data.branchId,
             productId: deduction.productId,
             inventoryId: deduction.inventoryId,
+            fromLocationId: deduction.inventoryLocationId || null,
             type: "SALE",
             quantity: -deduction.quantityToDeduct,
-            reason: `POS Sale Receipt #${receiptNo}`,
+            unitPrice: preparedSaleItems.find((i: any) => i.productId === deduction.productId)?.purchasePrice || 0,
+            reason: `POS Sale Receipt #${receiptNo} [${locLabel}]`,
             referenceId: createdSale.id,
             performedBy: userId,
           },

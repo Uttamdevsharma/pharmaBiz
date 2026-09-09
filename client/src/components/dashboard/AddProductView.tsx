@@ -12,7 +12,7 @@ import {
   AlertCircle,
   Loader2,
   Layers,
-  ShieldAlert,
+  Edit2,
   Sparkles,
   Plus,
   X,
@@ -39,11 +39,11 @@ export function AddProductView({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [isPackagingEditing, setIsPackagingEditing] = useState(true);
 
   // Quick Subcategory Modal
   const [quickSubModalOpen, setQuickSubModalOpen] = useState(false);
   const [quickSubName, setQuickSubName] = useState("");
-  const [quickSubUnit, setQuickSubUnit] = useState("tablet");
   const [quickSubSaving, setQuickSubSaving] = useState(false);
 
   // Quick Brand Modal
@@ -63,12 +63,10 @@ export function AddProductView({
     brandName: editingProduct?.brandName || "",
     unit: editingProduct?.unit || "tablet",
     size: editingProduct?.size || "500mg",
-    defaultPackType: editingProduct?.defaultPackType || "BOX",
+    defaultPackType: "BOX",
     stripsPerBox: editingProduct?.stripsPerBox || 10,
     tabletsPerStrip: editingProduct?.tabletsPerStrip || 10,
-    minStockAlert: editingProduct?.minStockAlert || 20,
     description: editingProduct?.description || "",
-    isControlled: Boolean(editingProduct?.isControlled),
     requiresPrescription: Boolean(editingProduct?.requiresPrescription),
   });
 
@@ -176,7 +174,6 @@ export function AddProductView({
         body: JSON.stringify({
           name: quickSubName.trim(),
           parentId: formData.categoryId,
-          defaultUnit: quickSubUnit.trim() || null,
         }),
       });
 
@@ -244,12 +241,10 @@ export function AddProductView({
         manufacturer: formData.brandName || null,
         unit: formData.unit,
         size: formData.size || null,
-        defaultPackType: formData.defaultPackType,
-        stripsPerBox: isMedicineCategory ? Number(formData.stripsPerBox) : null,
-        tabletsPerStrip: isMedicineCategory ? Number(formData.tabletsPerStrip) : null,
-        minStockAlert: Number(formData.minStockAlert),
+        defaultPackType: "BOX",
+        stripsPerBox: Number(formData.stripsPerBox) || 10,
+        tabletsPerStrip: Number(formData.tabletsPerStrip) || 10,
         description: formData.description || null,
-        isControlled: formData.isControlled,
         requiresPrescription: formData.requiresPrescription,
       };
 
@@ -299,9 +294,7 @@ export function AddProductView({
       defaultPackType: "BOX",
       stripsPerBox: 10,
       tabletsPerStrip: 10,
-      minStockAlert: 20,
       description: "",
-      isControlled: false,
       requiresPrescription: false,
     });
   };
@@ -488,17 +481,7 @@ export function AddProductView({
                 </label>
                 <button
                   type="button"
-                  onClick={() => {
-                    const parent = categories.find((c) => c.id === formData.categoryId);
-                    if (parent) {
-                      if (parent.name === "Medicine") setQuickSubUnit("tablet");
-                      else if (parent.name === "Syrup") setQuickSubUnit("bottle");
-                      else if (parent.name === "Medical Equipment") setQuickSubUnit("piece");
-                      else if (parent.name.includes("Saline")) setQuickSubUnit("bag");
-                      else setQuickSubUnit("piece");
-                    }
-                    setQuickSubModalOpen(true);
-                  }}
+                  onClick={() => setQuickSubModalOpen(true)}
                   className="text-[11px] text-brand-primary hover:underline font-bold flex items-center gap-0.5"
                 >
                   <Plus className="h-3 w-3" />
@@ -549,7 +532,7 @@ export function AddProductView({
 
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                Base Selling Price (per {formData.unit}) *
+                Base Selling Price (per Box) *
               </label>
               <div className="relative">
                 <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
@@ -569,177 +552,111 @@ export function AddProductView({
           </div>
         </div>
 
-        {/* Section 3: Multi-Unit Packaging (If Medicine) */}
-        {isMedicineCategory ? (
-          <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-            <div className="font-black text-sm text-slate-900 dark:text-white flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <span className="flex items-center gap-2">
-                <Package className="h-4 w-4 text-brand-primary" />
-                3. Packaging & Dispensing Units (Box → Strip → Tablet)
-              </span>
-              <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                Medicine Packaging Active
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Default Sales Unit
-                </label>
-                <select
-                  value={formData.defaultPackType}
-                  onChange={(e) => setFormData({ ...formData, defaultPackType: e.target.value })}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white font-bold outline-none"
-                >
-                  <option value="BOX">Full Box</option>
-                  <option value="STRIP">Strip / Pouch</option>
-                  <option value="TABLET">Individual Tablet / Capsule</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Strips per Box
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  value={formData.stripsPerBox}
-                  onChange={(e) =>
-                    setFormData({ ...formData, stripsPerBox: parseInt(e.target.value) || 1 })
-                  }
-                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Tablets / Capsules per Strip
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  value={formData.tabletsPerStrip}
-                  onChange={(e) =>
-                    setFormData({ ...formData, tabletsPerStrip: parseInt(e.target.value) || 1 })
-                  }
-                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none"
-                />
-              </div>
-            </div>
-
-            <div className="p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-600 dark:text-slate-400">
-              💡 <strong>Automatic Multiplier:</strong> 1 Box = {formData.stripsPerBox} Strips ={" "}
-              {formData.stripsPerBox * formData.tabletsPerStrip} Tablets. Inwarding and POS calculations will automatically convert between Boxes, Strips, and Tablets.
-            </div>
-          </div>
-        ) : (
-          <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-            <div className="font-black text-sm text-slate-900 dark:text-white flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <span className="flex items-center gap-2">
-                <Package className="h-4 w-4 text-brand-primary" />
-                3. Dispensing Unit & Packaging
-              </span>
-              <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-                {selectedCategoryObj?.name || "Standard Item"}
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Sales Dispensing Unit
-                </label>
-                <input
-                  type="text"
-                  value={formData.unit}
-                  onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                  placeholder="e.g. bottle, piece, bag, pack, set"
-                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Package Type
-                </label>
-                <select
-                  value={formData.defaultPackType}
-                  onChange={(e) => setFormData({ ...formData, defaultPackType: e.target.value })}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none"
-                >
-                  <option value="PIECE">Single Piece</option>
-                  <option value="BOTTLE">Bottle</option>
-                  <option value="BAG">Infusion Bag</option>
-                  <option value="BOX">Box / Carton</option>
-                  <option value="PACK">Pack / Tin</option>
-                </select>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Section 4: Storage, Clinical Flags & Alerts */}
+        {/* Section 3: Packaging & Dispensing Units */}
         <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-          <div className="font-black text-sm text-slate-900 dark:text-white flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
-            <ShieldAlert className="h-4 w-4 text-brand-primary" />
-            4. Storage Location, Minimum Threshold & Clinical Alerts
+          <div className="font-black text-sm text-slate-900 dark:text-white flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+            <span className="flex items-center gap-2">
+              <Package className="h-4 w-4 text-brand-primary" />
+              3. Packaging & Dispensing Units
+            </span>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-bold px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1.5">
+                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                Full Box • {formData.stripsPerBox || 10} Strips per Box • {formData.tabletsPerStrip || 10} Tablets per Strip
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsPackagingEditing(!isPackagingEditing)}
+                className="text-xs font-bold px-3 py-1 rounded-xl bg-slate-100 dark:bg-slate-800 text-brand-primary hover:bg-brand-primary hover:text-white transition flex items-center gap-1"
+              >
+                <Edit2 className="h-3 w-3" />
+                {isPackagingEditing ? "Lock Config" : "Edit Packaging"}
+              </button>
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Fixed Default Sales Unit */}
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                Low Stock Alert Threshold ({formData.unit}s)
+                Default Sales Unit
+              </label>
+              <div className="w-full px-3.5 py-2.5 bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-200 font-bold flex items-center justify-between">
+                <span>Full Box</span>
+                <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-bold px-2 py-0.5 bg-emerald-100 dark:bg-emerald-950/50 rounded-full">
+                  Fixed / Default
+                </span>
+              </div>
+              <p className="text-[10px] text-slate-400 mt-1">Default sales unit is permanently fixed to Full Box</p>
+            </div>
+
+            {/* Strips per Box */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                Strips per Box *
               </label>
               <input
                 type="number"
                 min="1"
-                value={formData.minStockAlert}
+                required
+                disabled={!isPackagingEditing}
+                value={formData.stripsPerBox}
                 onChange={(e) =>
-                  setFormData({ ...formData, minStockAlert: parseInt(e.target.value) || 10 })
+                  setFormData({ ...formData, stripsPerBox: parseInt(e.target.value) || 1 })
                 }
-                className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-brand-primary/20"
+                className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-brand-primary/20 disabled:opacity-75 disabled:bg-slate-100 dark:disabled:bg-slate-800/40"
               />
+              <p className="text-[10px] text-slate-400 mt-1">Number of strips in 1 box</p>
+            </div>
+
+            {/* Tablets / Capsules per Strip */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                Tablets / Capsules per Strip *
+              </label>
+              <input
+                type="number"
+                min="1"
+                required
+                disabled={!isPackagingEditing}
+                value={formData.tabletsPerStrip}
+                onChange={(e) =>
+                  setFormData({ ...formData, tabletsPerStrip: parseInt(e.target.value) || 1 })
+                }
+                className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-brand-primary/20 disabled:opacity-75 disabled:bg-slate-100 dark:disabled:bg-slate-800/40"
+              />
+              <p className="text-[10px] text-slate-400 mt-1">Number of tablets/capsules per strip</p>
             </div>
           </div>
 
-          {/* Clinical Switches */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-            <label className="p-3.5 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl flex items-center justify-between cursor-pointer hover:bg-slate-100 transition">
-              <div>
-                <div className="text-xs font-bold text-slate-900 dark:text-white">
-                  Requires Doctor Prescription (Rx)
-                </div>
-                <div className="text-[10px] text-slate-400">
-                  Cashiers must verify prescription details during POS billing
-                </div>
-              </div>
-              <input
-                type="checkbox"
-                checked={formData.requiresPrescription}
-                onChange={(e) => setFormData({ ...formData, requiresPrescription: e.target.checked })}
-                className="h-4 w-4 text-brand-primary rounded"
-              />
-            </label>
-
-            <label className="p-3.5 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl flex items-center justify-between cursor-pointer hover:bg-slate-100 transition">
-              <div>
-                <div className="text-xs font-bold text-slate-900 dark:text-white">
-                  Controlled Substance (Narcotics / Sedatives)
-                </div>
-                <div className="text-[10px] text-slate-400">
-                  Requires Manager PIN approval & doctor verification at counter
-                </div>
-              </div>
-              <input
-                type="checkbox"
-                checked={formData.isControlled}
-                onChange={(e) => setFormData({ ...formData, isControlled: e.target.checked })}
-                className="h-4 w-4 text-brand-primary rounded"
-              />
-            </label>
+          <div className="p-3.5 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-600 dark:text-slate-400">
+            💡 <strong>Automatic Multiplier:</strong> 1 Box = {formData.stripsPerBox || 10} Strips ={" "}
+            <strong className="text-brand-primary">{(formData.stripsPerBox || 10) * (formData.tabletsPerStrip || 10)} Tablets/Capsules</strong>.
+            All future Stock Receiving, POS dispensing, and Stock Allocation will use these saved packaging values.
           </div>
+        </div>
+
+        {/* Section 4: Doctor Prescription (Rx) */}
+        <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+          <label className="p-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl flex items-center justify-between cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition">
+            <div>
+              <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <span className="px-2 py-0.5 bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 rounded font-black text-[10px]">
+                  Rx
+                </span>
+                Requires Doctor Prescription (Rx)
+              </div>
+              <div className="text-[11px] text-slate-400 mt-0.5">
+                When enabled, Counter POS will strictly require prescription confirmation/reference before completing any sale containing this item.
+              </div>
+            </div>
+            <input
+              type="checkbox"
+              checked={formData.requiresPrescription}
+              onChange={(e) => setFormData({ ...formData, requiresPrescription: e.target.checked })}
+              className="h-5 w-5 text-brand-primary rounded accent-brand-primary"
+            />
+          </label>
         </div>
 
         {/* Submit Bar */}
@@ -803,19 +720,6 @@ export function AddProductView({
                   value={quickSubName}
                   onChange={(e) => setQuickSubName(e.target.value)}
                   className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-brand-primary/20"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Default Unit (Optional)
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. tablet, capsule, bottle, bag, piece"
-                  value={quickSubUnit}
-                  onChange={(e) => setQuickSubUnit(e.target.value)}
-                  className="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-900 dark:text-white outline-none"
                 />
               </div>
 

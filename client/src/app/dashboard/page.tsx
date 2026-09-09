@@ -19,12 +19,18 @@ import { SubscriptionModule } from "@/components/dashboard/SubscriptionModule";
 import { SettingsModule } from "@/components/dashboard/SettingsModule";
 
 // Dedicated Domain Subpage Views
+import { CreateCategoryView } from "@/components/dashboard/CreateCategoryView";
+import { CategoryListView } from "@/components/dashboard/CategoryListView";
 import { AddProductView } from "@/components/dashboard/AddProductView";
 import { ProductListView } from "@/components/dashboard/ProductListView";
 import { VariantsView } from "@/components/dashboard/VariantsView";
 import { ExpiredProductsView } from "@/components/dashboard/ExpiredProductsView";
 import { AddStockView } from "@/components/dashboard/AddStockView";
 import { StockListView } from "@/components/dashboard/StockListView";
+import { StockAllocationView } from "@/components/dashboard/StockAllocationView";
+import { StockAllocationHistoryView } from "@/components/dashboard/StockAllocationHistoryView";
+import { CreateRackView } from "@/components/dashboard/CreateRackView";
+import { RackListView } from "@/components/dashboard/RackListView";
 import { StockHistoryView } from "@/components/dashboard/StockHistoryView";
 import { TransferStockView } from "@/components/dashboard/TransferStockView";
 import { TransferHistoryView } from "@/components/dashboard/TransferHistoryView";
@@ -32,6 +38,8 @@ import { StockReceiveView } from "@/components/dashboard/StockReceiveView";
 import { StockInspectionView } from "@/components/dashboard/StockInspectionView";
 import { DamagedProductsView } from "@/components/dashboard/DamagedProductsView";
 import { SuppliersView } from "@/components/dashboard/SuppliersView";
+import { CreateSupplierView } from "@/components/dashboard/CreateSupplierView";
+import { SupplierDetailsView } from "@/components/dashboard/SupplierDetailsView";
 import { PurchaseHistoryView } from "@/components/dashboard/PurchaseHistoryView";
 import { PaymentsDueView } from "@/components/dashboard/PaymentsDueView";
 import { PaymentMethodSalesView } from "@/components/dashboard/PaymentMethodSalesView";
@@ -54,6 +62,7 @@ import { SalaryManagementView } from "@/components/dashboard/SalaryManagementVie
 import { BranchSalaryHistoryView } from "@/components/dashboard/BranchSalaryHistoryView";
 import { EmployeeDetailsView } from "@/components/dashboard/EmployeeDetailsView";
 import { AttendanceView } from "@/components/dashboard/AttendanceView";
+import { SalaryDeductionRules } from "@/components/dashboard/SalaryDeductionRules";
 import { StaffSalaryHistoryView } from "@/components/dashboard/StaffSalaryHistoryView";
 import { Product } from "@/types";
 import {
@@ -91,11 +100,14 @@ export default function RoleBasedDashboard() {
 
   const [activeModule, setActiveModule] = useState<OwnerModule>(getDefaultModuleForRole(user?.role));
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [preselectedBatchId, setPreselectedBatchId] = useState<string>("");
+  const [preselectedProductId, setPreselectedProductId] = useState<string>("");
   const [inspectionTransferId, setInspectionTransferId] = useState<string>("");
   const [tenantProfile, setTenantProfile] = useState<any>(null);
   const [currentSub, setCurrentSub] = useState<any>(null);
   const [branches, setBranches] = useState<any[]>([]);
   const [selectedBranchId, setSelectedBranchId] = useState<string>(user?.branchId || "");
+  const [selectedSupplierDetailId, setSelectedSupplierDetailId] = useState<string | null>(null);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("");
   const [selectedRecurringForPay, setSelectedRecurringForPay] = useState<any | null>(null);
   const [dataLoading, setDataLoading] = useState(true);
@@ -366,6 +378,9 @@ export default function RoleBasedDashboard() {
             if (mod !== "inv_add_product") {
               setEditingProduct(null);
             }
+            if (mod === "sup_suppliers") {
+              setSelectedSupplierDetailId(null);
+            }
             setActiveModule(mod);
           }}
         />
@@ -452,8 +467,8 @@ export default function RoleBasedDashboard() {
       case "exp_list":
       case "exp_recurring":
       case "exp_settings":
-        if (!isOwner && !hasPermission("accounts.expenses") && !hasPermission("accounts.manage")) {
-          return <TenantAccessRestricted moduleName="Bill List" requiredPerm="accounts.expenses" />;
+        if (!isOwner && !hasPermission("expenses.list")) {
+          return <TenantAccessRestricted moduleName="Bill List" requiredPerm="expenses.list" />;
         }
         return (
           <BillListView
@@ -467,8 +482,8 @@ export default function RoleBasedDashboard() {
         );
 
       case "exp_pay":
-        if (!isOwner && !hasPermission("accounts.expenses") && !hasPermission("accounts.manage")) {
-          return <TenantAccessRestricted moduleName="Pay Bill" requiredPerm="accounts.expenses" />;
+        if (!isOwner && !hasPermission("expenses.pay")) {
+          return <TenantAccessRestricted moduleName="Pay Bill" requiredPerm="expenses.pay" />;
         }
         return (
           <PayBillView
@@ -481,8 +496,8 @@ export default function RoleBasedDashboard() {
       case "exp_history":
       case "exp_monthly":
       case "acc_expenses":
-        if (!isOwner && !hasPermission("accounts.expenses") && !hasPermission("accounts.manage")) {
-          return <TenantAccessRestricted moduleName="Bill History" requiredPerm="accounts.expenses" />;
+        if (!isOwner && !hasPermission("expenses.history")) {
+          return <TenantAccessRestricted moduleName="Bill History" requiredPerm="expenses.history" />;
         }
         return (
           <BillHistoryView
@@ -493,8 +508,8 @@ export default function RoleBasedDashboard() {
 
       // 👥 Employee & Salary
       case "sal_employees":
-        if (!isOwner && !hasPermission("accounts.salaries") && !hasPermission("accounts.manage")) {
-          return <TenantAccessRestricted moduleName="Employee List" requiredPerm="accounts.salaries" />;
+        if (!isOwner && !hasPermission("employee.view")) {
+          return <TenantAccessRestricted moduleName="Employee List" requiredPerm="employee.view" />;
         }
         return (
           <EmployeeListView
@@ -508,7 +523,7 @@ export default function RoleBasedDashboard() {
         );
 
       case "sal_attendance":
-        if (!isOwner && !isBranchManager && !hasPermission("attendance.manage")) {
+        if (!isOwner && !hasPermission("attendance.manage")) {
           return <TenantAccessRestricted moduleName="Attendance Management" requiredPerm="attendance.manage" />;
         }
         return (
@@ -524,8 +539,8 @@ export default function RoleBasedDashboard() {
         );
 
       case "sal_offdays":
-        if (!isOwner && !isBranchManager && !hasPermission("attendance.offdays") && !hasPermission("attendance.manage")) {
-          return <TenantAccessRestricted moduleName="Off-Day Settings" requiredPerm="attendance.manage" />;
+        if (!isOwner && !hasPermission("attendance.offdays")) {
+          return <TenantAccessRestricted moduleName="Off-Day Settings" requiredPerm="attendance.offdays" />;
         }
         return (
           <AttendanceView
@@ -539,10 +554,18 @@ export default function RoleBasedDashboard() {
           />
         );
 
+      case "sal_deduction_rules":
+        if (!isOwner && !hasPermission("salary.deductions")) {
+          return <TenantAccessRestricted moduleName="Salary Deduction Rules" requiredPerm="salary.deductions" />;
+        }
+        return (
+          <SalaryDeductionRules selectedBranchId={selectedBranchId} />
+        );
+
       case "sal_management":
       case "acc_salaries":
-        if (!isOwner && !hasPermission("accounts.salaries") && !hasPermission("accounts.manage")) {
-          return <TenantAccessRestricted moduleName="Salary Management" requiredPerm="accounts.salaries" />;
+        if (!isOwner && !hasPermission("salary.manage")) {
+          return <TenantAccessRestricted moduleName="Salary Management" requiredPerm="salary.manage" />;
         }
         return (
           <SalaryManagementView
@@ -556,6 +579,9 @@ export default function RoleBasedDashboard() {
         );
 
       case "sal_history":
+        if (!isOwner && !hasPermission("salary.history")) {
+          return <TenantAccessRestricted moduleName="Salary History" requiredPerm="salary.history" />;
+        }
         return (
           <BranchSalaryHistoryView
             selectedBranchId={selectedBranchId}
@@ -568,8 +594,8 @@ export default function RoleBasedDashboard() {
         );
 
       case "employee_details":
-        if (!isOwner && !hasPermission("accounts.salaries") && !hasPermission("accounts.manage")) {
-          return <TenantAccessRestricted moduleName="Employee Details & Salary History" requiredPerm="accounts.salaries" />;
+        if (!isOwner && !hasPermission("employee.view")) {
+          return <TenantAccessRestricted moduleName="Employee Details & Salary History" requiredPerm="employee.view" />;
         }
         return (
           <EmployeeDetailsView
@@ -586,10 +612,23 @@ export default function RoleBasedDashboard() {
           />
         );
 
+      // 📁 Category Management Subpages
+      case "cat_create":
+        if (!isOwner && !hasPermission("category.manage")) {
+          return <TenantAccessRestricted moduleName="Manage Categories" requiredPerm="category.manage" />;
+        }
+        return <CreateCategoryView onNavigate={setActiveModule} />;
+
+      case "cat_list":
+        if (!isOwner && !hasPermission("category.subcategories") && !hasPermission("category.manage")) {
+          return <TenantAccessRestricted moduleName="Manage Subcategories" requiredPerm="category.subcategories" />;
+        }
+        return <CategoryListView onNavigate={setActiveModule} />;
+
       // 📦 Inventory Subpages
       case "inv_add_product":
-        if (!isOwner && !hasPermission("inventory.manage")) {
-          return <TenantAccessRestricted moduleName="Add Product" requiredPerm="inventory.manage" />;
+        if (!isOwner && !hasPermission("inventory.add_product")) {
+          return <TenantAccessRestricted moduleName="Add Product" requiredPerm="inventory.add_product" />;
         }
         return (
           <AddProductView
@@ -600,8 +639,8 @@ export default function RoleBasedDashboard() {
         );
 
       case "inv_product_list":
-        if (!isOwner && !hasPermission("inventory.manage")) {
-          return <TenantAccessRestricted moduleName="Product List" requiredPerm="inventory.manage" />;
+        if (!isOwner && !hasPermission("inventory.product_list")) {
+          return <TenantAccessRestricted moduleName="Product List" requiredPerm="inventory.product_list" />;
         }
         return (
           <ProductListView
@@ -614,51 +653,94 @@ export default function RoleBasedDashboard() {
         );
 
       case "inv_variants":
-        if (!isOwner && !hasPermission("inventory.manage")) {
-          return <TenantAccessRestricted moduleName="Categories & Variants" requiredPerm="inventory.manage" />;
+        if (!isOwner && !hasPermission("inventory.product_list")) {
+          return <TenantAccessRestricted moduleName="Categories & Variants" requiredPerm="inventory.product_list" />;
         }
         return <VariantsView />;
 
       case "inv_expired_products":
-        if (!isOwner && !hasPermission("inventory.manage")) {
-          return <TenantAccessRestricted moduleName="Expired Products" requiredPerm="inventory.manage" />;
+        if (!isOwner && !hasPermission("inventory.product_list")) {
+          return <TenantAccessRestricted moduleName="Expired Products" requiredPerm="inventory.product_list" />;
         }
         return <ExpiredProductsView />;
 
       // 🔄 Stock Management Subpages
       case "stock_add_stock":
-        if (!isOwner && !hasPermission("stock.manage")) {
-          return <TenantAccessRestricted moduleName="Add Stock" requiredPerm="stock.manage" />;
+        if (!isOwner && !hasPermission("stock.add_stock")) {
+          return <TenantAccessRestricted moduleName="Add Stock" requiredPerm="stock.add_stock" />;
         }
         return <AddStockView onNavigate={setActiveModule} />;
 
       case "stock_stock_list":
-        if (!isOwner && !hasPermission("stock.manage")) {
-          return <TenantAccessRestricted moduleName="Stock List" requiredPerm="stock.manage" />;
+        if (!isOwner && !hasPermission("stock.stock_list")) {
+          return <TenantAccessRestricted moduleName="Stock List" requiredPerm="stock.stock_list" />;
         }
-        return <StockListView onNavigate={setActiveModule} />;
+        return (
+          <StockListView
+            onNavigate={(module, extra) => {
+              if (extra && module === "stock_stock_allocation") {
+                if (typeof extra === "object") {
+                  setPreselectedBatchId(extra.batchId || "");
+                  setPreselectedProductId(extra.productId || "");
+                } else {
+                  setPreselectedBatchId(extra);
+                  setPreselectedProductId("");
+                }
+              }
+              setActiveModule(module);
+            }}
+          />
+        );
+
+      case "stock_stock_allocation":
+        if (!isOwner && !hasPermission("stock.allocation")) {
+          return <TenantAccessRestricted moduleName="Stock Allocation" requiredPerm="stock.allocation" />;
+        }
+        return (
+          <StockAllocationView
+            selectedBranchId={selectedBranchId}
+            preselectedProductId={preselectedProductId}
+            preselectedBatchId={preselectedBatchId}
+            onClearPreselectedBatch={() => {
+              setPreselectedBatchId("");
+              setPreselectedProductId("");
+            }}
+            onNavigate={setActiveModule}
+          />
+        );
+
+      case "stock_allocation_history":
+        if (!isOwner && !hasPermission("stock.allocation_history")) {
+          return <TenantAccessRestricted moduleName="Allocation History" requiredPerm="stock.allocation_history" />;
+        }
+        return (
+          <StockAllocationHistoryView
+            selectedBranchId={selectedBranchId}
+            onNavigate={setActiveModule}
+          />
+        );
 
       case "stock_stock_history":
-        if (!isOwner && !hasPermission("stock.manage")) {
-          return <TenantAccessRestricted moduleName="Stock History" requiredPerm="stock.manage" />;
+        if (!isOwner && !hasPermission("stock.stock_history")) {
+          return <TenantAccessRestricted moduleName="Stock History" requiredPerm="stock.stock_history" />;
         }
         return <StockHistoryView />;
 
       case "stock_transfer_stock":
-        if (!isOwner && !hasPermission("stock.manage")) {
-          return <TenantAccessRestricted moduleName="Transfer Stock" requiredPerm="stock.manage" />;
+        if (!isOwner && !hasPermission("stock.transfer")) {
+          return <TenantAccessRestricted moduleName="Transfer Stock" requiredPerm="stock.transfer" />;
         }
         return <TransferStockView onNavigate={setActiveModule} />;
 
       case "stock_transfer_history":
-        if (!isOwner && !hasPermission("stock.manage")) {
-          return <TenantAccessRestricted moduleName="Transfer History" requiredPerm="stock.manage" />;
+        if (!isOwner && !hasPermission("stock.transfer_history")) {
+          return <TenantAccessRestricted moduleName="Transfer History" requiredPerm="stock.transfer_history" />;
         }
         return <TransferHistoryView onNavigate={setActiveModule} />;
 
       case "stock_stock_receive":
-        if (!isOwner && !hasPermission("stock.manage")) {
-          return <TenantAccessRestricted moduleName="Stock Receive" requiredPerm="stock.manage" />;
+        if (!isOwner && !hasPermission("stock.receive")) {
+          return <TenantAccessRestricted moduleName="Stock Receive" requiredPerm="stock.receive" />;
         }
         return (
           <StockReceiveView
@@ -671,8 +753,8 @@ export default function RoleBasedDashboard() {
         );
 
       case "stock_inspection":
-        if (!isOwner && !hasPermission("stock.manage")) {
-          return <TenantAccessRestricted moduleName="Stock Receiving & Inspection" requiredPerm="stock.manage" />;
+        if (!isOwner && !hasPermission("stock.receive")) {
+          return <TenantAccessRestricted moduleName="Stock Receiving & Inspection" requiredPerm="stock.receive" />;
         }
         return (
           <StockInspectionView
@@ -682,27 +764,70 @@ export default function RoleBasedDashboard() {
         );
 
       case "stock_damaged_products":
-        if (!isOwner && !hasPermission("stock.manage")) {
-          return <TenantAccessRestricted moduleName="Damaged Products" requiredPerm="stock.manage" />;
+        if (!isOwner && !hasPermission("stock.damaged")) {
+          return <TenantAccessRestricted moduleName="Damaged Products" requiredPerm="stock.damaged" />;
         }
         return <DamagedProductsView onNavigate={setActiveModule} />;
 
-      // 🏭 Supplier Management Subpages
-      case "sup_suppliers":
-        if (!isOwner && !hasPermission("suppliers.manage")) {
-          return <TenantAccessRestricted moduleName="Suppliers" requiredPerm="suppliers.manage" />;
+      // 📍 Location Management Subpages
+      case "loc_create_rack":
+        if (!isOwner && !hasPermission("location.create_rack")) {
+          return <TenantAccessRestricted moduleName="Create Rack" requiredPerm="location.create_rack" />;
         }
-        return <SuppliersView onNavigate={setActiveModule} />;
+        return (
+          <CreateRackView
+            selectedBranchId={selectedBranchId}
+            onNavigate={setActiveModule}
+          />
+        );
+
+      case "loc_rack_list":
+        if (!isOwner && !hasPermission("location.rack_list")) {
+          return <TenantAccessRestricted moduleName="Rack List" requiredPerm="location.rack_list" />;
+        }
+        return (
+          <RackListView
+            selectedBranchId={selectedBranchId}
+            onNavigate={setActiveModule}
+          />
+        );
+
+      // 🏭 Supplier Management Subpages
+      case "sup_create_supplier":
+        if (!isOwner && !hasPermission("supplier.manage")) {
+          return <TenantAccessRestricted moduleName="Create Supplier" requiredPerm="supplier.manage" />;
+        }
+        return <CreateSupplierView onNavigate={setActiveModule} />;
+
+      case "sup_suppliers":
+        if (!isOwner && !hasPermission("supplier.view")) {
+          return <TenantAccessRestricted moduleName="Suppliers" requiredPerm="supplier.view" />;
+        }
+        if (selectedSupplierDetailId) {
+          return (
+            <SupplierDetailsView
+              supplierId={selectedSupplierDetailId}
+              onBack={() => setSelectedSupplierDetailId(null)}
+              onNavigate={setActiveModule}
+            />
+          );
+        }
+        return (
+          <SuppliersView
+            onNavigate={setActiveModule}
+            onSelectSupplier={(id) => setSelectedSupplierDetailId(id)}
+          />
+        );
 
       case "sup_purchase_history":
-        if (!isOwner && !hasPermission("suppliers.manage")) {
-          return <TenantAccessRestricted moduleName="Purchase History" requiredPerm="suppliers.manage" />;
+        if (!isOwner && !hasPermission("supplier.purchase_history")) {
+          return <TenantAccessRestricted moduleName="Purchase History" requiredPerm="supplier.purchase_history" />;
         }
         return <PurchaseHistoryView onNavigate={setActiveModule} />;
 
       case "sup_payments_due":
-        if (!isOwner && !hasPermission("suppliers.manage") && !hasPermission("accounts.supplier_due")) {
-          return <TenantAccessRestricted moduleName="Payments / Due" requiredPerm="suppliers.manage" />;
+        if (!isOwner && !hasPermission("supplier.payments_due")) {
+          return <TenantAccessRestricted moduleName="Payments / Due" requiredPerm="supplier.payments_due" />;
         }
         return <PaymentsDueView onNavigate={setActiveModule} />;
 
@@ -714,14 +839,14 @@ export default function RoleBasedDashboard() {
         return <BranchModule />;
 
       case "staff":
-        if (!isOwner && !hasPermission("staff.manage")) {
-          return <TenantAccessRestricted moduleName="Staff List" requiredPerm="staff.manage" />;
+        if (!isOwner && !hasPermission("staff.view")) {
+          return <TenantAccessRestricted moduleName="Staff List" requiredPerm="staff.view" />;
         }
         return <StaffModule onNavigate={setActiveModule} />;
 
       case "staff_create":
-        if (!isOwner && !hasPermission("staff.manage")) {
-          return <TenantAccessRestricted moduleName="Create Staff" requiredPerm="staff.manage" />;
+        if (!isOwner && !hasPermission("staff.create")) {
+          return <TenantAccessRestricted moduleName="Create Staff" requiredPerm="staff.create" />;
         }
         return <CreateStaffTab onNavigate={setActiveModule} />;
 
@@ -739,8 +864,8 @@ export default function RoleBasedDashboard() {
 
       // ⚙️ Pharmacy Owner Settings
       case "profile":
-        if (!isOwner) {
-          return <TenantAccessRestricted moduleName="Pharmacy Profile" requiredPerm="Owner Only" />;
+        if (!isOwner && !hasPermission("settings.manage")) {
+          return <TenantAccessRestricted moduleName="Pharmacy Profile" requiredPerm="settings.manage" />;
         }
         return <ProfileModule />;
 
@@ -751,8 +876,8 @@ export default function RoleBasedDashboard() {
         return <SubscriptionModule />;
 
       case "settings":
-        if (!isOwner) {
-          return <TenantAccessRestricted moduleName="Settings" requiredPerm="Owner Only" />;
+        if (!isOwner && !hasPermission("settings.manage")) {
+          return <TenantAccessRestricted moduleName="Settings" requiredPerm="settings.manage" />;
         }
         return <SettingsModule />;
 

@@ -129,15 +129,17 @@ export function StockHistoryView() {
           <select
             value={movementType}
             onChange={(e) => setMovementType(e.target.value)}
-            className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-700 dark:text-slate-300 outline-none"
+            className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-700 dark:text-slate-300 outline-none font-bold"
           >
             <option value="">All Movement Types</option>
-            <option value="INWARD">Stock Inward / Purchases</option>
-            <option value="POS_SALE">POS Sales (Counter)</option>
-            <option value="ADJUSTMENT_ADD">Calibration Addition (+)</option>
-            <option value="ADJUSTMENT_DEDUCT">Calibration Deduction (-)</option>
-            <option value="TRANSFER_OUT">Transfer Out (Dispatched)</option>
-            <option value="TRANSFER_IN">Transfer In (Received)</option>
+            <option value="PURCHASE">Stock Inward / Purchases</option>
+            <option value="ALLOCATION">Stock Allocation (Bulk → Shelf)</option>
+            <option value="LOCATION_TRANSFER">Shelf Relocation (Shelf → Shelf)</option>
+            <option value="SALE">POS Counter Sales</option>
+            <option value="DAMAGE">Damaged / Expired Removal</option>
+            <option value="TRANSFER_OUT">Inter-Branch Transfer Out</option>
+            <option value="TRANSFER_IN">Inter-Branch Transfer In</option>
+            <option value="ADJUSTMENT">Manual Stock Calibration</option>
             <option value="RETURN">Sales Return / Restock</option>
           </select>
         </div>
@@ -162,12 +164,12 @@ export function StockHistoryView() {
               <thead>
                 <tr className="bg-slate-50/75 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 text-slate-500 uppercase tracking-wider font-bold text-[10px]">
                   <th className="py-3 px-4">Date & Time</th>
-                  <th className="py-3 px-4">Medicine & Formulation</th>
+                  <th className="py-3 px-4">Medicine & Batch</th>
                   <th className="py-3 px-4">Movement Type</th>
                   <th className="py-3 px-4">Quantity Change</th>
-                  <th className="py-3 px-4">Before → After Stock</th>
+                  <th className="py-3 px-4">Physical Movement Flow</th>
                   <th className="py-3 px-4">User / Staff</th>
-                  <th className="py-3 px-4">Reference & Notes</th>
+                  <th className="py-3 px-4">Reason & Reference</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium text-slate-700 dark:text-slate-300">
@@ -179,23 +181,28 @@ export function StockHistoryView() {
                         {new Date(m.createdAt).toLocaleString()}
                       </td>
 
-                      <td className="py-3 px-4 font-bold text-slate-900 dark:text-white">
-                        {m.product?.name || "Product"}
-                        {m.product?.genericName && (
-                          <div className="text-[10px] text-slate-400 font-normal">
-                            Generic: {m.product.genericName}
-                          </div>
-                        )}
+                      <td className="py-3 px-4">
+                        <div className="font-bold text-slate-900 dark:text-white">
+                          {m.product?.name || "Product"}
+                        </div>
+                        <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                          {m.batchNumber ? `Batch: ${m.batchNumber}` : "No Batch"}
+                          {m.product?.genericName ? ` • ${m.product.genericName}` : ""}
+                        </div>
                       </td>
 
                       <td className="py-3 px-4">
                         <span
-                          className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                            m.type.includes("INWARD") || m.type.includes("ADD") || m.type.includes("RETURN")
-                              ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300"
-                              : m.type.includes("SALE")
-                              ? "bg-sky-50 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300"
-                              : "bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300"
+                          className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                            m.type === "PURCHASE" || m.type === "TRANSFER_IN" || m.type === "RETURN"
+                              ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900"
+                              : m.type === "SALE"
+                              ? "bg-sky-50 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300 border border-sky-200 dark:border-sky-900"
+                              : m.type === "ALLOCATION"
+                              ? "bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300 border border-amber-200 dark:border-amber-900"
+                              : m.type === "LOCATION_TRANSFER"
+                              ? "bg-purple-50 text-purple-700 dark:bg-purple-950/50 dark:text-purple-300 border border-purple-200 dark:border-purple-900"
+                              : "bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300 border border-rose-200 dark:border-rose-900"
                           }`}
                         >
                           {m.type}
@@ -209,20 +216,23 @@ export function StockHistoryView() {
                           }`}
                         >
                           {isPositive ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-                          {isPositive ? `+${m.quantity}` : m.quantity}
+                          {isPositive ? `+${m.quantity}` : m.quantity} {m.product?.unit || "units"}
                         </span>
                       </td>
 
-                      <td className="py-3 px-4 font-mono text-slate-600 dark:text-slate-400">
-                        {m.previousStock} → <span className="font-bold text-slate-900 dark:text-white">{m.newStock}</span>
+                      <td className="py-3 px-4 font-mono text-slate-700 dark:text-slate-300 text-[11px]">
+                        {m.sourceDestination || (m.fromLocationLabel ? `${m.fromLocationLabel} → Shelf` : "—")}
                       </td>
 
                       <td className="py-3 px-4 text-slate-500 text-[11px]">
-                        {m.user?.name || "System"}
+                        {m.user?.name || "System Staff"}
                       </td>
 
-                      <td className="py-3 px-4 text-slate-400 text-[11px] truncate max-w-xs">
-                        {m.referenceId ? `Ref: ${m.referenceId}` : ""} {m.notes ? `• ${m.notes}` : ""}
+                      <td className="py-3 px-4 text-slate-500 text-[11px] max-w-xs">
+                        <div className="truncate">{m.reason || m.notes || "—"}</div>
+                        {m.referenceId && (
+                          <div className="text-[10px] text-slate-400 font-mono">Ref: {m.referenceId}</div>
+                        )}
                       </td>
                     </tr>
                   );

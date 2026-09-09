@@ -67,6 +67,7 @@ model SaleItem {
   saleId             String
   productId          String
   inventoryId        String?
+  inventoryLocationId String?
   batchNumber        String?
   expiryDate         DateTime?
   unitType           String?   @default("PIECE") // e.g. "TABLET", "STRIP", "BOX", "BOTTLE", "PIECE"
@@ -79,8 +80,10 @@ model SaleItem {
 
   sale               Sale      @relation(fields: [saleId], references: [id], onDelete: Cascade)
   product            Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  inventoryLocation  InventoryLocation? @relation(fields: [inventoryLocationId], references: [id], onDelete: SetNull)
 
   @@index([saleId])
   @@index([productId])
   @@index([inventoryId])
+  @@index([inventoryLocationId])
 }

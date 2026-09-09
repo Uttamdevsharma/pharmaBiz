@@ -2,6 +2,7 @@ import { Router } from "express";
 import { UserController } from "./user.controller";
 import { authenticate } from "../../middleware/authenticate";
 import { authorize } from "../../middleware/authorize";
+import { requirePermission } from "../../middleware/requirePermission";
 import { validateRequest } from "../../middleware/validate";
 import { requireActiveSubscription, checkStaffLimit } from "../../middleware/planLimiter";
 import {
@@ -32,42 +33,42 @@ router.patch(
 );
 
 // Dynamic Pharmacy Roles CRUD
-router.get("/roles", UserController.listRoles);
+router.get("/roles", requirePermission("roles.manage"), UserController.listRoles);
 router.post(
   "/roles",
-  authorize(["COMPANY_OWNER", "SUPER_ADMIN"]),
+  requirePermission("roles.manage"),
   validateRequest({ body: createPharmacyRoleSchema }),
   UserController.createRole
 );
 router.patch(
   "/roles/:id",
-  authorize(["COMPANY_OWNER", "SUPER_ADMIN"]),
+  requirePermission("roles.manage"),
   validateRequest({ body: updatePharmacyRoleSchema }),
   UserController.updateRole
 );
 router.delete(
   "/roles/:id",
-  authorize(["COMPANY_OWNER", "SUPER_ADMIN"]),
+  requirePermission("roles.manage"),
   UserController.deleteRole
 );
 
 // RBAC Permissions Info
-router.get("/roles/permissions", UserController.getPermissionsHierarchy);
+router.get("/roles/permissions", requirePermission("roles.manage"), UserController.getPermissionsHierarchy);
 router.post(
   "/roles/permissions",
-  authorize(["COMPANY_OWNER", "SUPER_ADMIN"]),
+  requirePermission("roles.manage"),
   validateRequest({ body: updateRolePermissionsSchema }),
   UserController.updateRolePermissions
 );
 
 // Staff Listing & Details
-router.get("/", validateRequest({ query: listUsersQuerySchema }), UserController.listUsers);
-router.get("/:id", UserController.getUserDetails);
+router.get("/", requirePermission("staff.view"), validateRequest({ query: listUsersQuerySchema }), UserController.listUsers);
+router.get("/:id", requirePermission("staff.view"), UserController.getUserDetails);
 
 // Staff Management
 router.post(
   "/",
-  authorize(["COMPANY_OWNER", "SUPER_ADMIN"]),
+  requirePermission("staff.manage"),
   checkStaffLimit,
   validateRequest({ body: createUserSchema }),
   UserController.createUser
@@ -75,20 +76,20 @@ router.post(
 
 router.patch(
   "/:id",
-  authorize(["COMPANY_OWNER", "SUPER_ADMIN"]),
+  requirePermission("staff.manage"),
   validateRequest({ body: updateUserSchema }),
   UserController.updateUser
 );
 
 router.patch(
   "/:id/status",
-  authorize(["COMPANY_OWNER", "SUPER_ADMIN"]),
+  requirePermission("staff.manage"),
   UserController.updateUserStatus
 );
 
 router.delete(
   "/:id",
-  authorize(["COMPANY_OWNER", "SUPER_ADMIN"]),
+  requirePermission("staff.manage"),
   UserController.deleteUser
 );
 

@@ -60,6 +60,7 @@ model FinancialAccount {
   settlementsIn       TransferSettlement[]   @relation("SettlementDestAccount")
   expenses            BranchExpense[]
   salaryDisbursements SalaryDisbursement[]
+  supplierPayments    SupplierPayment[]
 
   @@index([tenantId])
   @@index([branchId])

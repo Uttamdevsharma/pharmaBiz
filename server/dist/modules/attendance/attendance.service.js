@@ -223,7 +223,7 @@ class AttendanceService {
     /**
      * 5. Get complete attendance history for a single employee in a month
      */
-    static async getEmployeeAttendanceHistory(tenantId, userId, month) {
+    static async getEmployeeAttendanceHistory(tenantId, userId, month, requestingUser) {
         const employee = await prisma_1.prisma.user.findFirst({
             where: { id: userId, tenantId },
             include: {
@@ -233,6 +233,20 @@ class AttendanceService {
         });
         if (!employee)
             throw new Error("Employee not found.");
+        if (requestingUser) {
+            const isOwnerOrAdmin = requestingUser.role === "COMPANY_OWNER" ||
+                requestingUser.role === "SUPER_ADMIN" ||
+                requestingUser.role === "REGIONAL_ADMIN";
+            const isBranchManager = requestingUser.role === "BRANCH_MANAGER" ||
+                requestingUser.pharmacyRoleName?.toLowerCase().includes("branch manager") ||
+                requestingUser.customRoleName?.toLowerCase().includes("branch manager");
+            if (isBranchManager && !isOwnerOrAdmin) {
+                const reqBranchId = requestingUser.branchId;
+                if (reqBranchId && employee.branchId && employee.branchId !== reqBranchId) {
+                    throw new Error("Access denied: You can only view attendance history of employees in your branch.");
+                }
+            }
+        }
         const branchId = employee.branchId;
         if (!branchId)
             throw new Error("Employee is not assigned to a branch.");
@@ -254,9 +268,12 @@ class AttendanceService {
         const recordMap = new Map(attendances.map((a) => [a.date, a]));
         let presentDays = 0;
         let absentDays = 0;
+        let lateDays = 0;
         let paidLeaveDays = 0;
         let unpaidLeaveDays = 0;
         let offDays = 0;
+        const now = new Date();
+        const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
         const history = calendarDays.map((day) => {
             const record = recordMap.get(day.date);
             let status;
@@ -268,12 +285,19 @@ class AttendanceService {
             }
             else {
                 // Working day without explicit record
-                status = "NOT_MARKED";
+                if (day.date < todayStr) {
+                    status = "ABSENT";
+                }
+                else {
+                    status = "NOT_MARKED";
+                }
             }
             if (status === "PRESENT")
                 presentDays++;
             else if (status === "ABSENT")
                 absentDays++;
+            else if (status === "LATE")
+                lateDays++;
             else if (status === "PAID_LEAVE")
                 paidLeaveDays++;
             else if (status === "UNPAID_LEAVE")
@@ -309,6 +333,7 @@ class AttendanceService {
                 totalWorkingDays: workingDaysCount,
                 presentDays,
                 absentDays,
+                lateDays,
                 paidLeaveDays,
                 unpaidLeaveDays,
             },
@@ -334,11 +359,22 @@ class AttendanceService {
         const packageDeductions = Number(config?.deductions || 0);
         // Fetch attendance metrics
         const attendanceData = await this.getEmployeeAttendanceHistory(tenantId, userId, month);
-        const { totalDays, offDays, totalWorkingDays, presentDays, absentDays, paidLeaveDays, unpaidLeaveDays } = attendanceData.summary;
+        const { totalDays, offDays, totalWorkingDays, presentDays, absentDays, lateDays, paidLeaveDays, unpaidLeaveDays } = attendanceData.summary;
         // Daily rate = baseSalary / totalWorkingDays
         const dailyRate = totalWorkingDays > 0 ? Number((baseSalary / totalWorkingDays).toFixed(2)) : 0;
-        // Attendance deduction = (absentDays + unpaidLeaveDays) * dailyRate
-        const penalDays = absentDays + unpaidLeaveDays;
+        // Fetch SalaryDeductionRule
+        const deductionRule = await prisma_1.prisma.salaryDeductionRule.findUnique({
+            where: { branchId },
+        });
+        let penalDays = unpaidLeaveDays;
+        const absentRatio = deductionRule?.absentRuleRatio ? Number(deductionRule.absentRuleRatio) : 1; // Default 1:1 if not set
+        if (absentRatio > 0) {
+            penalDays += absentDays / absentRatio;
+        }
+        const lateRatio = deductionRule?.lateRuleRatio ? Number(deductionRule.lateRuleRatio) : 0; // Default disabled if not set
+        if (lateRatio > 0) {
+            penalDays += lateDays / lateRatio;
+        }
         const attendanceDeduction = Number((penalDays * dailyRate).toFixed(2));
         // Dynamic monthly allowances
         const monthlyAllowances = await prisma_1.prisma.employeeMonthlyAllowance.findMany({

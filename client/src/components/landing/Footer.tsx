@@ -45,10 +45,10 @@ export function Footer() {
           <div className="space-y-3">
             <h5 className="text-xs uppercase font-bold text-white tracking-wider">Quick Navigation</h5>
             <ul className="space-y-2 text-sm">
-              <li><a href="#hero" className="hover:text-white transition">Home</a></li>
-              <li><a href="#features" className="hover:text-white transition">Features</a></li>
-              <li><a href="#how-it-works" className="hover:text-white transition">How It Works</a></li>
-              <li><a href="#pricing" className="hover:text-white transition">Pricing Plans</a></li>
+              <li><Link href="/" className="hover:text-white transition">Home</Link></li>
+              <li><Link href="/pricing" className="hover:text-white transition">Pricing Plans</Link></li>
+              <li><Link href="/contact" className="hover:text-white transition">Contact Us</Link></li>
+              <li><a href="/#features" className="hover:text-white transition">Platform Features</a></li>
             </ul>
           </div>
 
@@ -58,8 +58,8 @@ export function Footer() {
             <ul className="space-y-2 text-sm">
               <li><Link href="/login" className="hover:text-white transition">Super Admin Login</Link></li>
               <li><Link href="/login" className="hover:text-white transition">Pharmacy Owner Portal</Link></li>
-              <li><a href="#contact" className="hover:text-white transition">Enterprise Inquiries</a></li>
-              <li><a href="#about" className="hover:text-white transition">About System</a></li>
+              <li><Link href="/contact" className="hover:text-white transition">Enterprise Inquiries</Link></li>
+              <li><Link href="/pricing" className="hover:text-white transition">Compare Tiers</Link></li>
             </ul>
           </div>
         </div>

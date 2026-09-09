@@ -92,6 +92,9 @@ model Tenant {
   branchOffDayConfigs    BranchOffDayConfig[]
   employeeAttendances    EmployeeAttendance[]
   employeeMonthlyAllowances EmployeeMonthlyAllowance[]
+  salaryDeductionRules   SalaryDeductionRule[]
+  supplierContacts       SupplierContact[]
+  supplierPayments       SupplierPayment[]
 
   @@index([verificationStatus])
 }
@@ -117,6 +120,7 @@ model Branch {
   auditLogs              AuditLog[]
   notifications          Notification[]
   financialAccounts      FinancialAccount[]
+  supplierPayments       SupplierPayment[]
   financialTransactions  FinancialTransaction[]
   branchExpenses         BranchExpense[]
   recurringExpenseConfigs RecurringExpenseConfig[]
@@ -125,6 +129,7 @@ model Branch {
   branchOffDayConfigs    BranchOffDayConfig[]
   employeeAttendances    EmployeeAttendance[]
   employeeMonthlyAllowances EmployeeMonthlyAllowance[]
+  salaryDeductionRules   SalaryDeductionRule[]
   
   stockTransfersFrom StockTransfer[]      @relation("TransferFrom")
   stockTransfersTo   StockTransfer[]      @relation("TransferTo")

@@ -42,7 +42,6 @@ export function ProductsModule({ subAction }: ProductsModuleProps = {}) {
   const [variantTab, setVariantTab] = useState<"categories" | "brands">("categories");
   const [selectedParentIdForModal, setSelectedParentIdForModal] = useState("");
   const [newSubcategoryName, setNewSubcategoryName] = useState("");
-  const [newSubcategoryUnit, setNewSubcategoryUnit] = useState("tablet");
   const [newBrandName, setNewBrandName] = useState("");
   const [variantSaving, setVariantSaving] = useState(false);
 
@@ -321,7 +320,6 @@ export function ProductsModule({ subAction }: ProductsModuleProps = {}) {
         body: JSON.stringify({
           name: newSubcategoryName.trim(),
           parentId: selectedParentIdForModal,
-          defaultUnit: newSubcategoryUnit || null,
         }),
       });
       if (res.success) {
@@ -1043,13 +1041,6 @@ export function ProductsModule({ subAction }: ProductsModuleProps = {}) {
                     value={newSubcategoryName}
                     onChange={(e) => setNewSubcategoryName(e.target.value)}
                     className="flex-1 px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs dark:text-white outline-none"
-                  />
-                  <input
-                    type="text"
-                    placeholder="Unit (e.g. tablet, bottle)"
-                    value={newSubcategoryUnit}
-                    onChange={(e) => setNewSubcategoryUnit(e.target.value)}
-                    className="w-28 px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs dark:text-white outline-none"
                   />
                   <button
                     type="submit"

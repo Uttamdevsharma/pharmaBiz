@@ -16,6 +16,7 @@ router.get("/overview", (0, requirePermission_1.requirePermission)("accounts.vie
 router.get("/accounts", (0, requirePermission_1.requirePermission)("accounts.view"), accounting_controller_1.AccountingController.listAccounts);
 router.post("/accounts", (0, requirePermission_1.requirePermission)("accounts.manage"), (0, validate_1.validateRequest)({ body: accounting_validation_1.createAccountSchema }), accounting_controller_1.AccountingController.createAccount);
 router.patch("/accounts/:id", (0, requirePermission_1.requirePermission)("accounts.manage"), (0, validate_1.validateRequest)({ body: accounting_validation_1.updateAccountSchema }), accounting_controller_1.AccountingController.updateAccount);
+router.post("/accounts/deposit", (0, requirePermission_1.requirePermission)("accounts.manage"), (0, validate_1.validateRequest)({ body: accounting_validation_1.depositFundsSchema }), accounting_controller_1.AccountingController.depositFunds);
 router.delete("/accounts/:id", (0, requirePermission_1.requirePermission)("accounts.manage"), accounting_controller_1.AccountingController.deleteAccount);
 // Double-entry transfer
 router.post("/transfer", (0, requirePermission_1.requirePermission)("accounts.transfer"), (0, validate_1.validateRequest)({ body: accounting_validation_1.transferFundsSchema }), accounting_controller_1.AccountingController.transferFunds);
@@ -28,23 +29,23 @@ router.get("/daily-sales", (0, requirePermission_1.requirePermission)("accounts.
 // ==========================================
 // 🏢 Recurring bills & expenses
 // ==========================================
-router.get("/recurring-expenses", (0, requirePermission_1.requirePermission)("accounts.expenses"), accounting_controller_1.AccountingController.listRecurringExpenses);
-router.post("/recurring-expenses", (0, requirePermission_1.requirePermission)("accounts.expenses"), (0, validate_1.validateRequest)({ body: accounting_validation_1.createRecurringExpenseSchema }), accounting_controller_1.AccountingController.createRecurringExpense);
-router.put("/recurring-expenses/:id", (0, requirePermission_1.requirePermission)("accounts.expenses"), (0, validate_1.validateRequest)({ body: accounting_validation_1.updateRecurringExpenseSchema }), accounting_controller_1.AccountingController.updateRecurringExpense);
-router.delete("/recurring-expenses/:id", (0, requirePermission_1.requirePermission)("accounts.expenses"), accounting_controller_1.AccountingController.deleteRecurringExpense);
+router.get("/recurring-expenses", (0, requirePermission_1.requirePermission)("expenses.list"), accounting_controller_1.AccountingController.listRecurringExpenses);
+router.post("/recurring-expenses", (0, requirePermission_1.requirePermission)("expenses.list"), (0, validate_1.validateRequest)({ body: accounting_validation_1.createRecurringExpenseSchema }), accounting_controller_1.AccountingController.createRecurringExpense);
+router.put("/recurring-expenses/:id", (0, requirePermission_1.requirePermission)("expenses.list"), (0, validate_1.validateRequest)({ body: accounting_validation_1.updateRecurringExpenseSchema }), accounting_controller_1.AccountingController.updateRecurringExpense);
+router.delete("/recurring-expenses/:id", (0, requirePermission_1.requirePermission)("expenses.list"), accounting_controller_1.AccountingController.deleteRecurringExpense);
 // ==========================================
 // 💸 Monthly Expenses & Payments
 // ==========================================
-router.get("/expenses", (0, requirePermission_1.requirePermission)("accounts.expenses"), (0, validate_1.validateRequest)({ query: accounting_validation_1.listExpensesQuerySchema }), accounting_controller_1.AccountingController.listExpenses);
-router.post("/expenses", (0, requirePermission_1.requirePermission)("accounts.expenses"), (0, validate_1.validateRequest)({ body: accounting_validation_1.recordExpensePaymentSchema }), accounting_controller_1.AccountingController.recordExpense);
-router.get("/expenses/summary", (0, requirePermission_1.requirePermission)("accounts.expenses"), accounting_controller_1.AccountingController.getExpenseSummary);
+router.get("/expenses", (0, requirePermission_1.requirePermission)("expenses.history"), (0, validate_1.validateRequest)({ query: accounting_validation_1.listExpensesQuerySchema }), accounting_controller_1.AccountingController.listExpenses);
+router.post("/expenses", (0, requirePermission_1.requirePermission)("expenses.pay"), (0, validate_1.validateRequest)({ body: accounting_validation_1.recordExpensePaymentSchema }), accounting_controller_1.AccountingController.recordExpense);
+router.get("/expenses/summary", (0, requirePermission_1.requirePermission)("expenses.history"), accounting_controller_1.AccountingController.getExpenseSummary);
 // ==========================================
 // 👥 Staff Salaries & Payroll
 // ==========================================
-router.get("/salaries/employees", (0, requirePermission_1.requirePermission)("accounts.salaries"), accounting_controller_1.AccountingController.listBranchStaffSalaries);
-router.post("/salaries/config", (0, requirePermission_1.requirePermission)("accounts.salaries"), (0, validate_1.validateRequest)({ body: accounting_validation_1.setSalaryConfigSchema }), accounting_controller_1.AccountingController.setSalaryConfig);
-router.post("/salaries/disburse", (0, requirePermission_1.requirePermission)("accounts.salaries"), (0, validate_1.validateRequest)({ body: accounting_validation_1.disburseSalarySchema }), accounting_controller_1.AccountingController.disburseSalary);
-router.get("/salaries/branch-history", (0, requirePermission_1.requirePermission)("accounts.salaries"), accounting_controller_1.AccountingController.getBranchSalaryHistory);
-router.get("/salaries/history/:userId", (0, requirePermission_1.requirePermission)("accounts.salaries"), accounting_controller_1.AccountingController.getEmployeeSalaryHistory);
+router.get("/salaries/employees", (0, requirePermission_1.requirePermission)("employee.view"), accounting_controller_1.AccountingController.listBranchStaffSalaries);
+router.post("/salaries/config", (0, requirePermission_1.requirePermission)("salary.manage"), (0, validate_1.validateRequest)({ body: accounting_validation_1.setSalaryConfigSchema }), accounting_controller_1.AccountingController.setSalaryConfig);
+router.post("/salaries/disburse", (0, requirePermission_1.requirePermission)("salary.manage"), (0, validate_1.validateRequest)({ body: accounting_validation_1.disburseSalarySchema }), accounting_controller_1.AccountingController.disburseSalary);
+router.get("/salaries/branch-history", (0, requirePermission_1.requirePermission)("salary.history"), accounting_controller_1.AccountingController.getBranchSalaryHistory);
+router.get("/salaries/history/:userId", (0, requirePermission_1.requirePermission)("salary.history"), accounting_controller_1.AccountingController.getEmployeeSalaryHistory);
 router.get("/salaries/my-history", accounting_controller_1.AccountingController.getMySalaryHistory);
 exports.accountingRoutes = router;

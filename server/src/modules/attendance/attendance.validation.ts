@@ -10,7 +10,7 @@ export const setBranchOffDayConfigSchema = z.object({
 
 export const attendanceItemSchema = z.object({
   userId: z.string().uuid("Invalid user ID"),
-  status: z.enum(["PRESENT", "ABSENT", "PAID_LEAVE", "UNPAID_LEAVE", "OFF_DAY"]),
+  status: z.enum(["PRESENT", "ABSENT", "LATE", "PAID_LEAVE", "UNPAID_LEAVE", "OFF_DAY"]),
   notes: z.string().optional().nullable(),
 });
 

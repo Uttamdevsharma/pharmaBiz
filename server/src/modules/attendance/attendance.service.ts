@@ -324,6 +324,7 @@ export class AttendanceService {
 
     let presentDays = 0;
     let absentDays = 0;
+    let lateDays = 0;
     let paidLeaveDays = 0;
     let unpaidLeaveDays = 0;
     let offDays = 0;
@@ -350,6 +351,7 @@ export class AttendanceService {
 
       if (status === "PRESENT") presentDays++;
       else if (status === "ABSENT") absentDays++;
+      else if (status === "LATE") lateDays++;
       else if (status === "PAID_LEAVE") paidLeaveDays++;
       else if (status === "UNPAID_LEAVE") unpaidLeaveDays++;
       else if (status === "OFF_DAY") offDays++;
@@ -384,6 +386,7 @@ export class AttendanceService {
         totalWorkingDays: workingDaysCount,
         presentDays,
         absentDays,
+        lateDays,
         paidLeaveDays,
         unpaidLeaveDays,
       },
@@ -412,14 +415,29 @@ export class AttendanceService {
 
     // Fetch attendance metrics
     const attendanceData = await this.getEmployeeAttendanceHistory(tenantId, userId, month);
-    const { totalDays, offDays, totalWorkingDays, presentDays, absentDays, paidLeaveDays, unpaidLeaveDays } =
+    const { totalDays, offDays, totalWorkingDays, presentDays, absentDays, lateDays, paidLeaveDays, unpaidLeaveDays } =
       attendanceData.summary;
 
     // Daily rate = baseSalary / totalWorkingDays
     const dailyRate = totalWorkingDays > 0 ? Number((baseSalary / totalWorkingDays).toFixed(2)) : 0;
 
-    // Attendance deduction = (absentDays + unpaidLeaveDays) * dailyRate
-    const penalDays = absentDays + unpaidLeaveDays;
+    // Fetch SalaryDeductionRule
+    const deductionRule = await (prisma as any).salaryDeductionRule.findUnique({
+      where: { branchId },
+    });
+
+    let penalDays = unpaidLeaveDays;
+    
+    const absentRatio = deductionRule?.absentRuleRatio ? Number(deductionRule.absentRuleRatio) : 1; // Default 1:1 if not set
+    if (absentRatio > 0) {
+       penalDays += absentDays / absentRatio;
+    }
+
+    const lateRatio = deductionRule?.lateRuleRatio ? Number(deductionRule.lateRuleRatio) : 0; // Default disabled if not set
+    if (lateRatio > 0) {
+       penalDays += lateDays / lateRatio;
+    }
+
     const attendanceDeduction = Number((penalDays * dailyRate).toFixed(2));
 
     // Dynamic monthly allowances

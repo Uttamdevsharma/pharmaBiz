@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { InventoryService } from "./inventory.service";
-import { ListMovementsQuery, InventoryAlertsQuery } from "./inventory.validation";
+import { ListMovementsQuery, InventoryAlertsQuery, PosBatchQuery } from "./inventory.validation";
 
 export class InventoryController {
   static async getBranchInventory(req: Request, res: Response): Promise<void> {
@@ -67,6 +67,51 @@ export class InventoryController {
     }
   }
 
+  static async allocateStock(req: Request, res: Response): Promise<void> {
+    try {
+      const tenantId = req.user!.tenantId;
+      const userId = req.user!.id;
+      const result = await InventoryService.allocateStock(tenantId, userId, req.body);
+      res.status(200).json({
+        success: true,
+        message: "Stock allocated successfully",
+        data: result,
+      });
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  }
+
+  static async moveStock(req: Request, res: Response): Promise<void> {
+    try {
+      const tenantId = req.user!.tenantId;
+      const userId = req.user!.id;
+      const result = await InventoryService.moveStock(tenantId, userId, req.body);
+      res.status(200).json({
+        success: true,
+        message: "Stock moved successfully",
+        data: result,
+      });
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  }
+
+  static async removeExpiredStock(req: Request, res: Response): Promise<void> {
+    try {
+      const tenantId = req.user!.tenantId;
+      const userId = req.user!.id;
+      const result = await InventoryService.removeExpiredStock(tenantId, userId, req.body);
+      res.status(200).json({
+        success: true,
+        message: "Expired stock removed successfully and logged in movement ledger",
+        data: result,
+      });
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  }
+
   static async listMovements(req: Request, res: Response): Promise<void> {
     try {
       const tenantId = req.user!.tenantId;
@@ -106,6 +151,32 @@ export class InventoryController {
       res.status(200).json({ success: true, data: result });
     } catch (error: any) {
       res.status(500).json({ success: false, message: error.message });
+    }
+  }
+
+  static async getPosBatches(req: Request, res: Response): Promise<void> {
+    try {
+      const { branchId, productId } = req.query as unknown as PosBatchQuery;
+      const tenantId = req.user!.tenantId;
+      if (!branchId || !productId) {
+        res.status(400).json({ success: false, message: "branchId and productId are required" });
+        return;
+      }
+      const batches = await InventoryService.getPosAvailableBatches(tenantId, branchId as string, productId as string);
+      res.status(200).json({ success: true, data: batches });
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
+
+  static async getBatchDetails(req: Request, res: Response): Promise<void> {
+    try {
+      const { id } = req.params;
+      const tenantId = req.user!.tenantId;
+      const batch = await InventoryService.getBatchDetails(tenantId, id);
+      res.status(200).json({ success: true, data: batch });
+    } catch (error: any) {
+      res.status(404).json({ success: false, message: error.message });
     }
   }
 }

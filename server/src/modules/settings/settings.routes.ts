@@ -2,6 +2,7 @@ import { Router } from "express";
 import { SettingsController } from "./settings.controller";
 import { authenticate } from "../../middleware/authenticate";
 import { authorize } from "../../middleware/authorize";
+import { requirePermission } from "../../middleware/requirePermission";
 import { validateRequest } from "../../middleware/validate";
 import { updatePlatformSettingsSchema } from "./settings.validation";
 
@@ -31,7 +32,7 @@ router.get("/vat", authenticate, SettingsController.getTenantVatSettings);
 router.put(
   "/vat",
   authenticate,
-  authorize(["COMPANY_OWNER", "BRANCH_MANAGER", "REGIONAL_ADMIN"]),
+  requirePermission("pos.vat"),
   SettingsController.updateTenantVatSettings
 );
 

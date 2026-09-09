@@ -5,6 +5,7 @@ const zod_1 = require("zod");
 exports.saleItemInputSchema = zod_1.z.object({
     productId: zod_1.z.string().min(1, "Product ID is required"),
     inventoryId: zod_1.z.string().optional().nullable(),
+    inventoryLocationId: zod_1.z.string().optional().nullable(),
     batchNumber: zod_1.z.string().optional().nullable(),
     unitType: zod_1.z.string().default("PIECE"), // e.g. "TABLET", "STRIP", "BOX", "BOTTLE", "PIECE"
     unitMultiplier: zod_1.z.number().int().positive().default(1),

@@ -100,24 +100,24 @@ router.get(
 // ==========================================
 router.get(
   "/recurring-expenses",
-  requirePermission("accounts.expenses"),
+  requirePermission("expenses.list"),
   AccountingController.listRecurringExpenses
 );
 router.post(
   "/recurring-expenses",
-  requirePermission("accounts.expenses"),
+  requirePermission("expenses.list"),
   validateRequest({ body: createRecurringExpenseSchema }),
   AccountingController.createRecurringExpense
 );
 router.put(
   "/recurring-expenses/:id",
-  requirePermission("accounts.expenses"),
+  requirePermission("expenses.list"),
   validateRequest({ body: updateRecurringExpenseSchema }),
   AccountingController.updateRecurringExpense
 );
 router.delete(
   "/recurring-expenses/:id",
-  requirePermission("accounts.expenses"),
+  requirePermission("expenses.list"),
   AccountingController.deleteRecurringExpense
 );
 
@@ -126,19 +126,19 @@ router.delete(
 // ==========================================
 router.get(
   "/expenses",
-  requirePermission("accounts.expenses"),
+  requirePermission("expenses.history"),
   validateRequest({ query: listExpensesQuerySchema }),
   AccountingController.listExpenses
 );
 router.post(
   "/expenses",
-  requirePermission("accounts.expenses"),
+  requirePermission("expenses.pay"),
   validateRequest({ body: recordExpensePaymentSchema }),
   AccountingController.recordExpense
 );
 router.get(
   "/expenses/summary",
-  requirePermission("accounts.expenses"),
+  requirePermission("expenses.history"),
   AccountingController.getExpenseSummary
 );
 
@@ -147,29 +147,29 @@ router.get(
 // ==========================================
 router.get(
   "/salaries/employees",
-  requirePermission("accounts.salaries"),
+  requirePermission("employee.view"),
   AccountingController.listBranchStaffSalaries
 );
 router.post(
   "/salaries/config",
-  requirePermission("accounts.salaries"),
+  requirePermission("salary.manage"),
   validateRequest({ body: setSalaryConfigSchema }),
   AccountingController.setSalaryConfig
 );
 router.post(
   "/salaries/disburse",
-  requirePermission("accounts.salaries"),
+  requirePermission("salary.manage"),
   validateRequest({ body: disburseSalarySchema }),
   AccountingController.disburseSalary
 );
 router.get(
   "/salaries/branch-history",
-  requirePermission("accounts.salaries"),
+  requirePermission("salary.history"),
   AccountingController.getBranchSalaryHistory
 );
 router.get(
   "/salaries/history/:userId",
-  requirePermission("accounts.salaries"),
+  requirePermission("salary.history"),
   AccountingController.getEmployeeSalaryHistory
 );
 router.get(

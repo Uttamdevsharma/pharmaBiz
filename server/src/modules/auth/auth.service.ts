@@ -7,6 +7,7 @@ import { CENTRAL_PLAN_DEFINITIONS } from "../../app/lib/planLimits";
 import { ProductService } from "../product/product.service";
 import { UploadService } from "../upload/upload.service";
 import { EmailService } from "../../app/lib/email.service";
+import { DEFAULT_ROLE_PERMISSIONS } from "../../middleware/requirePermission";
 
 export class AuthService {
   /**
@@ -86,6 +87,8 @@ export class AuthService {
       } catch (e) {
         // Fallback
       }
+    } else if (effectivePermissions.length === 0 && DEFAULT_ROLE_PERMISSIONS[user.role]) {
+      effectivePermissions = DEFAULT_ROLE_PERMISSIONS[user.role] || [];
     }
 
     const tenantVerificationStatus = user.tenant?.verificationStatus || "ACTIVE";
@@ -178,6 +181,8 @@ export class AuthService {
           effectivePermissions = Array.from(combined);
         }
       } catch (e) {}
+    } else if (effectivePermissions.length === 0 && DEFAULT_ROLE_PERMISSIONS[user.role]) {
+      effectivePermissions = DEFAULT_ROLE_PERMISSIONS[user.role] || [];
     }
 
     const tenantVerificationStatus = user.tenant?.verificationStatus || "ACTIVE";
