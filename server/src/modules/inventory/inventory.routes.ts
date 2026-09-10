@@ -69,6 +69,13 @@ router.patch(
   InventoryController.updateInventoryItem
 );
 
+// List Stock Receiving History
+router.get(
+  "/receiving-history",
+  requirePermission("stock.stock_history"),
+  InventoryController.listReceivingHistory
+);
+
 // List Movements / Stock History Ledger
 router.get(
   "/movements",
@@ -129,11 +136,7 @@ router.get(
   "/",
   requirePermission("stock.stock_list"),
   (req, res) => {
-    const branchId = (req.query.branchId as string) || req.user?.branchId;
-    if (!branchId) {
-      res.status(400).json({ success: false, message: "branchId is required" });
-      return;
-    }
+    const branchId = (req.query.branchId as string) || (req.headers["x-branch-id"] as string) || req.user?.branchId || "all";
     req.params.branchId = branchId;
     return InventoryController.getBranchInventory(req, res);
   }

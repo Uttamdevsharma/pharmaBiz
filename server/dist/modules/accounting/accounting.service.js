@@ -1000,15 +1000,17 @@ class AccountingService {
     // ==========================================
     // 👥 STAFF SALARY MANAGEMENT & PAYROLL
     // ==========================================
-    static async listBranchStaffSalaries(tenantId, branchId, month, includeInactive = false) {
+    static async listBranchStaffSalaries(tenantId, branchId, month = "", includeInactive = false) {
         // Fetch branch-assigned staff only, explicitly excluding Company Owner and Super Admin
         const where = {
             tenantId,
-            branchId,
             role: {
                 notIn: ["COMPANY_OWNER", "SUPER_ADMIN"],
             },
         };
+        if (branchId && branchId !== "all" && branchId !== "all-branches") {
+            where.branchId = branchId;
+        }
         if (!includeInactive) {
             where.isActive = true;
         }

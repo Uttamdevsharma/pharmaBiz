@@ -19,18 +19,29 @@ import {
   FileText,
   DollarSign,
   AlertCircle,
+  Store,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { useBranchContext } from "@/context/BranchContext";
 
 type DateFilterPreset = "today" | "yesterday" | "this_month" | "this_year" | "custom";
 type DisplayMode = "due" | "history";
 
 interface PaymentsDueViewProps {
   onNavigate?: (module: any) => void;
+  selectedBranchId?: string;
 }
 
-export function PaymentsDueView({ onNavigate: _onNavigate }: PaymentsDueViewProps = {}) {
+export function PaymentsDueView({ onNavigate: _onNavigate, selectedBranchId: propBranchId }: PaymentsDueViewProps = {}) {
   const { user } = useAuth();
+  const {
+    branches,
+    selectedBranchId: contextBranchId,
+    currentBranch,
+    isAllBranches,
+  } = useBranchContext();
+
+  const effectiveBranchId = propBranchId !== undefined ? propBranchId : contextBranchId;
 
   // Mode and Filter state
   const [displayMode, setDisplayMode] = useState<DisplayMode>("due");
@@ -42,8 +53,6 @@ export function PaymentsDueView({ onNavigate: _onNavigate }: PaymentsDueViewProp
 
   // Data state
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [branches, setBranches] = useState<any[]>([]);
-  const [selectedBranchId, setSelectedBranchId] = useState<string>(user?.branchId || "");
   const [financialAccounts, setFinancialAccounts] = useState<any[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState<string>("");
 
@@ -117,30 +126,14 @@ export function PaymentsDueView({ onNavigate: _onNavigate }: PaymentsDueViewProp
     loadAllSuppliers();
   }, []);
 
-  // Load branches
-  useEffect(() => {
-    async function loadBranches() {
-      try {
-        const res = await fetchApi<any[]>("/branches");
-        if (res.success && res.data && res.data.length > 0) {
-          setBranches(res.data);
-          if (!selectedBranchId) {
-            setSelectedBranchId(user?.branchId || res.data[0].id);
-          }
-        }
-      } catch (err) {
-        console.error("Failed to load branches", err);
-      }
-    }
-    loadBranches();
-  }, [user]);
-
   // Load financial accounts
   useEffect(() => {
     async function loadAccounts() {
-      if (!selectedBranchId) return;
       try {
-        const res = await fetchApi<any[]>(`/accounting/accounts?branchId=${selectedBranchId}`);
+        const url = (effectiveBranchId && effectiveBranchId !== "all")
+          ? `/accounting/accounts?branchId=${effectiveBranchId}`
+          : "/accounting/accounts";
+        const res = await fetchApi<any[]>(url);
         if (res.success && res.data) {
           setFinancialAccounts(res.data);
           if (res.data.length > 0) {
@@ -154,7 +147,7 @@ export function PaymentsDueView({ onNavigate: _onNavigate }: PaymentsDueViewProp
       }
     }
     loadAccounts();
-  }, [selectedBranchId]);
+  }, [effectiveBranchId]);
 
   // Fetch summary and active table data based on active filters
   const fetchData = async (isManual = false) => {
@@ -168,6 +161,9 @@ export function PaymentsDueView({ onNavigate: _onNavigate }: PaymentsDueViewProp
       if (dateRange.start) params.append("startDate", dateRange.start);
       if (dateRange.end) params.append("endDate", dateRange.end);
       if (selectedSupplierId) params.append("supplierId", selectedSupplierId);
+      if (effectiveBranchId && effectiveBranchId !== "all") {
+        params.append("branchId", effectiveBranchId);
+      }
 
       // 1. Fetch Dynamic Summary
       const summaryRes = await fetchApi(`/suppliers/due-summary?${params.toString()}`);
@@ -177,14 +173,19 @@ export function PaymentsDueView({ onNavigate: _onNavigate }: PaymentsDueViewProp
 
       // 2. Fetch Due View or Payment History View
       if (displayMode === "due") {
-        // Fetch suppliers with dues (and apply supplier filter if set)
+        // Fetch suppliers with dues (and apply supplier, branch, and date filters)
         const supParams = new URLSearchParams();
-        if (selectedSupplierId) supParams.append("search", "");
+        if (dateRange.start) supParams.append("startDate", dateRange.start);
+        if (dateRange.end) supParams.append("endDate", dateRange.end);
+        if (selectedSupplierId) supParams.append("supplierId", selectedSupplierId);
+        if (effectiveBranchId && effectiveBranchId !== "all") {
+          supParams.append("branchId", effectiveBranchId);
+        }
         const supRes = await fetchApi(`/suppliers?${supParams.toString()}`);
         if (supRes.success && supRes.data) {
           const list = (supRes.data as Supplier[]).filter((s) => {
             if (selectedSupplierId && s.id !== selectedSupplierId) return false;
-            return Number(s.totalDue || 0) > 0;
+            return Number(s.totalDue || 0) > 0 || Number((s as any).periodPurchased || 0) > 0;
           });
           setDueSuppliers(list);
         }
@@ -207,7 +208,7 @@ export function PaymentsDueView({ onNavigate: _onNavigate }: PaymentsDueViewProp
 
   useEffect(() => {
     fetchData();
-  }, [displayMode, dateRange, selectedSupplierId]);
+  }, [displayMode, dateRange, selectedSupplierId, effectiveBranchId]);
 
   // Filtered due suppliers by local text search
   const filteredDueSuppliers = useMemo(() => {
@@ -229,7 +230,9 @@ export function PaymentsDueView({ onNavigate: _onNavigate }: PaymentsDueViewProp
       (p) =>
         p.supplier?.name?.toLowerCase().includes(q) ||
         p.notes?.toLowerCase().includes(q) ||
-        p.purchase?.invoiceNumber?.toLowerCase().includes(q) ||
+        p.reference?.toLowerCase().includes(q) ||
+        p.purchase?.invoiceNo?.toLowerCase().includes(q) ||
+        p.financialAccount?.name?.toLowerCase().includes(q) ||
         p.financialAccount?.accountName?.toLowerCase().includes(q)
     );
   }, [paymentsHistory, search]);
@@ -260,7 +263,9 @@ export function PaymentsDueView({ onNavigate: _onNavigate }: PaymentsDueViewProp
         method: "POST",
         body: JSON.stringify({
           amount: Number(payAmount),
-          branchId: selectedBranchId,
+          branchId: (effectiveBranchId && effectiveBranchId !== "all")
+            ? effectiveBranchId
+            : (financialAccounts.find((a) => a.id === selectedAccountId)?.branchId || branches[0]?.id),
           financialAccountId: selectedAccountId,
           notes: payNotes || null,
         }),
@@ -441,21 +446,31 @@ export function PaymentsDueView({ onNavigate: _onNavigate }: PaymentsDueViewProp
             ))}
           </div>
 
-          {/* Supplier Dropdown */}
-          <div className="flex items-center gap-2">
-            <Building className="h-4 w-4 text-slate-400 shrink-0" />
-            <select
-              value={selectedSupplierId}
-              onChange={(e) => setSelectedSupplierId(e.target.value)}
-              className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-700 dark:text-slate-300 outline-none font-bold min-w-[200px]"
-            >
-              <option value="">All Suppliers</option>
-              {suppliers.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
+          {/* Supplier Dropdown & Scope Badge */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-2">
+              <Building className="h-4 w-4 text-slate-400 shrink-0" />
+              <select
+                value={selectedSupplierId}
+                onChange={(e) => setSelectedSupplierId(e.target.value)}
+                className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-700 dark:text-slate-300 outline-none font-bold min-w-[200px]"
+              >
+                <option value="">All Suppliers</option>
+                {suppliers.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-300">
+              <Store className="h-3.5 w-3.5 text-brand-primary" />
+              <span>Scope:</span>
+              <span className="font-bold text-slate-900 dark:text-white">
+                {isAllBranches ? "All Branches" : (currentBranch?.name || "Selected Branch")}
+              </span>
+            </div>
           </div>
         </div>
 
@@ -633,11 +648,11 @@ export function PaymentsDueView({ onNavigate: _onNavigate }: PaymentsDueViewProp
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium text-slate-700 dark:text-slate-300">
                   {filteredPaymentHistory.map((p) => {
                     const paid = Number(p.amount || 0);
-                    const due = Number(p.dueRemaining || 0);
-                    const purchaseRef = p.purchase?.invoiceNumber || (p.purchaseId ? `PUR-${p.purchaseId.slice(-6)}` : "General Settlement");
-                    const method = p.financialAccount
-                      ? `${p.financialAccount.accountName} (${p.financialAccount.accountType})`
-                      : p.paymentMethod || "Cash";
+                    const due = Number(p.remainingDue !== undefined && p.remainingDue !== null ? p.remainingDue : p.dueRemaining || 0);
+                    const purchaseRef = p.reference || p.purchase?.invoiceNo || (p.purchaseId ? `PUR-${p.purchaseId.slice(-6)}` : "General Settlement");
+                    const accountName = p.financialAccount?.name || p.financialAccount?.accountName || p.paymentMethod || "Cash";
+                    const accountType = p.financialAccount?.type ? ` (${p.financialAccount.type})` : "";
+                    const method = `${accountName}${accountType}`;
 
                     return (
                       <tr key={p.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/30">

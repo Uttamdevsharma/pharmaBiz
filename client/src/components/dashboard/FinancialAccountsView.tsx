@@ -23,7 +23,9 @@ import {
   Landmark,
   Copy,
   Check,
+  Store,
 } from "lucide-react";
+import { useBranchContext } from "@/context/BranchContext";
 
 interface FinancialAccount {
   id: string;
@@ -44,6 +46,7 @@ interface FinancialAccount {
 
 interface FinancialAccountsViewProps {
   onNavigate?: (module: OwnerModule) => void;
+  selectedBranchId?: string;
 }
 
 const COMMON_BANKS = [
@@ -61,10 +64,18 @@ const COMMON_BANKS = [
   "Sonali Bank",
 ];
 
-export function FinancialAccountsView({ onNavigate }: FinancialAccountsViewProps) {
+export function FinancialAccountsView({ onNavigate, selectedBranchId: propBranchId }: FinancialAccountsViewProps) {
+  const {
+    branches,
+    selectedBranchId: contextBranchId,
+    currentBranch,
+    isAllBranches,
+  } = useBranchContext();
+
+  const effectiveBranchId = propBranchId !== undefined ? propBranchId : contextBranchId;
+
   const [accounts, setAccounts] = useState<FinancialAccount[]>([]);
-  const [branches, setBranches] = useState<any[]>([]);
-  const [selectedBranchId, setSelectedBranchId] = useState<string>("");
+  const [targetFormBranchId, setTargetFormBranchId] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("ALL");
@@ -106,8 +117,8 @@ export function FinancialAccountsView({ onNavigate }: FinancialAccountsViewProps
     try {
       setLoading(true);
       setError(null);
-      const url = selectedBranchId
-        ? `/accounting/accounts?branchId=${selectedBranchId}`
+      const url = (effectiveBranchId && effectiveBranchId !== "all")
+        ? `/accounting/accounts?branchId=${effectiveBranchId}`
         : "/accounting/accounts";
       const res = await fetchApi<FinancialAccount[]>(url);
       if (res.success && res.data) {
@@ -121,30 +132,12 @@ export function FinancialAccountsView({ onNavigate }: FinancialAccountsViewProps
   };
 
   useEffect(() => {
-    async function init() {
-      try {
-        const bRes = await fetchApi<any[]>("/branches");
-        if (bRes.success && bRes.data && bRes.data.length > 0) {
-          setBranches(bRes.data);
-          if (!selectedBranchId) {
-            setSelectedBranchId(bRes.data[0].id);
-          }
-        }
-      } catch (err) {
-        console.error("Failed to load branches", err);
-      }
-    }
-    init();
-  }, []);
-
-  useEffect(() => {
-    if (selectedBranchId) {
-      loadAccounts();
-    }
-  }, [selectedBranchId]);
+    loadAccounts();
+  }, [effectiveBranchId]);
 
   const handleOpenCreate = () => {
     setEditingAccount(null);
+    setTargetFormBranchId(effectiveBranchId && effectiveBranchId !== "all" ? effectiveBranchId : (branches[0]?.id || ""));
     setFormData({
       name: "",
       type: "BANK",
@@ -321,7 +314,7 @@ export function FinancialAccountsView({ onNavigate }: FinancialAccountsViewProps
         const res = await fetchApi("/accounting/accounts", {
           method: "POST",
           body: JSON.stringify({
-            branchId: selectedBranchId,
+            branchId: targetFormBranchId || (effectiveBranchId && effectiveBranchId !== "all" ? effectiveBranchId : branches[0]?.id),
             name: formData.name,
             type: formData.type,
             bankName: formData.bankName || null,
@@ -473,19 +466,13 @@ export function FinancialAccountsView({ onNavigate }: FinancialAccountsViewProps
         </div>
 
         <div className="flex items-center gap-2.5 flex-wrap">
-          {branches.length > 1 && (
-            <select
-              value={selectedBranchId}
-              onChange={(e) => setSelectedBranchId(e.target.value)}
-              className="px-3 py-2 xl:px-3.5 xl:py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs xl:text-sm font-bold text-slate-700 dark:text-slate-200 outline-none"
-            >
-              {branches.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
-                </option>
-              ))}
-            </select>
-          )}
+          <div className="flex items-center gap-2 px-3 py-2 xl:px-3.5 xl:py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs xl:text-sm font-medium text-slate-600 dark:text-slate-300">
+            <Store className="h-4 w-4 text-emerald-500" />
+            <span>Scope:</span>
+            <span className="font-bold text-slate-900 dark:text-white">
+              {isAllBranches ? "All Branches" : (currentBranch?.name || "Selected Branch")}
+            </span>
+          </div>
 
           <button
             onClick={loadAccounts}
@@ -920,6 +907,24 @@ export function FinancialAccountsView({ onNavigate }: FinancialAccountsViewProps
             )}
 
             <form onSubmit={handleSave} className="space-y-4">
+              {!editingAccount && (isAllBranches || !effectiveBranchId || effectiveBranchId === "all") && branches.length > 1 && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Assign To Branch *
+                  </label>
+                  <select
+                    value={targetFormBranchId || branches[0]?.id || ""}
+                    onChange={(e) => setTargetFormBranchId(e.target.value)}
+                    className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none dark:text-white"
+                  >
+                    {branches.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                   Account Type *

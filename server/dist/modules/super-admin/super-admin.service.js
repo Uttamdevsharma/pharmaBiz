@@ -5,6 +5,54 @@ const prisma_1 = require("../../app/lib/prisma");
 const email_service_1 = require("../../app/lib/email.service");
 class SuperAdminService {
     /**
+     * Helper: Calculate Prisma date range filter for date presets and custom date ranges
+     */
+    static getDateRangeFilter(datePreset, startDate, endDate) {
+        if (!datePreset || datePreset === "ALL")
+            return undefined;
+        const now = new Date();
+        const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+        if (datePreset === "TODAY") {
+            const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+            return { gte: startOfToday, lte: endOfToday };
+        }
+        if (datePreset === "YESTERDAY") {
+            const startOfYesterday = new Date(startOfToday);
+            startOfYesterday.setDate(startOfYesterday.getDate() - 1);
+            const endOfYesterday = new Date(startOfToday);
+            endOfYesterday.setMilliseconds(-1);
+            return { gte: startOfYesterday, lte: endOfYesterday };
+        }
+        if (datePreset === "THIS_MONTH") {
+            const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+            const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+            return { gte: startOfMonth, lte: endOfMonth };
+        }
+        if (datePreset === "LAST_MONTH") {
+            const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
+            const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+            return { gte: startOfLastMonth, lte: endOfLastMonth };
+        }
+        if (datePreset === "THIS_YEAR") {
+            const startOfYear = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
+            const endOfYear = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
+            return { gte: startOfYear, lte: endOfYear };
+        }
+        if (datePreset === "CUSTOM") {
+            const filter = {};
+            if (startDate) {
+                filter.gte = new Date(startDate);
+            }
+            if (endDate) {
+                const e = new Date(endDate);
+                e.setHours(23, 59, 59, 999);
+                filter.lte = e;
+            }
+            return Object.keys(filter).length > 0 ? filter : undefined;
+        }
+        return undefined;
+    }
+    /**
      * Plans Management
      */
     static async createPlan(data) {
@@ -113,6 +161,10 @@ class SuperAdminService {
         }
         if (query.isActive !== undefined) {
             where.isActive = query.isActive;
+        }
+        const dateRange = SuperAdminService.getDateRangeFilter(query.datePreset, query.startDate, query.endDate);
+        if (dateRange) {
+            where.createdAt = dateRange;
         }
         const [total, tenants] = await Promise.all([
             prisma_1.prisma.tenant.count({ where }),
@@ -240,11 +292,30 @@ class SuperAdminService {
     /**
      * Platform Subscriptions List
      */
-    static async listSubscriptions(page = 1, limit = 50, status) {
+    static async listSubscriptions(page = 1, limit = 50, status, query) {
         const skip = (page - 1) * limit;
         const where = { tenant: { name: { not: "Platform HQ" } } };
-        if (status) {
+        if (status && status !== "ALL") {
             where.status = status;
+        }
+        const dateRange = SuperAdminService.getDateRangeFilter(query?.datePreset, query?.startDate, query?.endDate);
+        if (dateRange) {
+            where.createdAt = dateRange;
+        }
+        if (query?.tier) {
+            where.tenant = { ...where.tenant, tier: query.tier };
+        }
+        if (query?.search) {
+            const searchStr = query.search.trim();
+            where.AND = [
+                {
+                    OR: [
+                        { tenant: { name: { contains: searchStr, mode: "insensitive" } } },
+                        { tenant: { email: { contains: searchStr, mode: "insensitive" } } },
+                        { plan: { name: { contains: searchStr, mode: "insensitive" } } },
+                    ],
+                },
+            ];
         }
         const [total, subscriptions] = await Promise.all([
             prisma_1.prisma.subscription.count({ where }),
@@ -311,20 +382,32 @@ class SuperAdminService {
     /**
      * Platform Analytics (No tenant sales data)
      */
-    static async getPlatformAnalytics() {
+    static async getPlatformAnalytics(query) {
+        const dateRange = SuperAdminService.getDateRangeFilter(query?.datePreset, query?.startDate, query?.endDate);
         const tenantFilter = { name: { not: "Platform HQ" } };
+        if (dateRange) {
+            tenantFilter.createdAt = dateRange;
+        }
+        const paymentFilter = { status: "VALIDATED", tenant: { name: { not: "Platform HQ" } } };
+        if (dateRange) {
+            paymentFilter.createdAt = dateRange;
+        }
+        const subFilter = { tenant: { name: { not: "Platform HQ" } } };
+        if (dateRange) {
+            subFilter.createdAt = dateRange;
+        }
         const [totalTenants, activeTenants, suspendedTenants, totalSubscriptions, activeSubscriptions, successfulPayments, activeSubsWithPlans, recentTenants,] = await Promise.all([
             prisma_1.prisma.tenant.count({ where: tenantFilter }),
             prisma_1.prisma.tenant.count({ where: { ...tenantFilter, isActive: true } }),
             prisma_1.prisma.tenant.count({ where: { ...tenantFilter, isActive: false } }),
-            prisma_1.prisma.subscription.count({ where: { tenant: tenantFilter } }),
-            prisma_1.prisma.subscription.count({ where: { status: "ACTIVE", tenant: tenantFilter } }),
+            prisma_1.prisma.subscription.count({ where: subFilter }),
+            prisma_1.prisma.subscription.count({ where: { ...subFilter, status: "ACTIVE" } }),
             prisma_1.prisma.payment.findMany({
-                where: { status: "VALIDATED", tenant: tenantFilter },
+                where: paymentFilter,
                 select: { amount: true, createdAt: true },
             }),
             prisma_1.prisma.subscription.findMany({
-                where: { status: "ACTIVE", tenant: tenantFilter },
+                where: { ...subFilter, status: "ACTIVE" },
                 include: { plan: true, tenant: { select: { tier: true } } },
             }),
             prisma_1.prisma.tenant.findMany({
@@ -834,6 +917,10 @@ class SuperAdminService {
         const where = {};
         if (query?.status && query.status !== "ALL") {
             where.verificationStatus = query.status;
+        }
+        const dateRange = SuperAdminService.getDateRangeFilter(query?.datePreset, query?.startDate, query?.endDate);
+        if (dateRange) {
+            where.createdAt = dateRange;
         }
         if (query?.search) {
             const search = query.search.trim();

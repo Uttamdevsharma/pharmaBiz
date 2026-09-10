@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { fetchApi } from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
 import { OwnerModule } from "./DashboardSidebar";
 import {
   History,
@@ -27,9 +28,11 @@ import {
   Clock,
   UserCheck,
 } from "lucide-react";
+import { useBranchContext } from "@/context/BranchContext";
 
 interface SalesHistoryViewProps {
   onNavigate?: (module: OwnerModule) => void;
+  selectedBranchId?: string;
 }
 
 interface SaleRecord {
@@ -60,7 +63,11 @@ interface SaleRecord {
   }>;
 }
 
-export function SalesHistoryView({ onNavigate }: SalesHistoryViewProps = {}) {
+export function SalesHistoryView({ onNavigate, selectedBranchId: propBranchId }: SalesHistoryViewProps = {}) {
+  const { user: authUser } = useAuth();
+  const { selectedBranchId: contextBranchId, currentBranch, isAllBranches } = useBranchContext();
+  const effectiveBranchId = propBranchId !== undefined ? propBranchId : contextBranchId;
+
   const [sales, setSales] = useState<SaleRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -71,8 +78,6 @@ export function SalesHistoryView({ onNavigate }: SalesHistoryViewProps = {}) {
   const [periodPreset, setPeriodPreset] = useState<"today" | "yesterday" | "last7Days" | "thisMonth" | "all" | "custom">("today");
   const [startDate, setStartDate] = useState<string>(new Date().toISOString().split("T")[0]);
   const [endDate, setEndDate] = useState<string>(new Date().toISOString().split("T")[0]);
-  const [selectedBranchId, setSelectedBranchId] = useState<string>("");
-  const [branches, setBranches] = useState<any[]>([]);
 
   // Pagination
   const [page, setPage] = useState(1);
@@ -95,17 +100,16 @@ export function SalesHistoryView({ onNavigate }: SalesHistoryViewProps = {}) {
 
       if (search.trim()) params.append("search", search.trim());
       if (paymentMethod) params.append("paymentMethod", paymentMethod);
-      if (selectedBranchId) params.append("branchId", selectedBranchId);
+      if (effectiveBranchId && effectiveBranchId !== "all") {
+        params.append("branchId", effectiveBranchId);
+      }
 
       if (periodPreset !== "all") {
         if (startDate) params.append("startDate", startDate);
         if (endDate) params.append("endDate", endDate);
       }
 
-      const [res, branchRes] = await Promise.all([
-        fetchApi<any>(`/sales?${params.toString()}`),
-        branches.length === 0 ? fetchApi<any>("/branches") : Promise.resolve({ success: true, data: branches }),
-      ]);
+      const res = await fetchApi<any>(`/sales?${params.toString()}`);
 
       if (res.success) {
         setSales(res.data || []);
@@ -114,9 +118,6 @@ export function SalesHistoryView({ onNavigate }: SalesHistoryViewProps = {}) {
           setTotalPages(pagination.totalPages || 1);
           setTotalCount(pagination.total || 0);
         }
-      }
-      if (branchRes.success && branchRes.data && branches.length === 0) {
-        setBranches(branchRes.data || []);
       }
     } catch (err) {
       console.error("Failed to load sales history", err);
@@ -128,7 +129,7 @@ export function SalesHistoryView({ onNavigate }: SalesHistoryViewProps = {}) {
 
   useEffect(() => {
     loadSales();
-  }, [page, periodPreset, startDate, endDate, paymentMethod, selectedBranchId]);
+  }, [page, periodPreset, startDate, endDate, paymentMethod, effectiveBranchId]);
 
   const handlePeriodPreset = (preset: "today" | "yesterday" | "last7Days" | "thisMonth" | "all" | "custom") => {
     setPeriodPreset(preset);
@@ -293,24 +294,14 @@ export function SalesHistoryView({ onNavigate }: SalesHistoryViewProps = {}) {
               <option value="BANK">Bank / Card</option>
             </select>
 
-            {/* Branch Filter */}
-            {branches.length > 1 && (
-              <select
-                value={selectedBranchId}
-                onChange={(e) => {
-                  setSelectedBranchId(e.target.value);
-                  setPage(1);
-                }}
-                className="px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-slate-200 outline-none"
-              >
-                <option value="">All Branches</option>
-                {branches.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.name}
-                  </option>
-                ))}
-              </select>
-            )}
+            {/* Active Branch Scope Badge */}
+            <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-600 dark:text-slate-300">
+              <Store className="h-3.5 w-3.5 text-emerald-500" />
+              <span>Scope:</span>
+              <span className="font-bold text-slate-900 dark:text-white">
+                {isAllBranches ? "All Branches" : (currentBranch?.name || "Selected Branch")}
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -533,9 +524,23 @@ export function SalesHistoryView({ onNavigate }: SalesHistoryViewProps = {}) {
             {/* Modal Content / Thermal Paper View */}
             <div className="p-6 overflow-y-auto space-y-4 font-mono text-xs">
               <div className="text-center pb-3 border-b border-dashed border-slate-300 dark:border-slate-700 space-y-1">
-                <div className="font-black text-sm text-slate-900 dark:text-white">
-                  {selectedSale.branch?.name || "PHARMABIZ STORE"}
+                {authUser?.tenant?.logoUrl && (
+                  <div className="flex justify-center mb-1">
+                    <img
+                      src={authUser.tenant.logoUrl}
+                      alt="Pharmacy logo"
+                      className="h-10 object-contain"
+                    />
+                  </div>
+                )}
+                <div className="font-black text-sm text-slate-900 dark:text-white uppercase">
+                  {authUser?.tenant?.name || selectedSale.branch?.name || "Pharmacy Store"}
                 </div>
+                {selectedSale.branch?.name && (
+                  <div className="text-[10px] font-semibold text-slate-500">
+                    Branch: {selectedSale.branch.name}
+                  </div>
+                )}
                 {selectedSale.branch?.location && (
                   <div className="text-[10px] text-slate-500">{selectedSale.branch.location}</div>
                 )}

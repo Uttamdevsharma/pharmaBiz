@@ -9,18 +9,21 @@ class DeductionRuleController {
             const { branchId } = req.query;
             const user = req.user;
             const tenantId = user.tenantId;
-            if (!branchId) {
-                res.status(400).json({ error: "branchId is required" });
+            if (!branchId || branchId === "all") {
+                res.status(400).json({ success: false, message: "A specific branchId is required" });
                 return;
             }
             const rule = await prisma_1.prisma.salaryDeductionRule.findUnique({
                 where: { branchId: String(branchId) },
             });
-            res.status(200).json(rule || { absentRuleRatio: null, lateRuleRatio: null });
+            res.status(200).json({
+                success: true,
+                data: rule || { absentRuleRatio: null, lateRuleRatio: null },
+            });
         }
         catch (error) {
             console.error("[DeductionRuleController.getRules] Error:", error.message);
-            res.status(500).json({ error: "Failed to get deduction rules." });
+            res.status(500).json({ success: false, message: "Failed to get deduction rules." });
         }
     }
     static async setRules(req, res) {
@@ -28,8 +31,8 @@ class DeductionRuleController {
             const { branchId, absentRuleRatio, lateRuleRatio } = req.body;
             const user = req.user;
             const tenantId = user.tenantId;
-            if (!branchId) {
-                res.status(400).json({ error: "branchId is required" });
+            if (!branchId || branchId === "all") {
+                res.status(400).json({ success: false, message: "A specific branchId is required" });
                 return;
             }
             const parseRatio = (val) => {
@@ -41,14 +44,14 @@ class DeductionRuleController {
             const parsedAbsent = parseRatio(absentRuleRatio);
             const parsedLate = parseRatio(lateRuleRatio);
             const rule = await prisma_1.prisma.salaryDeductionRule.upsert({
-                where: { branchId },
+                where: { branchId: String(branchId) },
                 update: {
                     absentRuleRatio: parsedAbsent,
                     lateRuleRatio: parsedLate,
                 },
                 create: {
                     tenantId,
-                    branchId,
+                    branchId: String(branchId),
                     absentRuleRatio: parsedAbsent,
                     lateRuleRatio: parsedLate,
                     createdById: user.id,
@@ -56,16 +59,20 @@ class DeductionRuleController {
             });
             await audit_1.AuditService.log({
                 tenantId,
-                branchId,
+                branchId: String(branchId),
                 userId: user.id,
                 action: "SALARY_DEDUCTION_RULE_UPDATED",
                 details: { absentRuleRatio: parsedAbsent, lateRuleRatio: parsedLate },
             });
-            res.status(200).json(rule);
+            res.status(200).json({
+                success: true,
+                message: "Salary deduction rules saved successfully",
+                data: rule,
+            });
         }
         catch (error) {
             console.error("[DeductionRuleController.setRules] Error:", error.message);
-            res.status(500).json({ error: "Failed to set deduction rules." });
+            res.status(500).json({ success: false, message: "Failed to set deduction rules." });
         }
     }
 }

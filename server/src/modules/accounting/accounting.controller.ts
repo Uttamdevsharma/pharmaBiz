@@ -8,9 +8,12 @@ export class AccountingController {
     try {
       const tenantId = req.user!.tenantId;
       const user = req.user!;
-      const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN";
-      const branchId = isOwner ? (req.query.branchId as string | undefined) : (user.branchId || (req.query.branchId as string | undefined));
-      const accounts = await AccountingService.listAccounts(tenantId, branchId);
+      const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN" || user.role === "REGIONAL_ADMIN";
+      const branchId = isOwner
+        ? ((req.query.branchId as string) || (req.headers["x-branch-id"] as string) || undefined)
+        : (user.branchId || undefined);
+      const cleanBranchId = !branchId || branchId === "all" || branchId === "all-branches" ? undefined : branchId;
+      const accounts = await AccountingService.listAccounts(tenantId, cleanBranchId);
       res.json({ success: true, data: accounts });
     } catch (err: any) {
       res.status(400).json({ success: false, message: err.message });
@@ -110,14 +113,20 @@ export class AccountingController {
 
   static async getOverview(req: Request, res: Response): Promise<void> {
     try {
-      const tenantId = req.user!.tenantId;
-      const branchId = req.query.branchId as string | undefined;
+      const user = req.user!;
+      const tenantId = user.tenantId;
+      const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN" || user.role === "REGIONAL_ADMIN";
+      const branchId = isOwner
+        ? ((req.query.branchId as string) || (req.headers["x-branch-id"] as string) || undefined)
+        : (user.branchId || undefined);
+      const cleanBranchId = !branchId || branchId === "all" || branchId === "all-branches" ? undefined : branchId;
+
       const options = {
         startDate: req.query.startDate as string | undefined,
         endDate: req.query.endDate as string | undefined,
         period: req.query.period as string | undefined,
       };
-      const overview = await AccountingService.getFinancialOverview(tenantId, branchId, options);
+      const overview = await AccountingService.getFinancialOverview(tenantId, cleanBranchId, options);
       res.json({ success: true, data: overview });
     } catch (err: any) {
       res.status(400).json({ success: false, message: err.message });
@@ -143,10 +152,16 @@ export class AccountingController {
   // ==========================================
   static async listRecurringExpenses(req: Request, res: Response): Promise<void> {
     try {
-      const tenantId = req.user!.tenantId;
-      const branchId = req.query.branchId as string | undefined;
+      const user = req.user!;
+      const tenantId = user.tenantId;
+      const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN" || user.role === "REGIONAL_ADMIN";
+      const branchId = isOwner
+        ? ((req.query.branchId as string) || (req.headers["x-branch-id"] as string) || undefined)
+        : (user.branchId || undefined);
+      const cleanBranchId = !branchId || branchId === "all" || branchId === "all-branches" ? undefined : branchId;
+
       const includeInactive = req.query.includeInactive === "true" || req.query.includeInactive === "1";
-      const data = await AccountingService.listRecurringExpenses(tenantId, branchId, includeInactive);
+      const data = await AccountingService.listRecurringExpenses(tenantId, cleanBranchId, includeInactive);
       res.json({ success: true, data });
     } catch (err: any) {
       res.status(400).json({ success: false, message: err.message });
@@ -226,17 +241,15 @@ export class AccountingController {
     try {
       const tenantId = req.user!.tenantId;
       const user = req.user!;
-      const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN";
-      const branchId = isOwner ? ((req.query.branchId as string) || user.branchId || "") : (user.branchId || (req.query.branchId as string) || "");
+      const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN" || user.role === "REGIONAL_ADMIN";
+      const branchId = isOwner
+        ? ((req.query.branchId as string) || (req.headers["x-branch-id"] as string) || undefined)
+        : (user.branchId || undefined);
+      const cleanBranchId = !branchId || branchId === "all" || branchId === "all-branches" ? undefined : branchId;
       const month = (req.query.month as string) || new Date().toISOString().slice(0, 7);
       const includeInactive = req.query.includeInactive === "true" || req.query.includeInactive === "1";
 
-      if (!branchId) {
-        res.status(400).json({ success: false, message: "Branch ID is required" });
-        return;
-      }
-
-      const employees = await AccountingService.listBranchStaffSalaries(tenantId, branchId, month, includeInactive);
+      const employees = await AccountingService.listBranchStaffSalaries(tenantId, cleanBranchId, month, includeInactive);
       res.json({ success: true, data: employees });
     } catch (err: any) {
       res.status(400).json({ success: false, message: err.message });
@@ -318,14 +331,17 @@ export class AccountingController {
     try {
       const tenantId = req.user!.tenantId;
       const user = req.user!;
-      const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN";
-      const branchId = isOwner ? ((req.query.branchId as string) || user.branchId || "") : (user.branchId || (req.query.branchId as string) || "");
+      const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN" || user.role === "REGIONAL_ADMIN";
+      const branchId = isOwner
+        ? ((req.query.branchId as string) || (req.headers["x-branch-id"] as string) || undefined)
+        : (user.branchId || undefined);
+      const cleanBranchId = !branchId || branchId === "all" || branchId === "all-branches" ? undefined : branchId;
       const month = req.query.month as string | undefined;
       const userId = req.query.userId as string | undefined;
       const page = req.query.page ? parseInt(req.query.page as string, 10) : 1;
       const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 50;
 
-      const data = await AccountingService.getBranchSalaryHistory(tenantId, branchId, {
+      const data = await AccountingService.getBranchSalaryHistory(tenantId, cleanBranchId, {
         month,
         userId,
         page,

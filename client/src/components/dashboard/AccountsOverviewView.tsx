@@ -37,13 +37,21 @@ interface FinancialAccount {
   description?: string | null;
 }
 
-export function AccountsOverviewView({ onNavigate }: AccountsOverviewViewProps = {}) {
+import { useBranchContext } from "@/context/BranchContext";
+
+interface AccountsOverviewViewProps {
+  onNavigate?: (module: OwnerModule) => void;
+  selectedBranchId?: string;
+}
+
+export function AccountsOverviewView({ onNavigate, selectedBranchId: propBranchId }: AccountsOverviewViewProps = {}) {
+  const { selectedBranchId: contextBranchId, currentBranch, isAllBranches } = useBranchContext();
+  const effectiveBranchId = propBranchId !== undefined ? propBranchId : contextBranchId;
+
   // Time filter state for KPI summary
   const [periodPreset, setPeriodPreset] = useState<"thisMonth" | "lastMonth" | "last6Months" | "thisYear" | "custom">("thisMonth");
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
-  const [selectedBranchId, setSelectedBranchId] = useState<string>("");
-  const [branches, setBranches] = useState<any[]>([]);
 
   // Accounts & Telemetry data
   const [accounts, setAccounts] = useState<FinancialAccount[]>([]);
@@ -61,19 +69,20 @@ export function AccountsOverviewView({ onNavigate }: AccountsOverviewViewProps =
       else setLoading(true);
 
       const params = new URLSearchParams();
-      if (selectedBranchId) params.append("branchId", selectedBranchId);
+      if (effectiveBranchId && effectiveBranchId !== "all") {
+        params.append("branchId", effectiveBranchId);
+      }
       if (periodPreset !== "custom") params.append("period", periodPreset);
       if (startDate) params.append("startDate", startDate);
       if (endDate) params.append("endDate", endDate);
 
-      const accountsUrl = selectedBranchId
-        ? `/accounting/accounts?branchId=${selectedBranchId}`
+      const accountsUrl = (effectiveBranchId && effectiveBranchId !== "all")
+        ? `/accounting/accounts?branchId=${effectiveBranchId}`
         : "/accounting/accounts";
 
-      const [res, accRes, branchRes] = await Promise.all([
+      const [res, accRes] = await Promise.all([
         fetchApi<any>(`/accounting/overview?${params.toString()}`),
         fetchApi<FinancialAccount[]>(accountsUrl),
-        branches.length === 0 ? fetchApi<any>("/branches") : Promise.resolve({ success: true, data: branches }),
       ]);
 
       if (res.success && res.data) {
@@ -81,9 +90,6 @@ export function AccountsOverviewView({ onNavigate }: AccountsOverviewViewProps =
       }
       if (accRes.success && accRes.data) {
         setAccounts(accRes.data);
-      }
-      if (branchRes.success && branchRes.data && branches.length === 0) {
-        setBranches(branchRes.data || []);
       }
     } catch (err) {
       console.error("Failed to load financial overview", err);
@@ -95,7 +101,7 @@ export function AccountsOverviewView({ onNavigate }: AccountsOverviewViewProps =
 
   useEffect(() => {
     loadFinancialOverview();
-  }, [periodPreset, startDate, endDate, selectedBranchId]);
+  }, [periodPreset, startDate, endDate, effectiveBranchId]);
 
   const handlePeriodChange = (preset: "thisMonth" | "lastMonth" | "last6Months" | "thisYear" | "custom") => {
     setPeriodPreset(preset);
@@ -308,23 +314,13 @@ export function AccountsOverviewView({ onNavigate }: AccountsOverviewViewProps =
             />
           </div>
 
-          {branches.length > 1 && (
-            <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800/80 px-3 py-1.5 xl:py-2 rounded-xl border border-slate-200 dark:border-slate-700">
-              <Store className="h-4 w-4 text-slate-400" />
-              <select
-                value={selectedBranchId}
-                onChange={(e) => setSelectedBranchId(e.target.value)}
-                className="bg-transparent text-xs xl:text-sm font-bold text-slate-800 dark:text-slate-200 outline-none"
-              >
-                <option value="">All Branches</option>
-                {branches.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
+          <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800/80 px-3 py-1.5 xl:py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs xl:text-sm text-slate-600 dark:text-slate-300">
+            <Store className="h-4 w-4 text-emerald-500" />
+            <span>Scope:</span>
+            <span className="font-bold text-slate-900 dark:text-white">
+              {isAllBranches ? "All Branches" : (currentBranch?.name || "Selected Branch")}
+            </span>
+          </div>
         </div>
       </div>
 

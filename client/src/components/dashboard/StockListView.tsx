@@ -4,12 +4,14 @@ import React, { useEffect, useState, useMemo } from "react";
 import { fetchApi } from "@/lib/api";
 import { Branch, InventoryItem } from "@/types";
 import { useAuth } from "@/context/AuthContext";
+import { useBranchContext } from "@/context/BranchContext";
 import {
   calculatePackaging,
   PackagingConfig,
 } from "@/lib/packaging";
 import { ProductInventoryDetailsView } from "./ProductInventoryDetailsView";
 import { BatchStockDetailsView } from "./BatchStockDetailsView";
+import { OwnerModule } from "./DashboardSidebar";
 import {
   Boxes,
   Plus,
@@ -26,10 +28,6 @@ import {
   Calendar,
   Sparkles,
 } from "lucide-react";
-
-interface StockListViewProps {
-  onNavigate: (module: any, extra?: any) => void;
-}
 
 interface ProductStockGroup {
   productId: string;
@@ -55,10 +53,22 @@ interface ProductStockGroup {
   earliestExpiry?: string | null;
 }
 
-export function StockListView({ onNavigate }: StockListViewProps) {
+interface StockListViewProps {
+  onNavigate: (module: OwnerModule, extraParams?: any) => void;
+  selectedBranchId?: string;
+}
+
+export function StockListView({ onNavigate, selectedBranchId: propBranchId }: StockListViewProps) {
   const { user } = useAuth();
-  const [branches, setBranches] = useState<Branch[]>([]);
-  const [selectedBranchId, setSelectedBranchId] = useState<string>(user?.branchId || "");
+  const {
+    branches,
+    selectedBranchId: contextBranchId,
+    currentBranch,
+    isAllBranches,
+    isBranchLocked,
+  } = useBranchContext();
+
+  const effectiveBranchId = propBranchId !== undefined ? propBranchId : contextBranchId;
   const [rawInventory, setRawInventory] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -72,36 +82,18 @@ export function StockListView({ onNavigate }: StockListViewProps) {
   const [selectedProductGroup, setSelectedProductGroup] = useState<ProductStockGroup | null>(null);
   const [selectedBatchItem, setSelectedBatchItem] = useState<InventoryItem | null>(null);
 
-  const isBranchLocked = Boolean(
-    user?.branchId && user?.role !== "COMPANY_OWNER" && user?.role !== "SUPER_ADMIN"
-  );
-
-  useEffect(() => {
-    async function loadBranches() {
-      try {
-        const res = await fetchApi("/branches");
-        if (res.success && res.data && res.data.length > 0) {
-          setBranches(res.data);
-          if (!selectedBranchId) {
-            setSelectedBranchId(user?.branchId || res.data[0].id);
-          }
-        }
-      } catch (err) {
-        console.error("Failed to load branches", err);
-      }
-    }
-    loadBranches();
-  }, [user]);
-
   const loadBranchStock = async () => {
-    if (!selectedBranchId) return;
     try {
       setLoading(true);
       const params = new URLSearchParams();
       params.append("limit", "250");
       if (search) params.append("search", search);
 
-      const res = await fetchApi(`/inventory/branch/${selectedBranchId}?${params.toString()}`);
+      const targetPath = effectiveBranchId && effectiveBranchId !== "all"
+        ? `/inventory/branch/${effectiveBranchId}?${params.toString()}`
+        : `/inventory/branch/all?${params.toString()}`;
+
+      const res = await fetchApi(targetPath);
       if (res.success && res.data) {
         setRawInventory(res.data);
       }
@@ -113,10 +105,8 @@ export function StockListView({ onNavigate }: StockListViewProps) {
   };
 
   useEffect(() => {
-    if (selectedBranchId) {
-      loadBranchStock();
-    }
-  }, [selectedBranchId]);
+    loadBranchStock();
+  }, [effectiveBranchId]);
 
   // Keep active batch & product in sync when inventory reloads
   useEffect(() => {
@@ -272,7 +262,7 @@ export function StockListView({ onNavigate }: StockListViewProps) {
       <BatchStockDetailsView
         batch={selectedBatchItem}
         product={selectedProductGroup}
-        selectedBranchId={selectedBranchId}
+        selectedBranchId={effectiveBranchId}
         onBackToProduct={() => setViewMode("PRODUCT_DETAILS")}
         onBackToStockList={() => setViewMode("PRODUCT_BROWSER")}
         onNavigateToAllocate={handleNavigateToAllocate}
@@ -287,7 +277,7 @@ export function StockListView({ onNavigate }: StockListViewProps) {
       <ProductInventoryDetailsView
         product={selectedProductGroup}
         batches={selectedProductGroup.batches}
-        selectedBranchId={selectedBranchId}
+        selectedBranchId={effectiveBranchId}
         onSelectBatch={handleSelectBatch}
         onBackToStockList={() => setViewMode("PRODUCT_BROWSER")}
         onNavigateToAllocate={handleNavigateToAllocate}
@@ -316,21 +306,9 @@ export function StockListView({ onNavigate }: StockListViewProps) {
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Branch Selector */}
-          <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3.5 py-2 rounded-xl">
-            <Store className="h-4 w-4 text-slate-400" />
-            <select
-              disabled={isBranchLocked}
-              value={selectedBranchId}
-              onChange={(e) => setSelectedBranchId(e.target.value)}
-              className="bg-transparent text-xs font-bold text-slate-800 dark:text-white outline-none disabled:opacity-60"
-            >
-              {branches.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
-                </option>
-              ))}
-            </select>
+          <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-200 shadow-xs">
+            <Store className="h-4 w-4 text-brand-primary shrink-0" />
+            <span>{currentBranch?.name || (effectiveBranchId ? "Selected Branch" : "All Branches (Consolidated)")}</span>
           </div>
 
           <button

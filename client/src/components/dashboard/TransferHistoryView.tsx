@@ -5,6 +5,7 @@ import { fetchApi } from "@/lib/api";
 import { Branch } from "@/types";
 import { useAuth } from "@/context/AuthContext";
 import { OwnerModule } from "./DashboardSidebar";
+import { DateRangeFilter, DatePreset, getComputedDateRange } from "./DateRangeFilter";
 import {
   FileSpreadsheet,
   Plus,
@@ -47,6 +48,9 @@ export function TransferHistoryView({ onNavigate }: TransferHistoryViewProps) {
   const [branchFilter, setBranchFilter] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState<string>("");
+  const [datePreset, setDatePreset] = useState<DatePreset>("ALL");
+  const [startDate, setStartDate] = useState<string>("");
+  const [endDate, setEndDate] = useState<string>("");
 
   // Details Modal State
   const [selectedTransfer, setSelectedTransfer] = useState<any | null>(null);
@@ -55,12 +59,23 @@ export function TransferHistoryView({ onNavigate }: TransferHistoryViewProps) {
   const loadData = async () => {
     try {
       setLoading(true);
+      const { start, end } = getComputedDateRange(datePreset, startDate, endDate);
+      const params = new URLSearchParams();
+      params.append("limit", "100");
+      if (branchFilter) params.append("branchId", branchFilter);
+      if (statusFilter) params.append("status", statusFilter);
+      if (searchQuery) params.append("search", searchQuery);
+      if (start) params.append("startDate", start);
+      if (end) params.append("endDate", end);
+
       const [tRes, bRes] = await Promise.all([
-        fetchApi<any[]>("/transfers?limit=100"),
+        fetchApi<any[]>(`/transfers?${params.toString()}`),
         fetchApi<Branch[]>("/branches"),
       ]);
 
-      if (tRes.success && tRes.data) setTransfers(tRes.data);
+      if (tRes.success && tRes.data) {
+        setTransfers(Array.isArray(tRes.data) ? tRes.data : (tRes.data as any).data || []);
+      }
       if (bRes.success && bRes.data) setBranches(bRes.data);
     } catch (err) {
       console.error("Failed to load transfer history", err);
@@ -71,7 +86,7 @@ export function TransferHistoryView({ onNavigate }: TransferHistoryViewProps) {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [datePreset, startDate, endDate, branchFilter, statusFilter]);
 
   const openDetailsModal = async (transfer: any) => {
     try {
@@ -208,42 +223,54 @@ export function TransferHistoryView({ onNavigate }: TransferHistoryViewProps) {
       </div>
 
       {/* Filter Bar */}
-      <div className="p-4 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col md:flex-row items-center justify-between gap-3 text-xs">
-        <div className="relative w-full md:w-72">
-          <Search className="h-4 w-4 text-slate-400 absolute left-3 top-2.5" />
-          <input
-            type="text"
-            placeholder="Search transfer ID, branch, product..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none text-xs"
-          />
-        </div>
+      <div className="p-4 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-3">
+        <DateRangeFilter
+          datePreset={datePreset}
+          setDatePreset={setDatePreset}
+          startDate={startDate}
+          setStartDate={setStartDate}
+          endDate={endDate}
+          setEndDate={setEndDate}
+          label="Transfer Date Filter"
+        />
 
-        <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
-          <select
-            value={branchFilter}
-            onChange={(e) => setBranchFilter(e.target.value)}
-            className="px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-bold text-xs outline-none cursor-pointer"
-          >
-            <option value="">All Branches</option>
-            {branches.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name}
-              </option>
-            ))}
-          </select>
+        <div className="flex flex-col md:flex-row items-center justify-between gap-3 text-xs pt-2 border-t border-slate-100 dark:border-slate-800">
+          <div className="relative w-full md:w-72">
+            <Search className="h-4 w-4 text-slate-400 absolute left-3 top-2.5" />
+            <input
+              type="text"
+              placeholder="Search transfer ID, branch, product..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none text-xs"
+            />
+          </div>
 
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-bold text-xs outline-none cursor-pointer"
-          >
-            <option value="">All Transfer Status</option>
-            <option value="IN_TRANSIT">In Transit</option>
-            <option value="RECEIVED">Received & Inspected</option>
-            <option value="CANCELLED">Cancelled</option>
-          </select>
+          <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
+            <select
+              value={branchFilter}
+              onChange={(e) => setBranchFilter(e.target.value)}
+              className="px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-bold text-xs outline-none cursor-pointer"
+            >
+              <option value="">All Branches</option>
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-bold text-xs outline-none cursor-pointer"
+            >
+              <option value="">All Transfer Status</option>
+              <option value="IN_TRANSIT">In Transit</option>
+              <option value="RECEIVED">Received & Inspected</option>
+              <option value="CANCELLED">Cancelled</option>
+            </select>
+          </div>
         </div>
       </div>
 

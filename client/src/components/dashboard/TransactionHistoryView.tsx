@@ -11,7 +11,9 @@ import {
   Loader2,
   Calendar,
   Wallet,
+  Store,
 } from "lucide-react";
+import { useBranchContext } from "@/context/BranchContext";
 
 interface TransactionItem {
   id: string;
@@ -33,13 +35,20 @@ interface TransactionItem {
 
 interface TransactionHistoryViewProps {
   onNavigate?: (module: OwnerModule) => void;
+  selectedBranchId?: string;
 }
 
-export function TransactionHistoryView({ onNavigate: _onNavigate }: TransactionHistoryViewProps = {}) {
+export function TransactionHistoryView({ onNavigate: _onNavigate, selectedBranchId: propBranchId }: TransactionHistoryViewProps = {}) {
+  const {
+    selectedBranchId: contextBranchId,
+    currentBranch,
+    isAllBranches,
+  } = useBranchContext();
+
+  const effectiveBranchId = propBranchId !== undefined ? propBranchId : contextBranchId;
+
   const [transactions, setTransactions] = useState<TransactionItem[]>([]);
   const [accounts, setAccounts] = useState<any[]>([]);
-  const [branches, setBranches] = useState<any[]>([]);
-  const [selectedBranchId, setSelectedBranchId] = useState<string>("");
   const [selectedAccountId, setSelectedAccountId] = useState<string>("");
   
   // Simple Date Preset state: "today" | "yesterday" | "7days" | "thisMonth" | "thisYear" | "custom"
@@ -88,7 +97,7 @@ export function TransactionHistoryView({ onNavigate: _onNavigate }: TransactionH
 
   const loadAccounts = async (branchId?: string) => {
     try {
-      const url = branchId ? `/accounting/accounts?branchId=${branchId}` : "/accounting/accounts";
+      const url = (branchId && branchId !== "all") ? `/accounting/accounts?branchId=${branchId}` : "/accounting/accounts";
       const res = await fetchApi<any[]>(url);
       if (res.success && res.data) {
         setAccounts(res.data);
@@ -102,7 +111,9 @@ export function TransactionHistoryView({ onNavigate: _onNavigate }: TransactionH
     try {
       setLoading(true);
       const params = new URLSearchParams();
-      if (selectedBranchId) params.append("branchId", selectedBranchId);
+      if (effectiveBranchId && effectiveBranchId !== "all") {
+        params.append("branchId", effectiveBranchId);
+      }
       if (selectedAccountId) params.append("accountId", selectedAccountId);
       if (startDate) params.append("startDate", startDate);
       if (endDate) params.append("endDate", endDate);
@@ -120,29 +131,12 @@ export function TransactionHistoryView({ onNavigate: _onNavigate }: TransactionH
   };
 
   useEffect(() => {
-    async function init() {
-      try {
-        const bRes = await fetchApi<any[]>("/branches");
-        if (bRes.success && bRes.data && bRes.data.length > 0) {
-          setBranches(bRes.data);
-          if (!selectedBranchId) {
-            setSelectedBranchId(bRes.data[0].id);
-          }
-        }
-      } catch (err) {
-        console.error("Failed to load branches", err);
-      }
-    }
-    init();
-  }, []);
-
-  useEffect(() => {
-    loadAccounts(selectedBranchId);
-  }, [selectedBranchId]);
+    loadAccounts(effectiveBranchId);
+  }, [effectiveBranchId]);
 
   useEffect(() => {
     loadTransactions();
-  }, [selectedBranchId, selectedAccountId, startDate, endDate]);
+  }, [startDate, endDate, selectedAccountId, effectiveBranchId]);
 
   const filteredTransactions = transactions.filter((t) => {
     if (!search) return true;
@@ -204,20 +198,13 @@ export function TransactionHistoryView({ onNavigate: _onNavigate }: TransactionH
         </div>
 
         <div className="flex items-center gap-2.5 flex-wrap">
-          {branches.length > 1 && (
-            <select
-              value={selectedBranchId}
-              onChange={(e) => setSelectedBranchId(e.target.value)}
-              className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 outline-none"
-            >
-              <option value="">All Branches</option>
-              {branches.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
-                </option>
-              ))}
-            </select>
-          )}
+          <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-300">
+            <Store className="h-4 w-4 text-emerald-500" />
+            <span>Scope:</span>
+            <span className="font-bold text-slate-900 dark:text-white">
+              {isAllBranches ? "All Branches" : (currentBranch?.name || "Selected Branch")}
+            </span>
+          </div>
 
           <button
             onClick={loadTransactions}

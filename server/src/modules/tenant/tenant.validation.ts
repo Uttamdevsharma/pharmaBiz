@@ -5,6 +5,9 @@ export const updateTenantProfileSchema = z.object({
   email: z.string().email("Invalid email format").optional(),
   phone: z.string().optional(),
   address: z.string().optional(),
+  logoUrl: z.string().url().optional().or(z.literal("")),
+  logoPublicId: z.string().optional(),
 });
 
 export type UpdateTenantProfileInput = z.infer<typeof updateTenantProfileSchema>;
+

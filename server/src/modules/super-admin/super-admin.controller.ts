@@ -116,7 +116,12 @@ export class SuperAdminController {
       const page = req.query.page ? parseInt(req.query.page as string, 10) : 1;
       const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 50;
       const status = req.query.status as string | undefined;
-      const result = await SuperAdminService.listSubscriptions(page, limit, status);
+      const datePreset = req.query.datePreset as string | undefined;
+      const startDate = req.query.startDate as string | undefined;
+      const endDate = req.query.endDate as string | undefined;
+      const tier = req.query.tier as string | undefined;
+      const search = req.query.search as string | undefined;
+      const result = await SuperAdminService.listSubscriptions(page, limit, status, { datePreset, startDate, endDate, tier, search });
       res.status(200).json({ success: true, ...result });
     } catch (error: any) {
       res.status(500).json({ success: false, message: error.message });
@@ -138,7 +143,10 @@ export class SuperAdminController {
   // Analytics
   static async getAnalytics(req: Request, res: Response): Promise<void> {
     try {
-      const analytics = await SuperAdminService.getPlatformAnalytics();
+      const datePreset = req.query.datePreset as string | undefined;
+      const startDate = req.query.startDate as string | undefined;
+      const endDate = req.query.endDate as string | undefined;
+      const analytics = await SuperAdminService.getPlatformAnalytics({ datePreset, startDate, endDate });
       res.status(200).json({ success: true, data: analytics });
     } catch (error: any) {
       res.status(500).json({ success: false, message: error.message });
@@ -290,12 +298,15 @@ export class SuperAdminController {
    */
   static async listPharmacyVerifications(req: Request, res: Response): Promise<void> {
     try {
-      const { status, search, page, limit } = req.query;
+      const { status, search, page, limit, datePreset, startDate, endDate } = req.query;
       const result = await SuperAdminService.listPharmacyVerifications({
         status: status as string,
         search: search as string,
         page: page ? parseInt(page as string) : undefined,
         limit: limit ? parseInt(limit as string) : undefined,
+        datePreset: datePreset as string,
+        startDate: startDate as string,
+        endDate: endDate as string,
       });
 
       res.status(200).json({

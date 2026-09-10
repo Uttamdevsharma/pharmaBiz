@@ -7,4 +7,6 @@ exports.updateTenantProfileSchema = zod_1.z.object({
     email: zod_1.z.string().email("Invalid email format").optional(),
     phone: zod_1.z.string().optional(),
     address: zod_1.z.string().optional(),
+    logoUrl: zod_1.z.string().url().optional().or(zod_1.z.literal("")),
+    logoPublicId: zod_1.z.string().optional(),
 });

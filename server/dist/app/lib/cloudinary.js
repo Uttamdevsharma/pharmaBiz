@@ -33,16 +33,52 @@ class CloudinaryService {
         return { cloudName, apiKey, apiSecret };
     }
     /**
-     * Uploads an image (base64 data URI, remote URL, or buffer) to Cloudinary using the official SDK
+     * Uploads an image or document (PDF, PNG, JPG, WEBP, base64 data URI, remote URL, or buffer) to Cloudinary
      */
     static async uploadImage(file, folder = "pharmacy_saas/general") {
         this.configure();
         let filePayload;
         if (Buffer.isBuffer(file)) {
-            filePayload = `data:image/png;base64,${file.toString("base64")}`;
+            // Check if buffer is PDF by checking magic bytes %PDF (0x25 0x50 0x44 0x46)
+            const isPdf = file.length >= 4 &&
+                file[0] === 0x25 &&
+                file[1] === 0x50 &&
+                file[2] === 0x44 &&
+                file[3] === 0x46;
+            if (isPdf) {
+                filePayload = `data:application/pdf;base64,${file.toString("base64")}`;
+            }
+            else {
+                filePayload = `data:image/png;base64,${file.toString("base64")}`;
+            }
+        }
+        else if (typeof file === "string") {
+            const trimmed = file.trim();
+            if (trimmed.startsWith("data:") || trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+                filePayload = trimmed;
+            }
+            else if (trimmed.startsWith("JVBERi0")) {
+                // PDF base64 without prefix (%PDF)
+                filePayload = `data:application/pdf;base64,${trimmed}`;
+            }
+            else if (trimmed.startsWith("/9j/")) {
+                // JPEG base64 without prefix
+                filePayload = `data:image/jpeg;base64,${trimmed}`;
+            }
+            else if (trimmed.startsWith("iVBORw0KGgo")) {
+                // PNG base64 without prefix
+                filePayload = `data:image/png;base64,${trimmed}`;
+            }
+            else if (trimmed.length > 50 && !trimmed.includes(" ") && !trimmed.includes("\n")) {
+                // Default base64 fallback
+                filePayload = `data:image/png;base64,${trimmed}`;
+            }
+            else {
+                filePayload = trimmed;
+            }
         }
         else {
-            filePayload = file;
+            throw new Error("Invalid file payload provided to Cloudinary uploader");
         }
         try {
             const result = await cloudinary_1.v2.uploader.upload(filePayload, {
@@ -61,7 +97,7 @@ class CloudinaryService {
         }
         catch (error) {
             console.error("[Cloudinary Upload Error]", error);
-            throw new Error(error.message || "Failed to upload image to Cloudinary. Verify Cloudinary API Key permissions.");
+            throw new Error(error.message || "Failed to upload asset to Cloudinary. Please verify Cloudinary API permissions.");
         }
     }
     /**
@@ -72,16 +108,21 @@ class CloudinaryService {
             return { success: true, result: "not_found" };
         this.configure();
         try {
-            const result = await cloudinary_1.v2.uploader.destroy(publicId, {
+            let result = await cloudinary_1.v2.uploader.destroy(publicId, {
                 resource_type: "image",
             });
+            if (result.result !== "ok") {
+                result = await cloudinary_1.v2.uploader.destroy(publicId, {
+                    resource_type: "raw",
+                });
+            }
             return {
                 success: result.result === "ok",
                 result: result.result,
             };
         }
         catch (error) {
-            console.warn(`[Cloudinary Warning] Could not delete image with publicId "${publicId}":`, error);
+            console.warn(`[Cloudinary Warning] Could not delete asset with publicId "${publicId}":`, error);
             return { success: false, result: error?.message || "delete_failed" };
         }
     }

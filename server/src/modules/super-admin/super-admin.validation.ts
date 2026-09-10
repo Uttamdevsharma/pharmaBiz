@@ -30,6 +30,9 @@ export const listTenantsQuerySchema = z.object({
   search: z.string().optional(),
   tier: z.enum(["TRIAL", "STARTER", "GROWTH", "ENTERPRISE"]).optional(),
   isActive: z.string().optional().transform(v => (v === "true" ? true : v === "false" ? false : undefined)),
+  datePreset: z.string().optional(),
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
 });
 
 export const createRoleSchema = z.object({

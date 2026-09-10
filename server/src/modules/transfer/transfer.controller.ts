@@ -114,6 +114,8 @@ export class TransferController {
       const query = {
         branchId: req.query.branchId as string,
         search: req.query.search as string,
+        startDate: req.query.startDate as string,
+        endDate: req.query.endDate as string,
       };
 
       const result = await TransferService.getDamagedProducts(tenantId, userRole, userBranchId, query);

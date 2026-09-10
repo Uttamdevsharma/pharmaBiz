@@ -29,6 +29,12 @@ import {
   BadgeCheck,
   XCircle,
   Hash,
+  ExternalLink,
+  Maximize2,
+  X,
+  FileCheck,
+  Pill,
+  Image as ImageIcon,
 } from "lucide-react";
 
 interface PharmacyDetailsViewProps {
@@ -42,6 +48,13 @@ export function PharmacyDetailsView({ tenantId, onBack, onToggleStatusSuccess }:
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [statusLoading, setStatusLoading] = useState(false);
+  const [viewingDoc, setViewingDoc] = useState<{ title: string; url: string; number?: string } | null>(null);
+
+  const isPdf = (url?: string) => {
+    if (!url) return false;
+    const lower = url.toLowerCase();
+    return lower.includes(".pdf") || lower.includes("/raw/") || lower.includes("application/pdf");
+  };
 
   const loadTenantDetails = async () => {
     try {
@@ -162,8 +175,18 @@ export function PharmacyDetailsView({ tenantId, onBack, onToggleStatusSuccess }:
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
+            {tenant.logoUrl ? (
+              <img
+                src={tenant.logoUrl}
+                alt={tenant.name}
+                className="h-12 w-12 rounded-2xl object-cover border border-slate-200 dark:border-slate-700 shadow-sm bg-white dark:bg-slate-800"
+              />
+            ) : (
+              <div className="h-12 w-12 rounded-2xl bg-brand-primary/10 text-brand-primary border border-brand-primary/20 flex items-center justify-center">
+                <Building2 className="h-6 w-6" />
+              </div>
+            )}
             <h1 className="text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2.5">
-              <Building2 className="h-7 w-7 text-brand-primary" />
               <span>{tenant.name}</span>
             </h1>
 
@@ -488,6 +511,140 @@ export function PharmacyDetailsView({ tenantId, onBack, onToggleStatusSuccess }:
       </div>
 
       {/* ========================================================================= */}
+      {/* 2.5 REGULATORY & COMPLIANCE DOCUMENTS (CLOUDINARY STORAGE) */}
+      {/* ========================================================================= */}
+      <div className="space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <h2 className="text-xs font-black uppercase tracking-wider text-slate-400 flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4 text-emerald-500" />
+              <span>Regulatory Verification & Compliance Documents</span>
+            </h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Verified legal records uploaded by applicant and securely archived on Cloudinary CDN.
+            </p>
+          </div>
+          <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-full flex items-center gap-1.5 self-start sm:self-auto">
+            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+            Cloudinary Storage Active
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {[
+            {
+              id: "nid_front",
+              title: "Owner National ID (Front)",
+              number: tenant.nidNumber,
+              url: tenant.nidFrontUrl || tenant.nidDocUrl,
+              icon: FileText,
+              iconColor: "text-brand-primary",
+              bgColor: "bg-brand-primary/10",
+            },
+            {
+              id: "nid_back",
+              title: "Owner National ID (Back)",
+              number: tenant.nidNumber,
+              url: tenant.nidBackUrl,
+              icon: FileText,
+              iconColor: "text-brand-primary",
+              bgColor: "bg-brand-primary/10",
+            },
+            {
+              id: "trade",
+              title: "Trade License Document",
+              number: tenant.tradeLicenseNumber,
+              url: tenant.tradeLicenseDocUrl || tenant.tradeLicenseFrontUrl,
+              icon: FileCheck,
+              iconColor: "text-emerald-500",
+              bgColor: "bg-emerald-500/10",
+            },
+            {
+              id: "drug",
+              title: "DGDA Drug License",
+              number: tenant.drugLicenseNumber,
+              url: tenant.drugLicenseDocUrl || tenant.drugLicenseFrontUrl,
+              icon: Pill,
+              iconColor: "text-purple-500",
+              bgColor: "bg-purple-500/10",
+            },
+          ].map((doc) => {
+            const hasDoc = Boolean(doc.url);
+            const docIsPdf = isPdf(doc.url);
+            const isCloudinary = doc.url?.includes("cloudinary.com");
+
+            return (
+              <div
+                key={doc.id}
+                className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col justify-between space-y-4"
+              >
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className={`h-9 w-9 rounded-xl ${doc.bgColor} ${doc.iconColor} flex items-center justify-center`}>
+                      <doc.icon className="h-5 w-5" />
+                    </div>
+                    {hasDoc ? (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
+                        {docIsPdf ? "PDF Document" : "Image File"}
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-400">
+                        Not Uploaded
+                      </span>
+                    )}
+                  </div>
+
+                  <div>
+                    <h4 className="font-bold text-sm text-slate-900 dark:text-white leading-snug">
+                      {doc.title}
+                    </h4>
+                    {doc.number && (
+                      <div className="text-[11px] font-mono text-slate-500 mt-0.5">
+                        Ref: <span className="font-bold text-slate-700 dark:text-slate-300">{doc.number}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {hasDoc && (
+                    <div className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-500">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                      <span>{isCloudinary ? "Cloudinary CDN Verified" : "Direct Cloud Asset"}</span>
+                    </div>
+                  )}
+                </div>
+
+                {hasDoc ? (
+                  <div className="flex items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                    <button
+                      type="button"
+                      onClick={() => setViewingDoc({ title: doc.title, url: doc.url!, number: doc.number })}
+                      className="flex-1 py-2 px-3 rounded-xl bg-brand-primary/10 hover:bg-brand-primary/20 text-brand-primary font-bold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <Maximize2 className="h-3.5 w-3.5" />
+                      <span>Preview</span>
+                    </button>
+                    <a
+                      href={doc.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 transition cursor-pointer"
+                      title="Open in new browser tab"
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                    </a>
+                  </div>
+                ) : (
+                  <div className="py-2 text-center text-[11px] text-slate-400 font-medium pt-2 border-t border-slate-100 dark:border-slate-800">
+                    No document attached
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
       {/* 3. CHRONOLOGICAL SUBSCRIPTION HISTORY SECTION (TIMELINE / CARDS) */}
       {/* ========================================================================= */}
       <div className="space-y-4 pt-2">
@@ -649,6 +806,61 @@ export function PharmacyDetailsView({ tenantId, onBack, onToggleStatusSuccess }:
           </div>
         )}
       </div>
+
+      {/* ========================================================= */}
+      {/* STANDALONE DOCUMENT PREVIEW MODAL                         */}
+      {/* ========================================================= */}
+      {viewingDoc && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-4xl w-full max-h-[90vh] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <div>
+                <h3 className="font-extrabold text-sm text-slate-900 dark:text-white">
+                  {viewingDoc.title}
+                </h3>
+                {viewingDoc.number && (
+                  <p className="text-xs font-mono text-brand-primary">License/Doc No: {viewingDoc.number}</p>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <a
+                  href={viewingDoc.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold transition flex items-center gap-1.5"
+                  title="Open in new tab"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  <span>Open in New Tab</span>
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setViewingDoc(null)}
+                  className="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 transition cursor-pointer"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 p-6 overflow-auto flex items-center justify-center bg-slate-950/5 dark:bg-slate-950 min-h-[450px]">
+              {isPdf(viewingDoc.url) ? (
+                <iframe
+                  src={viewingDoc.url}
+                  className="w-full h-[580px] rounded-2xl border border-slate-200 dark:border-slate-800 bg-white"
+                  title={viewingDoc.title}
+                />
+              ) : (
+                <img
+                  src={viewingDoc.url}
+                  alt={viewingDoc.title}
+                  className="max-h-[580px] max-w-full object-contain rounded-2xl shadow-lg"
+                />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

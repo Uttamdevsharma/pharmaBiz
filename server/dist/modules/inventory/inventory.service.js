@@ -145,19 +145,28 @@ class InventoryService {
      * List Batch Inventory for a Branch with Supplier & Expiry data
      */
     static async getBranchInventory(tenantId, branchId, query) {
-        const branch = await prisma_1.prisma.branch.findFirst({
-            where: { id: branchId, tenantId },
-        });
-        if (!branch) {
-            throw new Error("Branch not found");
+        const isAll = !branchId || branchId === "all" || branchId === "all-branches";
+        let branch = null;
+        if (!isAll) {
+            branch = await prisma_1.prisma.branch.findFirst({
+                where: { id: branchId, tenantId, isActive: true },
+            });
+            if (!branch) {
+                throw new Error("Branch not found");
+            }
         }
         const page = query.page || 1;
         const limit = query.limit || 20;
         const skip = (page - 1) * limit;
         const where = {
-            branchId,
             product: { tenantId, isActive: true },
         };
+        if (!isAll && branchId) {
+            where.branchId = branchId;
+        }
+        else {
+            where.branch = { tenantId, isActive: true };
+        }
         if (query.category) {
             where.product.category = { equals: query.category, mode: "insensitive" };
         }
@@ -181,9 +190,12 @@ class InventoryService {
                 take: limit,
                 orderBy: [{ expiryDate: "asc" }, { updatedAt: "desc" }],
                 include: {
+                    branch: {
+                        select: { id: true, name: true, location: true },
+                    },
                     product: {
                         include: {
-                            branchOverrides: { where: { branchId } },
+                            ...(!isAll && branchId ? { branchOverrides: { where: { branchId } } } : {}),
                             categoryRef: true,
                             brandRef: true,
                             unitRef: true,
@@ -265,6 +277,8 @@ class InventoryService {
             });
             return {
                 id: inv.id,
+                branchId: inv.branchId,
+                branch: inv.branch || (branch ? { id: branch.id, name: branch.name, location: branch.location } : undefined),
                 productId: inv.productId,
                 productName: inv.product.name,
                 genericName: inv.product.genericName,
@@ -1492,6 +1506,286 @@ class InventoryService {
                 limit,
                 total,
                 totalPages: Math.ceil(total / limit),
+            },
+        };
+    }
+    /**
+     * Dedicated Stock Receiving History Query
+     * Pulls real inward receiving records (BatchReceivingRecord & StockMovement of type PURCHASE)
+     */
+    static async listReceivingHistory(tenantId, query, userRole, userBranchId) {
+        const page = Math.max(1, Number(query.page) || 1);
+        const limit = Math.max(1, Math.min(100, Number(query.limit) || 20));
+        const skip = (page - 1) * limit;
+        const branchWhere = {};
+        if (["BRANCH_MANAGER", "CASHIER"].includes(userRole) && userBranchId) {
+            branchWhere.branchId = userBranchId;
+        }
+        else if (query.branchId && query.branchId !== "all") {
+            branchWhere.branchId = query.branchId;
+        }
+        else {
+            const tenantBranches = await prisma_1.prisma.branch.findMany({
+                where: { tenantId },
+                select: { id: true },
+            });
+            branchWhere.branchId = { in: tenantBranches.map((b) => b.id) };
+        }
+        const dateFilter = {};
+        if (query.startDate || query.endDate) {
+            if (query.startDate) {
+                const start = new Date(query.startDate);
+                start.setHours(0, 0, 0, 0);
+                dateFilter.gte = start;
+            }
+            if (query.endDate) {
+                const end = new Date(query.endDate);
+                end.setHours(23, 59, 59, 999);
+                dateFilter.lte = end;
+            }
+        }
+        // Try BatchReceivingRecord first
+        const recWhere = { ...branchWhere };
+        if (Object.keys(dateFilter).length > 0) {
+            recWhere.receivedDate = dateFilter;
+        }
+        if (query.search && query.search.trim()) {
+            const q = query.search.trim();
+            recWhere.OR = [
+                { batchNumber: { contains: q, mode: "insensitive" } },
+                { invoiceNo: { contains: q, mode: "insensitive" } },
+                { supplier: { name: { contains: q, mode: "insensitive" } } },
+                { inventory: { product: { name: { contains: q, mode: "insensitive" } } } },
+            ];
+        }
+        const batchCount = await prisma_1.prisma.batchReceivingRecord.count({ where: recWhere });
+        if (batchCount > 0) {
+            const records = await prisma_1.prisma.batchReceivingRecord.findMany({
+                where: recWhere,
+                skip,
+                take: limit,
+                orderBy: { receivedDate: "desc" },
+                include: {
+                    supplier: { select: { id: true, name: true } },
+                    inventory: {
+                        include: {
+                            product: {
+                                select: {
+                                    id: true,
+                                    name: true,
+                                    genericName: true,
+                                    unit: true,
+                                    category: true,
+                                    stripsPerBox: true,
+                                    tabletsPerStrip: true,
+                                    qtyPerLevel2: true,
+                                },
+                            },
+                            supplier: { select: { id: true, name: true } },
+                        },
+                    },
+                },
+            });
+            // Product fallback lookup
+            const missingProductIds = records
+                .filter((r) => !r.inventory?.product && r.productId)
+                .map((r) => r.productId);
+            let productMap = new Map();
+            if (missingProductIds.length > 0) {
+                const prods = await prisma_1.prisma.product.findMany({
+                    where: { id: { in: missingProductIds } },
+                    select: { id: true, name: true, genericName: true, unit: true, stripsPerBox: true, tabletsPerStrip: true },
+                });
+                productMap = new Map(prods.map((p) => [p.id, p]));
+            }
+            const formatted = records.map((rec) => {
+                const prod = rec.inventory?.product || productMap.get(rec.productId) || {
+                    name: "Unknown Product",
+                    genericName: null,
+                    unit: "Unit",
+                };
+                const supplierName = rec.supplier?.name || rec.inventory?.supplier?.name || rec.contactPersonName || "Direct Intake";
+                const cartonsReceived = rec.cartonsReceived || 0;
+                const boxesReceived = rec.boxesReceived || 0;
+                const totalQuantity = rec.totalQuantity || 0;
+                const stripsPerBox = rec.stripsPerBox || prod.stripsPerBox || 10;
+                const tabletsPerStrip = rec.tabletsPerStrip || prod.tabletsPerStrip || 10;
+                const tabletsPerBox = stripsPerBox * tabletsPerStrip;
+                const boxesPerCarton = rec.boxesPerCarton || 10;
+                let receivingUnit = rec.receivingUnit || "CARTON";
+                let receivedQuantityLabel = "";
+                let receivingUnitDisplay = "";
+                let totalEquivalentLabel = "";
+                if (receivingUnit === "CARTON" && cartonsReceived > 0) {
+                    receivingUnitDisplay = "Carton";
+                    receivedQuantityLabel = `${cartonsReceived} Carton${cartonsReceived > 1 ? "s" : ""}`;
+                    const calcBoxes = boxesReceived > 0 ? boxesReceived : cartonsReceived * boxesPerCarton;
+                    totalEquivalentLabel = `${calcBoxes} Boxes (${totalQuantity.toLocaleString()} ${prod.unit || "Units"})`;
+                }
+                else if (receivingUnit === "BOX" && boxesReceived > 0) {
+                    receivingUnitDisplay = "Box";
+                    receivedQuantityLabel = `${boxesReceived} Box${boxesReceived > 1 ? "es" : ""}`;
+                    totalEquivalentLabel = `${totalQuantity.toLocaleString()} ${prod.unit || "Units"}`;
+                }
+                else {
+                    receivingUnitDisplay = prod.unit || "Unit";
+                    receivedQuantityLabel = `${totalQuantity.toLocaleString()} ${prod.unit || "Units"}`;
+                    totalEquivalentLabel = boxesReceived > 0 ? `${boxesReceived} Boxes` : `${totalQuantity.toLocaleString()} ${prod.unit || "Units"}`;
+                }
+                const unitPurchasePrice = rec.purchasePrice ? Number(rec.purchasePrice) : 0;
+                const boxPurchasePrice = rec.boxPurchasePrice ? Number(rec.boxPurchasePrice) : 0;
+                let totalPurchaseValue = 0;
+                if (boxPurchasePrice > 0 && boxesReceived > 0) {
+                    totalPurchaseValue = boxesReceived * boxPurchasePrice;
+                }
+                else if (unitPurchasePrice > 0 && totalQuantity > 0) {
+                    totalPurchaseValue = totalQuantity * unitPurchasePrice;
+                }
+                return {
+                    id: rec.id,
+                    receivedDate: rec.receivedDate || rec.createdAt,
+                    product: {
+                        id: prod.id,
+                        name: prod.name,
+                        genericName: prod.genericName,
+                        unit: prod.unit || "Unit",
+                    },
+                    supplierName,
+                    batchNumber: rec.batchNumber || "No Batch",
+                    invoiceNo: rec.invoiceNo || null,
+                    receivedQuantity: cartonsReceived > 0 ? cartonsReceived : boxesReceived > 0 ? boxesReceived : totalQuantity,
+                    receivingUnit: receivingUnitDisplay,
+                    receivedQuantityLabel,
+                    totalEquivalentLabel,
+                    totalQuantityUnits: totalQuantity,
+                    unitPurchasePrice,
+                    boxPurchasePrice,
+                    totalPurchaseValue,
+                };
+            });
+            return {
+                data: formatted,
+                pagination: {
+                    page,
+                    limit,
+                    total: batchCount,
+                    totalPages: Math.ceil(batchCount / limit),
+                },
+            };
+        }
+        // Fallback to StockMovement where type = PURCHASE
+        const movWhere = { ...branchWhere, type: "PURCHASE" };
+        if (Object.keys(dateFilter).length > 0) {
+            movWhere.createdAt = dateFilter;
+        }
+        if (query.search && query.search.trim()) {
+            const q = query.search.trim();
+            movWhere.OR = [
+                { batchNumber: { contains: q, mode: "insensitive" } },
+                { reason: { contains: q, mode: "insensitive" } },
+            ];
+        }
+        const [movCount, movements] = await Promise.all([
+            prisma_1.prisma.stockMovement.count({ where: movWhere }),
+            prisma_1.prisma.stockMovement.findMany({
+                where: movWhere,
+                skip,
+                take: limit,
+                orderBy: { createdAt: "desc" },
+                include: {
+                    inventory: {
+                        include: {
+                            product: {
+                                select: {
+                                    id: true,
+                                    name: true,
+                                    genericName: true,
+                                    unit: true,
+                                    stripsPerBox: true,
+                                    tabletsPerStrip: true,
+                                    qtyPerLevel2: true,
+                                },
+                            },
+                            supplier: { select: { id: true, name: true } },
+                        },
+                    },
+                },
+            }),
+        ]);
+        const missingProdIds = movements
+            .filter((m) => !m.inventory?.product && m.productId)
+            .map((m) => m.productId);
+        let prodMap = new Map();
+        if (missingProdIds.length > 0) {
+            const prods = await prisma_1.prisma.product.findMany({
+                where: { id: { in: missingProdIds } },
+                select: { id: true, name: true, genericName: true, unit: true, stripsPerBox: true, tabletsPerStrip: true },
+            });
+            prodMap = new Map(prods.map((p) => [p.id, p]));
+        }
+        const formattedMovs = movements.map((m) => {
+            const prod = m.inventory?.product || prodMap.get(m.productId) || {
+                name: "Product",
+                genericName: null,
+                unit: "Unit",
+            };
+            const supplierName = m.inventory?.supplier?.name || "Direct Intake";
+            const totalQuantity = Math.abs(m.quantity || 0);
+            const stripsPerBox = m.inventory?.stripsPerBox || prod.stripsPerBox || 10;
+            const tabletsPerStrip = m.inventory?.tabletsPerStrip || prod.tabletsPerStrip || 10;
+            const tabletsPerBox = stripsPerBox * tabletsPerStrip;
+            const boxesPerCarton = m.inventory?.boxesPerCarton || 10;
+            const tabletsPerCarton = boxesPerCarton * tabletsPerBox;
+            let receivingUnitDisplay = "Unit";
+            let receivedQuantityLabel = `${totalQuantity.toLocaleString()} ${prod.unit || "Units"}`;
+            let totalEquivalentLabel = `${totalQuantity.toLocaleString()} ${prod.unit || "Units"}`;
+            let receivedQuantity = totalQuantity;
+            if (totalQuantity >= tabletsPerCarton && totalQuantity % tabletsPerCarton === 0) {
+                const cartons = totalQuantity / tabletsPerCarton;
+                const boxes = cartons * boxesPerCarton;
+                receivingUnitDisplay = "Carton";
+                receivedQuantity = cartons;
+                receivedQuantityLabel = `${cartons} Carton${cartons > 1 ? "s" : ""}`;
+                totalEquivalentLabel = `${boxes} Boxes (${totalQuantity.toLocaleString()} ${prod.unit || "Units"})`;
+            }
+            else if (totalQuantity >= tabletsPerBox && totalQuantity % tabletsPerBox === 0) {
+                const boxes = totalQuantity / tabletsPerBox;
+                receivingUnitDisplay = "Box";
+                receivedQuantity = boxes;
+                receivedQuantityLabel = `${boxes} Box${boxes > 1 ? "es" : ""}`;
+                totalEquivalentLabel = `${totalQuantity.toLocaleString()} ${prod.unit || "Units"}`;
+            }
+            const unitPurchasePrice = m.unitPrice ? Number(m.unitPrice) : m.inventory?.purchasePrice ? Number(m.inventory.purchasePrice) : 0;
+            const totalPurchaseValue = totalQuantity * unitPurchasePrice;
+            return {
+                id: m.id,
+                receivedDate: m.createdAt,
+                product: {
+                    id: prod.id,
+                    name: prod.name,
+                    genericName: prod.genericName,
+                    unit: prod.unit || "Unit",
+                },
+                supplierName,
+                batchNumber: m.batchNumber || "No Batch",
+                invoiceNo: null,
+                receivedQuantity,
+                receivingUnit: receivingUnitDisplay,
+                receivedQuantityLabel,
+                totalEquivalentLabel,
+                totalQuantityUnits: totalQuantity,
+                unitPurchasePrice,
+                boxPurchasePrice: null,
+                totalPurchaseValue,
+            };
+        });
+        return {
+            data: formattedMovs,
+            pagination: {
+                page,
+                limit,
+                total: movCount,
+                totalPages: Math.ceil(movCount / limit),
             },
         };
     }

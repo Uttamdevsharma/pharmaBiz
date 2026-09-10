@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { fetchApi } from "@/lib/api";
 import { CENTRAL_CLIENT_PLANS, calculateRemainingTrialDays } from "@/lib/planLimits";
+import { useBranchContext } from "@/context/BranchContext";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { DashboardSidebar, OwnerModule } from "@/components/dashboard/DashboardSidebar";
 import { OverviewModule } from "@/components/dashboard/OverviewModule";
@@ -42,8 +43,6 @@ import { CreateSupplierView } from "@/components/dashboard/CreateSupplierView";
 import { SupplierDetailsView } from "@/components/dashboard/SupplierDetailsView";
 import { PurchaseHistoryView } from "@/components/dashboard/PurchaseHistoryView";
 import { PaymentsDueView } from "@/components/dashboard/PaymentsDueView";
-import { PaymentMethodSalesView } from "@/components/dashboard/PaymentMethodSalesView";
-import { ProductWiseSalesView } from "@/components/dashboard/ProductWiseSalesView";
 import { AccountsOverviewView } from "@/components/dashboard/AccountsOverviewView";
 import { FinancialAccountsView } from "@/components/dashboard/FinancialAccountsView";
 import { FundTransferView } from "@/components/dashboard/FundTransferView";
@@ -105,8 +104,14 @@ export default function RoleBasedDashboard() {
   const [inspectionTransferId, setInspectionTransferId] = useState<string>("");
   const [tenantProfile, setTenantProfile] = useState<any>(null);
   const [currentSub, setCurrentSub] = useState<any>(null);
-  const [branches, setBranches] = useState<any[]>([]);
-  const [selectedBranchId, setSelectedBranchId] = useState<string>(user?.branchId || "");
+
+  // Global Branch Context
+  const {
+    branches,
+    selectedBranchId,
+    setSelectedBranchId,
+  } = useBranchContext();
+
   const [selectedSupplierDetailId, setSelectedSupplierDetailId] = useState<string | null>(null);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("");
   const [selectedRecurringForPay, setSelectedRecurringForPay] = useState<any | null>(null);
@@ -141,10 +146,9 @@ export default function RoleBasedDashboard() {
     async function loadTenantData() {
       try {
         setDataLoading(true);
-        const [profileRes, subRes, branchRes, plansRes] = await Promise.all([
+        const [profileRes, subRes, plansRes] = await Promise.all([
           fetchApi("/tenant/profile"),
           fetchApi("/subscriptions/current"),
-          fetchApi("/branches"),
           fetchApi("/subscriptions/plans"),
         ]);
 
@@ -156,14 +160,6 @@ export default function RoleBasedDashboard() {
           setAvailablePlans(paidOnly);
           if (paidOnly.length > 0 && !upgradePlanId) {
             setUpgradePlanId(paidOnly[0].id);
-          }
-        }
-        if (branchRes.success && branchRes.data && branchRes.data.length > 0) {
-          setBranches(branchRes.data);
-          if (user?.branchId) {
-            setSelectedBranchId(user.branchId);
-          } else {
-            setSelectedBranchId(branchRes.data[0].id);
           }
         }
       } catch (err) {
@@ -325,14 +321,11 @@ export default function RoleBasedDashboard() {
     );
   }
 
-  // Branch Selector visibility
-  const isBranchSwitcherAllowed = user?.role === "COMPANY_OWNER" || user?.role === "REGIONAL_ADMIN";
-
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col text-slate-900 dark:text-slate-100">
+    <div className="h-screen max-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col text-slate-900 dark:text-slate-100 overflow-hidden">
       {/* Free Trial Active Banner */}
       {isTrial && !isTrialExpired && (
-        <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white px-4 sm:px-6 py-2.5 flex flex-col sm:flex-row items-center justify-between gap-2 shadow-sm z-50 text-xs font-semibold">
+        <div className="shrink-0 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white px-4 sm:px-6 py-2.5 flex flex-col sm:flex-row items-center justify-between gap-2 shadow-sm z-50 text-xs font-semibold">
           <div className="flex items-center gap-2.5">
             <span className="relative flex h-2.5 w-2.5">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
@@ -362,14 +355,11 @@ export default function RoleBasedDashboard() {
         tier={effectiveTier}
         trialDaysRemaining={isTrial ? trialDaysRemaining : undefined}
         isTrial={isTrial}
-        branches={isBranchSwitcherAllowed ? branches : []}
-        selectedBranchId={selectedBranchId}
-        onBranchChange={isBranchSwitcherAllowed ? setSelectedBranchId : undefined}
         onNavigate={setActiveModule}
       />
 
       {/* Main Workspace Layout */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden min-h-0">
         {/* Role-Aware Sidebar */}
         <DashboardSidebar
           activeModule={activeModule}
@@ -386,7 +376,7 @@ export default function RoleBasedDashboard() {
         />
 
         {/* Content Area */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 2xl:p-10 overflow-y-auto w-full min-w-0">
+        <main className="flex-1 h-full min-h-0 p-4 sm:p-6 lg:p-8 2xl:p-10 content-scrollbar w-full min-w-0">
           {renderModuleContent()}
         </main>
       </div>
@@ -444,18 +434,6 @@ export default function RoleBasedDashboard() {
           return <TenantAccessRestricted moduleName="Fund Transfer" requiredPerm="accounts.fund_transfer" />;
         }
         return <FundTransferView onNavigate={setActiveModule} />;
-
-      case "acc_payment_sales":
-        if (!isOwner && !hasPermission("accounts.payment_sales")) {
-          return <TenantAccessRestricted moduleName="Payment Method Sales" requiredPerm="accounts.payment_sales" />;
-        }
-        return <PaymentMethodSalesView onNavigate={setActiveModule} />;
-
-      case "acc_product_sales":
-        if (!isOwner && !hasPermission("accounts.product_sales")) {
-          return <TenantAccessRestricted moduleName="Product-Wise Sales" requiredPerm="accounts.product_sales" />;
-        }
-        return <ProductWiseSalesView onNavigate={setActiveModule} />;
 
       case "acc_transaction_history":
         if (!isOwner && !hasPermission("accounts.transaction_history")) {

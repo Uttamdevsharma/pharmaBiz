@@ -4,18 +4,9 @@ import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { fetchApi } from "@/lib/api";
 import {
   History,
-  Calendar,
   Search,
-  Filter,
   RefreshCw,
   MapPin,
-  Package,
-  Layers,
-  Store,
-  User,
-  ArrowRight,
-  FileText,
-  Boxes,
 } from "lucide-react";
 
 interface StockAllocationHistoryViewProps {
@@ -39,9 +30,7 @@ export function StockAllocationHistoryView({
   const [search, setSearch] = useState("");
   const [productFilter, setProductFilter] = useState("ALL");
   const [batchFilter, setBatchFilter] = useState("");
-  const [fromLocFilter, setFromLocFilter] = useState("");
   const [toLocFilter, setToLocFilter] = useState("");
-  const [unitFilter, setUnitFilter] = useState("ALL");
 
   const loadAllocationHistory = useCallback(async () => {
     if (!selectedBranchId) return;
@@ -81,15 +70,6 @@ export function StockAllocationHistoryView({
       }
     });
     return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
-  }, [movements]);
-
-  // Distinct packaging units
-  const unitOptions = useMemo(() => {
-    const s = new Set<string>();
-    movements.forEach((m) => {
-      if (m.packagingUnit) s.add(m.packagingUnit);
-    });
-    return Array.from(s);
   }, [movements]);
 
   // Filtered movements
@@ -133,27 +113,19 @@ export function StockAllocationHistoryView({
         return false;
       }
 
-      // From location
-      if (fromLocFilter && !(m.fromLocationLabel || "Stock Not in Rack").toLowerCase().includes(fromLocFilter.toLowerCase())) {
-        return false;
-      }
-
       // To location
       if (toLocFilter && !(m.toLocationLabel || "").toLowerCase().includes(toLocFilter.toLowerCase())) {
         return false;
       }
-
-      // Packaging unit
-      if (unitFilter !== "ALL" && m.packagingUnit !== unitFilter) return false;
 
       // Search keyword
       if (search) {
         const q = search.toLowerCase().trim();
         const pName = (m.product?.name || "").toLowerCase();
         const bNum = (m.batchNumber || "").toLowerCase();
-        const rName = (m.reason || "").toLowerCase();
-        const user = (m.performedByName || "").toLowerCase();
-        if (!pName.includes(q) && !bNum.includes(q) && !rName.includes(q) && !user.includes(q)) {
+        const sType = (m.sourceType || "").toLowerCase();
+        const toLoc = (m.toLocationLabel || "").toLowerCase();
+        if (!pName.includes(q) && !bNum.includes(q) && !sType.includes(q) && !toLoc.includes(q)) {
           return false;
         }
       }
@@ -167,9 +139,7 @@ export function StockAllocationHistoryView({
     customEndDate,
     productFilter,
     batchFilter,
-    fromLocFilter,
     toLocFilter,
-    unitFilter,
     search,
     now,
   ]);
@@ -205,7 +175,7 @@ export function StockAllocationHistoryView({
             Stock Allocation History
           </h1>
           <p className="text-xs text-slate-500 mt-0.5">
-            Audit ledger of all stock placed into physical Rack → Shelf → Bin locations.
+            Audit ledger of stock placed into physical Rack → Shelf → Bin locations.
           </p>
         </div>
 
@@ -282,16 +252,16 @@ export function StockAllocationHistoryView({
         )}
 
         {/* Search & Select Filters */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {/* Keyword Search */}
           <div className="relative">
             <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
-              placeholder="Search product, note, user..."
+              placeholder="Search product, batch, location..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full text-xs pl-9 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-transparent text-slate-800 dark:text-slate-100"
+              className="w-full text-xs pl-9 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-transparent text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary transition"
             />
           </div>
 
@@ -300,7 +270,7 @@ export function StockAllocationHistoryView({
             <select
               value={productFilter}
               onChange={(e) => setProductFilter(e.target.value)}
-              className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-transparent text-slate-800 dark:text-slate-100 font-medium"
+              className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-transparent text-slate-800 dark:text-slate-100 font-medium focus:outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary transition"
             >
               <option value="ALL">All Products</option>
               {productOptions.map((p) => (
@@ -318,7 +288,7 @@ export function StockAllocationHistoryView({
               placeholder="Filter by Batch #..."
               value={batchFilter}
               onChange={(e) => setBatchFilter(e.target.value)}
-              className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-transparent text-slate-800 dark:text-slate-100"
+              className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-transparent text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary transition"
             />
           </div>
 
@@ -329,24 +299,8 @@ export function StockAllocationHistoryView({
               placeholder="Filter destination location..."
               value={toLocFilter}
               onChange={(e) => setToLocFilter(e.target.value)}
-              className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-transparent text-slate-800 dark:text-slate-100"
+              className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-transparent text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary transition"
             />
-          </div>
-
-          {/* Packaging Unit Filter */}
-          <div>
-            <select
-              value={unitFilter}
-              onChange={(e) => setUnitFilter(e.target.value)}
-              className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-transparent text-slate-800 dark:text-slate-100 font-medium"
-            >
-              <option value="ALL">All Units</option>
-              {unitOptions.map((u) => (
-                <option key={u} value={u}>
-                  {u}
-                </option>
-              ))}
-            </select>
           </div>
         </div>
       </div>
@@ -366,16 +320,12 @@ export function StockAllocationHistoryView({
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50 dark:bg-slate-800/60 text-[10px] font-black uppercase tracking-wider text-slate-400 border-b border-slate-200 dark:border-slate-800">
                 <tr>
-                  <th className="py-3 px-4">Date & Time</th>
-                  <th className="py-3 px-4">Product</th>
-                  <th className="py-3 px-4">Batch</th>
-                  <th className="py-3 px-4">Source Type</th>
-                  <th className="py-3 px-4">Quantity Placed</th>
-                  <th className="py-3 px-4">Packaging Unit</th>
-                  <th className="py-3 px-4">From</th>
-                  <th className="py-3 px-4">To (Rack → Shelf → Bin)</th>
-                  <th className="py-3 px-4">Recorded By</th>
-                  <th className="py-3 px-4">Note</th>
+                  <th className="py-3.5 px-4">Date & Time</th>
+                  <th className="py-3.5 px-4">Product</th>
+                  <th className="py-3.5 px-4">Batch</th>
+                  <th className="py-3.5 px-4">Source Type</th>
+                  <th className="py-3.5 px-4">Quantity Placed</th>
+                  <th className="py-3.5 px-4">To (Rack → Shelf → Bin)</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -393,40 +343,31 @@ export function StockAllocationHistoryView({
                     <td className="py-3.5 px-4 font-mono font-bold text-slate-700 dark:text-slate-300">
                       {m.batchNumber || "—"}
                     </td>
-                    <td className="py-3.5 px-4">
+                    <td className="py-3.5 px-4 whitespace-nowrap">
                       <span
                         className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                          m.sourceType === "From Carton"
+                          m.sourceType === "From Carton" || m.sourceType === "FROM_CARTON"
                             ? "bg-amber-100 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 border border-amber-300/50"
-                            : m.sourceType === "Loose Box"
+                            : m.sourceType === "Loose Box" || m.sourceType === "LOOSE_BOX"
                             ? "bg-sky-100 dark:bg-sky-950/50 text-sky-800 dark:text-sky-300 border border-sky-300/50"
+                            : m.sourceType === "Loose Strip" || m.sourceType === "LOOSE_STRIP"
+                            ? "bg-purple-100 dark:bg-purple-950/50 text-purple-800 dark:text-purple-300 border border-purple-300/50"
+                            : m.sourceType === "Loose Tablet" || m.sourceType === "LOOSE_TABLET"
+                            ? "bg-emerald-100 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 border border-emerald-300/50"
                             : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400"
                         }`}
                       >
                         {m.sourceType || "Allocation"}
                       </span>
                     </td>
-                    <td className="py-3.5 px-4 font-black text-brand-primary">
+                    <td className="py-3.5 px-4 font-black text-brand-primary whitespace-nowrap">
                       {m.packagingDisplay || `${m.quantity} units`}
                     </td>
-                    <td className="py-3.5 px-4 text-slate-600 dark:text-slate-400">
-                      {m.packagingUnit || "Tablets"}
-                    </td>
-                    <td className="py-3.5 px-4 text-slate-600 dark:text-slate-400 font-medium">
-                      {m.fromLocationLabel || "Stock Not in Rack"}
-                    </td>
-                    <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                      <MapPin className="h-3.5 w-3.5 text-brand-primary shrink-0" />
-                      <span>{m.toLocationLabel || "Shelf"}</span>
-                    </td>
-                    <td className="py-3.5 px-4 text-slate-600 dark:text-slate-400 font-medium">
-                      {m.performedByName || "Manager"}
-                    </td>
-                    <td
-                      className="py-3.5 px-4 text-slate-500 text-[11px] truncate max-w-[200px]"
-                      title={m.reason || ""}
-                    >
-                      {m.reason || "—"}
+                    <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-200 whitespace-nowrap">
+                      <div className="flex items-center gap-1.5">
+                        <MapPin className="h-3.5 w-3.5 text-brand-primary shrink-0" />
+                        <span>{m.toLocationLabel || "Shelf"}</span>
+                      </div>
                     </td>
                   </tr>
                 ))}

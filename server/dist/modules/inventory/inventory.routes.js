@@ -22,6 +22,8 @@ router.post("/move", (0, requirePermission_1.requirePermission)("stock.allocatio
 router.post("/remove-expired", (0, requirePermission_1.requirePermission)("stock.damaged"), (0, validate_1.validateRequest)({ body: inventory_validation_1.removeExpiredStockSchema }), inventory_controller_1.InventoryController.removeExpiredStock);
 // Update Inventory item metadata
 router.patch("/:id", (0, requirePermission_1.requirePermission)("stock.stock_list"), (0, validate_1.validateRequest)({ body: inventory_validation_1.updateInventoryItemSchema }), inventory_controller_1.InventoryController.updateInventoryItem);
+// List Stock Receiving History
+router.get("/receiving-history", (0, requirePermission_1.requirePermission)("stock.stock_history"), inventory_controller_1.InventoryController.listReceivingHistory);
 // List Movements / Stock History Ledger
 router.get("/movements", (0, requirePermission_1.requirePermission)("stock.stock_history"), (0, validate_1.validateRequest)({ query: inventory_validation_1.listMovementsQuerySchema }), inventory_controller_1.InventoryController.listMovements);
 router.get("/movements/:branchId", (0, requirePermission_1.requirePermission)("stock.stock_history"), (req, res) => {
@@ -40,11 +42,7 @@ router.get("/batch/:id", (0, requirePermission_1.requirePermission)("stock.stock
 router.get("/branch/:branchId", (0, requirePermission_1.requirePermission)("stock.stock_list"), inventory_controller_1.InventoryController.getBranchInventory);
 // Query-based branch inventory list (e.g. /api/inventory?branchId=...)
 router.get("/", (0, requirePermission_1.requirePermission)("stock.stock_list"), (req, res) => {
-    const branchId = req.query.branchId || req.user?.branchId;
-    if (!branchId) {
-        res.status(400).json({ success: false, message: "branchId is required" });
-        return;
-    }
+    const branchId = req.query.branchId || req.headers["x-branch-id"] || req.user?.branchId || "all";
     req.params.branchId = branchId;
     return inventory_controller_1.InventoryController.getBranchInventory(req, res);
 });

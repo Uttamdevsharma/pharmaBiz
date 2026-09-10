@@ -332,12 +332,10 @@ export function AccountsModule({ onNavigate }: AccountsModuleProps = {}) {
         <>
           {/* Quick Navigation Action Shortcuts */}
           {onNavigate && (
-            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
               {[
                 { id: "acc_financial_accounts", label: "Financial Accounts", icon: Wallet, color: "text-blue-600 bg-blue-50 dark:bg-blue-950/40" },
                 { id: "acc_fund_transfer", label: "Fund Transfer", icon: ArrowLeftRight, color: "text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40" },
-                { id: "acc_payment_sales", label: "Payment Sales", icon: CreditCard, color: "text-purple-600 bg-purple-50 dark:bg-purple-950/40" },
-                { id: "acc_product_sales", label: "Product Sales", icon: BarChart3, color: "text-indigo-600 bg-indigo-50 dark:bg-indigo-950/40" },
                 { id: "reports", label: "Sales Reports", icon: Receipt, color: "text-teal-600 bg-teal-50 dark:bg-teal-950/40" },
                 { id: "sup_payments_due", label: "Supplier Dues", icon: TrendingDown, color: "text-rose-600 bg-rose-50 dark:bg-rose-950/40" },
                 { id: "acc_transaction_history", label: "Ledger History", icon: Filter, color: "text-amber-600 bg-amber-50 dark:bg-amber-950/40" },

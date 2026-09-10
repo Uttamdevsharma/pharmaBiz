@@ -18,6 +18,16 @@ export type UserRole =
   | "AUDITOR"
   | string;
 
+export interface TenantInfo {
+  id: string;
+  name: string;
+  logoUrl?: string | null;
+  logoPublicId?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  address?: string | null;
+}
+
 export interface User {
   id: string;
   tenantId: string;
@@ -36,6 +46,7 @@ export interface User {
   verificationStatus?: string | null;
   requiresOtp?: boolean;
   paymentRequired?: boolean;
+  tenant?: TenantInfo | null;
 }
 
 /**
@@ -76,6 +87,7 @@ interface AuthContextType {
   login: (identifier: string, password: string) => Promise<{ success: boolean; message?: string; redirectUrl?: string }>;
   logout: () => void;
   refreshUser: () => Promise<void>;
+  updateTenantBranding: (branding: Partial<TenantInfo>) => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -91,6 +103,7 @@ const AuthContext = createContext<AuthContextType>({
   login: async () => ({ success: false }),
   logout: () => {},
   refreshUser: async () => {},
+  updateTenantBranding: () => {},
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -210,6 +223,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return checkUserPermission(user, permissionKey);
   };
 
+  const updateTenantBranding = (branding: Partial<TenantInfo>) => {
+    setUser((prev) => {
+      if (!prev) return null;
+      const updatedTenant: TenantInfo = {
+        id: prev.tenant?.id || prev.tenantId,
+        name: branding.name !== undefined ? branding.name : (prev.tenant?.name || ""),
+        logoUrl: branding.logoUrl !== undefined ? branding.logoUrl : (prev.tenant?.logoUrl || null),
+        logoPublicId: branding.logoPublicId !== undefined ? branding.logoPublicId : (prev.tenant?.logoPublicId || null),
+        email: branding.email !== undefined ? branding.email : (prev.tenant?.email || null),
+        phone: branding.phone !== undefined ? branding.phone : (prev.tenant?.phone || null),
+        address: branding.address !== undefined ? branding.address : (prev.tenant?.address || null),
+      };
+      const updatedUser = { ...prev, tenant: updatedTenant };
+      localStorage.setItem("user", JSON.stringify(updatedUser));
+      return updatedUser;
+    });
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -225,6 +256,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         login,
         logout,
         refreshUser,
+        updateTenantBranding,
       }}
     >
       {children}

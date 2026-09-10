@@ -18,10 +18,12 @@ export async function fetchApi<T = any>(
   options: RequestInit = {}
 ): Promise<ApiResponse<T>> {
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+  const branchId = typeof window !== "undefined" ? localStorage.getItem("pharmacy_selected_branch_id") : null;
 
   const headers: HeadersInit = {
     "Content-Type": "application/json",
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(branchId && branchId !== "all" && branchId !== "" ? { "x-branch-id": branchId } : {}),
     ...options.headers,
   };
 

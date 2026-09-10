@@ -33,6 +33,15 @@ export interface AuthenticatedUser {
   rejectionReason?: string | null;
   requiresOtp?: boolean;
   paymentRequired?: boolean;
+  tenant?: {
+    id: string;
+    name: string;
+    logoUrl?: string | null;
+    logoPublicId?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    address?: string | null;
+  } | null;
 }
 
 export interface LoginResponse {

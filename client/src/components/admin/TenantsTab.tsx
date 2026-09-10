@@ -1,9 +1,11 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { fetchApi } from "@/lib/api";
 import { Search, Loader2, AlertTriangle, Eye } from "lucide-react";
 import { PharmacyDetailsView } from "./PharmacyDetailsView";
+
+type DatePreset = "ALL" | "TODAY" | "YESTERDAY" | "THIS_MONTH" | "LAST_MONTH" | "THIS_YEAR" | "CUSTOM";
 
 export function TenantsTab() {
   const [tenants, setTenants] = useState<any[]>([]);
@@ -11,17 +13,28 @@ export function TenantsTab() {
   const [search, setSearch] = useState("");
   const [tierFilter, setTierFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+
+  // Date Filters
+  const [dateFilter, setDateFilter] = useState<DatePreset>("ALL");
+  const [customStartDate, setCustomStartDate] = useState("");
+  const [customEndDate, setCustomEndDate] = useState("");
+
   const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
   const [toggleModalTenant, setToggleModalTenant] = useState<any>(null);
   const [actionLoading, setActionLoading] = useState(false);
 
-  const loadTenants = async () => {
+  const loadTenants = useCallback(async () => {
     try {
       setLoading(true);
       const params = new URLSearchParams();
       if (search) params.append("search", search);
       if (tierFilter) params.append("tier", tierFilter);
       if (statusFilter) params.append("isActive", statusFilter);
+      if (dateFilter && dateFilter !== "ALL") params.append("datePreset", dateFilter);
+      if (dateFilter === "CUSTOM") {
+        if (customStartDate) params.append("startDate", customStartDate);
+        if (customEndDate) params.append("endDate", customEndDate);
+      }
 
       const res = await fetchApi(`/super-admin/tenants?${params.toString()}`);
       if (res.success && res.data) {
@@ -32,11 +45,11 @@ export function TenantsTab() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [search, tierFilter, statusFilter, dateFilter, customStartDate, customEndDate]);
 
   useEffect(() => {
     loadTenants();
-  }, [tierFilter, statusFilter]);
+  }, [loadTenants]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,30 +90,82 @@ export function TenantsTab() {
 
   return (
     <div className="space-y-6">
-      {/* Title & Filters */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-extrabold text-slate-900 dark:text-white">Pharmacy Tenants</h2>
-          <p className="text-sm text-slate-500">Manage all registered pharmacy companies, branches, and subscription states</p>
+      {/* Title */}
+      <div>
+        <h2 className="text-2xl font-extrabold text-slate-900 dark:text-white">Pharmacy Tenants</h2>
+        <p className="text-sm text-slate-500">Manage all registered pharmacy companies, branches, and subscription states</p>
+      </div>
+
+      {/* Filter Bar: Date Presets & Inputs + Attribute Filters */}
+      <div className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs space-y-3">
+        {/* Date Presets Row */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+          <div className="flex flex-wrap items-center gap-1.5 text-xs font-bold">
+            {[
+              { id: "ALL", label: "All Time" },
+              { id: "TODAY", label: "Today" },
+              { id: "YESTERDAY", label: "Yesterday" },
+              { id: "THIS_MONTH", label: "This Month" },
+              { id: "LAST_MONTH", label: "Last Month" },
+              { id: "THIS_YEAR", label: "This Year" },
+              { id: "CUSTOM", label: "Custom Date" },
+            ].map((df) => (
+              <button
+                key={df.id}
+                type="button"
+                onClick={() => setDateFilter(df.id as DatePreset)}
+                className={`px-3 py-1.5 rounded-xl transition cursor-pointer ${
+                  dateFilter === df.id
+                    ? "bg-brand-primary text-white shadow-xs"
+                    : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200"
+                }`}
+              >
+                {df.label}
+              </button>
+            ))}
+          </div>
+
+          {dateFilter === "CUSTOM" && (
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 text-xs">
+                <span className="text-slate-400 font-medium">From:</span>
+                <input
+                  type="date"
+                  value={customStartDate}
+                  onChange={(e) => setCustomStartDate(e.target.value)}
+                  className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-800 dark:text-slate-200"
+                />
+              </div>
+              <div className="flex items-center gap-2 text-xs">
+                <span className="text-slate-400 font-medium">To:</span>
+                <input
+                  type="date"
+                  value={customEndDate}
+                  onChange={(e) => setCustomEndDate(e.target.value)}
+                  className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-800 dark:text-slate-200"
+                />
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Search & Filters */}
+        {/* Attribute Filters Row: Search, Tier, Status */}
         <form onSubmit={handleSearchSubmit} className="flex flex-wrap items-center gap-3">
-          <div className="relative">
-            <Search className="h-4 w-4 text-slate-400 absolute left-3 top-3" />
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className="h-4 w-4 text-slate-400 absolute left-3 top-2.5" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search pharmacy..."
-              className="pl-9 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary"
+              placeholder="Search pharmacy name or email..."
+              className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs focus:outline-none focus:ring-2 focus:ring-brand-primary"
             />
           </div>
 
           <select
             value={tierFilter}
             onChange={(e) => setTierFilter(e.target.value)}
-            className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:outline-none"
+            className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-300 focus:outline-none cursor-pointer"
           >
             <option value="">All Tiers</option>
             <option value="STARTER">Starter</option>
@@ -111,7 +176,7 @@ export function TenantsTab() {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:outline-none"
+            className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-300 focus:outline-none cursor-pointer"
           >
             <option value="">All Status</option>
             <option value="true">Active</option>

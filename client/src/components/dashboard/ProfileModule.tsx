@@ -2,10 +2,12 @@
 
 import React, { useEffect, useState } from "react";
 import { fetchApi } from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
 import { ImageUploader } from "@/components/common/ImageUploader";
 import { Building, Save, CheckCircle2, Loader2, Mail, Phone, MapPin } from "lucide-react";
 
 export function ProfileModule() {
+  const { updateTenantBranding } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -33,6 +35,14 @@ export function ProfileModule() {
             logoPublicId: res.data.logoPublicId || "",
             tier: res.data.tier,
           });
+          updateTenantBranding({
+            name: res.data.name || "",
+            logoUrl: res.data.logoUrl || null,
+            logoPublicId: res.data.logoPublicId || null,
+            email: res.data.email || null,
+            phone: res.data.phone || null,
+            address: res.data.address || null,
+          });
         }
       } catch (err) {
         console.error("Failed to load tenant profile", err);
@@ -56,6 +66,14 @@ export function ProfileModule() {
 
       if (res.success) {
         setSuccess(true);
+        updateTenantBranding({
+          name: profile.name,
+          logoUrl: profile.logoUrl,
+          logoPublicId: profile.logoPublicId,
+          email: profile.email,
+          phone: profile.phone,
+          address: profile.address,
+        });
         setTimeout(() => setSuccess(false), 4000);
       } else {
         alert(res.message || "Failed to update profile");

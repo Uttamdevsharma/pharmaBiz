@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { fetchApi } from "@/lib/api";
 import { OwnerModule } from "./DashboardSidebar";
+import { DateRangeFilter, DatePreset, getComputedDateRange } from "./DateRangeFilter";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -18,8 +19,11 @@ import {
   FileSpreadsheet,
 } from "lucide-react";
 
+import { useBranchContext } from "@/context/BranchContext";
+
 interface DamagedProductsViewProps {
   onNavigate?: (module: OwnerModule) => void;
+  selectedBranchId?: string;
 }
 
 function formatQuantityWithPackaging(qty: number, item: any): string {
@@ -44,7 +48,15 @@ function formatQuantityWithPackaging(qty: number, item: any): string {
   return `${qty} ${pType}${qty > 1 && !pType.endsWith("s") ? "s" : ""}`;
 }
 
-export function DamagedProductsView({ onNavigate }: DamagedProductsViewProps) {
+export function DamagedProductsView({ onNavigate, selectedBranchId: propBranchId }: DamagedProductsViewProps) {
+  const {
+    selectedBranchId: contextBranchId,
+    currentBranch,
+    isAllBranches,
+  } = useBranchContext();
+
+  const effectiveBranchId = propBranchId !== undefined ? propBranchId : contextBranchId;
+
   const [loading, setLoading] = useState(true);
   const [damagedData, setDamagedData] = useState<{
     summary: {
@@ -69,20 +81,27 @@ export function DamagedProductsView({ onNavigate }: DamagedProductsViewProps) {
   });
 
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedBranchId, setSelectedBranchId] = useState("");
-  const [branches, setBranches] = useState<any[]>([]);
+  const [datePreset, setDatePreset] = useState<DatePreset>("ALL");
+  const [startDate, setStartDate] = useState<string>("");
+  const [endDate, setEndDate] = useState<string>("");
 
   const loadData = async () => {
     try {
       setLoading(true);
-      const [damRes, branchRes]: [any, any] = await Promise.all([
-        fetchApi(
-          `/transfers/damaged-products?${selectedBranchId ? `branchId=${selectedBranchId}&` : ""}${
-            searchQuery ? `search=${encodeURIComponent(searchQuery)}` : ""
-          }`
-        ),
-        fetchApi("/branches"),
-      ]);
+      const { start, end } = getComputedDateRange(datePreset, startDate, endDate);
+      const queryParams = new URLSearchParams();
+      if (effectiveBranchId && effectiveBranchId !== "all") {
+        queryParams.append("branchId", effectiveBranchId);
+      }
+      if (searchQuery) {
+        queryParams.append("search", searchQuery);
+      }
+      if (start) queryParams.append("startDate", start);
+      if (end) queryParams.append("endDate", end);
+
+      const damRes: any = await fetchApi(
+        `/transfers/damaged-products?${queryParams.toString()}`
+      );
 
       if (damRes.success) {
         setDamagedData({
@@ -97,9 +116,6 @@ export function DamagedProductsView({ onNavigate }: DamagedProductsViewProps) {
           data: Array.isArray(damRes.data) ? damRes.data : [],
         });
       }
-      if (branchRes.success && Array.isArray(branchRes.data)) {
-        setBranches(branchRes.data);
-      }
     } catch (err) {
       console.error("Failed to load damaged products data", err);
     } finally {
@@ -109,7 +125,7 @@ export function DamagedProductsView({ onNavigate }: DamagedProductsViewProps) {
 
   useEffect(() => {
     loadData();
-  }, [selectedBranchId]);
+  }, [effectiveBranchId, datePreset, startDate, endDate]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -223,31 +239,36 @@ export function DamagedProductsView({ onNavigate }: DamagedProductsViewProps) {
       </div>
 
       {/* Filter & Search Bar */}
-      <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">
-        <form onSubmit={handleSearchSubmit} className="relative w-full sm:w-80">
-          <Search className="h-4 w-4 text-slate-400 absolute left-3.5 top-3" />
-          <input
-            type="text"
-            placeholder="Search medication, generic, batch..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none"
-          />
-        </form>
+      <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-3">
+        <DateRangeFilter
+          datePreset={datePreset}
+          setDatePreset={setDatePreset}
+          startDate={startDate}
+          setStartDate={setStartDate}
+          endDate={endDate}
+          setEndDate={setEndDate}
+          label="Damage Record Date Filter"
+        />
 
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <select
-            value={selectedBranchId}
-            onChange={(e) => setSelectedBranchId(e.target.value)}
-            className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none cursor-pointer w-full sm:w-auto"
-          >
-            <option value="">All Branches</option>
-            {branches.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name}
-              </option>
-            ))}
-          </select>
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
+          <form onSubmit={handleSearchSubmit} className="relative w-full sm:w-80">
+            <Search className="h-4 w-4 text-slate-400 absolute left-3.5 top-3" />
+            <input
+              type="text"
+              placeholder="Search medication, generic, batch..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none"
+            />
+          </form>
+
+          <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3.5 py-2 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-300">
+            <Store className="h-4 w-4 text-amber-500" />
+            <span>Scope:</span>
+            <span className="font-bold text-slate-900 dark:text-white">
+              {isAllBranches ? "Company-Wide (All Branches)" : (currentBranch?.name || "Selected Branch")}
+            </span>
+          </div>
         </div>
       </div>
 

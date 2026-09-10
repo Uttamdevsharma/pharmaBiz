@@ -29,6 +29,9 @@ exports.listTenantsQuerySchema = zod_1.z.object({
     search: zod_1.z.string().optional(),
     tier: zod_1.z.enum(["TRIAL", "STARTER", "GROWTH", "ENTERPRISE"]).optional(),
     isActive: zod_1.z.string().optional().transform(v => (v === "true" ? true : v === "false" ? false : undefined)),
+    datePreset: zod_1.z.string().optional(),
+    startDate: zod_1.z.string().optional(),
+    endDate: zod_1.z.string().optional(),
 });
 exports.createRoleSchema = zod_1.z.object({
     name: zod_1.z.string().min(2, "Role name must be at least 2 characters"),

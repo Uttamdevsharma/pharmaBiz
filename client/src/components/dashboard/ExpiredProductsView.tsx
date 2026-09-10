@@ -18,10 +18,23 @@ import {
   CheckCircle2,
 } from "lucide-react";
 
-export function ExpiredProductsView() {
+import { useBranchContext } from "@/context/BranchContext";
+
+interface ExpiredProductsViewProps {
+  selectedBranchId?: string;
+}
+
+export function ExpiredProductsView({ selectedBranchId: propBranchId }: ExpiredProductsViewProps = {}) {
   const { user } = useAuth();
-  const [branches, setBranches] = useState<Branch[]>([]);
-  const [selectedBranchId, setSelectedBranchId] = useState<string>(user?.branchId || "");
+  const {
+    branches,
+    selectedBranchId: contextBranchId,
+    currentBranch,
+    isAllBranches,
+    isBranchLocked,
+  } = useBranchContext();
+
+  const effectiveBranchId = propBranchId !== undefined ? propBranchId : contextBranchId;
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -34,36 +47,18 @@ export function ExpiredProductsView() {
   const [writeOffReason, setWriteOffReason] = useState("Expired medication disposal");
   const [submittingWriteOff, setSubmittingWriteOff] = useState(false);
 
-  const isBranchLocked = Boolean(
-    user?.branchId && user?.role !== "COMPANY_OWNER" && user?.role !== "SUPER_ADMIN"
-  );
-
-  useEffect(() => {
-    async function loadBranches() {
-      try {
-        const res = await fetchApi("/branches");
-        if (res.success && res.data && res.data.length > 0) {
-          setBranches(res.data);
-          if (!selectedBranchId) {
-            setSelectedBranchId(user?.branchId || res.data[0].id);
-          }
-        }
-      } catch (err) {
-        console.error("Failed to load branches", err);
-      }
-    }
-    loadBranches();
-  }, [user]);
-
   const loadStock = async () => {
-    if (!selectedBranchId) return;
     try {
       setLoading(true);
       const params = new URLSearchParams();
-      params.append("limit", "100");
+      params.append("limit", "150");
       if (search) params.append("search", search);
 
-      const res = await fetchApi(`/inventory/branch/${selectedBranchId}?${params.toString()}`);
+      const targetPath = effectiveBranchId && effectiveBranchId !== "all"
+        ? `/inventory/branch/${effectiveBranchId}?${params.toString()}`
+        : `/inventory/branch/all?${params.toString()}`;
+
+      const res = await fetchApi(targetPath);
       if (res.success && res.data) {
         setInventory(res.data);
       }
@@ -76,7 +71,7 @@ export function ExpiredProductsView() {
 
   useEffect(() => {
     loadStock();
-  }, [selectedBranchId]);
+  }, [effectiveBranchId]);
 
   // Compute expiry metrics
   const expiredItems = inventory.filter((inv) => inv.isExpired || (inv.daysUntilExpiry !== null && inv.daysUntilExpiry !== undefined && inv.daysUntilExpiry <= 0));
@@ -102,7 +97,7 @@ export function ExpiredProductsView() {
       const res = await fetchApi("/inventory/adjust", {
         method: "POST",
         body: JSON.stringify({
-          branchId: selectedBranchId,
+          branchId: selectedItem.branchId || (effectiveBranchId !== "all" ? effectiveBranchId : undefined),
           productId: selectedItem.productId,
           inventoryId: selectedItem.id,
           quantity: writeOffQty,
@@ -142,21 +137,13 @@ export function ExpiredProductsView() {
           </p>
         </div>
 
-        {/* Branch Selector */}
-        <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3.5 py-2 rounded-xl">
-          <Store className="h-4 w-4 text-slate-400" />
-          <select
-            disabled={isBranchLocked}
-            value={selectedBranchId}
-            onChange={(e) => setSelectedBranchId(e.target.value)}
-            className="bg-transparent text-xs font-bold text-slate-800 dark:text-white outline-none disabled:opacity-60"
-          >
-            {branches.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name}
-              </option>
-            ))}
-          </select>
+        {/* Active Branch Scope Badge */}
+        <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 px-3.5 py-2 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-300">
+          <Store className="h-4 w-4 text-brand-primary" />
+          <span>Scope:</span>
+          <span className="font-bold text-slate-900 dark:text-white">
+            {isAllBranches ? "Company-Wide (All Branches)" : (currentBranch?.name || "Selected Branch")}
+          </span>
         </div>
       </div>
 

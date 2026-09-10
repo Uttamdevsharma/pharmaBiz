@@ -6,6 +6,7 @@ declare global {
     interface Request {
       params: { [key: string]: string };
       user?: AuthenticatedUser;
+      effectiveBranchId?: string;
       subscription?: any;
       tenant?: any;
       isTrial?: boolean;

@@ -91,4 +91,184 @@
   .animate-card-float {
     animation: subtle-card-float 7s ease-in-out infinite;
   }
+
+  /* Sidebar Custom Scrollbar: Slim, transparent track, subtle thumb */
+  .sidebar-scrollbar {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 transparent;
+  }
+
+  .dark .sidebar-scrollbar {
+    scrollbar-color: #334155 transparent;
+  }
+
+  .sidebar-scrollbar::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .sidebar-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .sidebar-scrollbar::-webkit-scrollbar-thumb {
+    background-color: #cbd5e1;
+    border-radius: 9999px;
+  }
+
+  .sidebar-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: #94a3b8;
+  }
+
+  .dark .sidebar-scrollbar::-webkit-scrollbar-thumb {
+    background-color: #334155;
+  }
+
+  .dark .sidebar-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: #475569;
+  }
+
+  /* Right Content Custom Scrollbar: Distinct styled track, wider thumb, brand hover */
+  .content-scrollbar {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scroll-behavior: smooth;
+    scrollbar-width: thin;
+    scrollbar-color: #94a3b8 #f1f5f9;
+  }
+
+  .dark .content-scrollbar {
+    scrollbar-color: #475569 #0f172a;
+  }
+
+  .content-scrollbar::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .content-scrollbar::-webkit-scrollbar-track {
+    background: #f8fafc;
+    border-radius: 9999px;
+  }
+
+  .dark .content-scrollbar::-webkit-scrollbar-track {
+    background: #090d16;
+    border-radius: 9999px;
+  }
+
+  .content-scrollbar::-webkit-scrollbar-thumb {
+    background-color: #cbd5e1;
+    border-radius: 9999px;
+    border: 2px solid #f8fafc;
+    transition: background-color 0.15s ease-in-out;
+  }
+
+  .content-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: var(--primary-color, #059669);
+  }
+
+  .dark .content-scrollbar::-webkit-scrollbar-thumb {
+    background-color: #334155;
+    border: 2px solid #090d16;
+  }
+
+  .dark .content-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: var(--primary-color, #059669);
+  }
+
+  /* General Custom Scrollbar utility */
+  .custom-scrollbar {
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 transparent;
+  }
+  .dark .custom-scrollbar {
+    scrollbar-color: #334155 transparent;
+  }
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background-color: #cbd5e1;
+    border-radius: 9999px;
+  }
+  .dark .custom-scrollbar::-webkit-scrollbar-thumb {
+    background-color: #334155;
+  }
+}
+
+/* ─── Print Styles ─────────────────────────────────────────────────────────── */
+/* When printing (Ctrl+P or window.print()), isolate ONLY the printable invoice */
+/* document so background POS cards, cart, sidebar, and navbar never appear     */
+@media print {
+  @page {
+    margin: 1cm 1.5cm;
+    size: A4 portrait;
+  }
+
+  html,
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-size: 11pt !important;
+    line-height: 1.4 !important;
+    width: 100% !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+
+  /* Hide ALL elements in DOM by default during print */
+  body * {
+    visibility: hidden !important;
+  }
+
+  /* Make ONLY the printable document and all its contents visible */
+  .printable-document,
+  .printable-document * {
+    visibility: visible !important;
+  }
+
+  /* Position the printable invoice document at top-left filling full page width */
+  .printable-document {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+  }
+
+  /* Explicitly hide buttons and control bar elements inside printable container */
+  .print\:hidden,
+  .print\:hidden *,
+  button {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+  }
+
+  thead,
+  tbody,
+  tr,
+  td,
+  th {
+    page-break-inside: avoid !important;
+  }
 }

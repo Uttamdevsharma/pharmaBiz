@@ -36,4 +36,8 @@ router.put(
   SettingsController.updateTenantVatSettings
 );
 
+// Pharmacy-specific settings (receipt notes, prescription message) — per-tenant, not SaaS-level
+router.get("/pharmacy", authenticate, SettingsController.getPharmacySettings);
+router.put("/pharmacy", authenticate, SettingsController.updatePharmacySettings);
+
 export { router as settingsRoutes };

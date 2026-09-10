@@ -18,3 +18,6 @@ router.patch("/admin", authenticate_1.authenticate, (0, authorize_1.authorize)([
 // Pharmacy Tenant VAT & Tax Configuration
 router.get("/vat", authenticate_1.authenticate, settings_controller_1.SettingsController.getTenantVatSettings);
 router.put("/vat", authenticate_1.authenticate, (0, requirePermission_1.requirePermission)("pos.vat"), settings_controller_1.SettingsController.updateTenantVatSettings);
+// Pharmacy-specific settings (receipt notes, prescription message) — per-tenant, not SaaS-level
+router.get("/pharmacy", authenticate_1.authenticate, settings_controller_1.SettingsController.getPharmacySettings);
+router.put("/pharmacy", authenticate_1.authenticate, settings_controller_1.SettingsController.updatePharmacySettings);

@@ -39,6 +39,8 @@ class TenantService {
             email: tenant.email,
             phone: tenant.phone,
             address: tenant.address,
+            logoUrl: tenant.logoUrl || null,
+            logoPublicId: tenant.logoPublicId || null,
             createdAt: tenant.createdAt,
             isTrial,
             trialDaysRemaining,
@@ -60,6 +62,8 @@ class TenantService {
                 ...(data.email && { email: data.email }),
                 ...(data.phone && { phone: data.phone }),
                 ...(data.address && { address: data.address }),
+                ...(data.logoUrl !== undefined && { logoUrl: data.logoUrl || null }),
+                ...(data.logoPublicId !== undefined && { logoPublicId: data.logoPublicId || null }),
             },
         });
         return updated;

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState } from "react";
 import { fetchApi } from "@/lib/api";
 import { Supplier, SupplierContact } from "@/types";
 import { useAuth } from "@/context/AuthContext";
@@ -27,6 +27,8 @@ import {
   Ban,
   DollarSign,
   TrendingDown,
+  Package,
+  Clock,
 } from "lucide-react";
 
 interface SupplierDetailsViewProps {
@@ -39,7 +41,12 @@ type DatePreset = "TODAY" | "YESTERDAY" | "THIS_MONTH" | "THIS_YEAR" | "CUSTOM" 
 
 function getDateRangeForPreset(preset: DatePreset, customStart?: string, customEnd?: string) {
   const now = new Date();
-  const formatYMD = (d: Date) => d.toISOString().slice(0, 10);
+  const formatYMD = (d: Date) => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
 
   if (preset === "TODAY") {
     const todayStr = formatYMD(now);
@@ -350,13 +357,46 @@ export function SupplierDetailsView({ supplierId, onBack, onNavigate }: Supplier
         </button>
       </div>
     );
-  }
+  }  const stats = supplier.periodStats || supplier.stats || {
+    totalPurchased: Number(supplier.totalPurchased || 0),
+    totalPaid: Number(supplier.totalPaid || 0),
+    totalDue: Number(supplier.totalDue || 0),
+    purchasesCount: supplier.purchases?.length || 0,
+    paymentsCount: supplier.payments?.length || 0,
+    lifetimeTotalPurchased: Number(supplier.totalPurchased || 0),
+    lifetimeTotalPaid: Number(supplier.totalPaid || 0),
+    lifetimeTotalDue: Number(supplier.totalDue || 0),
+    isFiltered: false,
+  };
 
-  const due = Number(supplier.totalDue || 0);
-  const total = Number(supplier.totalPurchased || 0);
-  const paid = Number(supplier.totalPaid || 0);
+  const periodPurchased = Number(stats.totalPurchased || 0);
+  const periodPaid = Number(stats.totalPaid || 0);
+  const periodDue = Number(stats.totalDue || 0);
+  const lifetimePurchased = Number(stats.lifetimeTotalPurchased ?? supplier.totalPurchased ?? 0);
+  const lifetimePaid = Number(stats.lifetimeTotalPaid ?? supplier.totalPaid ?? 0);
+  const lifetimeDue = Number(stats.lifetimeTotalDue ?? supplier.totalDue ?? 0);
   const contacts = supplier.contacts || [];
   const purchases = supplier.purchases || [];
+
+  const getPresetLabel = () => {
+    switch (datePreset) {
+      case "TODAY":
+        return "Today";
+      case "YESTERDAY":
+        return "Yesterday";
+      case "THIS_MONTH":
+        return "This Month";
+      case "THIS_YEAR":
+        return "This Year";
+      case "CUSTOM":
+        return customStartDate && customEndDate
+          ? `${customStartDate} to ${customEndDate}`
+          : "Custom Date";
+      case "ALL":
+      default:
+        return "All Time";
+    }
+  };
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
@@ -387,13 +427,13 @@ export function SupplierDetailsView({ supplierId, onBack, onNavigate }: Supplier
         </div>
 
         <div className="flex items-center gap-2.5 flex-wrap">
-          {due > 0 && (
+          {lifetimeDue > 0 && (
             <button
               onClick={handleOpenPayModal}
               className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm active:scale-95"
             >
               <CreditCard className="h-4 w-4" />
-              Settle Due (৳{due.toFixed(2)})
+              Settle Due (৳{lifetimeDue.toFixed(2)})
             </button>
           )}
           <button
@@ -422,63 +462,219 @@ export function SupplierDetailsView({ supplierId, onBack, onNavigate }: Supplier
         </div>
       )}
 
-      {/* Profile & Financial Summary Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Company Info Card */}
-        <div className="p-6 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
-          <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Company Information</div>
-          <div className="space-y-2 text-xs">
-            <div className="flex items-center gap-2 text-slate-800 dark:text-slate-200 font-semibold">
-              <Building className="h-4 w-4 text-slate-400 shrink-0" />
-              <span>{supplier.company || supplier.name}</span>
-            </div>
-            <div className="flex items-center gap-2 text-slate-800 dark:text-slate-200 font-mono">
-              <Phone className="h-4 w-4 text-slate-400 shrink-0" />
-              <span>{supplier.phone || "—"}</span>
-            </div>
-            {supplier.email && (
-              <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
-                <Mail className="h-4 w-4 text-slate-400 shrink-0" />
-                <span>{supplier.email}</span>
-              </div>
-            )}
-            {supplier.address && (
-              <div className="flex items-start gap-2 text-slate-600 dark:text-slate-400">
-                <MapPin className="h-4 w-4 text-slate-400 shrink-0 mt-0.5" />
-                <span>{supplier.address}</span>
-              </div>
-            )}
+      {/* Date Filter Bar - Positioned at top before Stat Cards */}
+      <div className="p-4 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Calendar className="h-4 w-4 text-brand-primary" />
+            <span className="text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-wider">
+              Filter Statistics by Date:
+            </span>
+            <span className="px-2.5 py-0.5 rounded-full bg-brand-primary/10 text-brand-primary text-xs font-bold">
+              {getPresetLabel()}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {(
+              [
+                { id: "ALL", label: "All Time" },
+                { id: "TODAY", label: "Today" },
+                { id: "YESTERDAY", label: "Yesterday" },
+                { id: "THIS_MONTH", label: "This Month" },
+                { id: "THIS_YEAR", label: "This Year" },
+                { id: "CUSTOM", label: "Custom Date" },
+              ] as const
+            ).map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setDatePreset(t.id)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                  datePreset === t.id
+                    ? "bg-brand-primary text-white shadow-sm"
+                    : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
           </div>
         </div>
 
-        {/* Financial KPI Cards */}
-        <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="p-5 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
-            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Total Purchased</div>
-            <div className="text-2xl font-black font-mono text-slate-900 dark:text-white mt-2">
-              ৳{total.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+        {datePreset === "CUSTOM" && (
+          <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2 text-xs">
+              <span className="font-bold text-slate-500">From:</span>
+              <input
+                type="date"
+                value={customStartDate}
+                onChange={(e) => setCustomStartDate(e.target.value)}
+                className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none text-slate-800 dark:text-white"
+              />
             </div>
-            <div className="text-[10px] text-slate-400 mt-1">Lifetime stock received</div>
+            <div className="flex items-center gap-2 text-xs">
+              <span className="font-bold text-slate-500">To:</span>
+              <input
+                type="date"
+                value={customEndDate}
+                onChange={(e) => setCustomEndDate(e.target.value)}
+                className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none text-slate-800 dark:text-white"
+              />
+            </div>
+            <button
+              onClick={loadSupplierData}
+              disabled={!customStartDate || !customEndDate}
+              className="px-4 py-1.5 bg-brand-primary text-white rounded-xl text-xs font-bold shadow-xs hover:opacity-95 disabled:opacity-50 transition"
+            >
+              Apply Filter
+            </button>
           </div>
+        )}
+      </div>
 
-          <div className="p-5 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
-            <div className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
-              Total Settled / Paid
+      {/* Dynamic Financial KPI State Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Card 1: Total Purchased */}
+        <div className="p-5 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between transition hover:shadow-md">
+          <div className="flex items-center justify-between">
+            <div className="text-[11px] font-black text-slate-400 uppercase tracking-wider">
+              Total Purchased
             </div>
-            <div className="text-2xl font-black font-mono text-emerald-600 dark:text-emerald-400 mt-2">
-              ৳{paid.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+            <div className="h-8 w-8 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+              <Receipt className="h-4 w-4" />
             </div>
-            <div className="text-[10px] text-emerald-500/80 mt-1">Settled payments</div>
           </div>
+          <div className="mt-2">
+            <div className="text-2xl font-black font-mono text-slate-900 dark:text-white">
+              ৳{periodPurchased.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
+            <div className="flex items-center justify-between text-[11px] mt-1 text-slate-500">
+              <span>{stats.purchasesCount || purchases.length} order(s) placed</span>
+              <span className="font-bold text-brand-primary">({getPresetLabel()})</span>
+            </div>
+          </div>
+          {datePreset !== "ALL" && (
+            <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800 text-[10px] text-slate-400 font-mono">
+              Lifetime: ৳{lifetimePurchased.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+            </div>
+          )}
+        </div>
 
-          <div className="p-5 bg-white dark:bg-slate-900 rounded-3xl border border-rose-200 dark:border-rose-950 shadow-sm flex flex-col justify-between">
-            <div className="text-[11px] font-bold text-rose-500 uppercase tracking-wider">Outstanding Due</div>
-            <div className="text-2xl font-black font-mono text-rose-600 dark:text-rose-400 mt-2">
-              ৳{due.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+        {/* Card 2: Total Settled / Paid */}
+        <div className="p-5 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between transition hover:shadow-md">
+          <div className="flex items-center justify-between">
+            <div className="text-[11px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
+              Settled / Paid
             </div>
-            <div className="text-[10px] text-rose-500 mt-1">
-              {due > 0 ? "Payable balance pending" : "All payments cleared"}
+            <div className="h-8 w-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+              <CreditCard className="h-4 w-4" />
             </div>
+          </div>
+          <div className="mt-2">
+            <div className="text-2xl font-black font-mono text-emerald-600 dark:text-emerald-400">
+              ৳{periodPaid.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
+            <div className="flex items-center justify-between text-[11px] mt-1 text-emerald-700 dark:text-emerald-300">
+              <span>{stats.paymentsCount || (supplier.payments?.length || 0)} payment(s)</span>
+              <span className="font-bold">({getPresetLabel()})</span>
+            </div>
+          </div>
+          {datePreset !== "ALL" && (
+            <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800 text-[10px] text-slate-400 font-mono">
+              Lifetime Paid: ৳{lifetimePaid.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+            </div>
+          )}
+        </div>
+
+        {/* Card 3: Period Due */}
+        <div className="p-5 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between transition hover:shadow-md">
+          <div className="flex items-center justify-between">
+            <div className="text-[11px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-wider">
+              Period Due
+            </div>
+            <div className="h-8 w-8 rounded-xl bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+              <TrendingDown className="h-4 w-4" />
+            </div>
+          </div>
+          <div className="mt-2">
+            <div className="text-2xl font-black font-mono text-amber-600 dark:text-amber-400">
+              ৳{periodDue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
+            <div className="text-[11px] mt-1 text-slate-500">
+              Invoices in ({getPresetLabel()})
+            </div>
+          </div>
+          {datePreset !== "ALL" && (
+            <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800 text-[10px] text-amber-600/80 font-bold">
+              Period Unsettled
+            </div>
+          )}
+        </div>
+
+        {/* Card 4: Total Outstanding Due (Lifetime) */}
+        <div className={`p-5 bg-white dark:bg-slate-900 rounded-3xl border shadow-sm flex flex-col justify-between transition hover:shadow-md ${
+          lifetimeDue > 0
+            ? "border-rose-200 dark:border-rose-950 bg-rose-50/10"
+            : "border-slate-200 dark:border-slate-800"
+        }`}>
+          <div className="flex items-center justify-between">
+            <div className="text-[11px] font-black text-rose-500 uppercase tracking-wider">
+              Total Outstanding Due
+            </div>
+            <div className="h-8 w-8 rounded-xl bg-rose-50 dark:bg-rose-950/50 text-rose-500 flex items-center justify-center">
+              <AlertCircle className="h-4 w-4" />
+            </div>
+          </div>
+          <div className="mt-2">
+            <div className="text-2xl font-black font-mono text-rose-600 dark:text-rose-400">
+              ৳{lifetimeDue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
+            <div className="text-[11px] mt-1 text-rose-500 font-semibold">
+              {lifetimeDue > 0 ? "Total payable balance pending" : "All payments cleared"}
+            </div>
+          </div>
+          <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+            <span className="text-[10px] text-slate-400 font-bold uppercase">Net Payable</span>
+            {lifetimeDue > 0 && (
+              <button
+                onClick={handleOpenPayModal}
+                className="text-[11px] font-black text-rose-600 dark:text-rose-400 hover:underline flex items-center gap-1"
+              >
+                Settle Due &rarr;
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Company Info & Overview Card */}
+      <div className="p-6 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Company Information</div>
+          <button
+            onClick={handleOpenEditProfile}
+            className="text-xs font-bold text-brand-primary hover:underline flex items-center gap-1"
+          >
+            <Edit2 className="h-3 w-3" />
+            Edit Profile
+          </button>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-xs pt-1">
+          <div className="flex items-center gap-2 text-slate-800 dark:text-slate-200 font-semibold">
+            <Building className="h-4 w-4 text-slate-400 shrink-0" />
+            <span className="truncate">{supplier.company || supplier.name}</span>
+          </div>
+          <div className="flex items-center gap-2 text-slate-800 dark:text-slate-200 font-mono">
+            <Phone className="h-4 w-4 text-slate-400 shrink-0" />
+            <span>{supplier.phone || "—"}</span>
+          </div>
+          <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
+            <Mail className="h-4 w-4 text-slate-400 shrink-0" />
+            <span className="truncate">{supplier.email || "—"}</span>
+          </div>
+          <div className="flex items-start gap-2 text-slate-600 dark:text-slate-400">
+            <MapPin className="h-4 w-4 text-slate-400 shrink-0 mt-0.5" />
+            <span className="truncate">{supplier.address || "—"}</span>
           </div>
         </div>
       </div>
@@ -585,66 +781,16 @@ export function SupplierDetailsView({ supplierId, onBack, onNavigate }: Supplier
             <Receipt className="h-5 w-5 text-brand-primary" />
             <div>
               <h2 className="text-base font-black text-slate-900 dark:text-white">Purchase & Inward Order History</h2>
-              <p className="text-xs text-slate-400">Filter medicine intake orders by date and view supplier invoice details.</p>
+              <p className="text-xs text-slate-400">Medicine intake orders received from {supplier.name}.</p>
             </div>
           </div>
 
-          {/* Preset Date Filters */}
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {(
-              [
-                { id: "ALL", label: "All Time" },
-                { id: "TODAY", label: "Today" },
-                { id: "YESTERDAY", label: "Yesterday" },
-                { id: "THIS_MONTH", label: "This Month" },
-                { id: "THIS_YEAR", label: "This Year" },
-                { id: "CUSTOM", label: "Custom Date" },
-              ] as const
-            ).map((t) => (
-              <button
-                key={t.id}
-                onClick={() => setDatePreset(t.id)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
-                  datePreset === t.id
-                    ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-sm"
-                    : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
-                }`}
-              >
-                {t.label}
-              </button>
-            ))}
+          <div className="flex items-center gap-2 text-xs text-slate-500 font-bold">
+            <span className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-xl text-slate-600 dark:text-slate-300">
+              Orders for: <strong className="text-brand-primary font-black">{getPresetLabel()}</strong> ({purchases.length} invoices)
+            </span>
           </div>
         </div>
-
-        {/* Custom Date Filter Box */}
-        {datePreset === "CUSTOM" && (
-          <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2 text-xs">
-              <span className="font-bold text-slate-500">From:</span>
-              <input
-                type="date"
-                value={customStartDate}
-                onChange={(e) => setCustomStartDate(e.target.value)}
-                className="px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none font-bold text-slate-800 dark:text-white"
-              />
-            </div>
-            <div className="flex items-center gap-2 text-xs">
-              <span className="font-bold text-slate-500">To:</span>
-              <input
-                type="date"
-                value={customEndDate}
-                onChange={(e) => setCustomEndDate(e.target.value)}
-                className="px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none font-bold text-slate-800 dark:text-white"
-              />
-            </div>
-            <button
-              onClick={loadSupplierData}
-              className="px-3.5 py-1.5 bg-brand-primary text-white rounded-xl text-xs font-bold shadow-xs hover:opacity-95"
-            >
-              Apply Filter
-            </button>
-          </div>
-        )}
 
         {/* Purchases Table */}
         {purchases.length === 0 ? (

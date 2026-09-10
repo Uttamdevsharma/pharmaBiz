@@ -67,5 +67,38 @@ class SettingsController {
             res.status(400).json({ success: false, message: error.message });
         }
     }
+    static async getPharmacySettings(req, res) {
+        try {
+            const tenantId = req.user?.tenantId;
+            if (!tenantId) {
+                res.status(400).json({ success: false, message: "Tenant context required" });
+                return;
+            }
+            const data = await settings_service_1.SettingsService.getPharmacySettings(tenantId);
+            res.status(200).json({ success: true, data });
+        }
+        catch (error) {
+            res.status(500).json({ success: false, message: error.message });
+        }
+    }
+    static async updatePharmacySettings(req, res) {
+        try {
+            const tenantId = req.user?.tenantId;
+            const userId = req.user?.id || req.user?.userId;
+            if (!tenantId) {
+                res.status(400).json({ success: false, message: "Tenant context required" });
+                return;
+            }
+            const updated = await settings_service_1.SettingsService.updatePharmacySettings(tenantId, userId, req.body);
+            res.status(200).json({
+                success: true,
+                message: "Pharmacy settings updated successfully",
+                data: updated,
+            });
+        }
+        catch (error) {
+            res.status(400).json({ success: false, message: error.message });
+        }
+    }
 }
 exports.SettingsController = SettingsController;

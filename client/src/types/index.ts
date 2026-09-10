@@ -180,6 +180,28 @@ export interface Supplier {
   _count?: { purchases: number; inventories: number; contacts?: number };
   purchases?: any[];
   payments?: SupplierPayment[];
+  stats?: {
+    totalPurchased: number;
+    totalPaid: number;
+    totalDue: number;
+    purchasesCount: number;
+    paymentsCount: number;
+    lifetimeTotalPurchased: number;
+    lifetimeTotalPaid: number;
+    lifetimeTotalDue: number;
+    isFiltered: boolean;
+  };
+  periodStats?: {
+    totalPurchased: number;
+    totalPaid: number;
+    totalDue: number;
+    purchasesCount: number;
+    paymentsCount: number;
+    lifetimeTotalPurchased: number;
+    lifetimeTotalPaid: number;
+    lifetimeTotalDue: number;
+    isFiltered: boolean;
+  };
 }
 
 export interface InventoryItem {

@@ -33,19 +33,23 @@ import {
   Filter,
 } from "lucide-react";
 
+import { useBranchContext } from "@/context/BranchContext";
+
 interface OverviewModuleProps {
   onNavigate: (module: OwnerModule) => void;
+  selectedBranchId?: string;
 }
 
 type PeriodFilter = "today" | "yesterday" | "7d" | "30d" | "custom";
 
-export function OverviewModule({ onNavigate }: OverviewModuleProps) {
+export function OverviewModule({ onNavigate, selectedBranchId: propBranchId }: OverviewModuleProps) {
   const { user } = useAuth();
+  const { selectedBranchId: contextBranchId, currentBranch } = useBranchContext();
+  const effectiveBranchId = propBranchId !== undefined ? propBranchId : contextBranchId;
+
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [dashboardData, setDashboardData] = useState<any>(null);
-  const [branches, setBranches] = useState<any[]>([]);
-  const [selectedBranchId, setSelectedBranchId] = useState<string>("all");
   
   // Date filter states
   const [period, setPeriod] = useState<PeriodFilter>("30d");
@@ -60,17 +64,6 @@ export function OverviewModule({ onNavigate }: OverviewModuleProps) {
 
   const isBranchRestricted = ["BRANCH_MANAGER", "MANAGER", "CASHIER", "INVENTORY_EXECUTIVE"].includes(user?.role || "");
 
-  // Load branch list for owners
-  useEffect(() => {
-    if (!isBranchRestricted) {
-      fetchApi<any[]>("/branches").then((res) => {
-        if (res.success && Array.isArray(res.data)) {
-          setBranches(res.data);
-        }
-      }).catch(() => {});
-    }
-  }, [isBranchRestricted]);
-
   const loadDashboard = async (showFullSpinner = false) => {
     try {
       if (showFullSpinner) setLoading(true);
@@ -79,8 +72,8 @@ export function OverviewModule({ onNavigate }: OverviewModuleProps) {
       const params = new URLSearchParams();
       params.set("period", period);
       
-      if (!isBranchRestricted && selectedBranchId && selectedBranchId !== "all") {
-        params.set("branchId", selectedBranchId);
+      if (!isBranchRestricted && effectiveBranchId && effectiveBranchId !== "all") {
+        params.set("branchId", effectiveBranchId);
       }
       
       if (period === "custom") {
@@ -102,7 +95,7 @@ export function OverviewModule({ onNavigate }: OverviewModuleProps) {
 
   useEffect(() => {
     loadDashboard(true);
-  }, [period, selectedBranchId]);
+  }, [period, effectiveBranchId]);
 
   const handleApplyCustomDate = () => {
     if (period === "custom") {
@@ -148,7 +141,7 @@ export function OverviewModule({ onNavigate }: OverviewModuleProps) {
   const categoryList: any[] = charts.categoryDistribution || [];
   const topProducts: any[] = charts.topSellingProducts || [];
 
-  const branchDisplayName = summary.branchName || (isBranchRestricted ? "Assigned Branch" : "All Branches");
+  const branchDisplayName = summary.branchName || currentBranch?.name || (effectiveBranchId ? "Selected Branch" : "All Branches");
 
   return (
     <div className="space-y-6 w-full max-w-[1920px] 2xl:max-w-[2560px] mx-auto animate-in fade-in duration-150">
@@ -162,44 +155,29 @@ export function OverviewModule({ onNavigate }: OverviewModuleProps) {
               <h1 className="text-xl sm:text-2xl xl:text-3xl font-black tracking-tight text-slate-900 dark:text-slate-100 flex items-center gap-2.5">
                 <LayoutDashboard className="h-6 w-6 sm:h-7 sm:w-7 xl:h-8 xl:w-8 text-brand-primary" />
                 <span>
-                  {isBranchRestricted ? `${branchDisplayName} Dashboard` : "Pharmacy Enterprise Dashboard"}
+                  {isBranchRestricted || effectiveBranchId ? `${branchDisplayName} Dashboard` : "Pharmacy Enterprise Dashboard"}
                 </span>
               </h1>
               <span className={`text-[10px] sm:text-xs px-2.5 py-0.5 rounded-full font-black uppercase tracking-wider ${
-                isBranchRestricted
+                isBranchRestricted || effectiveBranchId
                   ? "bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800"
                   : "bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
               }`}>
-                {isBranchRestricted ? "Branch Manager Scope" : "Multi-Branch Live"}
+                {isBranchRestricted
+                  ? "Branch Manager Scope"
+                  : effectiveBranchId
+                  ? `Branch: ${branchDisplayName}`
+                  : "Multi-Branch Live"}
               </span>
             </div>
             <p className="text-xs sm:text-sm text-slate-500 mt-1">
-              {isBranchRestricted
+              {isBranchRestricted || effectiveBranchId
                 ? `Real-time stock valuation, sales performance, transit loss tracking and net profit for ${branchDisplayName}.`
                 : "Real sales revenue, verified stock purchase valuation, gross profit, transit losses, and net profit across company branches."}
             </p>
           </div>
 
           <div className="flex items-center gap-2.5 flex-wrap">
-            {/* Branch Switcher for Company Owners */}
-            {!isBranchRestricted && (
-              <div className="flex items-center gap-2">
-                <Store className="h-4 w-4 text-slate-400" />
-                <select
-                  value={selectedBranchId}
-                  onChange={(e) => setSelectedBranchId(e.target.value)}
-                  className="px-3 py-2 text-xs sm:text-sm font-semibold rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                >
-                  <option value="all">🏢 All Branches (Company-Wide)</option>
-                  {branches.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      📍 {b.name} {b.location ? `(${b.location})` : ""}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
             <button
               onClick={() => loadDashboard(false)}
               disabled={refreshing}
@@ -463,7 +441,7 @@ export function OverviewModule({ onNavigate }: OverviewModuleProps) {
       {/* ========================================================================= */}
       {/* BRANCH-WISE PERFORMANCE MATRIX (FOR PHARMACY OWNER / ALL BRANCHES) */}
       {/* ========================================================================= */}
-      {!isBranchRestricted && branchList.length > 0 && selectedBranchId === "all" && (
+      {!isBranchRestricted && branchList.length > 0 && effectiveBranchId === "all" && (
         <div className="bg-white dark:bg-slate-900 p-6 2xl:p-8 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>

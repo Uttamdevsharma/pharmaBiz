@@ -6,7 +6,6 @@ import { Footer } from "@/components/landing/Footer";
 import {
   Mail,
   Phone,
-  MapPin,
   Clock,
   Send,
   CheckCircle2,

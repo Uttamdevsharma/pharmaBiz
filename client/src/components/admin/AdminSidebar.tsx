@@ -7,8 +7,6 @@ import {
   PackageCheck,
   CreditCard,
   Layers,
-  BarChart3,
-  Bell,
   Palette,
   ShieldCheck,
   Users,
@@ -56,7 +54,6 @@ export function AdminSidebar({ activeTab, onTabChange }: AdminSidebarProps) {
   const canViewPlans = isSuperAdmin || hasPermission("plans.manage");
   const canViewSubscriptions = isSuperAdmin || hasPermission("subscriptions.manage");
   const canViewPayments = isSuperAdmin || hasPermission("payments.view");
-  const canViewAnalytics = isSuperAdmin || hasPermission("reports.view");
   const canViewSettings = isSuperAdmin || hasPermission("settings.manage");
 
   // Staff sub-permissions
@@ -221,49 +218,6 @@ export function AdminSidebar({ activeTab, onTabChange }: AdminSidebarProps) {
             <span>Subscriptions</span>
           </button>
         )}
-
-        {/* Payments */}
-        {canViewPayments && (
-          <button
-            onClick={() => onTabChange("payments")}
-            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all ${
-              activeTab === "payments"
-                ? "bg-brand-primary text-white shadow-sm"
-                : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white"
-            }`}
-          >
-            <CreditCard className="h-4 w-4 shrink-0" />
-            <span>Payments</span>
-          </button>
-        )}
-
-        {/* Analytics / Reports */}
-        {canViewAnalytics && (
-          <button
-            onClick={() => onTabChange("analytics")}
-            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all ${
-              activeTab === "analytics"
-                ? "bg-brand-primary text-white shadow-sm"
-                : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white"
-            }`}
-          >
-            <BarChart3 className="h-4 w-4 shrink-0" />
-            <span>Platform Analytics</span>
-          </button>
-        )}
-
-        {/* Notifications */}
-        <button
-          onClick={() => onTabChange("notifications")}
-          className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all ${
-            activeTab === "notifications"
-              ? "bg-brand-primary text-white shadow-sm"
-              : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white"
-          }`}
-        >
-          <Bell className="h-4 w-4 shrink-0" />
-          <span>Notifications</span>
-        </button>
 
         {/* Settings */}
         {canViewSettings && (

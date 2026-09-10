@@ -23,7 +23,9 @@ import {
   Briefcase,
   Download,
   Info,
+  Store,
 } from "lucide-react";
+import { useBranchContext } from "@/context/BranchContext";
 
 interface BranchSalaryHistoryViewProps {
   selectedBranchId?: string;
@@ -72,10 +74,18 @@ interface DisbursementItem {
 }
 
 export function BranchSalaryHistoryView({
-  selectedBranchId,
+  selectedBranchId: propBranchId,
   onNavigate,
   onSelectEmployee,
 }: BranchSalaryHistoryViewProps) {
+  const {
+    selectedBranchId: contextBranchId,
+    currentBranch,
+    isAllBranches,
+  } = useBranchContext();
+
+  const effectiveBranchId = propBranchId !== undefined ? propBranchId : contextBranchId;
+
   const [currentMonth, setCurrentMonth] = useState<string>("");
   const [disbursements, setDisbursements] = useState<DisbursementItem[]>([]);
   const [totalDisbursed, setTotalDisbursed] = useState(0);
@@ -87,11 +97,13 @@ export function BranchSalaryHistoryView({
   const [selectedSlip, setSelectedSlip] = useState<DisbursementItem | null>(null);
 
   const loadSalaryHistory = async () => {
-    if (!selectedBranchId) return;
     try {
       setLoading(true);
       setError(null);
-      let url = `/accounting/salaries/branch-history?branchId=${selectedBranchId}&limit=100`;
+      let url = `/accounting/salaries/branch-history?limit=100`;
+      if (effectiveBranchId && effectiveBranchId !== "all") {
+        url += `&branchId=${effectiveBranchId}`;
+      }
       if (currentMonth) {
         url += `&month=${currentMonth}`;
       }
@@ -101,7 +113,7 @@ export function BranchSalaryHistoryView({
         setTotalDisbursed(res.data.totalDisbursed || 0);
       }
     } catch (err: any) {
-      setError(err.message || "Failed to load branch salary history");
+      setError(err.message || "Failed to load salary history");
     } finally {
       setLoading(false);
     }
@@ -109,7 +121,7 @@ export function BranchSalaryHistoryView({
 
   useEffect(() => {
     loadSalaryHistory();
-  }, [selectedBranchId, currentMonth]);
+  }, [effectiveBranchId, currentMonth]);
 
   const filteredItems = disbursements.filter((item) => {
     const q = searchQuery.toLowerCase();
@@ -139,6 +151,14 @@ export function BranchSalaryHistoryView({
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-300">
+            <Store className="h-4 w-4 text-purple-500" />
+            <span>Scope:</span>
+            <span className="font-bold text-slate-900 dark:text-white">
+              {isAllBranches ? "All Branches (Company-Wide)" : (currentBranch?.name || "Selected Branch")}
+            </span>
+          </div>
+
           <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-xl text-sm font-semibold">
             <Calendar className="w-4 h-4 text-slate-500" />
             <input

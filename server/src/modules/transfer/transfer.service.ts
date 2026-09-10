@@ -656,6 +656,20 @@ export class TransferService {
       where.settlementStatus = query.settlementStatus;
     }
 
+    if (query.startDate || query.endDate) {
+      where.createdAt = {};
+      if (query.startDate) {
+        const start = new Date(query.startDate);
+        start.setHours(0, 0, 0, 0);
+        where.createdAt.gte = start;
+      }
+      if (query.endDate) {
+        const end = new Date(query.endDate);
+        end.setHours(23, 59, 59, 999);
+        where.createdAt.lte = end;
+      }
+    }
+
     const [total, transfers] = await Promise.all([
       (prisma as any).stockTransfer.count({ where }),
       (prisma as any).stockTransfer.findMany({
@@ -827,7 +841,7 @@ export class TransferService {
     tenantId: string,
     userRole?: string,
     userBranchId?: string | null,
-    query?: { branchId?: string; search?: string }
+    query?: { branchId?: string; search?: string; startDate?: string; endDate?: string }
   ) {
     const where: any = {
       product: {
@@ -857,10 +871,29 @@ export class TransferService {
 
     if (query?.search) {
       where.product = {
+        ...where.product,
         OR: [
           { name: { contains: query.search, mode: "insensitive" } },
           { genericName: { contains: query.search, mode: "insensitive" } },
         ],
+      };
+    }
+
+    if (query?.startDate || query?.endDate) {
+      const dateFilter: any = {};
+      if (query?.startDate) {
+        const start = new Date(query.startDate);
+        start.setHours(0, 0, 0, 0);
+        dateFilter.gte = start;
+      }
+      if (query?.endDate) {
+        const end = new Date(query.endDate);
+        end.setHours(23, 59, 59, 999);
+        dateFilter.lte = end;
+      }
+      where.transfer = {
+        ...(where.transfer || {}),
+        createdAt: dateFilter,
       };
     }
 

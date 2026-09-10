@@ -116,7 +116,12 @@ class SuperAdminController {
             const page = req.query.page ? parseInt(req.query.page, 10) : 1;
             const limit = req.query.limit ? parseInt(req.query.limit, 10) : 50;
             const status = req.query.status;
-            const result = await super_admin_service_1.SuperAdminService.listSubscriptions(page, limit, status);
+            const datePreset = req.query.datePreset;
+            const startDate = req.query.startDate;
+            const endDate = req.query.endDate;
+            const tier = req.query.tier;
+            const search = req.query.search;
+            const result = await super_admin_service_1.SuperAdminService.listSubscriptions(page, limit, status, { datePreset, startDate, endDate, tier, search });
             res.status(200).json({ success: true, ...result });
         }
         catch (error) {
@@ -138,7 +143,10 @@ class SuperAdminController {
     // Analytics
     static async getAnalytics(req, res) {
         try {
-            const analytics = await super_admin_service_1.SuperAdminService.getPlatformAnalytics();
+            const datePreset = req.query.datePreset;
+            const startDate = req.query.startDate;
+            const endDate = req.query.endDate;
+            const analytics = await super_admin_service_1.SuperAdminService.getPlatformAnalytics({ datePreset, startDate, endDate });
             res.status(200).json({ success: true, data: analytics });
         }
         catch (error) {
@@ -290,12 +298,15 @@ class SuperAdminController {
      */
     static async listPharmacyVerifications(req, res) {
         try {
-            const { status, search, page, limit } = req.query;
+            const { status, search, page, limit, datePreset, startDate, endDate } = req.query;
             const result = await super_admin_service_1.SuperAdminService.listPharmacyVerifications({
                 status: status,
                 search: search,
                 page: page ? parseInt(page) : undefined,
                 limit: limit ? parseInt(limit) : undefined,
+                datePreset: datePreset,
+                startDate: startDate,
+                endDate: endDate,
             });
             res.status(200).json({
                 success: true,

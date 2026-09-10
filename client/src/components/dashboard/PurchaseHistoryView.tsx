@@ -18,15 +18,26 @@ import {
   Clock,
   AlertCircle,
   Eye,
+  Store,
 } from "lucide-react";
+import { useBranchContext } from "@/context/BranchContext";
 
 type DateFilterPreset = "today" | "yesterday" | "this_month" | "this_year" | "custom";
 
 interface PurchaseHistoryViewProps {
   onNavigate: (module: any) => void;
+  selectedBranchId?: string;
 }
 
-export function PurchaseHistoryView({ onNavigate }: PurchaseHistoryViewProps) {
+export function PurchaseHistoryView({ onNavigate, selectedBranchId: propBranchId }: PurchaseHistoryViewProps) {
+  const {
+    selectedBranchId: contextBranchId,
+    currentBranch,
+    isAllBranches,
+  } = useBranchContext();
+
+  const effectiveBranchId = propBranchId !== undefined ? propBranchId : contextBranchId;
+
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [selectedSupplierId, setSelectedSupplierId] = useState<string>("");
   const [dateFilter, setDateFilter] = useState<DateFilterPreset>("today");
@@ -95,6 +106,9 @@ export function PurchaseHistoryView({ onNavigate }: PurchaseHistoryViewProps) {
       if (dateRange.start) params.append("startDate", dateRange.start);
       if (dateRange.end) params.append("endDate", dateRange.end);
       if (selectedSupplierId) params.append("supplierId", selectedSupplierId);
+      if (effectiveBranchId && effectiveBranchId !== "all") {
+        params.append("branchId", effectiveBranchId);
+      }
 
       const res = await fetchApi(`/suppliers/purchases/list?${params.toString()}`);
       if (res.success && res.data) {
@@ -113,7 +127,7 @@ export function PurchaseHistoryView({ onNavigate }: PurchaseHistoryViewProps) {
   useEffect(() => {
     if (dateFilter === "custom" && (!customStartDate || !customEndDate)) return;
     loadPurchases();
-  }, [dateRange, selectedSupplierId]);
+  }, [dateRange, selectedSupplierId, effectiveBranchId]);
 
   // Totals for filtered list
   const totals = useMemo(() => {
@@ -231,21 +245,31 @@ export function PurchaseHistoryView({ onNavigate }: PurchaseHistoryViewProps) {
             ))}
           </div>
 
-          {/* Supplier Dropdown */}
-          <div className="flex items-center gap-2">
-            <Truck className="h-4 w-4 text-slate-400 shrink-0" />
-            <select
-              value={selectedSupplierId}
-              onChange={(e) => setSelectedSupplierId(e.target.value)}
-              className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-700 dark:text-slate-300 outline-none font-bold min-w-[200px]"
-            >
-              <option value="">All Suppliers</option>
-              {suppliers.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
+          {/* Supplier Dropdown & Scope Badge */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-2">
+              <Truck className="h-4 w-4 text-slate-400 shrink-0" />
+              <select
+                value={selectedSupplierId}
+                onChange={(e) => setSelectedSupplierId(e.target.value)}
+                className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-700 dark:text-slate-300 outline-none font-bold min-w-[200px]"
+              >
+                <option value="">All Suppliers</option>
+                {suppliers.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-300">
+              <Store className="h-3.5 w-3.5 text-brand-primary" />
+              <span>Scope:</span>
+              <span className="font-bold text-slate-900 dark:text-white">
+                {isAllBranches ? "All Branches" : (currentBranch?.name || "Selected Branch")}
+              </span>
+            </div>
           </div>
         </div>
 

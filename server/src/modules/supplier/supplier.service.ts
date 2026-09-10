@@ -18,7 +18,7 @@ export class SupplierService {
    */
   static async listSuppliers(tenantId: string, query: ListSuppliersQuery) {
     const page = Math.max(1, query.page || 1);
-    const limit = Math.max(1, Math.min(100, query.limit || 20));
+    const limit = Math.max(1, Math.min(100, query.limit || 50));
     const skip = (page - 1) * limit;
 
     const where: any = { tenantId };
@@ -52,6 +52,62 @@ export class SupplierService {
       (prisma as any).supplier.count({ where }),
     ]);
 
+    // If branchId or date filter is supplied, compute per-supplier purchase & due stats for that scope
+    const isFiltered = Boolean(query.startDate || query.endDate || (query.branchId && query.branchId !== "all"));
+    if (isFiltered && suppliers.length > 0) {
+      const supplierIds = suppliers.map((s: any) => s.id);
+      const purchaseWhere: any = { tenantId, supplierId: { in: supplierIds } };
+      if (query.branchId && query.branchId !== "all") {
+        purchaseWhere.branchId = query.branchId;
+      }
+      if (query.startDate || query.endDate) {
+        purchaseWhere.purchaseDate = {};
+        if (query.startDate) purchaseWhere.purchaseDate.gte = new Date(query.startDate);
+        if (query.endDate) {
+          const end = new Date(query.endDate);
+          end.setHours(23, 59, 59, 999);
+          purchaseWhere.purchaseDate.lte = end;
+        }
+      }
+
+      const purchases = await (prisma as any).purchase.findMany({
+        where: purchaseWhere,
+        select: { supplierId: true, totalAmount: true, paidAmount: true, dueAmount: true },
+      });
+
+      const statsMap = new Map<string, { totalPurchased: number; totalPaid: number; totalDue: number }>();
+      for (const p of purchases) {
+        if (!p.supplierId) continue;
+        const curr = statsMap.get(p.supplierId) || { totalPurchased: 0, totalPaid: 0, totalDue: 0 };
+        curr.totalPurchased += Number(p.totalAmount || 0);
+        curr.totalPaid += Number(p.paidAmount || 0);
+        curr.totalDue += Number(p.dueAmount || 0);
+        statsMap.set(p.supplierId, curr);
+      }
+
+      const formattedSuppliers = suppliers.map((s: any) => {
+        const stats = statsMap.get(s.id) || { totalPurchased: 0, totalPaid: 0, totalDue: 0 };
+        return {
+          ...s,
+          periodPurchased: stats.totalPurchased,
+          periodPaid: stats.totalPaid,
+          periodDue: stats.totalDue,
+          totalPurchased: stats.totalPurchased > 0 ? stats.totalPurchased : Number(s.totalPurchased || 0),
+          totalPaid: stats.totalPaid > 0 ? stats.totalPaid : Number(s.totalPaid || 0),
+        };
+      });
+
+      return {
+        data: formattedSuppliers,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+      };
+    }
+
     return {
       data: suppliers,
       pagination: {
@@ -68,54 +124,100 @@ export class SupplierService {
    */
   static async getSupplierById(id: string, tenantId: string, options?: { startDate?: string; endDate?: string }) {
     const purchaseWhere: any = {};
+    const paymentWhere: any = {};
+
     if (options?.startDate || options?.endDate) {
-      if (options.startDate) purchaseWhere.purchaseDate = { gte: new Date(options.startDate) };
+      const dateFilter: any = {};
+      if (options.startDate) {
+        dateFilter.gte = new Date(options.startDate);
+      }
       if (options.endDate) {
         const end = new Date(options.endDate);
         end.setHours(23, 59, 59, 999);
-        purchaseWhere.purchaseDate = { ...(purchaseWhere.purchaseDate || {}), lte: end };
+        dateFilter.lte = end;
       }
+      purchaseWhere.purchaseDate = dateFilter;
+      paymentWhere.paymentDate = dateFilter;
     }
 
-    const supplier = await (prisma as any).supplier.findFirst({
-      where: { id, tenantId },
-      include: {
-        contacts: {
-          orderBy: { createdAt: "desc" },
-        },
-        purchases: {
-          where: purchaseWhere,
-          orderBy: { purchaseDate: "desc" },
-          take: 100,
-          include: {
-            branch: { select: { id: true, name: true } },
-            contactPerson: { select: { id: true, name: true, phone: true, designation: true } },
-            items: {
-              include: {
-                product: { select: { id: true, name: true, sku: true, unit: true } },
+    const [supplier, purchaseAgg, paymentAgg] = await Promise.all([
+      (prisma as any).supplier.findFirst({
+        where: { id, tenantId },
+        include: {
+          contacts: {
+            orderBy: { createdAt: "desc" },
+          },
+          purchases: {
+            where: purchaseWhere,
+            orderBy: { purchaseDate: "desc" },
+            take: 100,
+            include: {
+              branch: { select: { id: true, name: true } },
+              contactPerson: { select: { id: true, name: true, phone: true, designation: true } },
+              items: {
+                include: {
+                  product: { select: { id: true, name: true, sku: true, unit: true } },
+                },
               },
             },
           },
-        },
-        payments: {
-          orderBy: { paymentDate: "desc" },
-          take: 50,
-          include: {
-            branch: { select: { id: true, name: true } },
-            financialAccount: { select: { id: true, name: true, type: true } },
+          payments: {
+            where: paymentWhere,
+            orderBy: { paymentDate: "desc" },
+            take: 50,
+            include: {
+              branch: { select: { id: true, name: true } },
+              financialAccount: { select: { id: true, name: true, type: true } },
+            },
+          },
+          _count: {
+            select: { purchases: true, contacts: true, inventories: true },
           },
         },
-        _count: {
-          select: { purchases: true, contacts: true, inventories: true },
-        },
-      },
-    });
+      }),
+      (prisma as any).purchase.aggregate({
+        where: { supplierId: id, tenantId, ...purchaseWhere },
+        _sum: { totalAmount: true, paidAmount: true, dueAmount: true },
+        _count: { id: true },
+      }),
+      (prisma as any).supplierPayment.aggregate({
+        where: { supplierId: id, tenantId, ...paymentWhere },
+        _sum: { amount: true },
+        _count: { id: true },
+      }),
+    ]);
 
     if (!supplier) {
       throw new Error("Supplier not found");
     }
 
-    return supplier;
+    const isFiltered = Boolean(options?.startDate || options?.endDate);
+
+    const periodStats = {
+      totalPurchased: isFiltered
+        ? Number(purchaseAgg._sum?.totalAmount || 0)
+        : Number(supplier.totalPurchased || 0),
+      totalPaid: isFiltered
+        ? Number(paymentAgg._sum?.amount || 0)
+        : Number(supplier.totalPaid || 0),
+      totalDue: isFiltered
+        ? Number(purchaseAgg._sum?.dueAmount || 0)
+        : Number(supplier.totalDue || 0),
+      purchasesCount: isFiltered
+        ? (purchaseAgg._count?.id || 0)
+        : (supplier._count?.purchases || 0),
+      paymentsCount: paymentAgg._count?.id || 0,
+      lifetimeTotalPurchased: Number(supplier.totalPurchased || 0),
+      lifetimeTotalPaid: Number(supplier.totalPaid || 0),
+      lifetimeTotalDue: Number(supplier.totalDue || 0),
+      isFiltered,
+    };
+
+    return {
+      ...supplier,
+      periodStats,
+      stats: periodStats,
+    };
   }
 
   /**
@@ -579,6 +681,34 @@ export class SupplierService {
             referenceId: purchase.id,
           },
         });
+
+        // Record Batch Receiving Record
+        await tx.batchReceivingRecord.create({
+          data: {
+            inventoryId,
+            branchId: data.branchId,
+            productId: item.productId,
+            supplierId: data.supplierId || null,
+            contactPersonId: data.contactPersonId || null,
+            contactPersonName: purchase.contactPersonName || null,
+            batchNumber: item.batchNumber || null,
+            receivingUnit: item.cartonQuantity && item.cartonQuantity > 0 ? "CARTON" : "BOX",
+            cartonsReceived: item.cartonQuantity || 0,
+            boxesPerCarton: item.cartonQuantity && item.cartonQuantity > 0 ? Math.round((item.boxQuantity || 0) / item.cartonQuantity) || 10 : 10,
+            boxesReceived: item.boxQuantity || 0,
+            stripsPerBox: item.stripsPerBox || 10,
+            tabletsPerStrip: item.tabletsPerStrip || 10,
+            totalQuantity: item.quantity,
+            purchasePrice: item.unitPurchasePrice,
+            sellingPrice: item.unitSellingPrice,
+            receivedDate: data.purchaseDate ? new Date(data.purchaseDate) : new Date(),
+            expiryDate: item.expiryDate ? new Date(item.expiryDate) : null,
+            mfgDate: item.mfgDate ? new Date(item.mfgDate) : null,
+            invoiceNo: purchase.invoiceNo || null,
+            notes: data.notes || null,
+            receivedBy: userId,
+          },
+        });
       }
 
       return purchase;
@@ -873,7 +1003,7 @@ export class SupplierService {
       paymentWhere.supplierId = query.supplierId;
       supplierWhere.id = query.supplierId;
     }
-    if (query.branchId) {
+    if (query.branchId && query.branchId !== "all") {
       purchaseWhere.branchId = query.branchId;
       paymentWhere.branchId = query.branchId;
     }
@@ -910,8 +1040,9 @@ export class SupplierService {
     ]);
 
     const totalPurchase = purchases.reduce((acc: number, p: any) => acc + Number(p.totalAmount || 0), 0);
-    const totalPaidInPeriod = payments.reduce((acc: number, p: any) => acc + Number(p.amount || 0), 0) +
-      purchases.reduce((acc: number, p: any) => acc + Number(p.paidAmount || 0), 0);
+    const paymentsSum = payments.reduce((acc: number, p: any) => acc + Number(p.amount || 0), 0);
+    const purchasePaidSum = purchases.reduce((acc: number, p: any) => acc + Number(p.paidAmount || 0), 0);
+    const totalPaidInPeriod = Math.max(paymentsSum, purchasePaidSum);
     const totalDueInPeriod = purchases.reduce((acc: number, p: any) => acc + Number(p.dueAmount || 0), 0);
 
     const lifetimePurchases = suppliers.reduce((acc: number, s: any) => acc + Number(s.totalPurchased || 0), 0);
@@ -919,8 +1050,13 @@ export class SupplierService {
     const lifetimeDue = suppliers.reduce((acc: number, s: any) => acc + Number(s.totalDue || 0), 0);
 
     return {
+      totalPurchases: totalPurchase,
+      totalPaid: totalPaidInPeriod,
+      totalDue: totalDueInPeriod,
+      dueCount: purchases.filter((p: any) => Number(p.dueAmount || 0) > 0).length,
       filtered: {
         totalPurchase,
+        totalPurchases: totalPurchase,
         totalPaid: totalPaidInPeriod,
         totalDue: totalDueInPeriod,
         count: purchases.length,

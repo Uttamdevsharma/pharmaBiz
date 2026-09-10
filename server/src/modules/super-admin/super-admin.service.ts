@@ -5,6 +5,62 @@ import { EmailService } from "../../app/lib/email.service";
 
 export class SuperAdminService {
   /**
+   * Helper: Calculate Prisma date range filter for date presets and custom date ranges
+   */
+  static getDateRangeFilter(datePreset?: string, startDate?: string, endDate?: string) {
+    if (!datePreset || datePreset === "ALL") return undefined;
+
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+
+    if (datePreset === "TODAY") {
+      const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+      return { gte: startOfToday, lte: endOfToday };
+    }
+
+    if (datePreset === "YESTERDAY") {
+      const startOfYesterday = new Date(startOfToday);
+      startOfYesterday.setDate(startOfYesterday.getDate() - 1);
+      const endOfYesterday = new Date(startOfToday);
+      endOfYesterday.setMilliseconds(-1);
+      return { gte: startOfYesterday, lte: endOfYesterday };
+    }
+
+    if (datePreset === "THIS_MONTH") {
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+      return { gte: startOfMonth, lte: endOfMonth };
+    }
+
+    if (datePreset === "LAST_MONTH") {
+      const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
+      const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+      return { gte: startOfLastMonth, lte: endOfLastMonth };
+    }
+
+    if (datePreset === "THIS_YEAR") {
+      const startOfYear = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
+      const endOfYear = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
+      return { gte: startOfYear, lte: endOfYear };
+    }
+
+    if (datePreset === "CUSTOM") {
+      const filter: any = {};
+      if (startDate) {
+        filter.gte = new Date(startDate);
+      }
+      if (endDate) {
+        const e = new Date(endDate);
+        e.setHours(23, 59, 59, 999);
+        filter.lte = e;
+      }
+      return Object.keys(filter).length > 0 ? filter : undefined;
+    }
+
+    return undefined;
+  }
+
+  /**
    * Plans Management
    */
   static async createPlan(data: CreatePlanInput) {
@@ -130,6 +186,11 @@ export class SuperAdminService {
 
     if (query.isActive !== undefined) {
       where.isActive = query.isActive;
+    }
+
+    const dateRange = SuperAdminService.getDateRangeFilter(query.datePreset, query.startDate, query.endDate);
+    if (dateRange) {
+      where.createdAt = dateRange;
     }
 
     const [total, tenants] = await Promise.all([
@@ -269,12 +330,39 @@ export class SuperAdminService {
   /**
    * Platform Subscriptions List
    */
-  static async listSubscriptions(page = 1, limit = 50, status?: string) {
+  static async listSubscriptions(
+    page = 1,
+    limit = 50,
+    status?: string,
+    query?: { datePreset?: string; startDate?: string; endDate?: string; tier?: string; search?: string }
+  ) {
     const skip = (page - 1) * limit;
     const where: any = { tenant: { name: { not: "Platform HQ" } } };
 
-    if (status) {
+    if (status && status !== "ALL") {
       where.status = status;
+    }
+
+    const dateRange = SuperAdminService.getDateRangeFilter(query?.datePreset, query?.startDate, query?.endDate);
+    if (dateRange) {
+      where.createdAt = dateRange;
+    }
+
+    if (query?.tier) {
+      where.tenant = { ...where.tenant, tier: query.tier };
+    }
+
+    if (query?.search) {
+      const searchStr = query.search.trim();
+      where.AND = [
+        {
+          OR: [
+            { tenant: { name: { contains: searchStr, mode: "insensitive" } } },
+            { tenant: { email: { contains: searchStr, mode: "insensitive" } } },
+            { plan: { name: { contains: searchStr, mode: "insensitive" } } },
+          ],
+        },
+      ];
     }
 
     const [total, subscriptions] = await Promise.all([
@@ -347,8 +435,23 @@ export class SuperAdminService {
   /**
    * Platform Analytics (No tenant sales data)
    */
-  static async getPlatformAnalytics(): Promise<PlatformAnalyticsResponse> {
-    const tenantFilter = { name: { not: "Platform HQ" } };
+  static async getPlatformAnalytics(query?: { datePreset?: string; startDate?: string; endDate?: string }): Promise<PlatformAnalyticsResponse> {
+    const dateRange = SuperAdminService.getDateRangeFilter(query?.datePreset, query?.startDate, query?.endDate);
+
+    const tenantFilter: any = { name: { not: "Platform HQ" } };
+    if (dateRange) {
+      tenantFilter.createdAt = dateRange;
+    }
+
+    const paymentFilter: any = { status: "VALIDATED", tenant: { name: { not: "Platform HQ" } } };
+    if (dateRange) {
+      paymentFilter.createdAt = dateRange;
+    }
+
+    const subFilter: any = { tenant: { name: { not: "Platform HQ" } } };
+    if (dateRange) {
+      subFilter.createdAt = dateRange;
+    }
 
     const [
       totalTenants,
@@ -363,14 +466,14 @@ export class SuperAdminService {
       (prisma as any).tenant.count({ where: tenantFilter }),
       (prisma as any).tenant.count({ where: { ...tenantFilter, isActive: true } }),
       (prisma as any).tenant.count({ where: { ...tenantFilter, isActive: false } }),
-      (prisma as any).subscription.count({ where: { tenant: tenantFilter } }),
-      (prisma as any).subscription.count({ where: { status: "ACTIVE", tenant: tenantFilter } }),
+      (prisma as any).subscription.count({ where: subFilter }),
+      (prisma as any).subscription.count({ where: { ...subFilter, status: "ACTIVE" } }),
       (prisma as any).payment.findMany({
-        where: { status: "VALIDATED", tenant: tenantFilter },
+        where: paymentFilter,
         select: { amount: true, createdAt: true },
       }),
       (prisma as any).subscription.findMany({
-        where: { status: "ACTIVE", tenant: tenantFilter },
+        where: { ...subFilter, status: "ACTIVE" },
         include: { plan: true, tenant: { select: { tier: true } } },
       }),
       (prisma as any).tenant.findMany({
@@ -944,6 +1047,9 @@ export class SuperAdminService {
     search?: string;
     page?: number;
     limit?: number;
+    datePreset?: string;
+    startDate?: string;
+    endDate?: string;
   }) {
     const page = Math.max(1, Number(query?.page) || 1);
     const limit = Math.max(1, Math.min(100, Number(query?.limit) || 20));
@@ -953,6 +1059,11 @@ export class SuperAdminService {
 
     if (query?.status && query.status !== "ALL") {
       where.verificationStatus = query.status;
+    }
+
+    const dateRange = SuperAdminService.getDateRangeFilter(query?.datePreset, query?.startDate, query?.endDate);
+    if (dateRange) {
+      where.createdAt = dateRange;
     }
 
     if (query?.search) {

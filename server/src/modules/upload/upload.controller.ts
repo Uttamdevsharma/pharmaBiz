@@ -8,23 +8,26 @@ export class UploadController {
    */
   static async uploadImage(req: Request, res: Response): Promise<void> {
     try {
-      const fileData = (req as any).file?.buffer || req.body.image || req.body.file;
+      let fileData: string | Buffer | undefined = req.body.image || req.body.file;
+      const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
+      if (!fileData && files) {
+        if (files["file"]?.[0]?.buffer) {
+          fileData = files["file"][0].buffer;
+        } else if (files["image"]?.[0]?.buffer) {
+          fileData = files["image"][0].buffer;
+        }
+      }
+      if (!fileData && (req as any).file?.buffer) {
+        fileData = (req as any).file.buffer;
+      }
       const folder = req.body.folder || "pharmacy_saas/general";
       const oldPublicId = req.body.oldPublicId;
 
-      // if (!fileData) {
-      //   res.status(400).json({
-      //     success: false,
-      //     message: "No image file provided. Send base64 data URI or multipart file.",
-      //   });
-      //   return;
-      // }
-
-      if(!fileData) {
+      if (!fileData) {
         res.status(400).json({
           success: false,
-          message : "No image file provided. Send base64 data URI or multipart file."
-        })
+          message: "No image or document provided. Send base64 data URI or multipart file.",
+        });
         return;
       }
 

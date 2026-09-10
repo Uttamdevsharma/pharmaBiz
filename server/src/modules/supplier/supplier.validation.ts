@@ -30,6 +30,9 @@ export const updateSupplierSchema = z.object({
 
 export const listSuppliersQuerySchema = z.object({
   search: z.string().optional(),
+  branchId: z.string().optional(),
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().default(50),
 });

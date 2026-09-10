@@ -25,17 +25,21 @@ interface FinancialAccount {
   accountNumber?: string | null;
 }
 
+import { useBranchContext } from "@/context/BranchContext";
+
 interface PaymentMethodSalesViewProps {
   onNavigate?: (module: any) => void;
+  selectedBranchId?: string;
 }
 
-export function PaymentMethodSalesView({ onNavigate: _onNavigate }: PaymentMethodSalesViewProps = {}) {
+export function PaymentMethodSalesView({ onNavigate: _onNavigate, selectedBranchId: propBranchId }: PaymentMethodSalesViewProps = {}) {
+  const { selectedBranchId: contextBranchId, currentBranch, isAllBranches } = useBranchContext();
+  const effectiveBranchId = propBranchId !== undefined ? propBranchId : contextBranchId;
+
   // Date range filtering
   const [datePreset, setDatePreset] = useState<"today" | "yesterday" | "last7" | "thisMonth" | "custom">("today");
   const [startDate, setStartDate] = useState<string>(new Date().toISOString().split("T")[0]);
   const [endDate, setEndDate] = useState<string>(new Date().toISOString().split("T")[0]);
-  const [selectedBranchId, setSelectedBranchId] = useState<string>("");
-  const [branches, setBranches] = useState<any[]>([]);
 
   // Accounts for dynamic payment method filter
   const [accounts, setAccounts] = useState<FinancialAccount[]>([]);
@@ -53,7 +57,7 @@ export function PaymentMethodSalesView({ onNavigate: _onNavigate }: PaymentMetho
 
   const loadAccounts = async (branchId?: string) => {
     try {
-      const url = branchId ? `/accounting/accounts?branchId=${branchId}` : "/accounting/accounts";
+      const url = (branchId && branchId !== "all") ? `/accounting/accounts?branchId=${branchId}` : "/accounting/accounts";
       const res = await fetchApi<FinancialAccount[]>(url);
       if (res.success && res.data) {
         setAccounts(res.data);
@@ -71,18 +75,14 @@ export function PaymentMethodSalesView({ onNavigate: _onNavigate }: PaymentMetho
       const params = new URLSearchParams();
       if (startDate) params.append("startDate", startDate);
       if (endDate) params.append("endDate", endDate);
-      if (selectedBranchId) params.append("branchId", selectedBranchId);
+      if (effectiveBranchId && effectiveBranchId !== "all") {
+        params.append("branchId", effectiveBranchId);
+      }
 
-      const [res, branchRes] = await Promise.all([
-        fetchApi<any>(`/reports/sales/daily?${params.toString()}`),
-        branches.length === 0 ? fetchApi<any>("/branches") : Promise.resolve({ success: true, data: branches }),
-      ]);
+      const res = await fetchApi<any>(`/reports/sales/daily?${params.toString()}`);
 
       if (res.success && res.data) {
         setDailyData(res.data);
-      }
-      if (branchRes.success && branchRes.data && branches.length === 0) {
-        setBranches(branchRes.data || []);
       }
     } catch (err) {
       console.error("Failed to load payment method sales", err);
@@ -94,9 +94,9 @@ export function PaymentMethodSalesView({ onNavigate: _onNavigate }: PaymentMetho
 
   // Initial load
   useEffect(() => {
-    loadAccounts(selectedBranchId || undefined);
+    loadAccounts(effectiveBranchId);
     loadPaymentSales();
-  }, [startDate, endDate, selectedBranchId]);
+  }, [startDate, endDate, effectiveBranchId]);
 
   const handlePresetChange = (preset: "today" | "yesterday" | "last7" | "thisMonth" | "custom") => {
     setDatePreset(preset);
@@ -281,26 +281,13 @@ export function PaymentMethodSalesView({ onNavigate: _onNavigate }: PaymentMetho
             />
           </div>
 
-          {branches.length > 1 && (
-            <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800/80 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700">
-              <Store className="h-4 w-4 text-slate-400" />
-              <select
-                value={selectedBranchId}
-                onChange={(e) => {
-                  setSelectedBranchId(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="bg-transparent text-xs font-bold text-slate-800 dark:text-slate-200 outline-none"
-              >
-                <option value="">All Branches</option>
-                {branches.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
+          <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800/80 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs text-slate-600 dark:text-slate-300">
+            <Store className="h-4 w-4 text-emerald-500" />
+            <span>Scope:</span>
+            <span className="font-bold text-slate-900 dark:text-white">
+              {isAllBranches ? "All Branches" : (currentBranch?.name || "Selected Branch")}
+            </span>
+          </div>
         </div>
       </div>
 

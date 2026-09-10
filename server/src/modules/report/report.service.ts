@@ -104,6 +104,7 @@ export class ReportService {
     let totalRevenue = 0;
     let totalPaid = 0;
     let totalDue = 0;
+    let totalCostOfGoods = 0;
 
     const paymentBreakdown = {
       cash: 0,
@@ -126,6 +127,7 @@ export class ReportService {
         quantitySold: number;
         lowestUnitQuantitySold: number;
         totalAmount: number;
+        totalCost: number;
         averageUnitPrice: number;
         transactionsCount: number;
       }
@@ -186,9 +188,12 @@ export class ReportService {
         const prod = item.product;
         const pId = item.productId;
         const qty = Number(item.quantity || 0);
+        const lowestUnitQty = Number(item.lowestUnitQuantity || qty);
         const itemAmount = Number(item.subTotal || Number(item.unitPrice || 0) * qty);
+        const itemCost = item.purchasePrice ? Number(item.purchasePrice) * lowestUnitQty : 0;
 
         totalUnitsSold += qty;
+        totalCostOfGoods += itemCost;
 
         if (!productMap.has(pId)) {
           productMap.set(pId, {
@@ -201,6 +206,7 @@ export class ReportService {
             quantitySold: 0,
             lowestUnitQuantitySold: 0,
             totalAmount: 0,
+            totalCost: 0,
             averageUnitPrice: 0,
             transactionsCount: 0,
           });
@@ -208,8 +214,9 @@ export class ReportService {
 
         const entry = productMap.get(pId)!;
         entry.quantitySold += qty;
-        entry.lowestUnitQuantitySold += Number(item.lowestUnitQuantity || qty);
+        entry.lowestUnitQuantitySold += lowestUnitQty;
         entry.totalAmount += itemAmount;
+        entry.totalCost += itemCost;
         entry.transactionsCount += 1;
       });
     });
@@ -218,6 +225,8 @@ export class ReportService {
       .map((p) => ({
         ...p,
         totalAmount: Math.round(p.totalAmount * 100) / 100,
+        totalCost: Math.round(p.totalCost * 100) / 100,
+        grossProfit: Math.round((p.totalAmount - p.totalCost) * 100) / 100,
         averageUnitPrice:
           p.quantitySold > 0 ? Math.round((p.totalAmount / p.quantitySold) * 100) / 100 : 0,
       }))
@@ -287,6 +296,8 @@ export class ReportService {
         totalDue: Math.round(totalDue * 100) / 100,
         transactionCount: totalTransactions,
         totalUnitsSold,
+        totalCostOfGoods: Math.round(totalCostOfGoods * 100) / 100,
+        grossProfit: Math.round((totalRevenue - totalCostOfGoods) * 100) / 100,
         averageOrderValue:
           totalTransactions > 0 ? Math.round((totalRevenue / totalTransactions) * 100) / 100 : 0,
       },

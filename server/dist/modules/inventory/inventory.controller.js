@@ -5,15 +5,24 @@ const inventory_service_1 = require("./inventory.service");
 class InventoryController {
     static async getBranchInventory(req, res) {
         try {
-            const { branchId } = req.params;
-            const tenantId = req.user.tenantId;
+            const user = req.user;
+            const tenantId = user.tenantId;
+            const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN" || user.role === "REGIONAL_ADMIN";
+            // If user is restricted to a branch, force that branch
+            let targetBranchId = req.params.branchId || req.query.branchId || req.headers["x-branch-id"];
+            if (!isOwner && user.branchId) {
+                targetBranchId = user.branchId;
+            }
+            else if (targetBranchId === "all" || targetBranchId === "all-branches") {
+                targetBranchId = undefined;
+            }
             const query = {
                 page: req.query.page ? parseInt(req.query.page, 10) : 1,
                 limit: req.query.limit ? parseInt(req.query.limit, 10) : 20,
                 search: req.query.search,
                 category: req.query.category,
             };
-            const result = await inventory_service_1.InventoryService.getBranchInventory(tenantId, branchId, query);
+            const result = await inventory_service_1.InventoryService.getBranchInventory(tenantId, targetBranchId, query);
             res.status(200).json({ success: true, ...result });
         }
         catch (error) {
@@ -117,7 +126,25 @@ class InventoryController {
             const userRole = req.user.role;
             const userBranchId = req.user.branchId;
             const query = req.query;
+            if (query.type === "PURCHASE") {
+                const result = await inventory_service_1.InventoryService.listReceivingHistory(tenantId, query, userRole, userBranchId);
+                res.status(200).json({ success: true, ...result });
+                return;
+            }
             const result = await inventory_service_1.InventoryService.listMovements(tenantId, query, userRole, userBranchId);
+            res.status(200).json({ success: true, ...result });
+        }
+        catch (error) {
+            res.status(500).json({ success: false, message: error.message });
+        }
+    }
+    static async listReceivingHistory(req, res) {
+        try {
+            const tenantId = req.user.tenantId;
+            const userRole = req.user.role;
+            const userBranchId = req.user.branchId;
+            const query = req.query;
+            const result = await inventory_service_1.InventoryService.listReceivingHistory(tenantId, query, userRole, userBranchId);
             res.status(200).json({ success: true, ...result });
         }
         catch (error) {

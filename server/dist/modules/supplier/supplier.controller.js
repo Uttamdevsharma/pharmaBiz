@@ -134,7 +134,13 @@ class SupplierController {
             const tenantId = req.user.tenantId;
             const userRole = req.user.role;
             const userBranchId = req.user.branchId;
-            const query = req.query;
+            const query = { ...req.query };
+            if (!query.branchId && req.headers["x-branch-id"]) {
+                const headerBranch = req.headers["x-branch-id"].trim();
+                if (headerBranch && headerBranch !== "all" && headerBranch !== "all-branches") {
+                    query.branchId = headerBranch;
+                }
+            }
             const result = await supplier_service_1.SupplierService.listPurchases(tenantId, query, userRole, userBranchId);
             res.status(200).json({ success: true, ...result });
         }
@@ -149,6 +155,12 @@ class SupplierController {
             const userRole = req.user.role;
             const userBranchId = req.user.branchId;
             const query = { ...req.query, supplierId: id };
+            if (!query.branchId && req.headers["x-branch-id"]) {
+                const headerBranch = req.headers["x-branch-id"].trim();
+                if (headerBranch && headerBranch !== "all" && headerBranch !== "all-branches") {
+                    query.branchId = headerBranch;
+                }
+            }
             const result = await supplier_service_1.SupplierService.listPurchases(tenantId, query, userRole, userBranchId);
             res.status(200).json({ success: true, ...result });
         }

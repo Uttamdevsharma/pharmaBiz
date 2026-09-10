@@ -27,7 +27,9 @@ import {
   CalendarCheck,
   UserX,
   UserCheck,
+  Store,
 } from "lucide-react";
+import { useBranchContext } from "@/context/BranchContext";
 
 interface EmployeeListViewProps {
   selectedBranchId?: string;
@@ -75,11 +77,19 @@ interface EmployeeItem {
 }
 
 export function EmployeeListView({
-  selectedBranchId,
+  selectedBranchId: propBranchId,
   onSelectEmployee,
   onNavigate,
 }: EmployeeListViewProps) {
   const { user } = useAuth();
+  const {
+    selectedBranchId: contextBranchId,
+    currentBranch,
+    isAllBranches,
+  } = useBranchContext();
+
+  const effectiveBranchId = propBranchId !== undefined ? propBranchId : contextBranchId;
+
   const isOwner = user?.role === "COMPANY_OWNER" || user?.role === "SUPER_ADMIN";
   const isBranchManager = user?.role === "BRANCH_MANAGER" || user?.pharmacyRoleName?.toLowerCase().includes("branch manager");
   const canSetBaseSalary = isOwner || isBranchManager;
@@ -99,13 +109,19 @@ export function EmployeeListView({
   const [submitting, setSubmitting] = useState(false);
 
   const loadEmployees = async () => {
-    if (!selectedBranchId) return;
     try {
       setLoading(true);
       setError(null);
       const currentMonth = new Date().toISOString().slice(0, 7);
+      const queryParams = new URLSearchParams();
+      if (effectiveBranchId && effectiveBranchId !== "all") {
+        queryParams.append("branchId", effectiveBranchId);
+      }
+      queryParams.append("month", currentMonth);
+      queryParams.append("includeInactive", "true");
+
       const res = await fetchApi<EmployeeItem[]>(
-        `/accounting/salaries/employees?branchId=${selectedBranchId}&month=${currentMonth}&includeInactive=true`
+        `/accounting/salaries/employees?${queryParams.toString()}`
       );
       if (res.success && res.data) {
         // Double-check Company Owner & Super Admin exclusion on client side
@@ -115,7 +131,7 @@ export function EmployeeListView({
         setEmployees(branchStaff);
       }
     } catch (err: any) {
-      setError(err.message || "Failed to load branch employee list");
+      setError(err.message || "Failed to load employee list");
     } finally {
       setLoading(false);
     }
@@ -123,7 +139,7 @@ export function EmployeeListView({
 
   useEffect(() => {
     loadEmployees();
-  }, [selectedBranchId]);
+  }, [effectiveBranchId]);
 
   const handleOpenStructureModal = (emp: EmployeeItem) => {
     setTargetEmployee(emp);
@@ -133,7 +149,8 @@ export function EmployeeListView({
 
   const handleSaveStructure = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!targetEmployee || !selectedBranchId) return;
+    const targetBranch = targetEmployee?.branchId || (effectiveBranchId && effectiveBranchId !== "all" ? effectiveBranchId : undefined);
+    if (!targetEmployee || !targetBranch) return;
     if (baseSalary === "" || Number(baseSalary) < 0) {
       setError("Base salary cannot be negative");
       return;
@@ -145,7 +162,7 @@ export function EmployeeListView({
       const res = await fetchApi("/accounting/salaries/config", {
         method: "POST",
         body: JSON.stringify({
-          branchId: selectedBranchId,
+          branchId: targetBranch,
           userId: targetEmployee.id,
           baseSalary: Number(baseSalary),
         }),
@@ -207,7 +224,14 @@ export function EmployeeListView({
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-300">
+            <Store className="h-4 w-4 text-emerald-500" />
+            <span>Scope:</span>
+            <span className="font-bold text-slate-900 dark:text-white">
+              {isAllBranches ? "All Branches (Company-Wide)" : (currentBranch?.name || "Selected Branch")}
+            </span>
+          </div>
           <button
             onClick={() => onNavigate?.("sal_attendance")}
             className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-sm font-semibold rounded-xl transition"

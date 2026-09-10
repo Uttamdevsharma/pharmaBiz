@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { fetchApi } from "@/lib/api";
 import {
   ShieldCheck,
@@ -102,6 +102,11 @@ export function PharmacyVerificationTab() {
   const [searchQuery, setSearchQuery] = useState("");
   const [plans, setPlans] = useState<any[]>([]);
 
+  // Date Filters
+  const [dateFilter, setDateFilter] = useState<"ALL" | "TODAY" | "YESTERDAY" | "THIS_MONTH" | "LAST_MONTH" | "THIS_YEAR" | "CUSTOM">("ALL");
+  const [customStartDate, setCustomStartDate] = useState("");
+  const [customEndDate, setCustomEndDate] = useState("");
+
   // Selected for full detail modal
   const [detailApp, setDetailApp] = useState<VerificationApplication | null>(null);
 
@@ -128,12 +133,17 @@ export function PharmacyVerificationTab() {
   // Feedback Banner
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
-  const loadApplications = async () => {
+  const loadApplications = useCallback(async () => {
     setLoading(true);
     try {
       const queryParams = new URLSearchParams();
       if (selectedStatus && selectedStatus !== "ALL") queryParams.set("status", selectedStatus);
       if (searchQuery.trim()) queryParams.set("search", searchQuery.trim());
+      if (dateFilter && dateFilter !== "ALL") queryParams.set("datePreset", dateFilter);
+      if (dateFilter === "CUSTOM") {
+        if (customStartDate) queryParams.set("startDate", customStartDate);
+        if (customEndDate) queryParams.set("endDate", customEndDate);
+      }
 
       const [res, plansRes] = await Promise.all([
         fetchApi<any>(`/super-admin/verifications?${queryParams.toString()}`),
@@ -153,11 +163,11 @@ export function PharmacyVerificationTab() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedStatus, dateFilter, customStartDate, customEndDate]);
 
   useEffect(() => {
     loadApplications();
-  }, [selectedStatus]);
+  }, [loadApplications]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -443,51 +453,104 @@ export function PharmacyVerificationTab() {
       )}
 
       {/* Filter and Search Bar */}
-      <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col md:flex-row items-center justify-between gap-4">
-        {/* Status Pills */}
-        <div className="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto pb-1 md:pb-0 text-xs font-bold">
-          {[
-            { key: "PENDING_APPROVAL", label: "Pending Review", count: metrics.pendingReview },
-            { key: "APPROVED_PENDING_PAYMENT", label: "Awaiting Payment", count: metrics.approved },
-            { key: "ACTIVE", label: "Active & Paid", count: metrics.active },
-            { key: "REJECTED", label: "Rejected", count: metrics.rejected },
-            { key: "ALL", label: "All", count: metrics.total },
-          ].map((tab) => (
-            <button
-              key={tab.key}
-              type="button"
-              onClick={() => setSelectedStatus(tab.key)}
-              className={`px-3.5 py-2 rounded-xl transition whitespace-nowrap flex items-center gap-2 cursor-pointer ${
-                selectedStatus === tab.key
-                  ? "bg-brand-primary text-white shadow-xs"
-                  : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200"
-              }`}
-            >
-              <span>{tab.label}</span>
-              <span
-                className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono ${
-                  selectedStatus === tab.key
-                    ? "bg-white/20 text-white"
-                    : "bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
+      <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-3">
+        {/* Date Presets Row */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+          <div className="flex flex-wrap items-center gap-1.5 text-xs font-bold">
+            {[
+              { id: "ALL", label: "All Time" },
+              { id: "TODAY", label: "Today" },
+              { id: "YESTERDAY", label: "Yesterday" },
+              { id: "THIS_MONTH", label: "This Month" },
+              { id: "LAST_MONTH", label: "Last Month" },
+              { id: "THIS_YEAR", label: "This Year" },
+              { id: "CUSTOM", label: "Custom Date" },
+            ].map((df) => (
+              <button
+                key={df.id}
+                type="button"
+                onClick={() => setDateFilter(df.id as any)}
+                className={`px-3 py-1.5 rounded-xl transition cursor-pointer ${
+                  dateFilter === df.id
+                    ? "bg-brand-primary text-white shadow-xs"
+                    : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200"
                 }`}
               >
-                {tab.count}
-              </span>
-            </button>
-          ))}
+                {df.label}
+              </button>
+            ))}
+          </div>
+
+          {dateFilter === "CUSTOM" && (
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 text-xs">
+                <span className="text-slate-400 font-medium">From:</span>
+                <input
+                  type="date"
+                  value={customStartDate}
+                  onChange={(e) => setCustomStartDate(e.target.value)}
+                  className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-800 dark:text-slate-200"
+                />
+              </div>
+              <div className="flex items-center gap-2 text-xs">
+                <span className="text-slate-400 font-medium">To:</span>
+                <input
+                  type="date"
+                  value={customEndDate}
+                  onChange={(e) => setCustomEndDate(e.target.value)}
+                  className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-800 dark:text-slate-200"
+                />
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Search */}
-        <form onSubmit={handleSearchSubmit} className="relative w-full md:w-72">
-          <Search className="h-4 w-4 text-slate-400 absolute left-3 top-3" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search pharmacy, owner, email..."
-            className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-brand-primary"
-          />
-        </form>
+        {/* Status Pills & Search */}
+        <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto pb-1 md:pb-0 text-xs font-bold">
+            {[
+              { key: "PENDING_APPROVAL", label: "Pending Review", count: metrics.pendingReview },
+              { key: "APPROVED_PENDING_PAYMENT", label: "Awaiting Payment", count: metrics.approved },
+              { key: "ACTIVE", label: "Active & Paid", count: metrics.active },
+              { key: "REJECTED", label: "Rejected", count: metrics.rejected },
+              { key: "ALL", label: "All", count: metrics.total },
+            ].map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setSelectedStatus(tab.key)}
+                className={`px-3.5 py-2 rounded-xl transition whitespace-nowrap flex items-center gap-2 cursor-pointer ${
+                  selectedStatus === tab.key
+                    ? "bg-brand-primary text-white shadow-xs"
+                    : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200"
+                }`}
+              >
+                <span>{tab.label}</span>
+                <span
+                  className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono ${
+                    selectedStatus === tab.key
+                      ? "bg-white/20 text-white"
+                      : "bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
+                  }`}
+                >
+                  {tab.count}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          {/* Search */}
+          <form onSubmit={handleSearchSubmit} className="relative w-full md:w-72">
+            <Search className="h-4 w-4 text-slate-400 absolute left-3 top-3" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search pharmacy, owner, email..."
+              className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-brand-primary"
+            />
+          </form>
+        </div>
       </div>
 
       {/* Main Content: Card Grid */}

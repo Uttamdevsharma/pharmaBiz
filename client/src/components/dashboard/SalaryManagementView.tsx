@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { fetchApi } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
+import { useBranchContext } from "@/context/BranchContext";
 import { OwnerModule } from "./DashboardSidebar";
 import {
   Users,
@@ -27,6 +28,7 @@ import {
   CalendarCheck,
   Lock,
   Sparkles,
+  Store,
 } from "lucide-react";
 
 interface SalaryManagementViewProps {
@@ -82,7 +84,13 @@ interface EmployeeItem {
   branchName?: string;
   createdAt: string;
   salaryConfig?: SalaryConfig | null;
-  monthStatus: MonthStatus;
+  monthStatus?: {
+    month: string;
+    netSalary: number;
+    paidAmount: number;
+    dueAmount: number;
+    status: string;
+  };
 }
 
 interface FinancialAccount {
@@ -90,15 +98,29 @@ interface FinancialAccount {
   name: string;
   type: string;
   balance: number;
+  isDefault: boolean;
   isActive: boolean;
+  bankName?: string;
+  accountNumber?: string;
+  branchId?: string;
+  branchName?: string;
 }
 
 export function SalaryManagementView({
-  selectedBranchId,
+  selectedBranchId: propBranchId,
   onSelectEmployee,
   onNavigate,
 }: SalaryManagementViewProps) {
   const { user, hasPermission } = useAuth();
+  const {
+    branches,
+    selectedBranchId: contextBranchId,
+    currentBranch,
+    isAllBranches,
+  } = useBranchContext();
+
+  const effectiveBranchId = propBranchId !== undefined ? propBranchId : contextBranchId;
+
   const isOwner = user?.role === "COMPANY_OWNER" || user?.role === "SUPER_ADMIN";
   const isBranchManager =
     user?.role === "BRANCH_MANAGER" ||
@@ -133,11 +155,13 @@ export function SalaryManagementView({
   const [loadingAllowances, setLoadingAllowances] = useState(false);
 
 
-  // Load Branch Financial Accounts
+  // Load Financial Accounts
   const loadAccounts = async () => {
-    if (!selectedBranchId) return;
     try {
-      const res = await fetchApi<FinancialAccount[]>(`/accounting/accounts?branchId=${selectedBranchId}`);
+      const url = (effectiveBranchId && effectiveBranchId !== "all")
+        ? `/accounting/accounts?branchId=${effectiveBranchId}`
+        : "/accounting/accounts";
+      const res = await fetchApi<FinancialAccount[]>(url);
       if (res.success && res.data) {
         setFinancialAccounts(res.data.filter((a) => a.isActive));
         if (res.data.length > 0 && !payAccountId) {
@@ -149,20 +173,24 @@ export function SalaryManagementView({
     }
   };
 
-  // Load Branch Staff with Salary Status for currentMonth
+  // Load Staff with Salary Status for currentMonth
   const loadEmployees = async () => {
-    if (!selectedBranchId) return;
     try {
       setLoading(true);
       setError(null);
+      const queryParams = new URLSearchParams();
+      if (effectiveBranchId && effectiveBranchId !== "all") {
+        queryParams.append("branchId", effectiveBranchId);
+      }
+      queryParams.append("month", currentMonth);
       const res = await fetchApi<EmployeeItem[]>(
-        `/accounting/salaries/employees?branchId=${selectedBranchId}&month=${currentMonth}`
+        `/accounting/salaries/employees?${queryParams.toString()}`
       );
       if (res.success && res.data) {
         setEmployees(res.data);
       }
     } catch (err: any) {
-      setError(err.message || "Failed to load branch employees");
+      setError(err.message || "Failed to load employees");
     } finally {
       setLoading(false);
     }
@@ -171,13 +199,13 @@ export function SalaryManagementView({
   useEffect(() => {
     loadAccounts();
     loadEmployees();
-  }, [selectedBranchId, currentMonth]);
+  }, [effectiveBranchId, currentMonth]);
 
   // Open Quick Pay Modal
   const openPayModal = (emp: EmployeeItem) => {
     setPayEmployee(emp);
-    const due = emp.monthStatus.dueAmount;
-    setPayAmount(due > 0 ? due : emp.monthStatus.netSalary || "");
+    const due = emp.monthStatus?.dueAmount ?? 0;
+    setPayAmount(due > 0 ? due : (emp.monthStatus?.netSalary || ""));
     setPayRef("");
     setPayNotes("");
     setIsPayModalOpen(true);
@@ -193,10 +221,10 @@ export function SalaryManagementView({
   };
 
   const fetchAllowances = async (userId: string) => {
-    if (!selectedBranchId) return;
     try {
       setLoadingAllowances(true);
-      const res = await fetchApi<any[]>(`/attendance/allowances?branchId=${selectedBranchId}&userId=${userId}&month=${currentMonth}`);
+      const branchParam = effectiveBranchId && effectiveBranchId !== "all" ? `&branchId=${effectiveBranchId}` : "";
+      const res = await fetchApi<any[]>(`/attendance/allowances?userId=${userId}&month=${currentMonth}${branchParam}`);
       if (res.success && res.data) {
         setExistingAllowances(res.data);
       }
@@ -209,7 +237,8 @@ export function SalaryManagementView({
 
   const handleAddAllowance = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!allowanceEmployee || !selectedBranchId) return;
+    const targetBranch = allowanceEmployee?.branchId || (effectiveBranchId && effectiveBranchId !== "all" ? effectiveBranchId : branches[0]?.id);
+    if (!allowanceEmployee || !targetBranch) return;
     if (!allowanceTitle.trim()) {
       setError("Please enter an allowance title.");
       return;
@@ -225,7 +254,7 @@ export function SalaryManagementView({
       const res = await fetchApi<{ success: boolean; message: string }>("/attendance/allowances", {
         method: "POST",
         body: JSON.stringify({
-          branchId: selectedBranchId,
+          branchId: targetBranch,
           userId: allowanceEmployee.id,
           month: currentMonth,
           title: allowanceTitle.trim(),
@@ -275,7 +304,8 @@ export function SalaryManagementView({
   // Handle Pay Submit
   const handlePaySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!payEmployee || !selectedBranchId) return;
+    const targetBranch = payEmployee?.branchId || (effectiveBranchId && effectiveBranchId !== "all" ? effectiveBranchId : branches[0]?.id);
+    if (!payEmployee || !targetBranch) return;
     if (!payAccountId) {
       setError("Please select a valid financial account to disburse salary.");
       return;
@@ -292,7 +322,7 @@ export function SalaryManagementView({
       const res = await fetchApi<{ success: boolean; message: string }>("/accounting/salaries/disburse", {
         method: "POST",
         body: JSON.stringify({
-          branchId: selectedBranchId,
+          branchId: targetBranch,
           userId: payEmployee.id,
           financialAccountId: payAccountId,
           month: currentMonth,
@@ -320,7 +350,7 @@ export function SalaryManagementView({
   const filteredEmployees = employees.filter((emp) => {
     // Exclude Company Owner and Super Admin from branch salary management
     if (emp.role === "COMPANY_OWNER" || emp.role === "SUPER_ADMIN") return false;
-    if (selectedBranchId && emp.branchId && emp.branchId !== selectedBranchId) return false;
+    if (effectiveBranchId && effectiveBranchId !== "all" && emp.branchId && emp.branchId !== effectiveBranchId) return false;
 
     const matchesSearch =
       !searchQuery ||
@@ -361,6 +391,14 @@ export function SalaryManagementView({
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-medium text-slate-600 dark:text-slate-300">
+            <Store className="h-3.5 w-3.5 text-brand-primary" />
+            <span>Scope:</span>
+            <span className="font-bold text-slate-900 dark:text-white">
+              {isAllBranches ? "All Branches (Company-Wide)" : (currentBranch?.name || "Selected Branch")}
+            </span>
+          </div>
+
           <button
             onClick={() => onNavigate?.("sal_attendance")}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-200 transition shadow-xs"

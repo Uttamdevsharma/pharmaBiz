@@ -71,8 +71,8 @@ exports.DEFAULT_SETTINGS = {
         },
     ],
     contact: {
-        email: "support@pharmabiz.com",
-        phone: "+880 1700-000000",
+        email: "shameem.rml@gmail.com",
+        phone: "01973590937",
         address: "Gulshan-2, Dhaka-1212, Bangladesh",
         supportHours: "24/7 Dedicated Support",
     },
@@ -174,6 +174,44 @@ class SettingsService {
             isVatEnabled,
             vatNumber,
             taxType,
+            updatedAt: new Date().toISOString(),
+            updatedBy: userId,
+        };
+        const setting = await prisma_1.prisma.platformSetting.upsert({
+            where: { key },
+            create: { key, value },
+            update: { value },
+        });
+        return setting.value;
+    }
+    /**
+     * Get pharmacy-specific UI/invoice settings (per-tenant, separate from SaaS branding)
+     */
+    static async getPharmacySettings(tenantId) {
+        const key = `pharmacy_settings_${tenantId}`;
+        const setting = await prisma_1.prisma.platformSetting.findUnique({ where: { key } });
+        if (!setting) {
+            return {
+                receiptHeaderNote: "Thank you for shopping with us. Get well soon!",
+                receiptFooterNote: "Items can be returned within 48 hours with original invoice and valid prescription.",
+                prescriptionRequiredMessage: "⚠️ This product requires a valid doctor's prescription. Please provide the prescription reference number or doctor's name before completing the purchase.",
+            };
+        }
+        return setting.value;
+    }
+    /**
+     * Update pharmacy-specific UI/invoice settings (per-tenant)
+     */
+    static async updatePharmacySettings(tenantId, userId, data) {
+        const key = `pharmacy_settings_${tenantId}`;
+        const current = await this.getPharmacySettings(tenantId);
+        const value = {
+            ...current,
+            ...(data.receiptHeaderNote !== undefined && { receiptHeaderNote: String(data.receiptHeaderNote).trim() }),
+            ...(data.receiptFooterNote !== undefined && { receiptFooterNote: String(data.receiptFooterNote).trim() }),
+            ...(data.prescriptionRequiredMessage !== undefined && {
+                prescriptionRequiredMessage: String(data.prescriptionRequiredMessage).trim(),
+            }),
             updatedAt: new Date().toISOString(),
             updatedBy: userId,
         };

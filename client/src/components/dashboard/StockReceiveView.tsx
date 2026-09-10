@@ -5,6 +5,7 @@ import { fetchApi } from "@/lib/api";
 import { Branch } from "@/types";
 import { useAuth } from "@/context/AuthContext";
 import { OwnerModule } from "./DashboardSidebar";
+import { DateRangeFilter, DatePreset, getComputedDateRange } from "./DateRangeFilter";
 import {
   Inbox,
   Store,
@@ -44,6 +45,10 @@ export function StockReceiveView({ onNavigate, onInspectTransfer }: StockReceive
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [selectedCourierTransfer, setSelectedCourierTransfer] = useState<any | null>(null);
 
+  const [datePreset, setDatePreset] = useState<DatePreset>("ALL");
+  const [startDate, setStartDate] = useState<string>("");
+  const [endDate, setEndDate] = useState<string>("");
+
   const isBranchLocked = Boolean(
     user?.branchId && user?.role !== "COMPANY_OWNER" && user?.role !== "SUPER_ADMIN"
   );
@@ -69,9 +74,18 @@ export function StockReceiveView({ onNavigate, onInspectTransfer }: StockReceive
   const loadData = async () => {
     try {
       setLoading(true);
-      const res = await fetchApi<any[]>("/transfers?limit=100");
+      const { start, end } = getComputedDateRange(datePreset, startDate, endDate);
+      const params = new URLSearchParams();
+      params.append("limit", "100");
+      if (selectedBranchId) params.append("branchId", selectedBranchId);
+      if (statusFilter) params.append("status", statusFilter);
+      if (searchQuery) params.append("search", searchQuery);
+      if (start) params.append("startDate", start);
+      if (end) params.append("endDate", end);
+
+      const res = await fetchApi<any[]>(`/transfers?${params.toString()}`);
       if (res.success && res.data) {
-        setTransfers(res.data);
+        setTransfers(Array.isArray(res.data) ? res.data : (res.data as any).data || []);
       }
     } catch (err) {
       console.error("Failed to load incoming transfers", err);
@@ -82,7 +96,7 @@ export function StockReceiveView({ onNavigate, onInspectTransfer }: StockReceive
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [selectedBranchId, datePreset, startDate, endDate, statusFilter]);
 
   // Filter transfers for the selected receiving branch
   const incomingTransfers = transfers.filter((t) => {
@@ -183,29 +197,41 @@ export function StockReceiveView({ onNavigate, onInspectTransfer }: StockReceive
       )}
 
       {/* Filter & Search Bar */}
-      <div className="p-4 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
-        <div className="relative w-full sm:w-80">
-          <Search className="h-4 w-4 text-slate-400 absolute left-3.5 top-3" />
-          <input
-            type="text"
-            placeholder="Search transfer ID, source branch, product..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none"
-          />
-        </div>
+      <div className="p-4 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-3">
+        <DateRangeFilter
+          datePreset={datePreset}
+          setDatePreset={setDatePreset}
+          startDate={startDate}
+          setStartDate={setStartDate}
+          endDate={endDate}
+          setEndDate={setEndDate}
+          label="Receiving Date Filter"
+        />
 
-        <div className="flex items-center gap-2.5 w-full sm:w-auto">
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-bold text-xs outline-none cursor-pointer w-full sm:w-auto"
-          >
-            <option value="">All Statuses</option>
-            <option value="IN_TRANSIT">In Transit / Awaiting Intake</option>
-            <option value="RECEIVED">Received & Inspected</option>
-            <option value="CANCELLED">Cancelled</option>
-          </select>
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-xs pt-2 border-t border-slate-100 dark:border-slate-800">
+          <div className="relative w-full sm:w-80">
+            <Search className="h-4 w-4 text-slate-400 absolute left-3.5 top-3" />
+            <input
+              type="text"
+              placeholder="Search transfer ID, source branch, product..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none"
+            />
+          </div>
+
+          <div className="flex items-center gap-2.5 w-full sm:w-auto">
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-bold text-xs outline-none cursor-pointer w-full sm:w-auto"
+            >
+              <option value="">All Statuses</option>
+              <option value="IN_TRANSIT">In Transit / Awaiting Intake</option>
+              <option value="RECEIVED">Received & Inspected</option>
+              <option value="CANCELLED">Cancelled</option>
+            </select>
+          </div>
         </div>
       </div>
 

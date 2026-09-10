@@ -202,5 +202,52 @@ export class SettingsService {
 
     return setting.value;
   }
+
+  /**
+   * Get pharmacy-specific UI/invoice settings (per-tenant, separate from SaaS branding)
+   */
+  static async getPharmacySettings(tenantId: string) {
+    const key = `pharmacy_settings_${tenantId}`;
+    const setting = await (prisma as any).platformSetting.findUnique({ where: { key } });
+
+    if (!setting) {
+      return {
+        receiptHeaderNote: "Thank you for shopping with us. Get well soon!",
+        receiptFooterNote: "Items can be returned within 48 hours with original invoice and valid prescription.",
+        prescriptionRequiredMessage:
+          "⚠️ This product requires a valid doctor's prescription. Please provide the prescription reference number or doctor's name before completing the purchase.",
+      };
+    }
+
+    return setting.value;
+  }
+
+  /**
+   * Update pharmacy-specific UI/invoice settings (per-tenant)
+   */
+  static async updatePharmacySettings(tenantId: string, userId: string, data: any) {
+    const key = `pharmacy_settings_${tenantId}`;
+
+    const current = await this.getPharmacySettings(tenantId);
+
+    const value = {
+      ...current,
+      ...(data.receiptHeaderNote !== undefined && { receiptHeaderNote: String(data.receiptHeaderNote).trim() }),
+      ...(data.receiptFooterNote !== undefined && { receiptFooterNote: String(data.receiptFooterNote).trim() }),
+      ...(data.prescriptionRequiredMessage !== undefined && {
+        prescriptionRequiredMessage: String(data.prescriptionRequiredMessage).trim(),
+      }),
+      updatedAt: new Date().toISOString(),
+      updatedBy: userId,
+    };
+
+    const setting = await (prisma as any).platformSetting.upsert({
+      where: { key },
+      create: { key, value },
+      update: { value },
+    });
+
+    return setting.value;
+  }
 }
 

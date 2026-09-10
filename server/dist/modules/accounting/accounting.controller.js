@@ -9,9 +9,12 @@ class AccountingController {
         try {
             const tenantId = req.user.tenantId;
             const user = req.user;
-            const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN";
-            const branchId = isOwner ? req.query.branchId : (user.branchId || req.query.branchId);
-            const accounts = await accounting_service_1.AccountingService.listAccounts(tenantId, branchId);
+            const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN" || user.role === "REGIONAL_ADMIN";
+            const branchId = isOwner
+                ? (req.query.branchId || req.headers["x-branch-id"] || undefined)
+                : (user.branchId || undefined);
+            const cleanBranchId = !branchId || branchId === "all" || branchId === "all-branches" ? undefined : branchId;
+            const accounts = await accounting_service_1.AccountingService.listAccounts(tenantId, cleanBranchId);
             res.json({ success: true, data: accounts });
         }
         catch (err) {
@@ -110,14 +113,19 @@ class AccountingController {
     }
     static async getOverview(req, res) {
         try {
-            const tenantId = req.user.tenantId;
-            const branchId = req.query.branchId;
+            const user = req.user;
+            const tenantId = user.tenantId;
+            const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN" || user.role === "REGIONAL_ADMIN";
+            const branchId = isOwner
+                ? (req.query.branchId || req.headers["x-branch-id"] || undefined)
+                : (user.branchId || undefined);
+            const cleanBranchId = !branchId || branchId === "all" || branchId === "all-branches" ? undefined : branchId;
             const options = {
                 startDate: req.query.startDate,
                 endDate: req.query.endDate,
                 period: req.query.period,
             };
-            const overview = await accounting_service_1.AccountingService.getFinancialOverview(tenantId, branchId, options);
+            const overview = await accounting_service_1.AccountingService.getFinancialOverview(tenantId, cleanBranchId, options);
             res.json({ success: true, data: overview });
         }
         catch (err) {
@@ -142,10 +150,15 @@ class AccountingController {
     // ==========================================
     static async listRecurringExpenses(req, res) {
         try {
-            const tenantId = req.user.tenantId;
-            const branchId = req.query.branchId;
+            const user = req.user;
+            const tenantId = user.tenantId;
+            const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN" || user.role === "REGIONAL_ADMIN";
+            const branchId = isOwner
+                ? (req.query.branchId || req.headers["x-branch-id"] || undefined)
+                : (user.branchId || undefined);
+            const cleanBranchId = !branchId || branchId === "all" || branchId === "all-branches" ? undefined : branchId;
             const includeInactive = req.query.includeInactive === "true" || req.query.includeInactive === "1";
-            const data = await accounting_service_1.AccountingService.listRecurringExpenses(tenantId, branchId, includeInactive);
+            const data = await accounting_service_1.AccountingService.listRecurringExpenses(tenantId, cleanBranchId, includeInactive);
             res.json({ success: true, data });
         }
         catch (err) {
@@ -225,15 +238,14 @@ class AccountingController {
         try {
             const tenantId = req.user.tenantId;
             const user = req.user;
-            const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN";
-            const branchId = isOwner ? (req.query.branchId || user.branchId || "") : (user.branchId || req.query.branchId || "");
+            const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN" || user.role === "REGIONAL_ADMIN";
+            const branchId = isOwner
+                ? (req.query.branchId || req.headers["x-branch-id"] || undefined)
+                : (user.branchId || undefined);
+            const cleanBranchId = !branchId || branchId === "all" || branchId === "all-branches" ? undefined : branchId;
             const month = req.query.month || new Date().toISOString().slice(0, 7);
             const includeInactive = req.query.includeInactive === "true" || req.query.includeInactive === "1";
-            if (!branchId) {
-                res.status(400).json({ success: false, message: "Branch ID is required" });
-                return;
-            }
-            const employees = await accounting_service_1.AccountingService.listBranchStaffSalaries(tenantId, branchId, month, includeInactive);
+            const employees = await accounting_service_1.AccountingService.listBranchStaffSalaries(tenantId, cleanBranchId, month, includeInactive);
             res.json({ success: true, data: employees });
         }
         catch (err) {
@@ -307,13 +319,16 @@ class AccountingController {
         try {
             const tenantId = req.user.tenantId;
             const user = req.user;
-            const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN";
-            const branchId = isOwner ? (req.query.branchId || user.branchId || "") : (user.branchId || req.query.branchId || "");
+            const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN" || user.role === "REGIONAL_ADMIN";
+            const branchId = isOwner
+                ? (req.query.branchId || req.headers["x-branch-id"] || undefined)
+                : (user.branchId || undefined);
+            const cleanBranchId = !branchId || branchId === "all" || branchId === "all-branches" ? undefined : branchId;
             const month = req.query.month;
             const userId = req.query.userId;
             const page = req.query.page ? parseInt(req.query.page, 10) : 1;
             const limit = req.query.limit ? parseInt(req.query.limit, 10) : 50;
-            const data = await accounting_service_1.AccountingService.getBranchSalaryHistory(tenantId, branchId, {
+            const data = await accounting_service_1.AccountingService.getBranchSalaryHistory(tenantId, cleanBranchId, {
                 month,
                 userId,
                 page,
