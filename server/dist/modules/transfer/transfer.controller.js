@@ -108,6 +108,8 @@ class TransferController {
             const query = {
                 branchId: req.query.branchId,
                 search: req.query.search,
+                startDate: req.query.startDate,
+                endDate: req.query.endDate,
             };
             const result = await transfer_service_1.TransferService.getDamagedProducts(tenantId, userRole, userBranchId, query);
             res.status(200).json({ success: true, ...result });

@@ -110,12 +110,14 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
 
 import { SubscriptionExpiryService } from "./modules/subscription/subscription-expiry.service";
 
-// Start Server and trigger Admin seeding & automated subscription expiry scheduler
-app.listen(port, async () => {
-  console.log(`Pharmacy Management SaaS API listening on port ${port}`);
-  await seedSuperAdmin();
-  SubscriptionExpiryService.initAutomatedScheduler();
-});
+// Start Server and trigger Admin seeding & automated subscription expiry scheduler (skip in Vercel serverless)
+if (!process.env.VERCEL) {
+  app.listen(port, async () => {
+    console.log(`Pharmacy Management SaaS API listening on port ${port}`);
+    await seedSuperAdmin();
+    SubscriptionExpiryService.initAutomatedScheduler();
+  });
+}
 
 // Trigger backend restart for Prisma Client update
 

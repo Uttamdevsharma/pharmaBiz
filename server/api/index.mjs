@@ -216,6 +216,44 @@ var SettingsService = class {
     });
     return setting.value;
   }
+  /**
+   * Get pharmacy-specific UI/invoice settings (per-tenant, separate from SaaS branding)
+   */
+  static async getPharmacySettings(tenantId) {
+    const key = `pharmacy_settings_${tenantId}`;
+    const setting = await prisma.platformSetting.findUnique({ where: { key } });
+    if (!setting) {
+      return {
+        receiptHeaderNote: "Thank you for shopping with us. Get well soon!",
+        receiptFooterNote: "Items can be returned within 48 hours with original invoice and valid prescription.",
+        prescriptionRequiredMessage: "\u26A0\uFE0F This product requires a valid doctor's prescription. Please provide the prescription reference number or doctor's name before completing the purchase."
+      };
+    }
+    return setting.value;
+  }
+  /**
+   * Update pharmacy-specific UI/invoice settings (per-tenant)
+   */
+  static async updatePharmacySettings(tenantId, userId, data) {
+    const key = `pharmacy_settings_${tenantId}`;
+    const current = await this.getPharmacySettings(tenantId);
+    const value = {
+      ...current,
+      ...data.receiptHeaderNote !== void 0 && { receiptHeaderNote: String(data.receiptHeaderNote).trim() },
+      ...data.receiptFooterNote !== void 0 && { receiptFooterNote: String(data.receiptFooterNote).trim() },
+      ...data.prescriptionRequiredMessage !== void 0 && {
+        prescriptionRequiredMessage: String(data.prescriptionRequiredMessage).trim()
+      },
+      updatedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      updatedBy: userId
+    };
+    const setting = await prisma.platformSetting.upsert({
+      where: { key },
+      create: { key, value },
+      update: { value }
+    });
+    return setting.value;
+  }
 };
 
 // src/app/lib/planLimits.ts
@@ -1806,15 +1844,35 @@ var CloudinaryService = class {
     return { cloudName, apiKey, apiSecret };
   }
   /**
-   * Uploads an image (base64 data URI, remote URL, or buffer) to Cloudinary using the official SDK
+   * Uploads an image or document (PDF, PNG, JPG, WEBP, base64 data URI, remote URL, or buffer) to Cloudinary
    */
   static async uploadImage(file, folder = "pharmacy_saas/general") {
     this.configure();
     let filePayload;
     if (Buffer.isBuffer(file)) {
-      filePayload = `data:image/png;base64,${file.toString("base64")}`;
+      const isPdf = file.length >= 4 && file[0] === 37 && file[1] === 80 && file[2] === 68 && file[3] === 70;
+      if (isPdf) {
+        filePayload = `data:application/pdf;base64,${file.toString("base64")}`;
+      } else {
+        filePayload = `data:image/png;base64,${file.toString("base64")}`;
+      }
+    } else if (typeof file === "string") {
+      const trimmed = file.trim();
+      if (trimmed.startsWith("data:") || trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+        filePayload = trimmed;
+      } else if (trimmed.startsWith("JVBERi0")) {
+        filePayload = `data:application/pdf;base64,${trimmed}`;
+      } else if (trimmed.startsWith("/9j/")) {
+        filePayload = `data:image/jpeg;base64,${trimmed}`;
+      } else if (trimmed.startsWith("iVBORw0KGgo")) {
+        filePayload = `data:image/png;base64,${trimmed}`;
+      } else if (trimmed.length > 50 && !trimmed.includes(" ") && !trimmed.includes("\n")) {
+        filePayload = `data:image/png;base64,${trimmed}`;
+      } else {
+        filePayload = trimmed;
+      }
     } else {
-      filePayload = file;
+      throw new Error("Invalid file payload provided to Cloudinary uploader");
     }
     try {
       const result = await cloudinary.uploader.upload(filePayload, {
@@ -1833,7 +1891,7 @@ var CloudinaryService = class {
     } catch (error) {
       console.error("[Cloudinary Upload Error]", error);
       throw new Error(
-        error.message || "Failed to upload image to Cloudinary. Verify Cloudinary API Key permissions."
+        error.message || "Failed to upload asset to Cloudinary. Please verify Cloudinary API permissions."
       );
     }
   }
@@ -1844,15 +1902,20 @@ var CloudinaryService = class {
     if (!publicId) return { success: true, result: "not_found" };
     this.configure();
     try {
-      const result = await cloudinary.uploader.destroy(publicId, {
+      let result = await cloudinary.uploader.destroy(publicId, {
         resource_type: "image"
       });
+      if (result.result !== "ok") {
+        result = await cloudinary.uploader.destroy(publicId, {
+          resource_type: "raw"
+        });
+      }
       return {
         success: result.result === "ok",
         result: result.result
       };
     } catch (error) {
-      console.warn(`[Cloudinary Warning] Could not delete image with publicId "${publicId}":`, error);
+      console.warn(`[Cloudinary Warning] Could not delete asset with publicId "${publicId}":`, error);
       return { success: false, result: error?.message || "delete_failed" };
     }
   }
@@ -1861,7 +1924,7 @@ var CloudinaryService = class {
 // src/modules/upload/upload.service.ts
 var UploadService = class {
   /**
-   * Upload image to Cloudinary, with automatic fallback to local storage if Cloudinary is unavailable or forbidden
+   * Upload image or document to Cloudinary
    */
   static async uploadImage(fileData, folder = "pharmacy_saas/general", oldPublicId) {
     if (oldPublicId) {
@@ -1872,11 +1935,11 @@ var UploadService = class {
           if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
         } catch (e) {
         }
-      } else {
+      } else if (!oldPublicId.startsWith("external_")) {
         try {
           await CloudinaryService.deleteImage(oldPublicId);
         } catch (err) {
-          console.warn(`[Upload Service] Failed to remove previous Cloudinary image (${oldPublicId}):`, err);
+          console.warn(`[Upload Service] Failed to remove previous Cloudinary asset (${oldPublicId}):`, err);
         }
       }
     }
@@ -1884,58 +1947,12 @@ var UploadService = class {
       const result = await CloudinaryService.uploadImage(fileData, folder);
       return result;
     } catch (cloudinaryErr) {
-      console.warn(
-        `[Upload Service] Cloudinary upload encountered error: "${cloudinaryErr.message}". Using local server storage as fallback.`
-      );
-      try {
-        const uploadDir = path2.join(process.cwd(), "public", "uploads");
-        if (!fs.existsSync(uploadDir)) {
-          fs.mkdirSync(uploadDir, { recursive: true });
-        }
-        const timestamp = Date.now();
-        const randomStr = Math.random().toString(36).substring(2, 9);
-        let ext = "png";
-        let buffer;
-        if (Buffer.isBuffer(fileData)) {
-          buffer = fileData;
-        } else if (typeof fileData === "string" && fileData.includes(";base64,")) {
-          if (fileData.includes("application/pdf")) ext = "pdf";
-          else if (fileData.includes("image/jpeg") || fileData.includes("image/jpg")) ext = "jpg";
-          else if (fileData.includes("image/webp")) ext = "webp";
-          const base64Data = fileData.split(";base64,").pop() || "";
-          buffer = Buffer.from(base64Data, "base64");
-        } else if (typeof fileData === "string" && (fileData.startsWith("http://") || fileData.startsWith("https://"))) {
-          return {
-            url: fileData,
-            secureUrl: fileData,
-            publicId: `external_${timestamp}`
-          };
-        } else if (typeof fileData === "string") {
-          buffer = Buffer.from(fileData, "base64");
-        } else {
-          throw cloudinaryErr;
-        }
-        const filename = `doc_${timestamp}_${randomStr}.${ext}`;
-        const filePath = path2.join(uploadDir, filename);
-        fs.writeFileSync(filePath, buffer);
-        const serverPort = process.env.PORT || 3e3;
-        const host = process.env.SERVER_URL || `http://localhost:${serverPort}`;
-        const fileUrl = `${host}/uploads/${filename}`;
-        return {
-          url: fileUrl,
-          secureUrl: fileUrl,
-          publicId: `local_${filename}`,
-          format: ext,
-          bytes: buffer.length
-        };
-      } catch (localErr) {
-        console.error("[Upload Service] Local fallback also failed:", localErr);
-        throw new Error(cloudinaryErr.message || "Failed to process and store image upload.");
-      }
+      console.error("[Upload Service] Cloudinary upload failed:", cloudinaryErr.message);
+      throw new Error(`Cloudinary upload failed: ${cloudinaryErr.message || "Unable to upload asset."}`);
     }
   }
   /**
-   * Delete asset from Cloudinary or local storage
+   * Delete asset from Cloudinary or clean legacy local storage
    */
   static async deleteImage(publicId) {
     if (publicId.startsWith("local_")) {
@@ -2795,7 +2812,16 @@ var AuthService = class {
       verificationStatus: tenantVerificationStatus,
       rejectionReason: user.tenant?.rejectionReason || null,
       requiresOtp,
-      paymentRequired
+      paymentRequired,
+      tenant: user.tenant ? {
+        id: user.tenant.id,
+        name: user.tenant.name,
+        logoUrl: user.tenant.logoUrl || null,
+        logoPublicId: user.tenant.logoPublicId || null,
+        email: user.tenant.email || null,
+        phone: user.tenant.phone || null,
+        address: user.tenant.address || null
+      } : null
     };
     const secret = process.env.JWT_SECRET || "default_secret";
     const expiresIn = process.env.JWT_EXPIRES_IN || "7d";
@@ -6158,6 +6184,8 @@ var TenantService = class {
       email: tenant.email,
       phone: tenant.phone,
       address: tenant.address,
+      logoUrl: tenant.logoUrl || null,
+      logoPublicId: tenant.logoPublicId || null,
       createdAt: tenant.createdAt,
       isTrial,
       trialDaysRemaining,
@@ -6178,7 +6206,9 @@ var TenantService = class {
         ...data.name && { name: data.name },
         ...data.email && { email: data.email },
         ...data.phone && { phone: data.phone },
-        ...data.address && { address: data.address }
+        ...data.address && { address: data.address },
+        ...data.logoUrl !== void 0 && { logoUrl: data.logoUrl || null },
+        ...data.logoPublicId !== void 0 && { logoPublicId: data.logoPublicId || null }
       }
     });
     return updated;
@@ -6288,7 +6318,9 @@ var updateTenantProfileSchema = z5.object({
   name: z5.string().min(2, "Company name must be at least 2 characters").optional(),
   email: z5.string().email("Invalid email format").optional(),
   phone: z5.string().optional(),
-  address: z5.string().optional()
+  address: z5.string().optional(),
+  logoUrl: z5.string().url().optional().or(z5.literal("")),
+  logoPublicId: z5.string().optional()
 });
 
 // src/modules/tenant/tenant.routes.ts
@@ -9890,6 +9922,273 @@ var InventoryService = class _InventoryService {
     };
   }
   /**
+   * Dedicated Stock Receiving History Query
+   * Pulls real inward receiving records (BatchReceivingRecord & StockMovement of type PURCHASE)
+   */
+  static async listReceivingHistory(tenantId, query, userRole, userBranchId) {
+    const page = Math.max(1, Number(query.page) || 1);
+    const limit = Math.max(1, Math.min(100, Number(query.limit) || 20));
+    const skip = (page - 1) * limit;
+    const branchWhere = {};
+    if (["BRANCH_MANAGER", "CASHIER"].includes(userRole) && userBranchId) {
+      branchWhere.branchId = userBranchId;
+    } else if (query.branchId && query.branchId !== "all") {
+      branchWhere.branchId = query.branchId;
+    } else {
+      const tenantBranches = await prisma.branch.findMany({
+        where: { tenantId },
+        select: { id: true }
+      });
+      branchWhere.branchId = { in: tenantBranches.map((b) => b.id) };
+    }
+    const dateFilter = {};
+    if (query.startDate || query.endDate) {
+      if (query.startDate) {
+        const start = new Date(query.startDate);
+        start.setHours(0, 0, 0, 0);
+        dateFilter.gte = start;
+      }
+      if (query.endDate) {
+        const end = new Date(query.endDate);
+        end.setHours(23, 59, 59, 999);
+        dateFilter.lte = end;
+      }
+    }
+    const recWhere = { ...branchWhere };
+    if (Object.keys(dateFilter).length > 0) {
+      recWhere.receivedDate = dateFilter;
+    }
+    if (query.search && query.search.trim()) {
+      const q = query.search.trim();
+      recWhere.OR = [
+        { batchNumber: { contains: q, mode: "insensitive" } },
+        { invoiceNo: { contains: q, mode: "insensitive" } },
+        { supplier: { name: { contains: q, mode: "insensitive" } } },
+        { inventory: { product: { name: { contains: q, mode: "insensitive" } } } }
+      ];
+    }
+    const batchCount = await prisma.batchReceivingRecord.count({ where: recWhere });
+    if (batchCount > 0) {
+      const records = await prisma.batchReceivingRecord.findMany({
+        where: recWhere,
+        skip,
+        take: limit,
+        orderBy: { receivedDate: "desc" },
+        include: {
+          supplier: { select: { id: true, name: true } },
+          inventory: {
+            include: {
+              product: {
+                select: {
+                  id: true,
+                  name: true,
+                  genericName: true,
+                  unit: true,
+                  category: true,
+                  stripsPerBox: true,
+                  tabletsPerStrip: true,
+                  qtyPerLevel2: true
+                }
+              },
+              supplier: { select: { id: true, name: true } }
+            }
+          }
+        }
+      });
+      const missingProductIds = records.filter((r) => !r.inventory?.product && r.productId).map((r) => r.productId);
+      let productMap = /* @__PURE__ */ new Map();
+      if (missingProductIds.length > 0) {
+        const prods = await prisma.product.findMany({
+          where: { id: { in: missingProductIds } },
+          select: { id: true, name: true, genericName: true, unit: true, stripsPerBox: true, tabletsPerStrip: true }
+        });
+        productMap = new Map(prods.map((p) => [p.id, p]));
+      }
+      const formatted = records.map((rec) => {
+        const prod = rec.inventory?.product || productMap.get(rec.productId) || {
+          name: "Unknown Product",
+          genericName: null,
+          unit: "Unit"
+        };
+        const supplierName = rec.supplier?.name || rec.inventory?.supplier?.name || rec.contactPersonName || "Direct Intake";
+        const cartonsReceived = rec.cartonsReceived || 0;
+        const boxesReceived = rec.boxesReceived || 0;
+        const totalQuantity = rec.totalQuantity || 0;
+        const stripsPerBox = rec.stripsPerBox || prod.stripsPerBox || 10;
+        const tabletsPerStrip = rec.tabletsPerStrip || prod.tabletsPerStrip || 10;
+        const tabletsPerBox = stripsPerBox * tabletsPerStrip;
+        const boxesPerCarton = rec.boxesPerCarton || 10;
+        let receivingUnit = rec.receivingUnit || "CARTON";
+        let receivedQuantityLabel = "";
+        let receivingUnitDisplay = "";
+        let totalEquivalentLabel = "";
+        if (receivingUnit === "CARTON" && cartonsReceived > 0) {
+          receivingUnitDisplay = "Carton";
+          receivedQuantityLabel = `${cartonsReceived} Carton${cartonsReceived > 1 ? "s" : ""}`;
+          const calcBoxes = boxesReceived > 0 ? boxesReceived : cartonsReceived * boxesPerCarton;
+          totalEquivalentLabel = `${calcBoxes} Boxes (${totalQuantity.toLocaleString()} ${prod.unit || "Units"})`;
+        } else if (receivingUnit === "BOX" && boxesReceived > 0) {
+          receivingUnitDisplay = "Box";
+          receivedQuantityLabel = `${boxesReceived} Box${boxesReceived > 1 ? "es" : ""}`;
+          totalEquivalentLabel = `${totalQuantity.toLocaleString()} ${prod.unit || "Units"}`;
+        } else {
+          receivingUnitDisplay = prod.unit || "Unit";
+          receivedQuantityLabel = `${totalQuantity.toLocaleString()} ${prod.unit || "Units"}`;
+          totalEquivalentLabel = boxesReceived > 0 ? `${boxesReceived} Boxes` : `${totalQuantity.toLocaleString()} ${prod.unit || "Units"}`;
+        }
+        const unitPurchasePrice = rec.purchasePrice ? Number(rec.purchasePrice) : 0;
+        const boxPurchasePrice = rec.boxPurchasePrice ? Number(rec.boxPurchasePrice) : 0;
+        let totalPurchaseValue = 0;
+        if (boxPurchasePrice > 0 && boxesReceived > 0) {
+          totalPurchaseValue = boxesReceived * boxPurchasePrice;
+        } else if (unitPurchasePrice > 0 && totalQuantity > 0) {
+          totalPurchaseValue = totalQuantity * unitPurchasePrice;
+        }
+        return {
+          id: rec.id,
+          receivedDate: rec.receivedDate || rec.createdAt,
+          product: {
+            id: prod.id,
+            name: prod.name,
+            genericName: prod.genericName,
+            unit: prod.unit || "Unit"
+          },
+          supplierName,
+          batchNumber: rec.batchNumber || "No Batch",
+          invoiceNo: rec.invoiceNo || null,
+          receivedQuantity: cartonsReceived > 0 ? cartonsReceived : boxesReceived > 0 ? boxesReceived : totalQuantity,
+          receivingUnit: receivingUnitDisplay,
+          receivedQuantityLabel,
+          totalEquivalentLabel,
+          totalQuantityUnits: totalQuantity,
+          unitPurchasePrice,
+          boxPurchasePrice,
+          totalPurchaseValue
+        };
+      });
+      return {
+        data: formatted,
+        pagination: {
+          page,
+          limit,
+          total: batchCount,
+          totalPages: Math.ceil(batchCount / limit)
+        }
+      };
+    }
+    const movWhere = { ...branchWhere, type: "PURCHASE" };
+    if (Object.keys(dateFilter).length > 0) {
+      movWhere.createdAt = dateFilter;
+    }
+    if (query.search && query.search.trim()) {
+      const q = query.search.trim();
+      movWhere.OR = [
+        { batchNumber: { contains: q, mode: "insensitive" } },
+        { reason: { contains: q, mode: "insensitive" } }
+      ];
+    }
+    const [movCount, movements] = await Promise.all([
+      prisma.stockMovement.count({ where: movWhere }),
+      prisma.stockMovement.findMany({
+        where: movWhere,
+        skip,
+        take: limit,
+        orderBy: { createdAt: "desc" },
+        include: {
+          inventory: {
+            include: {
+              product: {
+                select: {
+                  id: true,
+                  name: true,
+                  genericName: true,
+                  unit: true,
+                  stripsPerBox: true,
+                  tabletsPerStrip: true,
+                  qtyPerLevel2: true
+                }
+              },
+              supplier: { select: { id: true, name: true } }
+            }
+          }
+        }
+      })
+    ]);
+    const missingProdIds = movements.filter((m) => !m.inventory?.product && m.productId).map((m) => m.productId);
+    let prodMap = /* @__PURE__ */ new Map();
+    if (missingProdIds.length > 0) {
+      const prods = await prisma.product.findMany({
+        where: { id: { in: missingProdIds } },
+        select: { id: true, name: true, genericName: true, unit: true, stripsPerBox: true, tabletsPerStrip: true }
+      });
+      prodMap = new Map(prods.map((p) => [p.id, p]));
+    }
+    const formattedMovs = movements.map((m) => {
+      const prod = m.inventory?.product || prodMap.get(m.productId) || {
+        name: "Product",
+        genericName: null,
+        unit: "Unit"
+      };
+      const supplierName = m.inventory?.supplier?.name || "Direct Intake";
+      const totalQuantity = Math.abs(m.quantity || 0);
+      const stripsPerBox = m.inventory?.stripsPerBox || prod.stripsPerBox || 10;
+      const tabletsPerStrip = m.inventory?.tabletsPerStrip || prod.tabletsPerStrip || 10;
+      const tabletsPerBox = stripsPerBox * tabletsPerStrip;
+      const boxesPerCarton = m.inventory?.boxesPerCarton || 10;
+      const tabletsPerCarton = boxesPerCarton * tabletsPerBox;
+      let receivingUnitDisplay = "Unit";
+      let receivedQuantityLabel = `${totalQuantity.toLocaleString()} ${prod.unit || "Units"}`;
+      let totalEquivalentLabel = `${totalQuantity.toLocaleString()} ${prod.unit || "Units"}`;
+      let receivedQuantity = totalQuantity;
+      if (totalQuantity >= tabletsPerCarton && totalQuantity % tabletsPerCarton === 0) {
+        const cartons = totalQuantity / tabletsPerCarton;
+        const boxes = cartons * boxesPerCarton;
+        receivingUnitDisplay = "Carton";
+        receivedQuantity = cartons;
+        receivedQuantityLabel = `${cartons} Carton${cartons > 1 ? "s" : ""}`;
+        totalEquivalentLabel = `${boxes} Boxes (${totalQuantity.toLocaleString()} ${prod.unit || "Units"})`;
+      } else if (totalQuantity >= tabletsPerBox && totalQuantity % tabletsPerBox === 0) {
+        const boxes = totalQuantity / tabletsPerBox;
+        receivingUnitDisplay = "Box";
+        receivedQuantity = boxes;
+        receivedQuantityLabel = `${boxes} Box${boxes > 1 ? "es" : ""}`;
+        totalEquivalentLabel = `${totalQuantity.toLocaleString()} ${prod.unit || "Units"}`;
+      }
+      const unitPurchasePrice = m.unitPrice ? Number(m.unitPrice) : m.inventory?.purchasePrice ? Number(m.inventory.purchasePrice) : 0;
+      const totalPurchaseValue = totalQuantity * unitPurchasePrice;
+      return {
+        id: m.id,
+        receivedDate: m.createdAt,
+        product: {
+          id: prod.id,
+          name: prod.name,
+          genericName: prod.genericName,
+          unit: prod.unit || "Unit"
+        },
+        supplierName,
+        batchNumber: m.batchNumber || "No Batch",
+        invoiceNo: null,
+        receivedQuantity,
+        receivingUnit: receivingUnitDisplay,
+        receivedQuantityLabel,
+        totalEquivalentLabel,
+        totalQuantityUnits: totalQuantity,
+        unitPurchasePrice,
+        boxPurchasePrice: null,
+        totalPurchaseValue
+      };
+    });
+    return {
+      data: formattedMovs,
+      pagination: {
+        page,
+        limit,
+        total: movCount,
+        totalPages: Math.ceil(movCount / limit)
+      }
+    };
+  }
+  /**
    * POS: Get FEFO-sorted batches with physical locations for a product
    */
   static async getPosAvailableBatches(tenantId, branchId, productId) {
@@ -10236,7 +10535,24 @@ var InventoryController = class {
       const userRole = req.user.role;
       const userBranchId = req.user.branchId;
       const query = req.query;
+      if (query.type === "PURCHASE") {
+        const result2 = await InventoryService.listReceivingHistory(tenantId, query, userRole, userBranchId);
+        res.status(200).json({ success: true, ...result2 });
+        return;
+      }
       const result = await InventoryService.listMovements(tenantId, query, userRole, userBranchId);
+      res.status(200).json({ success: true, ...result });
+    } catch (error) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
+  static async listReceivingHistory(req, res) {
+    try {
+      const tenantId = req.user.tenantId;
+      const userRole = req.user.role;
+      const userBranchId = req.user.branchId;
+      const query = req.query;
+      const result = await InventoryService.listReceivingHistory(tenantId, query, userRole, userBranchId);
       res.status(200).json({ success: true, ...result });
     } catch (error) {
       res.status(500).json({ success: false, message: error.message });
@@ -10466,6 +10782,11 @@ router9.patch(
   requirePermission("stock.stock_list"),
   validateRequest({ body: updateInventoryItemSchema }),
   InventoryController.updateInventoryItem
+);
+router9.get(
+  "/receiving-history",
+  requirePermission("stock.stock_history"),
+  InventoryController.listReceivingHistory
 );
 router9.get(
   "/movements",
@@ -11061,6 +11382,19 @@ ${data.notes}`.trim() : transfer.notes
     if (query.settlementStatus) {
       where.settlementStatus = query.settlementStatus;
     }
+    if (query.startDate || query.endDate) {
+      where.createdAt = {};
+      if (query.startDate) {
+        const start = new Date(query.startDate);
+        start.setHours(0, 0, 0, 0);
+        where.createdAt.gte = start;
+      }
+      if (query.endDate) {
+        const end = new Date(query.endDate);
+        end.setHours(23, 59, 59, 999);
+        where.createdAt.lte = end;
+      }
+    }
     const [total, transfers] = await Promise.all([
       prisma.stockTransfer.count({ where }),
       prisma.stockTransfer.findMany({
@@ -11241,10 +11575,28 @@ ${data.notes}`.trim() : transfer.notes
     }
     if (query?.search) {
       where.product = {
+        ...where.product,
         OR: [
           { name: { contains: query.search, mode: "insensitive" } },
           { genericName: { contains: query.search, mode: "insensitive" } }
         ]
+      };
+    }
+    if (query?.startDate || query?.endDate) {
+      const dateFilter = {};
+      if (query?.startDate) {
+        const start = new Date(query.startDate);
+        start.setHours(0, 0, 0, 0);
+        dateFilter.gte = start;
+      }
+      if (query?.endDate) {
+        const end = new Date(query.endDate);
+        end.setHours(23, 59, 59, 999);
+        dateFilter.lte = end;
+      }
+      where.transfer = {
+        ...where.transfer || {},
+        createdAt: dateFilter
       };
     }
     const items = await prisma.transferItem.findMany({
@@ -11396,7 +11748,9 @@ var TransferController = class {
       const userBranchId = req.user.branchId;
       const query = {
         branchId: req.query.branchId,
-        search: req.query.search
+        search: req.query.search,
+        startDate: req.query.startDate,
+        endDate: req.query.endDate
       };
       const result = await TransferService.getDamagedProducts(tenantId, userRole, userBranchId, query);
       res.status(200).json({ success: true, ...result });
@@ -11457,6 +11811,8 @@ var listTransfersQuerySchema = z10.object({
   status: z10.string().optional(),
   settlementStatus: z10.string().optional(),
   search: z10.string().optional(),
+  startDate: z10.string().optional(),
+  endDate: z10.string().optional(),
   page: z10.coerce.number().int().positive().default(1),
   limit: z10.coerce.number().int().positive().max(100).default(20)
 });
@@ -12438,6 +12794,7 @@ var ReportService = class {
     let totalRevenue = 0;
     let totalPaid = 0;
     let totalDue = 0;
+    let totalCostOfGoods = 0;
     const paymentBreakdown = {
       cash: 0,
       bkash: 0,
@@ -12490,8 +12847,11 @@ var ReportService = class {
         const prod = item.product;
         const pId = item.productId;
         const qty = Number(item.quantity || 0);
+        const lowestUnitQty = Number(item.lowestUnitQuantity || qty);
         const itemAmount = Number(item.subTotal || Number(item.unitPrice || 0) * qty);
+        const itemCost = item.purchasePrice ? Number(item.purchasePrice) * lowestUnitQty : 0;
         totalUnitsSold += qty;
+        totalCostOfGoods += itemCost;
         if (!productMap.has(pId)) {
           productMap.set(pId, {
             productId: pId,
@@ -12503,20 +12863,24 @@ var ReportService = class {
             quantitySold: 0,
             lowestUnitQuantitySold: 0,
             totalAmount: 0,
+            totalCost: 0,
             averageUnitPrice: 0,
             transactionsCount: 0
           });
         }
         const entry = productMap.get(pId);
         entry.quantitySold += qty;
-        entry.lowestUnitQuantitySold += Number(item.lowestUnitQuantity || qty);
+        entry.lowestUnitQuantitySold += lowestUnitQty;
         entry.totalAmount += itemAmount;
+        entry.totalCost += itemCost;
         entry.transactionsCount += 1;
       });
     });
     const productSalesList = Array.from(productMap.values()).map((p) => ({
       ...p,
       totalAmount: Math.round(p.totalAmount * 100) / 100,
+      totalCost: Math.round(p.totalCost * 100) / 100,
+      grossProfit: Math.round((p.totalAmount - p.totalCost) * 100) / 100,
       averageUnitPrice: p.quantitySold > 0 ? Math.round(p.totalAmount / p.quantitySold * 100) / 100 : 0
     })).sort((a, b) => b.totalAmount - a.totalAmount);
     const transactionList = sales.map((s) => {
@@ -12580,6 +12944,8 @@ var ReportService = class {
         totalDue: Math.round(totalDue * 100) / 100,
         transactionCount: totalTransactions,
         totalUnitsSold,
+        totalCostOfGoods: Math.round(totalCostOfGoods * 100) / 100,
+        grossProfit: Math.round((totalRevenue - totalCostOfGoods) * 100) / 100,
         averageOrderValue: totalTransactions > 0 ? Math.round(totalRevenue / totalTransactions * 100) / 100 : 0
       },
       paymentBreakdown: {
@@ -14377,6 +14743,37 @@ var SettingsController = class {
       res.status(400).json({ success: false, message: error.message });
     }
   }
+  static async getPharmacySettings(req, res) {
+    try {
+      const tenantId = req.user?.tenantId;
+      if (!tenantId) {
+        res.status(400).json({ success: false, message: "Tenant context required" });
+        return;
+      }
+      const data = await SettingsService.getPharmacySettings(tenantId);
+      res.status(200).json({ success: true, data });
+    } catch (error) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
+  static async updatePharmacySettings(req, res) {
+    try {
+      const tenantId = req.user?.tenantId;
+      const userId = req.user?.id || req.user?.userId;
+      if (!tenantId) {
+        res.status(400).json({ success: false, message: "Tenant context required" });
+        return;
+      }
+      const updated = await SettingsService.updatePharmacySettings(tenantId, userId, req.body);
+      res.status(200).json({
+        success: true,
+        message: "Pharmacy settings updated successfully",
+        data: updated
+      });
+    } catch (error) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  }
 };
 
 // src/modules/settings/settings.validation.ts
@@ -14444,9 +14841,12 @@ router16.put(
   requirePermission("pos.vat"),
   SettingsController.updateTenantVatSettings
 );
+router16.get("/pharmacy", authenticate, SettingsController.getPharmacySettings);
+router16.put("/pharmacy", authenticate, SettingsController.updatePharmacySettings);
 
 // src/modules/upload/upload.routes.ts
 import { Router as Router17 } from "express";
+import multer from "multer";
 
 // src/modules/upload/upload.controller.ts
 var UploadController = class {
@@ -14455,13 +14855,24 @@ var UploadController = class {
    */
   static async uploadImage(req, res) {
     try {
-      const fileData = req.file?.buffer || req.body.image || req.body.file;
+      let fileData = req.body.image || req.body.file;
+      const files = req.files;
+      if (!fileData && files) {
+        if (files["file"]?.[0]?.buffer) {
+          fileData = files["file"][0].buffer;
+        } else if (files["image"]?.[0]?.buffer) {
+          fileData = files["image"][0].buffer;
+        }
+      }
+      if (!fileData && req.file?.buffer) {
+        fileData = req.file.buffer;
+      }
       const folder = req.body.folder || "pharmacy_saas/general";
       const oldPublicId = req.body.oldPublicId;
       if (!fileData) {
         res.status(400).json({
           success: false,
-          message: "No image file provided. Send base64 data URI or multipart file."
+          message: "No image or document provided. Send base64 data URI or multipart file."
         });
         return;
       }
@@ -14514,7 +14925,16 @@ var UploadController = class {
 
 // src/modules/upload/upload.routes.ts
 var router17 = Router17();
-router17.post("/image", authenticate, UploadController.uploadImage);
+var upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 25 * 1024 * 1024 }
+});
+router17.post(
+  "/image",
+  authenticate,
+  upload.fields([{ name: "file", maxCount: 1 }, { name: "image", maxCount: 1 }]),
+  UploadController.uploadImage
+);
 router17.delete("/image", authenticate, UploadController.deleteImage);
 
 // src/modules/supplier/supplier.routes.ts
@@ -14527,7 +14947,7 @@ var SupplierService = class {
    */
   static async listSuppliers(tenantId, query) {
     const page = Math.max(1, query.page || 1);
-    const limit = Math.max(1, Math.min(100, query.limit || 20));
+    const limit = Math.max(1, Math.min(100, query.limit || 50));
     const skip = (page - 1) * limit;
     const where = { tenantId };
     if (query.search) {
@@ -14557,6 +14977,56 @@ var SupplierService = class {
       }),
       prisma.supplier.count({ where })
     ]);
+    const isFiltered = Boolean(query.startDate || query.endDate || query.branchId && query.branchId !== "all");
+    if (isFiltered && suppliers.length > 0) {
+      const supplierIds = suppliers.map((s) => s.id);
+      const purchaseWhere = { tenantId, supplierId: { in: supplierIds } };
+      if (query.branchId && query.branchId !== "all") {
+        purchaseWhere.branchId = query.branchId;
+      }
+      if (query.startDate || query.endDate) {
+        purchaseWhere.purchaseDate = {};
+        if (query.startDate) purchaseWhere.purchaseDate.gte = new Date(query.startDate);
+        if (query.endDate) {
+          const end = new Date(query.endDate);
+          end.setHours(23, 59, 59, 999);
+          purchaseWhere.purchaseDate.lte = end;
+        }
+      }
+      const purchases = await prisma.purchase.findMany({
+        where: purchaseWhere,
+        select: { supplierId: true, totalAmount: true, paidAmount: true, dueAmount: true }
+      });
+      const statsMap = /* @__PURE__ */ new Map();
+      for (const p of purchases) {
+        if (!p.supplierId) continue;
+        const curr = statsMap.get(p.supplierId) || { totalPurchased: 0, totalPaid: 0, totalDue: 0 };
+        curr.totalPurchased += Number(p.totalAmount || 0);
+        curr.totalPaid += Number(p.paidAmount || 0);
+        curr.totalDue += Number(p.dueAmount || 0);
+        statsMap.set(p.supplierId, curr);
+      }
+      const formattedSuppliers = suppliers.map((s) => {
+        const stats = statsMap.get(s.id) || { totalPurchased: 0, totalPaid: 0, totalDue: 0 };
+        return {
+          ...s,
+          periodPurchased: stats.totalPurchased,
+          periodPaid: stats.totalPaid,
+          periodDue: stats.totalDue,
+          totalPurchased: stats.totalPurchased > 0 ? stats.totalPurchased : Number(s.totalPurchased || 0),
+          totalPaid: stats.totalPaid > 0 ? stats.totalPaid : Number(s.totalPaid || 0)
+        };
+      });
+      return {
+        data: formattedSuppliers,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit)
+        }
+      };
+    }
     return {
       data: suppliers,
       pagination: {
@@ -14572,51 +15042,86 @@ var SupplierService = class {
    */
   static async getSupplierById(id, tenantId, options) {
     const purchaseWhere = {};
+    const paymentWhere = {};
     if (options?.startDate || options?.endDate) {
-      if (options.startDate) purchaseWhere.purchaseDate = { gte: new Date(options.startDate) };
+      const dateFilter = {};
+      if (options.startDate) {
+        dateFilter.gte = new Date(options.startDate);
+      }
       if (options.endDate) {
         const end = new Date(options.endDate);
         end.setHours(23, 59, 59, 999);
-        purchaseWhere.purchaseDate = { ...purchaseWhere.purchaseDate || {}, lte: end };
+        dateFilter.lte = end;
       }
+      purchaseWhere.purchaseDate = dateFilter;
+      paymentWhere.paymentDate = dateFilter;
     }
-    const supplier = await prisma.supplier.findFirst({
-      where: { id, tenantId },
-      include: {
-        contacts: {
-          orderBy: { createdAt: "desc" }
-        },
-        purchases: {
-          where: purchaseWhere,
-          orderBy: { purchaseDate: "desc" },
-          take: 100,
-          include: {
-            branch: { select: { id: true, name: true } },
-            contactPerson: { select: { id: true, name: true, phone: true, designation: true } },
-            items: {
-              include: {
-                product: { select: { id: true, name: true, sku: true, unit: true } }
+    const [supplier, purchaseAgg, paymentAgg] = await Promise.all([
+      prisma.supplier.findFirst({
+        where: { id, tenantId },
+        include: {
+          contacts: {
+            orderBy: { createdAt: "desc" }
+          },
+          purchases: {
+            where: purchaseWhere,
+            orderBy: { purchaseDate: "desc" },
+            take: 100,
+            include: {
+              branch: { select: { id: true, name: true } },
+              contactPerson: { select: { id: true, name: true, phone: true, designation: true } },
+              items: {
+                include: {
+                  product: { select: { id: true, name: true, sku: true, unit: true } }
+                }
               }
             }
+          },
+          payments: {
+            where: paymentWhere,
+            orderBy: { paymentDate: "desc" },
+            take: 50,
+            include: {
+              branch: { select: { id: true, name: true } },
+              financialAccount: { select: { id: true, name: true, type: true } }
+            }
+          },
+          _count: {
+            select: { purchases: true, contacts: true, inventories: true }
           }
-        },
-        payments: {
-          orderBy: { paymentDate: "desc" },
-          take: 50,
-          include: {
-            branch: { select: { id: true, name: true } },
-            financialAccount: { select: { id: true, name: true, type: true } }
-          }
-        },
-        _count: {
-          select: { purchases: true, contacts: true, inventories: true }
         }
-      }
-    });
+      }),
+      prisma.purchase.aggregate({
+        where: { supplierId: id, tenantId, ...purchaseWhere },
+        _sum: { totalAmount: true, paidAmount: true, dueAmount: true },
+        _count: { id: true }
+      }),
+      prisma.supplierPayment.aggregate({
+        where: { supplierId: id, tenantId, ...paymentWhere },
+        _sum: { amount: true },
+        _count: { id: true }
+      })
+    ]);
     if (!supplier) {
       throw new Error("Supplier not found");
     }
-    return supplier;
+    const isFiltered = Boolean(options?.startDate || options?.endDate);
+    const periodStats = {
+      totalPurchased: isFiltered ? Number(purchaseAgg._sum?.totalAmount || 0) : Number(supplier.totalPurchased || 0),
+      totalPaid: isFiltered ? Number(paymentAgg._sum?.amount || 0) : Number(supplier.totalPaid || 0),
+      totalDue: isFiltered ? Number(purchaseAgg._sum?.dueAmount || 0) : Number(supplier.totalDue || 0),
+      purchasesCount: isFiltered ? purchaseAgg._count?.id || 0 : supplier._count?.purchases || 0,
+      paymentsCount: paymentAgg._count?.id || 0,
+      lifetimeTotalPurchased: Number(supplier.totalPurchased || 0),
+      lifetimeTotalPaid: Number(supplier.totalPaid || 0),
+      lifetimeTotalDue: Number(supplier.totalDue || 0),
+      isFiltered
+    };
+    return {
+      ...supplier,
+      periodStats,
+      stats: periodStats
+    };
   }
   /**
    * Create new supplier and optional initial contacts
@@ -15013,6 +15518,32 @@ var SupplierService = class {
             referenceId: purchase.id
           }
         });
+        await tx.batchReceivingRecord.create({
+          data: {
+            inventoryId,
+            branchId: data.branchId,
+            productId: item.productId,
+            supplierId: data.supplierId || null,
+            contactPersonId: data.contactPersonId || null,
+            contactPersonName: purchase.contactPersonName || null,
+            batchNumber: item.batchNumber || null,
+            receivingUnit: item.cartonQuantity && item.cartonQuantity > 0 ? "CARTON" : "BOX",
+            cartonsReceived: item.cartonQuantity || 0,
+            boxesPerCarton: item.cartonQuantity && item.cartonQuantity > 0 ? Math.round((item.boxQuantity || 0) / item.cartonQuantity) || 10 : 10,
+            boxesReceived: item.boxQuantity || 0,
+            stripsPerBox: item.stripsPerBox || 10,
+            tabletsPerStrip: item.tabletsPerStrip || 10,
+            totalQuantity: item.quantity,
+            purchasePrice: item.unitPurchasePrice,
+            sellingPrice: item.unitSellingPrice,
+            receivedDate: data.purchaseDate ? new Date(data.purchaseDate) : /* @__PURE__ */ new Date(),
+            expiryDate: item.expiryDate ? new Date(item.expiryDate) : null,
+            mfgDate: item.mfgDate ? new Date(item.mfgDate) : null,
+            invoiceNo: purchase.invoiceNo || null,
+            notes: data.notes || null,
+            receivedBy: userId
+          }
+        });
       }
       return purchase;
     });
@@ -15264,7 +15795,7 @@ var SupplierService = class {
       paymentWhere.supplierId = query.supplierId;
       supplierWhere.id = query.supplierId;
     }
-    if (query.branchId) {
+    if (query.branchId && query.branchId !== "all") {
       purchaseWhere.branchId = query.branchId;
       paymentWhere.branchId = query.branchId;
     }
@@ -15298,14 +15829,21 @@ var SupplierService = class {
       })
     ]);
     const totalPurchase = purchases.reduce((acc, p) => acc + Number(p.totalAmount || 0), 0);
-    const totalPaidInPeriod = payments.reduce((acc, p) => acc + Number(p.amount || 0), 0) + purchases.reduce((acc, p) => acc + Number(p.paidAmount || 0), 0);
+    const paymentsSum = payments.reduce((acc, p) => acc + Number(p.amount || 0), 0);
+    const purchasePaidSum = purchases.reduce((acc, p) => acc + Number(p.paidAmount || 0), 0);
+    const totalPaidInPeriod = Math.max(paymentsSum, purchasePaidSum);
     const totalDueInPeriod = purchases.reduce((acc, p) => acc + Number(p.dueAmount || 0), 0);
     const lifetimePurchases = suppliers.reduce((acc, s) => acc + Number(s.totalPurchased || 0), 0);
     const lifetimePaid = suppliers.reduce((acc, s) => acc + Number(s.totalPaid || 0), 0);
     const lifetimeDue = suppliers.reduce((acc, s) => acc + Number(s.totalDue || 0), 0);
     return {
+      totalPurchases: totalPurchase,
+      totalPaid: totalPaidInPeriod,
+      totalDue: totalDueInPeriod,
+      dueCount: purchases.filter((p) => Number(p.dueAmount || 0) > 0).length,
       filtered: {
         totalPurchase,
+        totalPurchases: totalPurchase,
         totalPaid: totalPaidInPeriod,
         totalDue: totalDueInPeriod,
         count: purchases.length
@@ -15541,6 +16079,9 @@ var updateSupplierSchema = z17.object({
 });
 var listSuppliersQuerySchema = z17.object({
   search: z17.string().optional(),
+  branchId: z17.string().optional(),
+  startDate: z17.string().optional(),
+  endDate: z17.string().optional(),
   page: z17.coerce.number().int().positive().default(1),
   limit: z17.coerce.number().int().positive().default(50)
 });
@@ -18415,17 +18956,20 @@ var DeductionRuleController = class {
       const { branchId } = req.query;
       const user = req.user;
       const tenantId = user.tenantId;
-      if (!branchId) {
-        res.status(400).json({ error: "branchId is required" });
+      if (!branchId || branchId === "all") {
+        res.status(400).json({ success: false, message: "A specific branchId is required" });
         return;
       }
       const rule = await prisma.salaryDeductionRule.findUnique({
         where: { branchId: String(branchId) }
       });
-      res.status(200).json(rule || { absentRuleRatio: null, lateRuleRatio: null });
+      res.status(200).json({
+        success: true,
+        data: rule || { absentRuleRatio: null, lateRuleRatio: null }
+      });
     } catch (error) {
       console.error("[DeductionRuleController.getRules] Error:", error.message);
-      res.status(500).json({ error: "Failed to get deduction rules." });
+      res.status(500).json({ success: false, message: "Failed to get deduction rules." });
     }
   }
   static async setRules(req, res) {
@@ -18433,8 +18977,8 @@ var DeductionRuleController = class {
       const { branchId, absentRuleRatio, lateRuleRatio } = req.body;
       const user = req.user;
       const tenantId = user.tenantId;
-      if (!branchId) {
-        res.status(400).json({ error: "branchId is required" });
+      if (!branchId || branchId === "all") {
+        res.status(400).json({ success: false, message: "A specific branchId is required" });
         return;
       }
       const parseRatio = (val) => {
@@ -18445,14 +18989,14 @@ var DeductionRuleController = class {
       const parsedAbsent = parseRatio(absentRuleRatio);
       const parsedLate = parseRatio(lateRuleRatio);
       const rule = await prisma.salaryDeductionRule.upsert({
-        where: { branchId },
+        where: { branchId: String(branchId) },
         update: {
           absentRuleRatio: parsedAbsent,
           lateRuleRatio: parsedLate
         },
         create: {
           tenantId,
-          branchId,
+          branchId: String(branchId),
           absentRuleRatio: parsedAbsent,
           lateRuleRatio: parsedLate,
           createdById: user.id
@@ -18460,15 +19004,19 @@ var DeductionRuleController = class {
       });
       await AuditService.log({
         tenantId,
-        branchId,
+        branchId: String(branchId),
         userId: user.id,
         action: "SALARY_DEDUCTION_RULE_UPDATED",
         details: { absentRuleRatio: parsedAbsent, lateRuleRatio: parsedLate }
       });
-      res.status(200).json(rule);
+      res.status(200).json({
+        success: true,
+        message: "Salary deduction rules saved successfully",
+        data: rule
+      });
     } catch (error) {
       console.error("[DeductionRuleController.setRules] Error:", error.message);
-      res.status(500).json({ error: "Failed to set deduction rules." });
+      res.status(500).json({ success: false, message: "Failed to set deduction rules." });
     }
   }
 };
@@ -19432,11 +19980,13 @@ app.use((err, req, res, next) => {
     message: err.message || "Internal server error"
   });
 });
-app.listen(port, async () => {
-  console.log(`Pharmacy Management SaaS API listening on port ${port}`);
-  await seedSuperAdmin();
-  SubscriptionExpiryService.initAutomatedScheduler();
-});
+if (!process.env.VERCEL) {
+  app.listen(port, async () => {
+    console.log(`Pharmacy Management SaaS API listening on port ${port}`);
+    await seedSuperAdmin();
+    SubscriptionExpiryService.initAutomatedScheduler();
+  });
+}
 var app_default = app;
 
 // src/index.ts
