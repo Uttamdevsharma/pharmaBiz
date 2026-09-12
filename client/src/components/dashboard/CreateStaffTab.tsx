@@ -143,6 +143,10 @@ export function CreateStaffTab({ onNavigate }: CreateStaffTabProps) {
           role: roles[0]?.id || "",
           branchId: user?.branchId || "",
         });
+        // Automatically navigate to Staff List
+        if (onNavigate) {
+          onNavigate("staff");
+        }
       } else {
         setError(res.message || "Failed to create staff member");
       }

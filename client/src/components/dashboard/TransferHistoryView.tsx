@@ -6,6 +6,7 @@ import { Branch } from "@/types";
 import { useAuth } from "@/context/AuthContext";
 import { OwnerModule } from "./DashboardSidebar";
 import { DateRangeFilter, DatePreset, getComputedDateRange } from "./DateRangeFilter";
+import { Pagination } from "@/components/common/Pagination";
 import {
   FileSpreadsheet,
   Plus,
@@ -51,6 +52,8 @@ export function TransferHistoryView({ onNavigate }: TransferHistoryViewProps) {
   const [datePreset, setDatePreset] = useState<DatePreset>("ALL");
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
 
   // Details Modal State
   const [selectedTransfer, setSelectedTransfer] = useState<any | null>(null);
@@ -123,6 +126,13 @@ export function TransferHistoryView({ onNavigate }: TransferHistoryViewProps) {
     }
     return true;
   });
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchQuery, branchFilter, statusFilter, datePreset, startDate, endDate]);
+
+  const totalPages = Math.ceil(filteredTransfers.length / pageSize) || 1;
+  const paginatedTransfers = filteredTransfers.slice((page - 1) * pageSize, page * pageSize);
 
   // Ledger Summary Totals
   const totalTransfersCount = transfers.length;
@@ -303,7 +313,7 @@ export function TransferHistoryView({ onNavigate }: TransferHistoryViewProps) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
-                {filteredTransfers.map((t) => {
+                {paginatedTransfers.map((t) => {
                   const sentVal = Number(t.sentTotalValue || t.totalValue || 0);
                   const receivedVal = Number(t.receivedTotalValue || 0);
                   const lossVal = Number(t.damagedTotalValue || 0) + Number(t.missingTotalValue || 0);
@@ -391,6 +401,14 @@ export function TransferHistoryView({ onNavigate }: TransferHistoryViewProps) {
             </table>
           </div>
         )}
+
+        <Pagination
+          currentPage={page}
+          totalPages={totalPages}
+          totalItems={filteredTransfers.length}
+          pageSize={pageSize}
+          onPageChange={setPage}
+        />
       </div>
 
       {/* Transfer Details Modal */}

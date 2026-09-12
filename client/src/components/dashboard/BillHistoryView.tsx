@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import { fetchApi } from "@/lib/api";
 import { OwnerModule } from "./DashboardSidebar";
 import { BillTypeConfig } from "./BillListView";
+import { Pagination } from "@/components/common/Pagination";
 import {
   History,
   Search,
@@ -66,6 +67,8 @@ export function BillHistoryView({
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState<string>("");
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
 
   const loadExpensesData = async (isManual = false) => {
     try {
@@ -173,6 +176,13 @@ export function BillHistoryView({
     return true;
   });
 
+  useEffect(() => {
+    setPage(1);
+  }, [monthFilter, billNameFilter, startDate, endDate, searchQuery]);
+
+  const totalPages = Math.ceil(filteredExpenses.length / pageSize) || 1;
+  const paginatedExpenses = filteredExpenses.slice((page - 1) * pageSize, page * pageSize);
+
   const hasActiveFilters = Boolean(
     monthFilter || billNameFilter !== "ALL" || startDate || endDate || searchQuery.trim()
   );
@@ -183,6 +193,7 @@ export function BillHistoryView({
     setStartDate("");
     setEndDate("");
     setSearchQuery("");
+    setPage(1);
   };
 
   return (
@@ -362,7 +373,7 @@ export function BillHistoryView({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs font-medium">
-                {filteredExpenses.map((exp) => (
+                {paginatedExpenses.map((exp) => (
                   <tr key={exp.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition">
                     {/* Bill Name */}
                     <td className="py-4 px-4">
@@ -423,6 +434,14 @@ export function BillHistoryView({
             </table>
           </div>
         )}
+
+        <Pagination
+          currentPage={page}
+          totalPages={totalPages}
+          totalItems={filteredExpenses.length}
+          pageSize={pageSize}
+          onPageChange={setPage}
+        />
       </div>
     </div>
   );

@@ -134,7 +134,7 @@ export function SettingsTab() {
   return (
     <form onSubmit={handleSaveSettings} className="space-y-8 max-w-5xl">
       {/* Header & Save Action */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 sticky top-16 z-30 bg-slate-50/95 dark:bg-slate-950/95 backdrop-blur-md py-4 border-b border-slate-200 dark:border-slate-800">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 sticky -top-3.5 sm:-top-6 md:-top-8 -mx-3.5 sm:-mx-6 md:-mx-8 -mt-3.5 sm:-mt-6 md:-mt-8 px-3.5 sm:px-6 md:px-8 py-4 z-30 bg-slate-50/95 dark:bg-slate-950/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800">
         <div>
           <h2 className="text-2xl font-extrabold text-slate-900 dark:text-white">
             Branding, Content & Dynamic Theme

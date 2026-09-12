@@ -12,6 +12,7 @@ import {
 import { ProductInventoryDetailsView } from "./ProductInventoryDetailsView";
 import { BatchStockDetailsView } from "./BatchStockDetailsView";
 import { OwnerModule } from "./DashboardSidebar";
+import { Pagination } from "@/components/common/Pagination";
 import {
   Boxes,
   Plus,
@@ -76,6 +77,8 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("ALL");
   const [stockStatusFilter, setStockStatusFilter] = useState<string>("ALL");
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
 
   // Navigation Hierarchy: PRODUCT_BROWSER -> PRODUCT_DETAILS -> BATCH_DETAILS
   const [viewMode, setViewMode] = useState<"PRODUCT_BROWSER" | "PRODUCT_DETAILS" | "BATCH_DETAILS">("PRODUCT_BROWSER");
@@ -234,6 +237,17 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
       return true;
     });
   }, [productGroups, search, categoryFilter, stockStatusFilter]);
+
+  // Reset page state on filter change
+  useEffect(() => {
+    setPage(1);
+  }, [search, categoryFilter, stockStatusFilter]);
+
+  const totalPages = Math.ceil(filteredProducts.length / pageSize) || 1;
+  const paginatedProducts = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filteredProducts.slice(start, start + pageSize);
+  }, [filteredProducts, page, pageSize]);
 
   // Handler: Click Product Card -> Navigate to Product Details
   const handleSelectProduct = (product: ProductStockGroup) => {
@@ -450,107 +464,117 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredProducts.map((prod) => {
-            const packConfig: PackagingConfig = {
-              packageType: prod.productType || prod.category || "MEDICINE",
-              boxesPerCarton: prod.qtyPerLevel2 || 10,
-              stripsPerBox: prod.stripsPerBox || 10,
-              tabletsPerStrip: prod.tabletsPerStrip || 10,
-              unit: prod.unit,
-            };
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {paginatedProducts.map((prod) => {
+              const packConfig: PackagingConfig = {
+                packageType: prod.productType || prod.category || "MEDICINE",
+                boxesPerCarton: prod.qtyPerLevel2 || 10,
+                stripsPerBox: prod.stripsPerBox || 10,
+                tabletsPerStrip: prod.tabletsPerStrip || 10,
+                unit: prod.unit,
+              };
 
-            const pkg = calculatePackaging(prod.totalStock, packConfig);
+              const pkg = calculatePackaging(prod.totalStock, packConfig);
 
-            return (
-              <div
-                key={prod.productId}
-                onClick={() => handleSelectProduct(prod)}
-                className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 p-5 shadow-sm hover:shadow-md hover:border-brand-primary/60 transition cursor-pointer group flex flex-col justify-between relative overflow-hidden"
-              >
-                {/* Status Badges */}
-                <div className="flex items-start justify-between gap-2 mb-3">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <h3 className="text-base font-black text-slate-900 dark:text-white group-hover:text-brand-primary transition truncate">
-                        {prod.name}
-                      </h3>
-                      {prod.size && (
-                        <span className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[10px] px-1.5 py-0.2 rounded font-bold">
-                          {prod.size}
+              return (
+                <div
+                  key={prod.productId}
+                  onClick={() => handleSelectProduct(prod)}
+                  className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 p-5 shadow-sm hover:shadow-md hover:border-brand-primary/60 transition cursor-pointer group flex flex-col justify-between relative overflow-hidden"
+                >
+                  {/* Status Badges */}
+                  <div className="flex items-start justify-between gap-2 mb-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <h3 className="text-base font-black text-slate-900 dark:text-white group-hover:text-brand-primary transition truncate">
+                          {prod.name}
+                        </h3>
+                        {prod.size && (
+                          <span className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[10px] px-1.5 py-0.2 rounded font-bold">
+                            {prod.size}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-brand-primary font-bold mt-0.5 truncate">
+                        {prod.genericName || "—"}
+                      </div>
+                      <div className="text-[11px] text-slate-500 truncate">
+                        {prod.manufacturer || prod.brandName || "Brand Manufacturer"}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      {prod.expiredBatchesCount > 0 && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-900 flex items-center gap-1">
+                          <AlertTriangle className="h-3 w-3" /> {prod.expiredBatchesCount} Expired
+                        </span>
+                      )}
+
+                      {prod.nearExpiryBatchesCount > 0 && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-900">
+                          {prod.nearExpiryBatchesCount} Near Expiry
+                        </span>
+                      )}
+
+                      {prod.totalStock <= 0 && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+                          Out of Stock
                         </span>
                       )}
                     </div>
-                    <div className="text-xs text-brand-primary font-bold mt-0.5 truncate">
-                      {prod.genericName || "—"}
-                    </div>
-                    <div className="text-[11px] text-slate-500 truncate">
-                      {prod.manufacturer || prod.brandName || "Brand Manufacturer"}
-                    </div>
                   </div>
 
-                  <div className="flex flex-col items-end gap-1 shrink-0">
-                    {prod.expiredBatchesCount > 0 && (
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-900 flex items-center gap-1">
-                        <AlertTriangle className="h-3 w-3" /> {prod.expiredBatchesCount} Expired
+                  {/* Stock Details & Packaging Breakdown */}
+                  <div className="bg-slate-50/70 dark:bg-slate-800/40 rounded-xl p-3.5 border border-slate-100 dark:border-slate-800 my-2 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                        Available Stock:
                       </span>
-                    )}
+                      <span className="text-sm font-black text-slate-900 dark:text-white">
+                        {prod.totalStock.toLocaleString()} {prod.unit}s
+                      </span>
+                    </div>
 
-                    {prod.nearExpiryBatchesCount > 0 && (
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-900">
-                        {prod.nearExpiryBatchesCount} Near Expiry
-                      </span>
-                    )}
-
-                    {prod.totalStock <= 0 && (
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400">
-                        Out of Stock
-                      </span>
+                    {pkg.isMedicine && (
+                      <div className="text-xs text-slate-600 dark:text-slate-400 font-medium flex items-center gap-1">
+                        <Package className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                        <span>{pkg.displayText}</span>
+                      </div>
                     )}
                   </div>
-                </div>
 
-                {/* Stock Details & Packaging Breakdown */}
-                <div className="bg-slate-50/70 dark:bg-slate-800/40 rounded-xl p-3.5 border border-slate-100 dark:border-slate-800 my-2 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                      Available Stock:
-                    </span>
-                    <span className="text-sm font-black text-slate-900 dark:text-white">
-                      {prod.totalStock.toLocaleString()} {prod.unit}s
-                    </span>
-                  </div>
+                  {/* Footer Metrics (Batches, Locations, Arrow) */}
+                  <div className="pt-3 border-t border-slate-100 dark:border-slate-800/60 flex items-center justify-between text-xs text-slate-500">
+                    <div className="flex items-center gap-3">
+                      <span className="flex items-center gap-1 font-bold text-slate-700 dark:text-slate-300">
+                        <Boxes className="h-3.5 w-3.5 text-brand-primary" />
+                        {prod.batchesCount} Batche{prod.batchesCount !== 1 ? "s" : ""}
+                      </span>
 
-                  {pkg.isMedicine && (
-                    <div className="text-xs text-slate-600 dark:text-slate-400 font-medium flex items-center gap-1">
-                      <Package className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                      <span>{pkg.displayText}</span>
+                      <span className="flex items-center gap-1 font-bold text-slate-700 dark:text-slate-300">
+                        <MapPin className="h-3.5 w-3.5 text-slate-400" />
+                        {prod.locationsCount} Location{prod.locationsCount !== 1 ? "s" : ""}
+                      </span>
                     </div>
-                  )}
-                </div>
 
-                {/* Footer Metrics (Batches, Locations, Arrow) */}
-                <div className="pt-3 border-t border-slate-100 dark:border-slate-800/60 flex items-center justify-between text-xs text-slate-500">
-                  <div className="flex items-center gap-3">
-                    <span className="flex items-center gap-1 font-bold text-slate-700 dark:text-slate-300">
-                      <Boxes className="h-3.5 w-3.5 text-brand-primary" />
-                      {prod.batchesCount} Batche{prod.batchesCount !== 1 ? "s" : ""}
-                    </span>
-
-                    <span className="flex items-center gap-1 font-bold text-slate-700 dark:text-slate-300">
-                      <MapPin className="h-3.5 w-3.5 text-slate-400" />
-                      {prod.locationsCount} Location{prod.locationsCount !== 1 ? "s" : ""}
-                    </span>
-                  </div>
-
-                  <div className="text-brand-primary font-bold text-xs flex items-center gap-1 group-hover:translate-x-1 transition">
-                    <span>View Batches</span>
-                    <ChevronRight className="h-4 w-4" />
+                    <div className="text-brand-primary font-bold text-xs flex items-center gap-1 group-hover:translate-x-1 transition">
+                      <span>View Batches</span>
+                      <ChevronRight className="h-4 w-4" />
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
+
+          <Pagination
+            currentPage={page}
+            totalPages={totalPages}
+            totalItems={filteredProducts.length}
+            pageSize={pageSize}
+            onPageChange={setPage}
+          />
         </div>
       )}
     </div>

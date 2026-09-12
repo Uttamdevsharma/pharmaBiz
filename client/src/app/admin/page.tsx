@@ -9,6 +9,8 @@ import { OverviewTab } from "@/components/admin/OverviewTab";
 import { TenantsTab } from "@/components/admin/TenantsTab";
 import { StaffListTab } from "@/components/admin/StaffListTab";
 import { CreateStaffTab } from "@/components/admin/CreateStaffTab";
+import { CreateAdminRoleView } from "@/components/admin/CreateAdminRoleView";
+import { AdminPermissionAssignmentView } from "@/components/admin/AdminPermissionAssignmentView";
 import { RolesPermissionsTab } from "@/components/admin/RolesPermissionsTab";
 import { PlansTab } from "@/components/admin/PlansTab";
 import { SubscriptionsTab } from "@/components/admin/SubscriptionsTab";
@@ -23,6 +25,7 @@ export default function AdminDashboardPage() {
   const router = useRouter();
   const { user, loading, isAuthenticated, isSuperAdmin, isPlatformStaff, hasPermission } = useAuth();
   const [activeTab, setActiveTab] = useState<AdminTab>("overview");
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   useEffect(() => {
     if (!loading) {
@@ -88,15 +91,27 @@ export default function AdminDashboardPage() {
           <CreateStaffTab
             onSuccess={() => setActiveTab("staff-list")}
             onNavigateToList={() => setActiveTab("staff-list")}
-            onNavigateToRoles={() => setActiveTab("roles-permissions")}
+            onNavigateToRoles={() => setActiveTab("create-role")}
           />
         );
+
+      case "create-role":
+        if (!isSuperAdmin && !hasPermission("roles.manage")) {
+          return <AccessRestrictedView moduleName="Create Role" requiredPerm="roles.manage" />;
+        }
+        return <CreateAdminRoleView />;
+
+      case "permission-assignment":
+        if (!isSuperAdmin && !hasPermission("roles.manage")) {
+          return <AccessRestrictedView moduleName="Permission Assignment" requiredPerm="roles.manage" />;
+        }
+        return <AdminPermissionAssignmentView />;
 
       case "roles-permissions":
         if (!isSuperAdmin && !hasPermission("roles.manage")) {
           return <AccessRestrictedView moduleName="Roles & Permissions" requiredPerm="roles.manage" />;
         }
-        return <RolesPermissionsTab onNavigateToCreateStaff={() => setActiveTab("staff-create")} />;
+        return <CreateAdminRoleView />;
 
       case "plans":
         if (!isSuperAdmin && !hasPermission("plans.manage")) {
@@ -137,17 +152,25 @@ export default function AdminDashboardPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col">
+    <div className="h-screen max-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col overflow-hidden">
       {/* Super Admin Top Header */}
-      <AdminHeader activeTab={activeTab} />
+      <AdminHeader
+        activeTab={activeTab}
+        onToggleMobileSidebar={() => setMobileSidebarOpen(!mobileSidebarOpen)}
+      />
 
       {/* Main Admin Console Layout */}
-      <div className="flex-1 flex flex-col md:flex-row">
+      <div className="flex-1 flex overflow-hidden min-h-0 relative">
         {/* Sidebar Navigation */}
-        <AdminSidebar activeTab={activeTab} onTabChange={setActiveTab} />
+        <AdminSidebar
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          mobileOpen={mobileSidebarOpen}
+          onCloseMobile={() => setMobileSidebarOpen(false)}
+        />
 
         {/* Dynamic Tab Content Area */}
-        <main className="flex-1 p-6 md:p-8 max-w-7xl mx-auto w-full">
+        <main className="flex-1 h-full min-h-0 p-3.5 sm:p-6 md:p-8 content-scrollbar max-w-full w-full min-w-0">
           {renderTabContent()}
         </main>
       </div>

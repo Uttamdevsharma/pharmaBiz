@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { fetchApi } from "@/lib/api";
 import { Supplier } from "@/types";
+import { Pagination } from "@/components/common/Pagination";
 import {
   Truck,
   Plus,
@@ -30,6 +31,9 @@ export function SuppliersView({ onNavigate, onSelectSupplier }: SuppliersViewPro
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
   const [saving, setSaving] = useState(false);
@@ -48,10 +52,20 @@ export function SuppliersView({ onNavigate, onSelectSupplier }: SuppliersViewPro
     try {
       setLoading(true);
       const params = new URLSearchParams();
+      params.append("page", page.toString());
+      params.append("limit", "10");
       if (search) params.append("search", search);
       const res = await fetchApi(`/suppliers?${params.toString()}`);
       if (res.success && res.data) {
         setSuppliers(res.data);
+        const meta = res.meta || (res as any).pagination;
+        if (meta) {
+          setTotalPages(meta.totalPages || 1);
+          setTotalCount(meta.total || res.data.length || 0);
+        } else {
+          setTotalPages(1);
+          setTotalCount(res.data.length);
+        }
       }
     } catch (err) {
       console.error("Failed to load suppliers", err);
@@ -62,10 +76,11 @@ export function SuppliersView({ onNavigate, onSelectSupplier }: SuppliersViewPro
 
   useEffect(() => {
     loadSuppliers();
-  }, []);
+  }, [page]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
+    setPage(1);
     loadSuppliers();
   };
 
@@ -217,8 +232,8 @@ export function SuppliersView({ onNavigate, onSelectSupplier }: SuppliersViewPro
             </button>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
+          <div className="table-responsive-container">
+            <table className="w-full min-w-[800px] text-left text-xs border-collapse">
               <thead>
                 <tr className="bg-slate-50/75 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 text-slate-500 uppercase tracking-wider font-bold text-[10px]">
                   <th className="py-3.5 px-4">Supplier / Company</th>
@@ -338,6 +353,14 @@ export function SuppliersView({ onNavigate, onSelectSupplier }: SuppliersViewPro
             </table>
           </div>
         )}
+
+        <Pagination
+          currentPage={page}
+          totalPages={totalPages}
+          totalItems={totalCount}
+          pageSize={10}
+          onPageChange={setPage}
+        />
       </div>
 
       {/* Add / Edit Supplier Modal */}

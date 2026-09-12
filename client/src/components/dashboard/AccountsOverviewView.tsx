@@ -332,14 +332,14 @@ export function AccountsOverviewView({ onNavigate, selectedBranchId: propBranchI
       ) : (
         <>
           {/* 5 EXECUTIVE SUMMARY KPI CARDS */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-5 gap-4 2xl:gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5 gap-4 2xl:gap-5">
             {/* Total Liquid Funds */}
             <div className="p-5 xl:p-6 rounded-3xl bg-gradient-to-br from-emerald-600 to-teal-700 text-white shadow-lg space-y-1 relative overflow-hidden">
               <div className="flex items-center justify-between opacity-80 text-[10px] xl:text-xs font-black uppercase tracking-wider">
                 <span>Total Liquid Funds</span>
                 <Wallet className="h-4 w-4" />
               </div>
-              <div className="text-xl xl:text-2xl 2xl:text-3xl font-black font-mono">
+              <div className="text-xl xl:text-2xl 2xl:text-3xl font-black font-mono truncate">
                 ৳{totalBalance.toLocaleString("en-BD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
               <div className="text-[10px] xl:text-xs opacity-85 font-medium">Drawer + Banks + Wallets</div>
@@ -351,7 +351,7 @@ export function AccountsOverviewView({ onNavigate, selectedBranchId: propBranchI
                 <span>Cash in Hand</span>
                 <Banknote className="h-4 w-4 text-emerald-500" />
               </div>
-              <div className="text-xl xl:text-2xl 2xl:text-3xl font-black text-emerald-600 dark:text-emerald-400 font-mono">
+              <div className="text-xl xl:text-2xl 2xl:text-3xl font-black text-emerald-600 dark:text-emerald-400 font-mono truncate">
                 ৳{totalCash.toLocaleString("en-BD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
               <div className="text-[10px] xl:text-xs text-slate-400 font-medium">Physical till cash</div>
@@ -363,7 +363,7 @@ export function AccountsOverviewView({ onNavigate, selectedBranchId: propBranchI
                 <span>Bank Accounts</span>
                 <Building2 className="h-4 w-4 text-blue-500" />
               </div>
-              <div className="text-xl xl:text-2xl 2xl:text-3xl font-black text-blue-600 dark:text-blue-400 font-mono">
+              <div className="text-xl xl:text-2xl 2xl:text-3xl font-black text-blue-600 dark:text-blue-400 font-mono truncate">
                 ৳{totalBank.toLocaleString("en-BD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
               <div className="text-[10px] xl:text-xs text-slate-400 font-medium">DBBL, City, BRAC, etc.</div>
@@ -375,7 +375,7 @@ export function AccountsOverviewView({ onNavigate, selectedBranchId: propBranchI
                 <span>bKash & Nagad</span>
                 <Smartphone className="h-4 w-4 text-pink-500" />
               </div>
-              <div className="text-xl xl:text-2xl 2xl:text-3xl font-black text-pink-600 dark:text-pink-400 font-mono">
+              <div className="text-xl xl:text-2xl 2xl:text-3xl font-black text-pink-600 dark:text-pink-400 font-mono truncate">
                 ৳{totalMobile.toLocaleString("en-BD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
               <div className="text-[10px] xl:text-xs text-slate-400 font-medium">Merchant wallets</div>
@@ -387,7 +387,7 @@ export function AccountsOverviewView({ onNavigate, selectedBranchId: propBranchI
                 <span>Supplier Payables</span>
                 <TrendingDown className="h-4 w-4 text-rose-500" />
               </div>
-              <div className="text-xl xl:text-2xl 2xl:text-3xl font-black text-rose-600 dark:text-rose-400 font-mono">
+              <div className="text-xl xl:text-2xl 2xl:text-3xl font-black text-rose-600 dark:text-rose-400 font-mono truncate">
                 ৳{(summary.totalSupplierDues || 0).toLocaleString("en-BD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
               <div className="text-[10px] xl:text-xs text-slate-400 font-medium">Pending supplier dues</div>

@@ -27,6 +27,7 @@ import {
   Clock,
   ArrowUpRight,
 } from "lucide-react";
+import { Pagination } from "@/components/common/Pagination";
 
 interface ExpensesManagementViewProps {
   selectedBranchId?: string;
@@ -95,6 +96,8 @@ export function ExpensesManagementView({ selectedBranchId, onNavigate }: Expense
   const [currentMonth, setCurrentMonth] = useState<string>(() => new Date().toISOString().slice(0, 7));
   const [categoryFilter, setCategoryFilter] = useState<string>("ALL");
   const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
 
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -310,6 +313,13 @@ export function ExpensesManagementView({ selectedBranchId, onNavigate }: Expense
     );
   });
 
+  useEffect(() => {
+    setPage(1);
+  }, [searchQuery, categoryFilter, currentMonth]);
+
+  const totalPages = Math.ceil(filteredExpenses.length / pageSize) || 1;
+  const paginatedExpenses = filteredExpenses.slice((page - 1) * pageSize, page * pageSize);
+
   const selectedAccount = financialAccounts.find((a) => a.id === recordAccountId);
 
   return (
@@ -523,8 +533,8 @@ export function ExpensesManagementView({ selectedBranchId, onNavigate }: Expense
                 </p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
+              <div className="table-responsive-container">
+                <table className="w-full min-w-[750px] text-left border-collapse">
                   <thead>
                     <tr className="border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                       <th className="py-3 px-4">Date / Voucher</th>
@@ -536,14 +546,14 @@ export function ExpensesManagementView({ selectedBranchId, onNavigate }: Expense
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs text-slate-700 dark:text-slate-300">
-                    {filteredExpenses.map((exp) => {
+                    {paginatedExpenses.map((exp) => {
                       const meta = CATEGORY_META[exp.category] || CATEGORY_META.OTHER;
                       const Icon = meta.icon;
                       return (
                         <tr key={exp.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition">
                           <td className="py-3.5 px-4 font-mono">
                             <div className="font-semibold text-slate-900 dark:text-white">
-                              {new Date(exp.paymentDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
+                              {new Date(exp.paymentDate || (exp as any).createdAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
                             </div>
                             <div className="text-[10px] text-slate-400">
                               {exp.voucherNo ? `Voucher: ${exp.voucherNo}` : exp.id.slice(0, 8)}
@@ -592,6 +602,14 @@ export function ExpensesManagementView({ selectedBranchId, onNavigate }: Expense
                 </table>
               </div>
             )}
+
+            <Pagination
+              currentPage={page}
+              totalPages={totalPages}
+              totalItems={filteredExpenses.length}
+              pageSize={pageSize}
+              onPageChange={setPage}
+            />
           </div>
         </div>
       )}
@@ -881,7 +899,7 @@ export function ExpensesManagementView({ selectedBranchId, onNavigate }: Expense
       {/* MODAL: Configure Recurring Bill */}
       {isRecurringModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="relative w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl p-6 sm:p-8">
+          <div className="relative w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl p-6 sm:p-8 max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800 mb-5">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center border border-amber-500/20">

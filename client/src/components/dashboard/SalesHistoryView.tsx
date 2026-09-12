@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { fetchApi } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { OwnerModule } from "./DashboardSidebar";
+import { Pagination } from "@/components/common/Pagination";
 import {
   History,
   Search,
@@ -63,7 +64,7 @@ interface SaleRecord {
   }>;
 }
 
-export function SalesHistoryView({ onNavigate, selectedBranchId: propBranchId }: SalesHistoryViewProps = {}) {
+export function SalesHistoryView({ selectedBranchId: propBranchId, onNavigate }: SalesHistoryViewProps = {}) {
   const { user: authUser } = useAuth();
   const { selectedBranchId: contextBranchId, currentBranch, isAllBranches } = useBranchContext();
   const effectiveBranchId = propBranchId !== undefined ? propBranchId : contextBranchId;
@@ -81,7 +82,7 @@ export function SalesHistoryView({ onNavigate, selectedBranchId: propBranchId }:
 
   // Pagination
   const [page, setPage] = useState(1);
-  const [limit] = useState(25);
+  const [limit] = useState(10);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
 
@@ -320,8 +321,8 @@ export function SalesHistoryView({ onNavigate, selectedBranchId: propBranchId }:
             <p className="text-xs text-slate-400">Try adjusting your date range or search filters.</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs xl:text-sm">
+          <div className="table-responsive-container">
+            <table className="w-full min-w-[850px] text-left text-xs xl:text-sm">
               <thead className="bg-slate-50 dark:bg-slate-800/80 text-slate-400 text-[10px] xl:text-xs font-black uppercase tracking-wider border-b border-slate-200 dark:border-slate-800">
                 <tr>
                   <th className="py-3.5 px-4 xl:px-6">Receipt #</th>
@@ -465,34 +466,13 @@ export function SalesHistoryView({ onNavigate, selectedBranchId: propBranchId }:
         )}
 
         {/* Pagination Footer */}
-        {!loading && sales.length > 0 && (
-          <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-slate-500">
-            <div>
-              Showing page <strong className="text-slate-800 dark:text-slate-200">{page}</strong> of{" "}
-              <strong className="text-slate-800 dark:text-slate-200">{totalPages}</strong> ({totalCount} total sales)
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                disabled={page <= 1}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold transition disabled:opacity-40 flex items-center gap-1"
-              >
-                <ChevronLeft className="h-3.5 w-3.5" />
-                <span>Prev</span>
-              </button>
-
-              <button
-                disabled={page >= totalPages}
-                onClick={() => setPage((p) => p + 1)}
-                className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold transition disabled:opacity-40 flex items-center gap-1"
-              >
-                <span>Next</span>
-                <ChevronRight className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          </div>
-        )}
+        <Pagination
+          currentPage={page}
+          totalPages={totalPages}
+          totalItems={totalCount}
+          pageSize={10}
+          onPageChange={setPage}
+        />
       </div>
 
       {/* Invoice Details & Thermal Print Modal */}

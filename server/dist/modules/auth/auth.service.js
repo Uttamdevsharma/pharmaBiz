@@ -217,17 +217,32 @@ class AuthService {
      * Register Pharmacy Owner with Regulatory Documents, OTP dispatch, and initial verification state
      */
     static async registerOwner(data) {
+        const normalizedEmail = data.email.trim().toLowerCase();
         // 1. Check if email already registered
         const existingUser = await prisma_1.prisma.user.findFirst({
             where: {
                 OR: [
-                    { email: data.email },
-                    { username: data.email },
+                    { email: { equals: normalizedEmail, mode: "insensitive" } },
+                    { username: { equals: normalizedEmail, mode: "insensitive" } },
                 ],
             },
+            include: { tenant: true },
         });
         if (existingUser) {
-            throw new Error("An account with this email address already exists. Please login instead.");
+            if (existingUser.tenant && existingUser.tenant.verificationStatus === "PENDING_OTP") {
+                // Clean up stale unverified registration attempt so user can re-submit
+                try {
+                    await prisma_1.prisma.tenant.delete({
+                        where: { id: existingUser.tenant.id },
+                    });
+                }
+                catch (e) {
+                    console.warn("[registerOwner] Could not delete stale PENDING_OTP tenant:", e);
+                }
+            }
+            else {
+                throw new Error("An account or pending application already exists for this email address. Please login instead.");
+            }
         }
         // 2. Upload regulatory documents to Cloudinary / storage
         // NID requires both Front and Back sides
@@ -310,7 +325,7 @@ class AuthService {
                 data: {
                     name: data.companyName,
                     tier: plan ? plan.tier : "STARTER",
-                    email: data.email,
+                    email: normalizedEmail,
                     phone: data.phone,
                     address: data.address || "HQ Location",
                     isActive: false, // Inactive until approved and paid
@@ -360,8 +375,8 @@ class AuthService {
                 data: {
                     tenantId: tenant.id,
                     branchId: mainBranch.id,
-                    username: data.email,
-                    email: data.email,
+                    username: normalizedEmail,
+                    email: normalizedEmail,
                     name: data.ownerName,
                     phone: data.phone,
                     role: "COMPANY_OWNER",
@@ -390,9 +405,8 @@ class AuthService {
             console.error("[registerOwner] Error seeding default catalog variants:", err);
         });
         // 6. Send OTP verification email directly to the Pharmacy Owner's submitted email
-        const ownerEmail = data.email.trim().toLowerCase();
         await email_service_1.EmailService.sendOtpEmail({
-            to: ownerEmail,
+            to: normalizedEmail,
             name: data.ownerName,
             otpCode,
             companyName: data.companyName,
@@ -428,10 +442,21 @@ class AuthService {
      * Verify 6-digit email OTP
      */
     static async verifyOtp(data) {
-        const { email, otpCode } = data;
-        const tenant = await prisma_1.prisma.tenant.findFirst({
-            where: { email },
-        });
+        const normalizedEmail = (data.email || "").trim().toLowerCase();
+        const cleanOtpCode = (data.otpCode || "").replace(/\D/g, "").trim();
+        const tenantId = data.tenantId?.trim();
+        let tenant = null;
+        if (tenantId) {
+            tenant = await prisma_1.prisma.tenant.findUnique({
+                where: { id: tenantId },
+            });
+        }
+        if (!tenant && normalizedEmail) {
+            tenant = await prisma_1.prisma.tenant.findFirst({
+                where: { email: { equals: normalizedEmail, mode: "insensitive" } },
+                orderBy: { createdAt: "desc" },
+            });
+        }
         if (!tenant) {
             throw new Error("No pharmacy registration found for this email address.");
         }
@@ -441,23 +466,44 @@ class AuthService {
                 alreadyVerified: true,
                 verificationStatus: tenant.verificationStatus,
                 message: "Email has already been verified.",
+                tenant,
             };
         }
-        if (!tenant.otpCode || tenant.otpCode !== otpCode.trim()) {
+        if (!tenant.otpCode || tenant.otpCode !== cleanOtpCode) {
             throw new Error("Invalid verification OTP code. Please check your email and try again.");
         }
         if (tenant.otpExpiresAt && new Date() > new Date(tenant.otpExpiresAt)) {
             throw new Error("This verification OTP has expired. Please click 'Resend OTP' to get a new code.");
         }
-        // Mark as PENDING_APPROVAL (under Super Admin review)
-        const updatedTenant = await prisma_1.prisma.tenant.update({
-            where: { id: tenant.id },
+        // Mark as PENDING_APPROVAL atomically
+        const updateResult = await prisma_1.prisma.tenant.updateMany({
+            where: {
+                id: tenant.id,
+                verificationStatus: "PENDING_OTP",
+                otpCode: cleanOtpCode,
+            },
             data: {
                 verificationStatus: "PENDING_APPROVAL",
                 otpVerifiedAt: new Date(),
                 otpCode: null,
+                otpExpiresAt: null,
             },
         });
+        if (updateResult.count === 0) {
+            // Re-fetch to check if already verified by concurrent call
+            const reFetched = await prisma_1.prisma.tenant.findUnique({ where: { id: tenant.id } });
+            if (reFetched && reFetched.verificationStatus !== "PENDING_OTP") {
+                return {
+                    success: true,
+                    alreadyVerified: true,
+                    verificationStatus: reFetched.verificationStatus,
+                    message: "Email has already been verified.",
+                    tenant: reFetched,
+                };
+            }
+            throw new Error("OTP verification could not be completed. Please try again.");
+        }
+        const updatedTenant = await prisma_1.prisma.tenant.findUnique({ where: { id: tenant.id } });
         return {
             success: true,
             verificationStatus: "PENDING_APPROVAL",
@@ -469,9 +515,10 @@ class AuthService {
      * Resend 6-digit email OTP
      */
     static async resendOtp(data) {
-        const { email } = data;
+        const normalizedEmail = data.email.trim().toLowerCase();
         const tenant = await prisma_1.prisma.tenant.findFirst({
-            where: { email },
+            where: { email: { equals: normalizedEmail, mode: "insensitive" } },
+            orderBy: { createdAt: "desc" },
             include: { users: { where: { role: "COMPANY_OWNER" }, take: 1 } },
         });
         if (!tenant) {
@@ -491,7 +538,7 @@ class AuthService {
         });
         const ownerUser = tenant.users?.[0];
         await email_service_1.EmailService.sendOtpEmail({
-            to: email,
+            to: normalizedEmail,
             name: ownerUser?.name || tenant.name,
             otpCode: newOtp,
             companyName: tenant.name,
@@ -505,13 +552,15 @@ class AuthService {
      * Check verification and subscription status
      */
     static async getVerificationStatus(identifier) {
+        const cleanIdentifier = identifier.trim();
         const tenant = await prisma_1.prisma.tenant.findFirst({
             where: {
                 OR: [
-                    { id: identifier },
-                    { email: identifier },
+                    { id: cleanIdentifier },
+                    { email: { equals: cleanIdentifier, mode: "insensitive" } },
                 ],
             },
+            orderBy: { createdAt: "desc" },
             include: {
                 users: { where: { role: "COMPANY_OWNER" }, take: 1 },
                 subscriptions: {

@@ -193,8 +193,8 @@ export function TenantsTab() {
             <span>Loading tenants...</span>
           </div>
         ) : tenants.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
+          <div className="table-responsive-container">
+            <table className="w-full min-w-[750px] text-left text-sm">
               <thead className="text-xs uppercase bg-slate-50 dark:bg-slate-800/50 text-slate-500 border-b border-slate-200 dark:border-slate-800">
                 <tr>
                   <th className="px-6 py-4 font-semibold">Pharmacy Name</th>

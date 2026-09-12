@@ -200,6 +200,25 @@
   .dark .custom-scrollbar::-webkit-scrollbar-thumb {
     background-color: #334155;
   }
+
+  /* Responsive Data Table Container Helpers */
+  .table-responsive-container {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Modal Safe Scrollbar */
+  .modal-scrollbar {
+    max-height: 90vh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 transparent;
+  }
+  .dark .modal-scrollbar {
+    scrollbar-color: #334155 transparent;
+  }
 }
 
 /* ─── Print Styles ─────────────────────────────────────────────────────────── */

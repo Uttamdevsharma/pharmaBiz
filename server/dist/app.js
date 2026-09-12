@@ -100,11 +100,13 @@ app.use((err, req, res, next) => {
     });
 });
 const subscription_expiry_service_1 = require("./modules/subscription/subscription-expiry.service");
-// Start Server and trigger Admin seeding & automated subscription expiry scheduler
-app.listen(port, async () => {
-    console.log(`Pharmacy Management SaaS API listening on port ${port}`);
-    await (0, seedAdmin_1.seedSuperAdmin)();
-    subscription_expiry_service_1.SubscriptionExpiryService.initAutomatedScheduler();
-});
+// Start Server and trigger Admin seeding & automated subscription expiry scheduler (skip in Vercel serverless)
+if (!process.env.VERCEL) {
+    app.listen(port, async () => {
+        console.log(`Pharmacy Management SaaS API listening on port ${port}`);
+        await (0, seedAdmin_1.seedSuperAdmin)();
+        subscription_expiry_service_1.SubscriptionExpiryService.initAutomatedScheduler();
+    });
+}
 // Trigger backend restart for Prisma Client update
 exports.default = app;

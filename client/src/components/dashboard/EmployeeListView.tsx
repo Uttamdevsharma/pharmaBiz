@@ -29,6 +29,7 @@ import {
   UserCheck,
   Store,
 } from "lucide-react";
+import { Pagination } from "@/components/common/Pagination";
 import { useBranchContext } from "@/context/BranchContext";
 
 interface EmployeeListViewProps {
@@ -99,6 +100,8 @@ export function EmployeeListView({
   const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState<"ACTIVE" | "RESIGNED" | "ALL">("ACTIVE");
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
@@ -202,6 +205,14 @@ export function EmployeeListView({
 
     return matchesSearch && matchesRole && matchesStatus;
   });
+
+  // Reset page state when filters change
+  useEffect(() => {
+    setPage(1);
+  }, [searchQuery, roleFilter, statusFilter]);
+
+  const totalPages = Math.ceil(filteredEmployees.length / pageSize) || 1;
+  const paginatedEmployees = filteredEmployees.slice((page - 1) * pageSize, page * pageSize);
 
   const activeStaff = employees.filter((e) => e.isActive !== false);
   const resignedCount = employees.filter((e) => e.isActive === false).length;
@@ -350,8 +361,8 @@ export function EmployeeListView({
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
+          <div className="table-responsive-container">
+            <table className="w-full min-w-[750px] text-left border-collapse">
               <thead>
                 <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
                   <th className="py-3.5 px-4">Employee</th>
@@ -363,7 +374,7 @@ export function EmployeeListView({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
-                {filteredEmployees.map((emp) => {
+                {paginatedEmployees.map((emp) => {
                   const cfg = emp.salaryConfig;
                   const hasPackage = cfg && cfg.netSalary > 0;
 
@@ -482,12 +493,20 @@ export function EmployeeListView({
             </table>
           </div>
         )}
+
+        <Pagination
+          currentPage={page}
+          totalPages={totalPages}
+          totalItems={filteredEmployees.length}
+          pageSize={pageSize}
+          onPageChange={setPage}
+        />
       </div>
 
       {/* Salary Structure Modal */}
       {isStructureModalOpen && targetEmployee && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5 max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 bg-emerald-500/10 text-emerald-600 rounded-xl">

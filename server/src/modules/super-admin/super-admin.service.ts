@@ -1,6 +1,6 @@
 import { prisma } from "../../app/lib/prisma";
 import { CreatePlanInput, UpdatePlanInput, ListTenantsQuery } from "./super-admin.validation";
-import { PlatformAnalyticsResponse } from "./super-admin.types";
+import { PlatformAnalyticsResponse, PharmacyGrowthPoint, SubscriptionByPlanData } from "./super-admin.types";
 import { EmailService } from "../../app/lib/email.service";
 
 export class SuperAdminService {
@@ -47,7 +47,9 @@ export class SuperAdminService {
     if (datePreset === "CUSTOM") {
       const filter: any = {};
       if (startDate) {
-        filter.gte = new Date(startDate);
+        const s = new Date(startDate);
+        s.setHours(0, 0, 0, 0);
+        filter.gte = s;
       }
       if (endDate) {
         const e = new Date(endDate);
@@ -433,45 +435,256 @@ export class SuperAdminService {
   }
 
   /**
-   * Platform Analytics (No tenant sales data)
+   * Helper: Generate time-series buckets for Pharmacy Growth line graph
+   */
+  static generatePharmacyGrowthSeries(
+    datePreset?: string,
+    startDateStr?: string,
+    endDateStr?: string,
+    approvedTenants: Array<{ approvedAt: Date | string }> = []
+  ): PharmacyGrowthPoint[] {
+    const now = new Date();
+    const preset = datePreset || "ALL";
+
+    interface Bucket {
+      label: string;
+      date: string;
+      start: Date;
+      end: Date;
+    }
+    const buckets: Bucket[] = [];
+
+    if (preset === "TODAY" || preset === "YESTERDAY") {
+      const targetDate = preset === "TODAY"
+        ? new Date(now)
+        : new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+      const y = targetDate.getFullYear();
+      const m = targetDate.getMonth();
+      const d = targetDate.getDate();
+
+      // 4-hour intervals across the 24 hours (00:00, 04:00, 08:00, 12:00, 16:00, 20:00, 24:00)
+      const hours = [0, 4, 8, 12, 16, 20, 24];
+      for (let i = 0; i < hours.length - 1; i++) {
+        const hStart = hours[i];
+        const hEnd = hours[i + 1];
+        const start = new Date(y, m, d, hStart, 0, 0, 0);
+        const end = new Date(y, m, d, hEnd - 1, 59, 59, 999);
+        const pad = (n: number) => n.toString().padStart(2, "0");
+        buckets.push({
+          label: `${pad(hStart)}:00`,
+          date: start.toISOString(),
+          start,
+          end,
+        });
+      }
+    } else if (preset === "THIS_MONTH" || preset === "LAST_MONTH") {
+      const mOffset = preset === "THIS_MONTH" ? 0 : -1;
+      const targetMonthDate = new Date(now.getFullYear(), now.getMonth() + mOffset, 1);
+      const y = targetMonthDate.getFullYear();
+      const m = targetMonthDate.getMonth();
+      const daysInMonth = new Date(y, m + 1, 0).getDate();
+      const monthShort = targetMonthDate.toLocaleString("en-US", { month: "short" });
+
+      for (let day = 1; day <= daysInMonth; day++) {
+        const start = new Date(y, m, day, 0, 0, 0, 0);
+        const end = new Date(y, m, day, 23, 59, 59, 999);
+        buckets.push({
+          label: `${monthShort} ${day}`,
+          date: start.toISOString(),
+          start,
+          end,
+        });
+      }
+    } else if (preset === "THIS_YEAR") {
+      const y = now.getFullYear();
+      const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      for (let m = 0; m < 12; m++) {
+        const start = new Date(y, m, 1, 0, 0, 0, 0);
+        const end = new Date(y, m + 1, 0, 23, 59, 59, 999);
+        buckets.push({
+          label: monthNames[m],
+          date: start.toISOString(),
+          start,
+          end,
+        });
+      }
+    } else if (preset === "CUSTOM" && (startDateStr || endDateStr)) {
+      const s = startDateStr ? new Date(startDateStr) : new Date(now.getFullYear(), now.getMonth(), 1);
+      s.setHours(0, 0, 0, 0);
+      const e = endDateStr ? new Date(endDateStr) : new Date(now);
+      e.setHours(23, 59, 59, 999);
+      const diffDays = Math.max(1, Math.ceil((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)));
+
+      if (diffDays <= 2) {
+        const totalHours = diffDays * 24;
+        const step = Math.max(3, Math.floor(totalHours / 6));
+        for (let h = 0; h < totalHours; h += step) {
+          const start = new Date(s.getTime() + h * 3600 * 1000);
+          const end = new Date(Math.min(e.getTime(), start.getTime() + step * 3600 * 1000 - 1));
+          const monthShort = start.toLocaleString("en-US", { month: "short" });
+          buckets.push({
+            label: `${monthShort} ${start.getDate()} ${start.getHours()}:00`,
+            date: start.toISOString(),
+            start,
+            end,
+          });
+        }
+      } else if (diffDays <= 35) {
+        for (let d = 0; d < diffDays; d++) {
+          const start = new Date(s.getFullYear(), s.getMonth(), s.getDate() + d, 0, 0, 0, 0);
+          const end = new Date(s.getFullYear(), s.getMonth(), s.getDate() + d, 23, 59, 59, 999);
+          const monthShort = start.toLocaleString("en-US", { month: "short" });
+          buckets.push({
+            label: `${monthShort} ${start.getDate()}`,
+            date: start.toISOString(),
+            start,
+            end,
+          });
+        }
+      } else {
+        let cur = new Date(s.getFullYear(), s.getMonth(), 1);
+        while (cur <= e) {
+          const start = new Date(cur);
+          const end = new Date(cur.getFullYear(), cur.getMonth() + 1, 0, 23, 59, 59, 999);
+          const label = cur.toLocaleString("en-US", { month: "short", year: "2-digit" });
+          buckets.push({
+            label,
+            date: start.toISOString(),
+            start,
+            end,
+          });
+          cur = new Date(cur.getFullYear(), cur.getMonth() + 1, 1);
+        }
+      }
+    } else {
+      // ALL preset: last 12 months trailing
+      const y = now.getFullYear();
+      const m = now.getMonth();
+      for (let i = 11; i >= 0; i--) {
+        const d = new Date(y, m - i, 1);
+        const start = new Date(d.getFullYear(), d.getMonth(), 1, 0, 0, 0, 0);
+        const end = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999);
+        const label = d.toLocaleString("en-US", { month: "short", year: "2-digit" });
+        buckets.push({
+          label,
+          date: start.toISOString(),
+          start,
+          end,
+        });
+      }
+    }
+
+    const validApprovedTimestamps = approvedTenants
+      .map((t) => new Date(t.approvedAt).getTime())
+      .filter((ts) => !isNaN(ts))
+      .sort((a, b) => a - b);
+
+    let cumulative = 0;
+    const firstBucketStart = buckets[0]?.start.getTime() || 0;
+    const priorCount = validApprovedTimestamps.filter((ts) => ts < firstBucketStart).length;
+    cumulative = priorCount;
+
+    return buckets.map((b) => {
+      const bStart = b.start.getTime();
+      const bEnd = b.end.getTime();
+      const count = validApprovedTimestamps.filter((ts) => ts >= bStart && ts <= bEnd).length;
+      cumulative += count;
+      return {
+        label: b.label,
+        date: b.date,
+        count,
+        cumulative,
+      };
+    });
+  }
+
+  /**
+   * Platform Analytics (Filtered by pharmacy approval date, subscription start date, and payment date)
    */
   static async getPlatformAnalytics(query?: { datePreset?: string; startDate?: string; endDate?: string }): Promise<PlatformAnalyticsResponse> {
     const dateRange = SuperAdminService.getDateRangeFilter(query?.datePreset, query?.startDate, query?.endDate);
 
-    const tenantFilter: any = { name: { not: "Platform HQ" } };
-    if (dateRange) {
-      tenantFilter.createdAt = dateRange;
-    }
+    // 1. New Pharmacies: Approved by Admin within date range (or all approved if ALL)
+    const approvedFilter: any = {
+      name: { not: "Platform HQ" },
+      ...(dateRange
+        ? { approvedAt: dateRange }
+        : {
+            OR: [
+              { approvedAt: { not: null } },
+              { verificationStatus: { in: ["APPROVED_PENDING_PAYMENT", "ACTIVE"] } },
+            ],
+          }),
+    };
 
-    const paymentFilter: any = { status: "VALIDATED", tenant: { name: { not: "Platform HQ" } } };
-    if (dateRange) {
-      paymentFilter.createdAt = dateRange;
-    }
+    // 2. New Subscriptions: Subscriptions started within date range
+    const subFilter: any = {
+      tenant: { name: { not: "Platform HQ" } },
+      ...(dateRange ? { startDate: dateRange } : {}),
+    };
 
-    const subFilter: any = { tenant: { name: { not: "Platform HQ" } } };
-    if (dateRange) {
-      subFilter.createdAt = dateRange;
-    }
+    // 3. Subscription Revenue: Payments validated within date range
+    const paymentFilter: any = {
+      status: "VALIDATED",
+      tenant: { name: { not: "Platform HQ" } },
+      ...(dateRange ? { createdAt: dateRange } : {}),
+    };
+
+    // General tenant filter for active/suspended counts
+    const tenantFilter: any = {
+      name: { not: "Platform HQ" },
+      ...(dateRange ? { createdAt: dateRange } : {}),
+    };
 
     const [
+      newPharmacies,
+      newSubscriptions,
+      paymentsInRange,
+      pendingReview,
+      allApprovedTenants,
+      subscriptionsInRange,
       totalTenants,
       activeTenants,
       suspendedTenants,
       totalSubscriptions,
       activeSubscriptions,
-      successfulPayments,
       activeSubsWithPlans,
       recentTenants,
     ] = await Promise.all([
+      (prisma as any).tenant.count({ where: approvedFilter }),
+      (prisma as any).subscription.count({ where: subFilter }),
+      (prisma as any).payment.findMany({
+        where: paymentFilter,
+        select: { amount: true, createdAt: true },
+      }),
+      // 4. Pending Review: Current live status, independent of date filter
+      (prisma as any).tenant.count({
+        where: { name: { not: "Platform HQ" }, verificationStatus: "PENDING_APPROVAL" },
+      }),
+      // For Pharmacy Growth Line Graph
+      (prisma as any).tenant.findMany({
+        where: {
+          name: { not: "Platform HQ" },
+          OR: [
+            { approvedAt: { not: null } },
+            { verificationStatus: { in: ["APPROVED_PENDING_PAYMENT", "ACTIVE"] } },
+          ],
+        },
+        select: { approvedAt: true, createdAt: true },
+      }),
+      // For Subscription by Plan Donut Chart
+      (prisma as any).subscription.findMany({
+        where: subFilter,
+        include: {
+          plan: { select: { tier: true, name: true } },
+          tenant: { select: { tier: true } },
+        },
+      }),
       (prisma as any).tenant.count({ where: tenantFilter }),
       (prisma as any).tenant.count({ where: { ...tenantFilter, isActive: true } }),
       (prisma as any).tenant.count({ where: { ...tenantFilter, isActive: false } }),
       (prisma as any).subscription.count({ where: subFilter }),
       (prisma as any).subscription.count({ where: { ...subFilter, status: "ACTIVE" } }),
-      (prisma as any).payment.findMany({
-        where: paymentFilter,
-        select: { amount: true, createdAt: true },
-      }),
       (prisma as any).subscription.findMany({
         where: { ...subFilter, status: "ACTIVE" },
         include: { plan: true, tenant: { select: { tier: true } } },
@@ -484,46 +697,98 @@ export class SuperAdminService {
       }),
     ]);
 
-    const totalPlatformRevenue = successfulPayments.reduce(
-      (sum: number, p: any) => sum + Number(p.amount),
+    // Calculate subscription revenue in range
+    const subscriptionRevenue = paymentsInRange.reduce(
+      (sum: number, p: any) => sum + Number(p.amount || 0),
       0
     );
 
-    // Calculate MRR from active subscriptions of client tenants
-    const monthlyRecurringRevenue = activeSubsWithPlans.reduce((sum: number, s: any) => {
-      const price = Number(s.plan?.price || 0);
-      const isYearly = s.plan?.billingCycle === "YEARLY" ||
-        ((new Date(s.endDate).getTime() - new Date(s.startDate).getTime()) > 45 * 24 * 60 * 60 * 1000);
-      return isYearly ? sum + (price / 12) : sum + price;
-    }, 0);
+    // Generate Pharmacy Growth time series
+    const mappedApproved = allApprovedTenants.map((t: any) => ({
+      approvedAt: t.approvedAt || t.createdAt,
+    }));
+    const pharmacyGrowth = SuperAdminService.generatePharmacyGrowthSeries(
+      query?.datePreset,
+      query?.startDate,
+      query?.endDate,
+      mappedApproved
+    );
 
-    // Plan distribution from active subscriptions
-    let trialCount = 0;
+    // Calculate Subscription by Plan distribution
     let starterCount = 0;
     let growthCount = 0;
     let enterpriseCount = 0;
 
-    for (const sub of activeSubsWithPlans) {
+    for (const sub of subscriptionsInRange) {
       const tier = sub.plan?.tier || sub.tenant?.tier;
-      if (tier === "TRIAL") trialCount++;
-      else if (tier === "STARTER") starterCount++;
+      if (tier === "STARTER") starterCount++;
       else if (tier === "GROWTH") growthCount++;
       else if (tier === "ENTERPRISE") enterpriseCount++;
     }
 
+    const subTotal = starterCount + growthCount + enterpriseCount;
+    const subscriptionByPlan: SubscriptionByPlanData = {
+      starter: starterCount,
+      growth: growthCount,
+      enterprise: enterpriseCount,
+      total: subTotal,
+      breakdown: [
+        {
+          tier: "STARTER",
+          name: "Starter",
+          count: starterCount,
+          percentage: subTotal > 0 ? Math.round((starterCount / subTotal) * 100) : 0,
+          color: "#3B82F6",
+        },
+        {
+          tier: "GROWTH",
+          name: "Growth",
+          count: growthCount,
+          percentage: subTotal > 0 ? Math.round((growthCount / subTotal) * 100) : 0,
+          color: "#10B981",
+        },
+        {
+          tier: "ENTERPRISE",
+          name: "Enterprise",
+          count: enterpriseCount,
+          percentage: subTotal > 0 ? Math.round((enterpriseCount / subTotal) * 100) : 0,
+          color: "#8B5CF6",
+        },
+      ],
+    };
+
+    // Calculate MRR from active subscriptions of client tenants (preserved)
+    const monthlyRecurringRevenue = activeSubsWithPlans.reduce((sum: number, s: any) => {
+      const price = Number(s.plan?.price || 0);
+      const isYearly =
+        s.plan?.billingCycle === "YEARLY" ||
+        new Date(s.endDate).getTime() - new Date(s.startDate).getTime() > 45 * 24 * 60 * 60 * 1000;
+      return isYearly ? sum + price / 12 : sum + price;
+    }, 0);
+
     return {
+      // 4 Target Stat Cards
+      newPharmacies,
+      newSubscriptions,
+      subscriptionRevenue: Math.round(subscriptionRevenue * 100) / 100,
+      pendingReview,
+
+      // 2 Target Charts
+      pharmacyGrowth,
+      subscriptionByPlan,
+
+      // Preserved for legacy & analytics tab compatibility
       totalTenants,
       activeTenants,
       suspendedTenants,
       tierBreakdown: {
-        trial: trialCount,
         starter: starterCount,
         growth: growthCount,
         enterprise: enterpriseCount,
       },
       totalSubscriptions,
       activeSubscriptions,
-      totalPlatformRevenue: Math.round(totalPlatformRevenue * 100) / 100,
+      totalPlatformRevenue: Math.round(subscriptionRevenue * 100) / 100,
       monthlyRecurringRevenue: Math.round(monthlyRecurringRevenue * 100) / 100,
       recentTenants: recentTenants.map((t: any) => ({
         id: t.id,
@@ -556,13 +821,14 @@ export class SuperAdminService {
       description: r.description,
       permissions: r.permissions || [],
       isSystem: r.isSystem,
+      isActive: r.isActive !== false,
       userCount: r._count?.users || 0,
       createdAt: r.createdAt,
       updatedAt: r.updatedAt,
     }));
   }
 
-  static async createRole(data: { name: string; description?: string; permissions?: string[] }) {
+  static async createRole(data: { name: string; description?: string; permissions?: string[]; isActive?: boolean }) {
     const nameTrimmed = data.name.trim();
     if (!nameTrimmed) {
       throw new Error("Role name is required");
@@ -589,20 +855,25 @@ export class SuperAdminService {
         description: data.description || null,
         permissions: data.permissions || [],
         isSystem: false,
+        isActive: data.isActive !== undefined ? data.isActive : true,
       },
     });
   }
 
-  static async updateRole(id: string, data: { name?: string; description?: string; permissions?: string[] }) {
+  static async updateRole(id: string, data: { name?: string; description?: string; permissions?: string[]; isActive?: boolean }) {
     const role = await (prisma as any).platformRole.findUnique({ where: { id } });
     if (!role) {
       throw new Error("Role not found");
     }
 
+    if (role.isSystem || role.name.toUpperCase() === "SUPER_ADMIN" || role.name.toUpperCase() === "SUPER ADMIN") {
+      throw new Error("Super Admin role is permanent and cannot be modified.");
+    }
+
     const updateData: any = {};
     if (data.name !== undefined) {
       const nameTrimmed = data.name.trim();
-      if (nameTrimmed.toUpperCase() === "SUPER_ADMIN") {
+      if (nameTrimmed.toUpperCase() === "SUPER_ADMIN" || nameTrimmed.toUpperCase() === "SUPER ADMIN") {
         throw new Error("Cannot rename role to Super Admin.");
       }
       updateData.name = nameTrimmed;
@@ -614,6 +885,10 @@ export class SuperAdminService {
 
     if (data.permissions !== undefined) {
       updateData.permissions = data.permissions;
+    }
+
+    if (data.isActive !== undefined) {
+      updateData.isActive = data.isActive;
     }
 
     return await (prisma as any).platformRole.update({
@@ -632,8 +907,8 @@ export class SuperAdminService {
       throw new Error("Role not found");
     }
 
-    if (role.isSystem) {
-      throw new Error("Protected system roles cannot be deleted.");
+    if (role.isSystem || role.name.toUpperCase() === "SUPER_ADMIN" || role.name.toUpperCase() === "SUPER ADMIN") {
+      throw new Error("Super Admin role is permanent and cannot be deleted.");
     }
 
     if (role._count?.users > 0) {
@@ -642,6 +917,23 @@ export class SuperAdminService {
 
     await (prisma as any).platformRole.delete({ where: { id } });
     return { success: true, message: `Role "${role.name}" removed successfully` };
+  }
+
+  static async batchUpdateRolePermissions(matrix: { roleId: string; permissions: string[] }[]) {
+    const updatedRoles = [];
+    for (const item of matrix) {
+      const role = await (prisma as any).platformRole.findUnique({
+        where: { id: item.roleId },
+      });
+      if (role && !role.isSystem && role.name.toUpperCase() !== "SUPER_ADMIN") {
+        const updated = await (prisma as any).platformRole.update({
+          where: { id: item.roleId },
+          data: { permissions: item.permissions },
+        });
+        updatedRoles.push(updated);
+      }
+    }
+    return updatedRoles;
   }
 
   /**
@@ -1055,7 +1347,9 @@ export class SuperAdminService {
     const limit = Math.max(1, Math.min(100, Number(query?.limit) || 20));
     const skip = (page - 1) * limit;
 
-    const where: any = {};
+    const where: any = {
+      name: { not: "Platform HQ" },
+    };
 
     if (query?.status && query.status !== "ALL") {
       where.verificationStatus = query.status;
@@ -1068,18 +1362,29 @@ export class SuperAdminService {
 
     if (query?.search) {
       const search = query.search.trim();
-      where.OR = [
-        { name: { contains: search, mode: "insensitive" } },
-        { email: { contains: search, mode: "insensitive" } },
-        { phone: { contains: search, mode: "insensitive" } },
-        { nidNumber: { contains: search, mode: "insensitive" } },
-        { tradeLicenseNumber: { contains: search, mode: "insensitive" } },
-        { drugLicenseNumber: { contains: search, mode: "insensitive" } },
-        { users: { some: { name: { contains: search, mode: "insensitive" }, role: "COMPANY_OWNER" } } },
+      where.AND = [
+        {
+          OR: [
+            { name: { contains: search, mode: "insensitive" } },
+            { email: { contains: search, mode: "insensitive" } },
+            { phone: { contains: search, mode: "insensitive" } },
+            { nidNumber: { contains: search, mode: "insensitive" } },
+            { tradeLicenseNumber: { contains: search, mode: "insensitive" } },
+            { drugLicenseNumber: { contains: search, mode: "insensitive" } },
+            { users: { some: { name: { contains: search, mode: "insensitive" }, role: "COMPANY_OWNER" } } },
+          ],
+        },
       ];
     }
 
-    const [tenants, total, pendingCount, approvedCount, rejectedCount, activeCount] = await Promise.all([
+    const baseMetricWhere: any = {
+      name: { not: "Platform HQ" },
+    };
+    if (dateRange) {
+      baseMetricWhere.createdAt = dateRange;
+    }
+
+    const [tenants, total, pendingCount, approvedCount, rejectedCount, activeCount, totalMetricsCount] = await Promise.all([
       (prisma as any).tenant.findMany({
         where,
         skip,
@@ -1099,10 +1404,11 @@ export class SuperAdminService {
         },
       }),
       (prisma as any).tenant.count({ where }),
-      (prisma as any).tenant.count({ where: { verificationStatus: "PENDING_APPROVAL" } }),
-      (prisma as any).tenant.count({ where: { verificationStatus: "APPROVED_PENDING_PAYMENT" } }),
-      (prisma as any).tenant.count({ where: { verificationStatus: "REJECTED" } }),
-      (prisma as any).tenant.count({ where: { verificationStatus: "ACTIVE" } }),
+      (prisma as any).tenant.count({ where: { ...baseMetricWhere, verificationStatus: "PENDING_APPROVAL" } }),
+      (prisma as any).tenant.count({ where: { ...baseMetricWhere, verificationStatus: "APPROVED_PENDING_PAYMENT" } }),
+      (prisma as any).tenant.count({ where: { ...baseMetricWhere, verificationStatus: "REJECTED" } }),
+      (prisma as any).tenant.count({ where: { ...baseMetricWhere, verificationStatus: "ACTIVE" } }),
+      (prisma as any).tenant.count({ where: baseMetricWhere }),
     ]);
 
     const formatted = tenants.map((t: any) => {
@@ -1147,7 +1453,7 @@ export class SuperAdminService {
     return {
       data: formatted,
       metrics: {
-        total,
+        total: totalMetricsCount,
         pendingReview: pendingCount,
         approved: approvedCount,
         rejected: rejectedCount,

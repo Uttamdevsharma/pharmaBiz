@@ -188,7 +188,7 @@ export function ProductsModule({ subAction }: ProductsModuleProps = {}) {
 
   const handleOpenCreate = () => {
     setEditingProduct(null);
-    const defaultCat = categories.find((c) => c.name === "Medicine") || categories[0];
+    const defaultCat = categories[0];
     const defaultBrand = brands[0];
 
     setFormData({

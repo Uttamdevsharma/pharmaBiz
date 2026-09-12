@@ -13,7 +13,8 @@ import { ProfileModule } from "@/components/dashboard/ProfileModule";
 import { BranchModule } from "@/components/dashboard/BranchModule";
 import { StaffModule } from "@/components/dashboard/StaffModule";
 import { CreateStaffTab } from "@/components/dashboard/CreateStaffTab";
-import { RolesModule } from "@/components/dashboard/RolesModule";
+import { CreateRoleView } from "@/components/dashboard/CreateRoleView";
+import { PermissionAssignmentView } from "@/components/dashboard/PermissionAssignmentView";
 import { PosModule } from "@/components/dashboard/PosModule";
 import { ReportsModule } from "@/components/dashboard/ReportsModule";
 import { SubscriptionModule } from "@/components/dashboard/SubscriptionModule";
@@ -98,6 +99,7 @@ export default function RoleBasedDashboard() {
   const { user, isAuthenticated, isSuperAdmin, isPlatformStaff, hasPermission, loading: authLoading } = useAuth();
 
   const [activeModule, setActiveModule] = useState<OwnerModule>(getDefaultModuleForRole(user?.role));
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [preselectedBatchId, setPreselectedBatchId] = useState<string>("");
   const [preselectedProductId, setPreselectedProductId] = useState<string>("");
@@ -356,14 +358,18 @@ export default function RoleBasedDashboard() {
         trialDaysRemaining={isTrial ? trialDaysRemaining : undefined}
         isTrial={isTrial}
         onNavigate={setActiveModule}
+        onToggleMobileSidebar={() => setMobileSidebarOpen(!mobileSidebarOpen)}
+        isMobileSidebarOpen={mobileSidebarOpen}
       />
 
       {/* Main Workspace Layout */}
-      <div className="flex-1 flex overflow-hidden min-h-0">
+      <div className="flex-1 flex overflow-hidden min-h-0 relative">
         {/* Role-Aware Sidebar */}
         <DashboardSidebar
           activeModule={activeModule}
           userRole={user?.role}
+          mobileOpen={mobileSidebarOpen}
+          onCloseMobile={() => setMobileSidebarOpen(false)}
           onModuleChange={(mod) => {
             if (mod !== "inv_add_product") {
               setEditingProduct(null);
@@ -376,7 +382,7 @@ export default function RoleBasedDashboard() {
         />
 
         {/* Content Area */}
-        <main className="flex-1 h-full min-h-0 p-4 sm:p-6 lg:p-8 2xl:p-10 content-scrollbar w-full min-w-0">
+        <main className="flex-1 h-full min-h-0 p-3 sm:p-5 lg:p-6 xl:p-8 2xl:p-10 content-scrollbar w-full min-w-0">
           {renderModuleContent()}
         </main>
       </div>
@@ -828,11 +834,18 @@ export default function RoleBasedDashboard() {
         }
         return <CreateStaffTab onNavigate={setActiveModule} />;
 
+      case "create_role":
       case "roles":
         if (!isOwner && !hasPermission("roles.manage")) {
-          return <TenantAccessRestricted moduleName="Roles & Permissions" requiredPerm="roles.manage" />;
+          return <TenantAccessRestricted moduleName="Create Role" requiredPerm="roles.manage" />;
         }
-        return <RolesModule />;
+        return <CreateRoleView />;
+
+      case "permission_assignment":
+        if (!isOwner && !hasPermission("roles.manage")) {
+          return <TenantAccessRestricted moduleName="Permission Assignment" requiredPerm="roles.manage" />;
+        }
+        return <PermissionAssignmentView />;
 
       case "reports":
         if (!isOwner && !hasPermission("accounts.reports")) {

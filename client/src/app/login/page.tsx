@@ -99,7 +99,7 @@ function LoginFormContent() {
         }`}
       >
         {/* LEFT COLUMN: COMPLETELY STABLE LOGIN FORM */}
-        <div className="lg:col-span-6 p-8 sm:p-12 lg:p-14 flex flex-col justify-between z-10 bg-white dark:bg-slate-900">
+        <div className="lg:col-span-6 p-5 sm:p-8 md:p-12 lg:p-14 flex flex-col justify-between z-10 bg-white dark:bg-slate-900">
           <div>
             {/* 1. Login Heading */}
             <h1 className="text-2xl sm:text-3xl font-black text-[#1E2A5A] dark:text-white tracking-tight">
@@ -222,38 +222,40 @@ function LoginFormContent() {
 
           {/* Quick Demo Credentials Footer Helper */}
           <div className="mt-8 pt-6 border-t border-slate-100 dark:border-slate-800/80">
-            <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
+            <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2.5">
               <Shield className="h-3 w-3 text-indigo-500" />
               <span>Quick Login Credentials</span>
             </div>
             <div className="flex flex-wrap gap-1.5">
-              <button
-                type="button"
-                onClick={() => setDemoCredentials("admin@gmail.com", "admin1234")}
-                className="px-2.5 py-1 rounded-xl text-[11px] font-bold bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 transition"
-              >
-                Super Admin
-              </button>
-              <button
-                type="button"
-                onClick={() => setDemoCredentials("owner@gmail.com", "owner1234")}
-                className="px-2.5 py-1 rounded-xl text-[11px] font-bold bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 transition"
-              >
-                Pharmacy Owner
-              </button>
-              <button
-                type="button"
-                onClick={() => setDemoCredentials("cashier@gmail.com", "cashier1234")}
-                className="px-2.5 py-1 rounded-xl text-[11px] font-bold bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 transition"
-              >
-                Cashier
-              </button>
+              {[
+                { label: "Super Admin", email: "admin@gmail.com", pass: "admin1234" },
+                { label: "Pharmacy Owner", email: "uttam23412@gmail.com", pass: "uttam1234" },
+                { label: "Branch Manager", email: "akash@gmail.com", pass: "akash1234" },
+                { label: "Cashier", email: "reday@gmail.com", pass: "reday1234" },
+                { label: "Inventory Manager", email: "alif@gmail.com", pass: "alif1234" },
+              ].map((acc) => {
+                const isActive = identifier === acc.email;
+                return (
+                  <button
+                    key={acc.label}
+                    type="button"
+                    onClick={() => setDemoCredentials(acc.email, acc.pass)}
+                    className={`px-2.5 py-1 rounded-xl text-[11px] font-bold transition ${
+                      isActive
+                        ? "bg-indigo-600 text-white shadow-xs"
+                        : "bg-slate-100 text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                    }`}
+                  >
+                    {acc.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
 
         {/* RIGHT COLUMN: PHARMACY ILLUSTRATION WITH ORGANIC WAVE SEPARATION */}
-        <div className="lg:col-span-6 bg-[#EDF3FD] dark:bg-slate-800/40 relative flex items-center justify-center p-6 sm:p-10 overflow-hidden min-h-[320px] lg:min-h-full">
+        <div className="hidden md:flex lg:col-span-6 bg-[#EDF3FD] dark:bg-slate-800/40 relative items-center justify-center p-6 sm:p-10 overflow-hidden min-h-[320px] lg:min-h-full">
           {/* S-Curve Wave Separator on Large Screens */}
           <div className="absolute inset-y-0 left-0 w-20 hidden lg:block pointer-events-none z-10">
             <svg

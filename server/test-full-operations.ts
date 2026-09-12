@@ -42,9 +42,16 @@ async function runTest() {
   console.log("✔ Created user:", user.name);
 
   // 2. Test Dynamic Categories & Units
-  const mainCategories = await ProductService.listCategories(tenant.id);
-  const medicineMainCat = mainCategories.find((c: any) => c.name === "Medicine") || mainCategories[0];
-  console.log("✔ Seeded/Found main categories count:", mainCategories.length, "(Primary:", medicineMainCat.name, ")");
+  let mainCategories = await ProductService.listCategories(tenant.id);
+  let medicineMainCat = mainCategories[0];
+  if (!medicineMainCat) {
+    medicineMainCat = await ProductService.createCategory(tenant.id, user.id, {
+      name: "Medicine",
+      description: "Pharmaceutical drugs and medications",
+    });
+    mainCategories = [medicineMainCat];
+  }
+  console.log("✔ Main categories count:", mainCategories.length, "(Primary:", medicineMainCat.name, ")");
 
   const subcategory = await ProductService.createCategory(tenant.id, user.id, {
     name: `Antibiotics-${Date.now().toString().slice(-4)}`,

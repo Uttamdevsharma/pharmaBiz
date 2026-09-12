@@ -90,6 +90,18 @@ export class UserController {
     }
   }
 
+  static async batchUpdateRolePermissions(req: Request, res: Response): Promise<void> {
+    try {
+      const tenantId = req.user!.tenantId;
+      const userId = req.user!.id;
+      const { matrix } = req.body;
+      const updated = await UserService.batchUpdateRolePermissions(tenantId, userId, matrix);
+      res.status(200).json({ success: true, message: "Permission matrix updated successfully", data: updated });
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  }
+
   /**
    * ==================== PHARMACY STAFF CONTROLLERS ====================
    */

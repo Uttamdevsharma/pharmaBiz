@@ -37,6 +37,7 @@ exports.registerOwnerSchema = zod_1.z.object({
 });
 exports.verifyOtpSchema = zod_1.z.object({
     email: zod_1.z.string().email("Invalid email address"),
+    tenantId: zod_1.z.string().optional(),
     otpCode: zod_1.z.string().min(4, "OTP code must be at least 4-6 digits"),
 });
 exports.resendOtpSchema = zod_1.z.object({

@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { fetchApi } from "@/lib/api";
+import { Pagination } from "@/components/common/Pagination";
 import {
   Package,
   Search,
@@ -39,7 +40,7 @@ export function ProductWiseSalesView({ onNavigate: _onNavigate, selectedBranchId
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 25;
+  const itemsPerPage = 10;
 
   const loadProductSales = async (isManualRefresh = false) => {
     try {
@@ -357,34 +358,13 @@ export function ProductWiseSalesView({ onNavigate: _onNavigate, selectedBranchId
             </div>
 
             {/* Pagination */}
-            {totalPages > 1 && (
-              <div className="flex items-center justify-between pt-3 text-xs text-slate-500">
-                <div>
-                  Showing {(currentPage - 1) * itemsPerPage + 1} to{" "}
-                  {Math.min(currentPage * itemsPerPage, filteredProducts.length)} of {filteredProducts.length} items
-                </div>
-
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                    disabled={currentPage === 1}
-                    className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 disabled:opacity-40 hover:bg-slate-200"
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </button>
-                  <span className="px-3 font-bold">
-                    {currentPage} / {totalPages}
-                  </span>
-                  <button
-                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                    disabled={currentPage === totalPages}
-                    className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 disabled:opacity-40 hover:bg-slate-200"
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-            )}
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalItems={filteredProducts.length}
+              pageSize={itemsPerPage}
+              onPageChange={setCurrentPage}
+            />
           </div>
         </>
       )}

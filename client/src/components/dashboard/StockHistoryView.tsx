@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import { fetchApi } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { useBranchContext } from "@/context/BranchContext";
+import { Pagination } from "@/components/common/Pagination";
 import {
   History,
   Search,
@@ -40,6 +41,9 @@ export function StockHistoryView({ selectedBranchId: propBranchId }: StockHistor
   const [datePreset, setDatePreset] = useState<DatePreset>("THIS_MONTH");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
 
   // Helper to format date range for API requests
   const getComputedDateRange = () => {
@@ -81,7 +85,8 @@ export function StockHistoryView({ selectedBranchId: propBranchId }: StockHistor
     try {
       setLoading(true);
       const params = new URLSearchParams();
-      params.append("limit", "100");
+      params.append("page", page.toString());
+      params.append("limit", "10");
       if (effectiveBranchId && effectiveBranchId !== "all") {
         params.append("branchId", effectiveBranchId);
       }
@@ -93,12 +98,27 @@ export function StockHistoryView({ selectedBranchId: propBranchId }: StockHistor
 
       const res = await fetchApi(`/inventory/receiving-history?${params.toString()}`);
       if (res.success && res.data) {
-        setRecords(Array.isArray(res.data) ? res.data : res.data.data || []);
+        const recList = Array.isArray(res.data) ? res.data : res.data.data || [];
+        setRecords(recList);
+        const pag = (res as any).pagination || res.meta;
+        if (pag) {
+          setTotalPages(pag.totalPages || 1);
+          setTotalCount(pag.total || recList.length || 0);
+        } else {
+          setTotalPages(Math.ceil(recList.length / 10) || 1);
+          setTotalCount(recList.length);
+        }
       } else {
         // Fallback to movements with type=PURCHASE
         const fallbackRes = await fetchApi(`/inventory/movements?type=PURCHASE&${params.toString()}`);
         if (fallbackRes.success && fallbackRes.data) {
-          setRecords(Array.isArray(fallbackRes.data) ? fallbackRes.data : fallbackRes.data.data || []);
+          const recList = Array.isArray(fallbackRes.data) ? fallbackRes.data : fallbackRes.data.data || [];
+          setRecords(recList);
+          const pag = (fallbackRes as any).pagination || fallbackRes.meta;
+          if (pag) {
+            setTotalPages(pag.totalPages || 1);
+            setTotalCount(pag.total || recList.length || 0);
+          }
         }
       }
     } catch (err) {
@@ -110,10 +130,11 @@ export function StockHistoryView({ selectedBranchId: propBranchId }: StockHistor
 
   useEffect(() => {
     loadReceivingHistory();
-  }, [effectiveBranchId, datePreset, startDate, endDate]);
+  }, [page, effectiveBranchId, datePreset, startDate, endDate]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setPage(1);
     loadReceivingHistory();
   };
 
@@ -394,6 +415,14 @@ export function StockHistoryView({ selectedBranchId: propBranchId }: StockHistor
             </table>
           </div>
         )}
+
+        <Pagination
+          currentPage={page}
+          totalPages={totalPages}
+          totalItems={totalCount}
+          pageSize={10}
+          onPageChange={setPage}
+        />
       </div>
     </div>
   );

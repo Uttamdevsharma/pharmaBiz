@@ -9,6 +9,8 @@ import {
   Users,
   UserPlus,
   Shield,
+  ShieldPlus,
+  CheckSquare,
   KeyRound,
   Package,
   ShoppingCart,
@@ -43,6 +45,7 @@ import {
   Layers,
   MapPin,
   Pill,
+  X,
 } from "lucide-react";
 
 export type OwnerModule =
@@ -98,6 +101,8 @@ export type OwnerModule =
   | "branches"
   | "staff"
   | "staff_create"
+  | "create_role"
+  | "permission_assignment"
   | "roles"
   | "reports"
   | "profile"
@@ -125,14 +130,25 @@ interface DashboardSidebarProps {
   activeModule: OwnerModule;
   userRole?: string;
   onModuleChange: (module: OwnerModule) => void;
+  mobileOpen?: boolean;
+  onCloseMobile?: () => void;
 }
 
 export function DashboardSidebar({
   activeModule,
   userRole = "COMPANY_OWNER",
   onModuleChange,
+  mobileOpen = false,
+  onCloseMobile,
 }: DashboardSidebarProps) {
   const { user, hasPermission } = useAuth();
+
+  const handleModuleSelect = (mod: OwnerModule) => {
+    onModuleChange(mod);
+    if (onCloseMobile) {
+      onCloseMobile();
+    }
+  };
 
   const isOwner = user?.role === "COMPANY_OWNER" || userRole === "COMPANY_OWNER" || user?.role === "SUPER_ADMIN";
 
@@ -146,6 +162,8 @@ export function DashboardSidebar({
   const isStaffActive =
     activeModule === "staff" ||
     activeModule === "staff_create" ||
+    activeModule === "create_role" ||
+    activeModule === "permission_assignment" ||
     activeModule === "roles";
 
   const isSalesPosActive =
@@ -200,6 +218,7 @@ export function DashboardSidebar({
 
   const [openSubgroups, setOpenSubgroups] = useState<Record<string, boolean>>({
     allocate_product_group: true,
+    role_management_group: false,
   });
 
   const toggleSubgroup = (subgroupId: string) => {
@@ -247,6 +266,9 @@ export function DashboardSidebar({
 
     if (activeModule === "stock_stock_allocation" || activeModule === "stock_allocation_history") {
       setOpenSubgroups((prev) => ({ ...prev, allocate_product_group: true }));
+    }
+    if (activeModule === "create_role" || activeModule === "permission_assignment" || activeModule === "roles") {
+      setOpenSubgroups((prev) => ({ ...prev, role_management_group: true }));
     }
   }, [
     activeModule,
@@ -430,14 +452,8 @@ export function DashboardSidebar({
     },
   ].filter((item) => item.visible);
 
-  // 7. Staff Management Section (Staff List, Create Staff, Roles & Permissions)
+  // 7. Staff Management Section (Create Staff, Staff List, Role Management -> Create Role, Permission Assignment)
   const staffChildren: SubMenuItem[] = [
-    {
-      id: "staff" as OwnerModule,
-      label: "Staff List",
-      icon: Users,
-      visible: isOwner || hasPermission("staff.view"),
-    },
     {
       id: "staff_create" as OwnerModule,
       label: "Create Staff",
@@ -445,10 +461,30 @@ export function DashboardSidebar({
       visible: isOwner || hasPermission("staff.create"),
     },
     {
-      id: "roles" as OwnerModule,
-      label: "Roles & Permissions",
+      id: "staff" as OwnerModule,
+      label: "Staff List",
+      icon: Users,
+      visible: isOwner || hasPermission("staff.view"),
+    },
+    {
+      id: "role_management_group",
+      label: "Role Management",
       icon: KeyRound,
       visible: isOwner || hasPermission("roles.manage"),
+      children: [
+        {
+          id: "create_role" as OwnerModule,
+          label: "Create Role",
+          icon: ShieldPlus,
+          visible: isOwner || hasPermission("roles.manage"),
+        },
+        {
+          id: "permission_assignment" as OwnerModule,
+          label: "Permission Assignment",
+          icon: CheckSquare,
+          visible: isOwner || hasPermission("roles.manage"),
+        },
+      ].filter((c) => c.visible),
     },
   ].filter((item) => item.visible);
 
@@ -689,198 +725,231 @@ export function DashboardSidebar({
   const visibleCollapsible = collapsibleSections.filter((sec) => sec.visible);
 
   return (
-    <aside className="w-64 xl:w-72 2xl:w-80 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col shrink-0 h-full max-h-full min-h-0 overflow-hidden transition-all duration-200">
-      <div className="p-3.5 xl:p-4 2xl:p-5 space-y-4 xl:space-y-5 2xl:space-y-6 flex-1 sidebar-scrollbar">
-        {/* Core Overview & Dashboard */}
-        {visibleCore.length > 0 && (
-          <div className="space-y-1 xl:space-y-1.5">
-            <div className="px-3 xl:px-3.5 2xl:px-4 text-[10px] xl:text-[11px] 2xl:text-xs font-black uppercase tracking-wider text-slate-400">
-              Overview
-            </div>
-            {visibleCore.map((item) => {
-              const Icon = item.icon;
-              const isActive = activeModule === item.id;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => onModuleChange(item.id)}
-                  className={`w-full flex items-center gap-2.5 xl:gap-3 px-3 py-2 xl:px-3.5 xl:py-2.5 2xl:px-4 2xl:py-3 rounded-xl xl:rounded-2xl text-xs xl:text-sm 2xl:text-base font-bold transition-all ${
-                    isActive
-                      ? "bg-brand-primary text-white shadow-sm"
-                      : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white"
-                  }`}
-                >
-                  <Icon className="h-4 w-4 xl:h-4.5 xl:w-4.5 2xl:h-5 2xl:w-5 shrink-0" />
-                  <span className="truncate">{item.label}</span>
-                </button>
-              );
-            })}
+    <>
+      {/* Mobile Backdrop Overlay */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-50 lg:hidden transition-opacity duration-200"
+          onClick={onCloseMobile}
+          aria-hidden="true"
+        />
+      )}
+
+      {/* Sidebar / Mobile Drawer */}
+      <aside
+        className={`bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col shrink-0 h-full max-h-full min-h-0 overflow-hidden transition-all duration-300 z-50 lg:z-auto ${
+          mobileOpen
+            ? "fixed inset-y-0 left-0 w-72 sm:w-80 shadow-2xl animate-in slide-in-from-left duration-200"
+            : "hidden lg:flex lg:w-64 xl:w-72 2xl:w-80"
+        }`}
+      >
+        {/* Mobile Drawer Header */}
+        <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between lg:hidden shrink-0">
+          <div className="flex items-center gap-2 font-bold text-sm text-slate-900 dark:text-white">
+            <LayoutDashboard className="h-5 w-5 text-brand-primary" />
+            <span>Navigation Menu</span>
           </div>
-        )}
+          <button
+            type="button"
+            onClick={onCloseMobile}
+            className="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition cursor-pointer"
+            aria-label="Close navigation"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
 
-        {/* Collapsible Domain Sections */}
-        {visibleCollapsible.length > 0 && (
-          <div className="space-y-2 xl:space-y-2.5">
-            <div className="px-3 xl:px-3.5 2xl:px-4 text-[10px] xl:text-[11px] 2xl:text-xs font-black uppercase tracking-wider text-slate-400">
-              Pharmacy Operations
-            </div>
-
-            {visibleCollapsible.map((section) => {
-              const ParentIcon = section.icon;
-              const isParentActive =
-                section.children.some(
-                  (child) =>
-                    activeModule === child.id ||
-                    Boolean(child.children?.some((gc) => gc.id === activeModule))
-                ) ||
-                Boolean(section.moduleId && activeModule === section.moduleId);
-              const isOpen = openParents[section.id] ?? isParentActive;
-
-              return (
-                <div key={section.id} className="rounded-xl xl:rounded-2xl overflow-hidden">
+        <div className="p-3.5 xl:p-4 2xl:p-5 space-y-4 xl:space-y-5 2xl:space-y-6 flex-1 sidebar-scrollbar">
+          {/* Core Overview & Dashboard */}
+          {visibleCore.length > 0 && (
+            <div className="space-y-1 xl:space-y-1.5">
+              <div className="px-3 xl:px-3.5 2xl:px-4 text-[10px] xl:text-[11px] 2xl:text-xs font-black uppercase tracking-wider text-slate-400">
+                Overview
+              </div>
+              {visibleCore.map((item) => {
+                const Icon = item.icon;
+                const isActive = activeModule === item.id;
+                return (
                   <button
-                    onClick={() => {
-                      if (section.moduleId) {
-                        onModuleChange(section.moduleId);
-                      }
-                      toggleParent(section.id);
-                    }}
-                    className={`w-full flex items-center justify-between px-3 py-2 xl:px-3.5 xl:py-2.5 2xl:px-4 2xl:py-3 rounded-xl xl:rounded-2xl text-xs xl:text-sm 2xl:text-base font-black transition-all ${
-                      isParentActive && !isOpen
-                        ? "bg-brand-primary/10 text-brand-primary dark:bg-brand-primary/20"
-                        : isParentActive && isOpen
-                        ? "bg-slate-100 dark:bg-slate-800/60 text-slate-900 dark:text-white"
-                        : "text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/50"
+                    key={item.id}
+                    onClick={() => handleModuleSelect(item.id)}
+                    className={`w-full flex items-center gap-2.5 xl:gap-3 px-3 py-2 xl:px-3.5 xl:py-2.5 2xl:px-4 2xl:py-3 rounded-xl xl:rounded-2xl text-xs xl:text-sm 2xl:text-base font-bold transition-all ${
+                      isActive
+                        ? "bg-brand-primary text-white shadow-sm"
+                        : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white"
                     }`}
                   >
-                    <div className="flex items-center gap-2.5 xl:gap-3">
-                      <ParentIcon
-                        className={`h-4 w-4 xl:h-4.5 xl:w-4.5 2xl:h-5 2xl:w-5 shrink-0 ${
-                          isParentActive ? "text-brand-primary" : "text-slate-500 dark:text-slate-400"
-                        }`}
-                      />
-                      <span className="truncate">{section.label}</span>
-                    </div>
-                    {isOpen ? (
-                      <ChevronDown className="h-3.5 w-3.5 xl:h-4 xl:w-4 text-slate-400" />
-                    ) : (
-                      <ChevronRight className="h-3.5 w-3.5 xl:h-4 xl:w-4 text-slate-400" />
-                    )}
+                    <Icon className="h-4 w-4 xl:h-4.5 xl:w-4.5 2xl:h-5 2xl:w-5 shrink-0" />
+                    <span className="truncate">{item.label}</span>
                   </button>
-
-                  {/* Sub-items */}
-                  {isOpen && (
-                    <div className="pl-3 xl:pl-4 pr-1 py-1 space-y-0.5 border-l-2 border-slate-100 dark:border-slate-800 ml-3.5 xl:ml-4 mt-1">
-                      {section.children.map((child) => {
-                        const ChildIcon = child.icon;
-
-                        // Check if item is a subgroup with nested children (e.g. Allocate Product)
-                        if (child.children && child.children.length > 0) {
-                          const isSubgroupOpen = openSubgroups[child.id] ?? true;
-                          const hasActiveGrandchild = child.children.some(
-                            (gc) => gc.id === activeModule
-                          );
-                          return (
-                            <div key={child.id} className="space-y-0.5 pt-0.5">
-                              <button
-                                onClick={() => toggleSubgroup(child.id)}
-                                className={`w-full flex items-center justify-between px-2.5 py-1.5 xl:px-3 xl:py-2 2xl:px-3.5 2xl:py-2.5 rounded-lg xl:rounded-xl text-[11px] xl:text-xs 2xl:text-sm font-bold transition-all ${
-                                  hasActiveGrandchild
-                                    ? "text-brand-primary bg-slate-100/70 dark:bg-slate-800/80 font-black"
-                                    : "text-slate-600 dark:text-slate-400 hover:bg-slate-100/50 dark:hover:bg-slate-800/40 hover:text-slate-900 dark:hover:text-white"
-                                }`}
-                              >
-                                <div className="flex items-center gap-2 xl:gap-2.5 truncate">
-                                  <ChildIcon className="h-3.5 w-3.5 xl:h-4 xl:w-4 shrink-0" />
-                                  <span className="truncate">{child.label}</span>
-                                </div>
-                                {isSubgroupOpen ? (
-                                  <ChevronDown className="h-3.5 w-3.5 xl:h-4 xl:w-4 shrink-0 opacity-70" />
-                                ) : (
-                                  <ChevronRight className="h-3.5 w-3.5 xl:h-4 xl:w-4 shrink-0 opacity-70" />
-                                )}
-                              </button>
-
-                              {isSubgroupOpen && (
-                                <div className="pl-2.5 py-0.5 space-y-0.5 border-l-2 border-slate-200 dark:border-slate-700 ml-3.5 my-0.5">
-                                  {child.children.map((grandchild) => {
-                                    const GrandIcon = grandchild.icon;
-                                    const isGrandActive = activeModule === grandchild.id;
-                                    return (
-                                      <button
-                                        key={grandchild.id}
-                                        onClick={() =>
-                                          onModuleChange(grandchild.id as OwnerModule)
-                                        }
-                                        className={`w-full flex items-center gap-2 xl:gap-2.5 px-2.5 py-1.5 xl:px-3 xl:py-2 2xl:px-3.5 2xl:py-2.5 rounded-lg xl:rounded-xl text-[11px] xl:text-xs 2xl:text-sm font-bold transition-all ${
-                                          isGrandActive
-                                            ? "bg-brand-primary text-white shadow-xs"
-                                            : "text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white"
-                                        }`}
-                                      >
-                                        <GrandIcon className="h-3.5 w-3.5 xl:h-4 xl:w-4 shrink-0" />
-                                        <span className="truncate">{grandchild.label}</span>
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        }
-
-                        const isChildActive = activeModule === child.id;
-                        return (
-                          <button
-                            key={child.id}
-                            onClick={() => onModuleChange(child.id as OwnerModule)}
-                            className={`w-full flex items-center gap-2 xl:gap-2.5 px-2.5 py-1.5 xl:px-3 xl:py-2 2xl:px-3.5 2xl:py-2.5 rounded-lg xl:rounded-xl text-[11px] xl:text-xs 2xl:text-sm font-bold transition-all ${
-                              isChildActive
-                                ? "bg-brand-primary text-white shadow-xs"
-                                : "text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white"
-                            }`}
-                          >
-                            <ChildIcon className="h-3.5 w-3.5 xl:h-4 xl:w-4 shrink-0" />
-                            <span className="truncate">{child.label}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-
-        {/* Pharmacy Owner Settings & Analytics */}
-        {visibleEnterprise.length > 0 && (
-          <div className="space-y-1 xl:space-y-1.5">
-            <div className="px-3 xl:px-3.5 2xl:px-4 text-[10px] xl:text-[11px] 2xl:text-xs font-black uppercase tracking-wider text-slate-400">
-              System Settings
+                );
+              })}
             </div>
-            {visibleEnterprise.map((item) => {
-              const Icon = item.icon;
-              const isActive = activeModule === item.id;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => onModuleChange(item.id)}
-                  className={`w-full flex items-center gap-2.5 xl:gap-3 px-3 py-2 xl:px-3.5 xl:py-2.5 2xl:px-4 2xl:py-3 rounded-xl xl:rounded-2xl text-xs xl:text-sm 2xl:text-base font-bold transition-all ${
-                    isActive
-                      ? "bg-brand-primary text-white shadow-sm"
-                      : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white"
-                  }`}
-                >
-                  <Icon className="h-4 w-4 xl:h-4.5 xl:w-4.5 2xl:h-5 2xl:w-5 shrink-0" />
-                  <span className="truncate">{item.label}</span>
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    </aside>
+          )}
+
+          {/* Collapsible Domain Sections */}
+          {visibleCollapsible.length > 0 && (
+            <div className="space-y-2 xl:space-y-2.5">
+              <div className="px-3 xl:px-3.5 2xl:px-4 text-[10px] xl:text-[11px] 2xl:text-xs font-black uppercase tracking-wider text-slate-400">
+                Pharmacy Operations
+              </div>
+
+              {visibleCollapsible.map((section) => {
+                const ParentIcon = section.icon;
+                const isParentActive =
+                  section.children.some(
+                    (child) =>
+                      activeModule === child.id ||
+                      Boolean(child.children?.some((gc) => gc.id === activeModule))
+                  ) ||
+                  Boolean(section.moduleId && activeModule === section.moduleId);
+                const isOpen = openParents[section.id] ?? isParentActive;
+
+                return (
+                  <div key={section.id} className="rounded-xl xl:rounded-2xl overflow-hidden">
+                    <button
+                      onClick={() => {
+                        if (section.moduleId) {
+                          handleModuleSelect(section.moduleId);
+                        }
+                        toggleParent(section.id);
+                      }}
+                      className={`w-full flex items-center justify-between px-3 py-2 xl:px-3.5 xl:py-2.5 2xl:px-4 2xl:py-3 rounded-xl xl:rounded-2xl text-xs xl:text-sm 2xl:text-base font-black transition-all ${
+                        isParentActive && !isOpen
+                          ? "bg-brand-primary/10 text-brand-primary dark:bg-brand-primary/20"
+                          : isParentActive && isOpen
+                          ? "bg-slate-100 dark:bg-slate-800/60 text-slate-900 dark:text-white"
+                          : "text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/50"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 xl:gap-3">
+                        <ParentIcon
+                          className={`h-4 w-4 xl:h-4.5 xl:w-4.5 2xl:h-5 2xl:w-5 shrink-0 ${
+                            isParentActive ? "text-brand-primary" : "text-slate-500 dark:text-slate-400"
+                          }`}
+                        />
+                        <span className="truncate">{section.label}</span>
+                      </div>
+                      {isOpen ? (
+                        <ChevronDown className="h-3.5 w-3.5 xl:h-4 xl:w-4 text-slate-400" />
+                      ) : (
+                        <ChevronRight className="h-3.5 w-3.5 xl:h-4 xl:w-4 text-slate-400" />
+                      )}
+                    </button>
+
+                    {/* Sub-items */}
+                    {isOpen && (
+                      <div className="pl-3 xl:pl-4 pr-1 py-1 space-y-0.5 border-l-2 border-slate-100 dark:border-slate-800 ml-3.5 xl:ml-4 mt-1">
+                        {section.children.map((child) => {
+                          const ChildIcon = child.icon;
+
+                          // Check if item is a subgroup with nested children (e.g. Allocate Product)
+                          if (child.children && child.children.length > 0) {
+                            const isSubgroupOpen = openSubgroups[child.id] ?? false;
+                            const hasActiveGrandchild = child.children.some(
+                              (gc) => gc.id === activeModule
+                            );
+                            return (
+                              <div key={child.id} className="space-y-0.5 pt-0.5">
+                                <button
+                                  onClick={() => toggleSubgroup(child.id)}
+                                  className={`w-full flex items-center justify-between px-2.5 py-1.5 xl:px-3 xl:py-2 2xl:px-3.5 2xl:py-2.5 rounded-lg xl:rounded-xl text-[11px] xl:text-xs 2xl:text-sm font-bold transition-all ${
+                                    hasActiveGrandchild
+                                      ? "text-brand-primary bg-slate-100/70 dark:bg-slate-800/80 font-black"
+                                      : "text-slate-600 dark:text-slate-400 hover:bg-slate-100/50 dark:hover:bg-slate-800/40 hover:text-slate-900 dark:hover:text-white"
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2 xl:gap-2.5 truncate">
+                                    <ChildIcon className="h-3.5 w-3.5 xl:h-4 xl:w-4 shrink-0" />
+                                    <span className="truncate">{child.label}</span>
+                                  </div>
+                                  {isSubgroupOpen ? (
+                                    <ChevronDown className="h-3.5 w-3.5 xl:h-4 xl:w-4 shrink-0 opacity-70" />
+                                  ) : (
+                                    <ChevronRight className="h-3.5 w-3.5 xl:h-4 xl:w-4 shrink-0 opacity-70" />
+                                  )}
+                                </button>
+
+                                {isSubgroupOpen && (
+                                  <div className="pl-2.5 py-0.5 space-y-0.5 border-l-2 border-slate-200 dark:border-slate-700 ml-3.5 my-0.5">
+                                    {child.children.map((grandchild) => {
+                                      const GrandIcon = grandchild.icon;
+                                      const isGrandActive = activeModule === grandchild.id;
+                                      return (
+                                        <button
+                                          key={grandchild.id}
+                                          onClick={() =>
+                                            handleModuleSelect(grandchild.id as OwnerModule)
+                                          }
+                                          className={`w-full flex items-center gap-2 xl:gap-2.5 px-2.5 py-1.5 xl:px-3 xl:py-2 2xl:px-3.5 2xl:py-2.5 rounded-lg xl:rounded-xl text-[11px] xl:text-xs 2xl:text-sm font-bold transition-all ${
+                                            isGrandActive
+                                              ? "bg-brand-primary text-white shadow-xs"
+                                              : "text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white"
+                                          }`}
+                                        >
+                                          <GrandIcon className="h-3.5 w-3.5 xl:h-4 xl:w-4 shrink-0" />
+                                          <span className="truncate">{grandchild.label}</span>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          }
+
+                          const isChildActive = activeModule === child.id;
+                          return (
+                            <button
+                              key={child.id}
+                              onClick={() => handleModuleSelect(child.id as OwnerModule)}
+                              className={`w-full flex items-center gap-2 xl:gap-2.5 px-2.5 py-1.5 xl:px-3 xl:py-2 2xl:px-3.5 2xl:py-2.5 rounded-lg xl:rounded-xl text-[11px] xl:text-xs 2xl:text-sm font-bold transition-all ${
+                                isChildActive
+                                  ? "bg-brand-primary text-white shadow-xs"
+                                  : "text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white"
+                              }`}
+                            >
+                              <ChildIcon className="h-3.5 w-3.5 xl:h-4 xl:w-4 shrink-0" />
+                              <span className="truncate">{child.label}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Pharmacy Owner Settings & Analytics */}
+          {visibleEnterprise.length > 0 && (
+            <div className="space-y-1 xl:space-y-1.5">
+              <div className="px-3 xl:px-3.5 2xl:px-4 text-[10px] xl:text-[11px] 2xl:text-xs font-black uppercase tracking-wider text-slate-400">
+                System Settings
+              </div>
+              {visibleEnterprise.map((item) => {
+                const Icon = item.icon;
+                const isActive = activeModule === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => handleModuleSelect(item.id)}
+                    className={`w-full flex items-center gap-2.5 xl:gap-3 px-3 py-2 xl:px-3.5 xl:py-2.5 2xl:px-4 2xl:py-3 rounded-xl xl:rounded-2xl text-xs xl:text-sm 2xl:text-base font-bold transition-all ${
+                      isActive
+                        ? "bg-brand-primary text-white shadow-sm"
+                        : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white"
+                    }`}
+                  >
+                    <Icon className="h-4 w-4 xl:h-4.5 xl:w-4.5 2xl:h-5 2xl:w-5 shrink-0" />
+                    <span className="truncate">{item.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </aside>
+    </>
   );
 }

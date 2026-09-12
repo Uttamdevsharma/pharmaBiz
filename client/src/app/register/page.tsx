@@ -359,9 +359,9 @@ function RegisterContent() {
         </div>
 
         {/* Step Indicator */}
-        <div className="flex items-center justify-center gap-3 text-xs font-bold">
+        <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 text-xs font-bold">
           <div
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl border transition ${
+            className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl border transition ${
               currentStep === 1
                 ? "bg-brand-primary text-white border-brand-primary shadow-sm"
                 : currentStep > 1
@@ -372,13 +372,13 @@ function RegisterContent() {
             <span className="h-5 w-5 rounded-full bg-black/10 flex items-center justify-center text-[10px]">
               {currentStep > 1 ? <Check className="h-3 w-3" /> : "1"}
             </span>
-            <span>1. Owner Info</span>
+            <span><span className="hidden sm:inline">1. </span>Owner Info</span>
           </div>
 
-          <div className="w-6 h-0.5 bg-slate-200 dark:bg-slate-800" />
+          <div className="hidden sm:block w-6 h-0.5 bg-slate-200 dark:bg-slate-800" />
 
           <div
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl border transition ${
+            className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl border transition ${
               currentStep === 2
                 ? "bg-brand-primary text-white border-brand-primary shadow-sm"
                 : currentStep > 2
@@ -389,13 +389,13 @@ function RegisterContent() {
             <span className="h-5 w-5 rounded-full bg-black/10 flex items-center justify-center text-[10px]">
               {currentStep > 2 ? <Check className="h-3 w-3" /> : "2"}
             </span>
-            <span>2. Legal Documents</span>
+            <span><span className="hidden sm:inline">2. </span>Legal Docs</span>
           </div>
 
-          <div className="w-6 h-0.5 bg-slate-200 dark:bg-slate-800" />
+          <div className="hidden sm:block w-6 h-0.5 bg-slate-200 dark:bg-slate-800" />
 
           <div
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl border transition ${
+            className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl border transition ${
               currentStep === 3
                 ? "bg-brand-primary text-white border-brand-primary shadow-sm"
                 : currentStep > 3
@@ -406,7 +406,7 @@ function RegisterContent() {
             <span className="h-5 w-5 rounded-full bg-black/10 flex items-center justify-center text-[10px]">
               {currentStep > 3 ? <Check className="h-3 w-3" /> : "3"}
             </span>
-            <span>3. Plan & Submit</span>
+            <span><span className="hidden sm:inline">3. </span>Plan & Submit</span>
           </div>
         </div>
 

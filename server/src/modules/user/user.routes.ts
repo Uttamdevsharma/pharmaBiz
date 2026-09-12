@@ -12,6 +12,7 @@ import {
   createPharmacyRoleSchema,
   updatePharmacyRoleSchema,
   updateRolePermissionsSchema,
+  batchUpdateRolePermissionsSchema,
   changePasswordSchema,
   updateProfileSchema,
 } from "./user.validation";
@@ -39,6 +40,12 @@ router.post(
   requirePermission("roles.manage"),
   validateRequest({ body: createPharmacyRoleSchema }),
   UserController.createRole
+);
+router.post(
+  "/roles/matrix",
+  requirePermission("roles.manage"),
+  validateRequest({ body: batchUpdateRolePermissionsSchema }),
+  UserController.batchUpdateRolePermissions
 );
 router.patch(
   "/roles/:id",

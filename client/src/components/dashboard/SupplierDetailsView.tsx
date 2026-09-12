@@ -800,8 +800,8 @@ export function SupplierDetailsView({ supplierId, onBack, onNavigate }: Supplier
             <p className="text-[11px] mt-0.5">Purchases recorded during Stock Intake will automatically appear here.</p>
           </div>
         ) : (
-          <div className="overflow-x-auto rounded-2xl border border-slate-100 dark:border-slate-800">
-            <table className="w-full text-left text-xs border-collapse">
+          <div className="table-responsive-container rounded-2xl border border-slate-100 dark:border-slate-800">
+            <table className="w-full min-w-[950px] text-left text-xs border-collapse">
               <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 uppercase font-bold text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-800">
                 <tr>
                   <th className="py-3.5 px-4">Date</th>
@@ -1104,7 +1104,7 @@ export function SupplierDetailsView({ supplierId, onBack, onNavigate }: Supplier
               <div className="p-3 bg-rose-50 dark:bg-rose-950/30 rounded-2xl border border-rose-200 dark:border-rose-900 flex items-center justify-between">
                 <span className="text-xs font-bold text-slate-600 dark:text-slate-400">Current Due:</span>
                 <span className="text-base font-black text-rose-600 dark:text-rose-400 font-mono">
-                  ৳{due.toFixed(2)}
+                  ৳{lifetimeDue.toFixed(2)}
                 </span>
               </div>
 
@@ -1117,7 +1117,7 @@ export function SupplierDetailsView({ supplierId, onBack, onNavigate }: Supplier
                   step="any"
                   required
                   min="1"
-                  max={due}
+                  max={lifetimeDue}
                   value={payAmount}
                   onChange={(e) => setPayAmount(parseFloat(e.target.value) || 0)}
                   className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-slate-900 dark:text-white outline-none"
@@ -1200,7 +1200,7 @@ export function SupplierDetailsView({ supplierId, onBack, onNavigate }: Supplier
       {/* INVOICE DETAILS MODAL */}
       {selectedInvoice && (
         <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-xl shadow-2xl p-6 space-y-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-xl shadow-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
                 <FileText className="h-5 w-5 text-brand-primary" />
@@ -1237,8 +1237,8 @@ export function SupplierDetailsView({ supplierId, onBack, onNavigate }: Supplier
             </div>
 
             {selectedInvoice.items && selectedInvoice.items.length > 0 && (
-              <div className="border border-slate-100 dark:border-slate-800 rounded-2xl overflow-hidden">
-                <table className="w-full text-left text-xs">
+              <div className="table-responsive-container border border-slate-100 dark:border-slate-800 rounded-2xl overflow-hidden">
+                <table className="w-full min-w-[500px] text-left text-xs">
                   <thead className="bg-slate-50 dark:bg-slate-800/50 text-[10px] uppercase font-bold text-slate-400">
                     <tr>
                       <th className="py-2.5 px-3">Product</th>

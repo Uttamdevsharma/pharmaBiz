@@ -80,7 +80,7 @@ export function AddProductView({
       if (catsRes.success && catsRes.data) {
         setCategories(catsRes.data);
         if (!formData.categoryId && catsRes.data.length > 0) {
-          const defaultCat = catsRes.data.find((c: Category) => c.name === "Medicine") || catsRes.data[0];
+          const defaultCat = catsRes.data[0];
           setFormData((prev) => ({ ...prev, categoryId: defaultCat.id }));
         }
       }
@@ -278,7 +278,7 @@ export function AddProductView({
     setSuccess(false);
     setError(null);
     if (onClearEditing) onClearEditing();
-    const defaultCat = categories.find((c) => c.name === "Medicine") || categories[0];
+    const defaultCat = categories[0];
     setFormData({
       name: "",
       genericName: "",

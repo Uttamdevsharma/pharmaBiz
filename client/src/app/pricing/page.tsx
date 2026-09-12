@@ -346,8 +346,8 @@ export default function PricingPage() {
               </p>
             </div>
 
-            <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
-              <table className="w-full text-left border-collapse text-sm">
+            <div className="table-responsive-container rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+              <table className="w-full min-w-[650px] text-left border-collapse text-sm">
                 <thead>
                   <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/75 dark:bg-slate-800/50">
                     <th className="py-4 px-6 font-bold text-slate-900 dark:text-white">Platform Feature</th>

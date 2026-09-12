@@ -610,18 +610,18 @@ function VerificationStatusContent() {
               </div>
             </div>
 
-            <div className="flex-1 p-6 overflow-auto flex items-center justify-center bg-slate-950/5 dark:bg-slate-950 min-h-[450px]">
+            <div className="flex-1 p-3 sm:p-6 overflow-auto flex items-center justify-center bg-slate-950/5 dark:bg-slate-950 min-h-[300px] sm:min-h-[450px]">
               {isPdf(viewingDoc.url) ? (
                 <iframe
                   src={viewingDoc.url}
-                  className="w-full h-[580px] rounded-2xl border border-slate-200 dark:border-slate-800 bg-white"
+                  className="w-full h-[360px] sm:h-[580px] rounded-2xl border border-slate-200 dark:border-slate-800 bg-white"
                   title={viewingDoc.title}
                 />
               ) : (
                 <img
                   src={viewingDoc.url}
                   alt={viewingDoc.title}
-                  className="max-h-[580px] max-w-full object-contain rounded-2xl shadow-lg"
+                  className="max-h-[360px] sm:max-h-[580px] max-w-full object-contain rounded-2xl shadow-lg"
                 />
               )}
             </div>

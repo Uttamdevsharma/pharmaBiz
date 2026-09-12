@@ -316,8 +316,8 @@ export function PurchaseHistoryView({ onNavigate, selectedBranchId: propBranchId
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
+          <div className="table-responsive-container">
+            <table className="w-full min-w-[850px] text-left text-xs border-collapse">
               <thead>
                 <tr className="bg-slate-50/75 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 text-slate-500 uppercase tracking-wider font-bold text-[10px]">
                   <th className="py-3.5 px-4">Date</th>
@@ -449,7 +449,7 @@ export function PurchaseHistoryView({ onNavigate, selectedBranchId: propBranchId
       {/* Purchase Details Breakdown Modal */}
       {detailModalOpen && selectedPurchase && (
         <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-lg shadow-2xl p-6 space-y-4 animate-in fade-in zoom-in-95">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-lg shadow-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <div>
                 <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
@@ -500,8 +500,8 @@ export function PurchaseHistoryView({ onNavigate, selectedBranchId: propBranchId
 
             {/* Itemized Table */}
             {selectedPurchase.items && selectedPurchase.items.length > 0 ? (
-              <div className="border border-slate-100 dark:border-slate-800 rounded-2xl overflow-hidden">
-                <table className="w-full text-left text-xs">
+              <div className="table-responsive-container border border-slate-100 dark:border-slate-800 rounded-2xl overflow-hidden">
+                <table className="w-full min-w-[450px] text-left text-xs">
                   <thead className="bg-slate-50 dark:bg-slate-800/50 text-[10px] uppercase font-bold text-slate-400">
                     <tr>
                       <th className="py-2.5 px-3">Product</th>

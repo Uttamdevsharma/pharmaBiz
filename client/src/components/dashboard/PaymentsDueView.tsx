@@ -531,8 +531,8 @@ export function PaymentsDueView({ onNavigate: _onNavigate, selectedBranchId: pro
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto rounded-2xl border border-slate-100 dark:border-slate-800">
-              <table className="w-full text-left text-xs border-collapse">
+            <div className="table-responsive-container rounded-2xl border border-slate-100 dark:border-slate-800">
+              <table className="w-full min-w-[800px] text-left text-xs border-collapse">
                 <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 uppercase font-bold text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-800">
                   <tr>
                     <th className="py-3.5 px-4">Supplier / Company Name</th>
@@ -633,8 +633,8 @@ export function PaymentsDueView({ onNavigate: _onNavigate, selectedBranchId: pro
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto rounded-2xl border border-slate-100 dark:border-slate-800">
-              <table className="w-full text-left text-xs border-collapse">
+            <div className="table-responsive-container rounded-2xl border border-slate-100 dark:border-slate-800">
+              <table className="w-full min-w-[750px] text-left text-xs border-collapse">
                 <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 uppercase font-bold text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-800">
                   <tr>
                     <th className="py-3.5 px-4">Date</th>
@@ -721,7 +721,7 @@ export function PaymentsDueView({ onNavigate: _onNavigate, selectedBranchId: pro
       {/* Settle Due Modal */}
       {payModalOpen && selectedSupplier && (
         <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-5 animate-in fade-in zoom-in-95">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-5 animate-in fade-in zoom-in-95 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
               <div className="flex items-center gap-2.5">
                 <div className="p-2.5 rounded-xl bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400">

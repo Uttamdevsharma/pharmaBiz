@@ -530,13 +530,18 @@ export function VariantsView() {
                     value={selectedParentId}
                     onChange={(e) => handleParentChange(e.target.value)}
                     required
-                    className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white outline-none font-bold"
+                    disabled={categories.length === 0}
+                    className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white outline-none font-bold disabled:opacity-50"
                   >
-                    {categories.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name} {c.isActive === false ? "(Inactive)" : ""}
-                      </option>
-                    ))}
+                    {categories.length === 0 ? (
+                      <option value="">No categories available (Create one first)</option>
+                    ) : (
+                      categories.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name} {c.isActive === false ? "(Inactive)" : ""}
+                        </option>
+                      ))
+                    )}
                   </select>
                 </div>
 
@@ -547,10 +552,11 @@ export function VariantsView() {
                   <input
                     type="text"
                     required
+                    disabled={categories.length === 0}
                     placeholder="e.g. Tablet, Capsule, Cream, Dry Syrup"
                     value={newSubcategoryName}
                     onChange={(e) => setNewSubcategoryName(e.target.value)}
-                    className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white outline-none font-bold"
+                    className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white outline-none font-bold disabled:opacity-50"
                   />
                   <p className="text-[11px] text-slate-400 mt-1">
                     Example: Tablet, Capsule, Syrup, Drops, Injections
@@ -559,7 +565,7 @@ export function VariantsView() {
 
                 <button
                   type="submit"
-                  disabled={saving || !selectedParentId || !newSubcategoryName.trim()}
+                  disabled={saving || !selectedParentId || !newSubcategoryName.trim() || categories.length === 0}
                   className="w-full py-2.5 bg-brand-primary hover:bg-brand-primary-hover text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm disabled:opacity-50"
                 >
                   {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
@@ -602,8 +608,14 @@ export function VariantsView() {
               ) : filteredCategories.length === 0 ? (
                 <div className="p-12 text-center text-slate-400 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">
                   <FolderTree className="h-8 w-8 mx-auto text-slate-300 dark:text-slate-700 mb-2" />
-                  <p className="text-xs font-bold text-slate-700 dark:text-slate-300">No matching categories found</p>
-                  <p className="text-[11px] text-slate-400 mt-1">Try clearing your search query or create a new Main Category.</p>
+                  <p className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                    {categories.length === 0 ? "No categories created yet" : "No matching categories found"}
+                  </p>
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    {categories.length === 0
+                      ? "Click 'New Main Category' to create your first main category."
+                      : "Try clearing your search query or create a new Main Category."}
+                  </p>
                 </div>
               ) : (
                 filteredCategories.map((mainCat) => {

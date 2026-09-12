@@ -397,16 +397,18 @@ export function CategoryListView({ onNavigate }: CategoryListViewProps) {
           <FolderTree className="h-10 w-10 mx-auto text-slate-300 dark:text-slate-700" />
           <div>
             <p className="text-xs font-bold text-slate-700 dark:text-slate-300">
-              No matching categories found
+              {categories.length === 0 ? "No categories created yet" : "No matching categories found"}
             </p>
             <p className="text-[11px] text-slate-400 mt-1">
-              Try adjusting your search query or click "Create Category" to add a new one.
+              {categories.length === 0
+                ? "Start by creating your first category to organize your products and subcategories."
+                : "Try adjusting your search query or clear filters to view categories."}
             </p>
           </div>
           {onNavigate && (
             <button
               onClick={() => onNavigate("cat_create")}
-              className="px-4 py-2 bg-brand-primary text-white rounded-xl text-xs font-bold transition inline-flex items-center gap-1.5"
+              className="px-4 py-2 bg-brand-primary hover:bg-brand-primary-hover text-white rounded-xl text-xs font-bold transition inline-flex items-center gap-1.5 shadow-sm"
             >
               <Plus className="h-4 w-4" />
               Create Category

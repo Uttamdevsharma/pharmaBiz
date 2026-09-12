@@ -36,15 +36,26 @@ export const listTenantsQuerySchema = z.object({
 });
 
 export const createRoleSchema = z.object({
-  name: z.string().min(2, "Role name must be at least 2 characters"),
+  name: z.string().min(1, "Role name is required"),
   description: z.string().optional(),
   permissions: z.array(z.string()).default([]),
+  isActive: z.boolean().default(true),
 });
 
 export const updateRoleSchema = z.object({
-  name: z.string().min(2, "Role name must be at least 2 characters").optional(),
+  name: z.string().min(1, "Role name is required").optional(),
   description: z.string().optional(),
   permissions: z.array(z.string()).optional(),
+  isActive: z.boolean().optional(),
+});
+
+export const batchUpdatePlatformRolePermissionsSchema = z.object({
+  matrix: z.array(
+    z.object({
+      roleId: z.string(),
+      permissions: z.array(z.string()),
+    })
+  ),
 });
 
 export const createPlatformStaffSchema = z.object({

@@ -10,6 +10,7 @@ import {
   listTenantsQuerySchema,
   createRoleSchema,
   updateRoleSchema,
+  batchUpdatePlatformRolePermissionsSchema,
   createPlatformStaffSchema,
   updatePlatformStaffSchema,
   updatePlatformRolePermissionsSchema,
@@ -54,6 +55,12 @@ router.get("/analytics", requirePermission("reports.view"), SuperAdminController
 // ==================== DYNAMIC ROLES & PERMISSIONS ====================
 router.get("/roles", requirePermission("roles.manage"), SuperAdminController.listRoles);
 router.post("/roles", requirePermission("roles.manage"), validateRequest({ body: createRoleSchema }), SuperAdminController.createRole);
+router.post(
+  "/roles/matrix",
+  requirePermission("roles.manage"),
+  validateRequest({ body: batchUpdatePlatformRolePermissionsSchema }),
+  SuperAdminController.batchUpdateRolePermissions
+);
 router.patch("/roles/:id", requirePermission("roles.manage"), validateRequest({ body: updateRoleSchema }), SuperAdminController.updateRole);
 router.delete("/roles/:id", requirePermission("roles.manage"), SuperAdminController.deleteRole);
 

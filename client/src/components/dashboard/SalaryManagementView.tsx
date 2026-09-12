@@ -84,13 +84,7 @@ interface EmployeeItem {
   branchName?: string;
   createdAt: string;
   salaryConfig?: SalaryConfig | null;
-  monthStatus?: {
-    month: string;
-    netSalary: number;
-    paidAmount: number;
-    dueAmount: number;
-    status: string;
-  };
+  monthStatus?: MonthStatus | null;
 }
 
 interface FinancialAccount {
@@ -359,7 +353,7 @@ export function SalaryManagementView({
       (emp.phone && emp.phone.includes(searchQuery));
 
     const matchesStatus =
-      statusFilter === "ALL" || emp.monthStatus.status === statusFilter;
+      statusFilter === "ALL" || emp.monthStatus?.status === statusFilter;
 
     return matchesSearch && matchesStatus;
   });
@@ -518,8 +512,8 @@ export function SalaryManagementView({
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
+          <div className="table-responsive-container">
+            <table className="w-full min-w-[850px] text-left border-collapse">
               <thead>
                 <tr className="border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                   <th className="py-3 px-4">Employee</th>
@@ -535,10 +529,10 @@ export function SalaryManagementView({
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs text-slate-700 dark:text-slate-300">
                 {filteredEmployees.map((emp) => {
                   const roleName = emp.pharmacyRoleName || emp.customRoleName || emp.role?.replace(/_/g, " ");
-                  const status = emp.monthStatus.status;
+                  const status = emp.monthStatus?.status || "UNCONFIGURED";
                   const config = emp.salaryConfig;
                   const mStatus = emp.monthStatus;
-                  const absentOrUnpaid = (mStatus.absentDays || 0) + (mStatus.unpaidLeaveDays || 0);
+                  const absentOrUnpaid = (mStatus?.absentDays || 0) + (mStatus?.unpaidLeaveDays || 0);
 
                   return (
                     <tr
@@ -587,7 +581,7 @@ export function SalaryManagementView({
                               ৳{config.baseSalary.toLocaleString()}
                             </div>
                             <div className="text-[10px] text-slate-400">
-                              Daily Rate: ৳{(mStatus.dailyRate || 0).toLocaleString()}
+                              Daily Rate: ৳{(mStatus?.dailyRate || 0).toLocaleString()}
                             </div>
                           </div>
                         ) : (
@@ -600,13 +594,13 @@ export function SalaryManagementView({
                         <div className="space-y-1">
                           <div className="flex items-center gap-2 text-[11px]">
                             <span className="font-semibold text-slate-700 dark:text-slate-300">
-                              {mStatus.workingDays ?? 0} Working Days
+                              {mStatus?.workingDays ?? 0} Working Days
                             </span>
-                            <span className="text-slate-400">({mStatus.offDays ?? 0} off)</span>
+                            <span className="text-slate-400">({mStatus?.offDays ?? 0} off)</span>
                           </div>
                           <div className="flex items-center gap-2 text-[10px]">
                             <span className="text-emerald-600 font-bold">
-                              ✓ {mStatus.presentDays ?? 0} Present
+                              ✓ {mStatus?.presentDays ?? 0} Present
                             </span>
                             {absentOrUnpaid > 0 && (
                               <span className="text-rose-600 font-bold">
@@ -621,22 +615,22 @@ export function SalaryManagementView({
                       <td className="py-3.5 px-4">
                         <div>
                           <div className="font-black text-slate-900 dark:text-white text-sm">
-                            ৳{mStatus.netSalary.toLocaleString()}
+                            ৳{(mStatus?.netSalary || 0).toLocaleString()}
                           </div>
                           <div className="flex items-center gap-1.5 text-[10px]">
-                            {(mStatus.attendanceDeduction || 0) > 0 && (
+                            {(mStatus?.attendanceDeduction || 0) > 0 && (
                               <span className="inline-flex items-center gap-0.5 text-rose-600 font-semibold" title="System attendance deduction (locked)">
                                 <Lock className="h-2.5 w-2.5" />
-                                -৳{mStatus.attendanceDeduction?.toLocaleString()}
+                                -৳{mStatus?.attendanceDeduction?.toLocaleString()}
                               </span>
                             )}
-                            {(mStatus.totalAllowances || 0) > 0 && (
+                            {(mStatus?.totalAllowances || 0) > 0 && (
                               <span className="inline-flex items-center gap-0.5 text-emerald-600 font-semibold" title="Dynamic allowances">
                                 <Sparkles className="h-2.5 w-2.5" />
-                                +৳{mStatus.totalAllowances?.toLocaleString()}
+                                +৳{mStatus?.totalAllowances?.toLocaleString()}
                               </span>
                             )}
-                            {(!mStatus.attendanceDeduction && !mStatus.totalAllowances) && (
+                            {(!mStatus?.attendanceDeduction && !mStatus?.totalAllowances) && (
                               <span className="text-slate-400">No deductions</span>
                             )}
                           </div>
@@ -669,11 +663,11 @@ export function SalaryManagementView({
                       <td className="py-3.5 px-4">
                         <div>
                           <div className="font-semibold text-emerald-600 dark:text-emerald-400">
-                            Paid: ৳{emp.monthStatus.paidAmount.toLocaleString()}
+                            Paid: ৳{(mStatus?.paidAmount || 0).toLocaleString()}
                           </div>
-                          {emp.monthStatus.dueAmount > 0 && (
+                          {(mStatus?.dueAmount || 0) > 0 && (
                             <div className="font-bold text-rose-600 dark:text-rose-400 text-[11px]">
-                              Due: ৳{emp.monthStatus.dueAmount.toLocaleString()}
+                              Due: ৳{(mStatus?.dueAmount || 0).toLocaleString()}
                             </div>
                           )}
                         </div>
@@ -738,7 +732,7 @@ export function SalaryManagementView({
 
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-            <div className="relative w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl p-6 sm:p-7">
+            <div className="relative w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl p-6 sm:p-7 max-h-[92vh] overflow-y-auto">
               <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 mb-4">
                 <div className="flex items-center gap-2.5">
                   <div className="h-10 w-10 rounded-xl bg-brand-primary/10 text-brand-primary flex items-center justify-center border border-brand-primary/20">
@@ -929,7 +923,7 @@ export function SalaryManagementView({
       {/* MODAL: Add Allowance (Optional) */}
       {isAllowanceModalOpen && allowanceEmployee && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="relative w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl p-6 sm:p-7 space-y-5">
+          <div className="relative w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl p-6 sm:p-7 space-y-5 max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <div className="flex items-center gap-2.5">
                 <div className="h-10 w-10 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center border border-emerald-500/20">

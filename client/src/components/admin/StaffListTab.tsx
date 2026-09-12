@@ -451,8 +451,8 @@ export function StaffListTab({ onNavigateToCreate }: StaffListTabProps) {
             <p className="text-xs text-slate-400 mt-1">Try adjusting your filters or search query.</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
+          <div className="table-responsive-container">
+            <table className="w-full min-w-[750px] text-left border-collapse">
               <thead>
                 <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 text-[11px] font-bold uppercase tracking-wider text-slate-500">
                   <th className="py-3.5 px-4">Staff Member</th>
@@ -607,7 +607,7 @@ export function StaffListTab({ onNavigateToCreate }: StaffListTabProps) {
       {/* Permissions View Popover Modal */}
       {selectedStaffForPerms && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-xl w-full border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-xl w-full border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
             <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-xl bg-brand-primary/10 text-brand-primary flex items-center justify-center font-bold">
@@ -695,7 +695,7 @@ export function StaffListTab({ onNavigateToCreate }: StaffListTabProps) {
       {/* Edit Staff & Permissions Modal */}
       {editingStaff && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-2xl w-full border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-2xl w-full border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
             <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
               <div>
                 <h3 className="font-bold text-base text-slate-900 dark:text-white">

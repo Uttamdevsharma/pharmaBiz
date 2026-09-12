@@ -320,125 +320,7 @@ export const ALL_PHARMACY_PERMISSIONS = [
   },
 ];
 
-export const DEFAULT_PHARMACY_ROLES = [
-  {
-    name: "Branch Manager",
-    description: "Full operational oversight over branch sales, inventory, stock, suppliers, finance, payroll, and staff.",
-    isSystem: true,
-    permissions: [
-      "dashboard.view",
-      "pos.manage",
-      "pos.history",
-      "pos.vat",
-      "accounts.payment_sales",
-      "accounts.product_sales",
-      "accounts.reports",
-      "category.manage",
-      "category.subcategories",
-      "inventory.add_product",
-      "inventory.product_list",
-      "stock.add_stock",
-      "stock.stock_list",
-      "stock.stock_history",
-      "stock.allocation",
-      "stock.allocation_history",
-      "stock.transfer",
-      "stock.transfer_history",
-      "stock.receive",
-      "stock.damaged",
-      "location.create_rack",
-      "location.rack_list",
-      "supplier.view",
-      "supplier.manage",
-      "supplier.purchase_history",
-      "supplier.payments_due",
-      "supplier.contacts",
-      "accounts.overview",
-      "accounts.financial_accounts",
-      "accounts.fund_transfer",
-      "accounts.supplier_due",
-      "accounts.transaction_history",
-      "expenses.list",
-      "expenses.pay",
-      "expenses.history",
-      "employee.view",
-      "attendance.manage",
-      "attendance.offdays",
-      "salary.deductions",
-      "salary.manage",
-      "salary.history",
-      "salaries.base_salary.edit",
-      "staff.view",
-      "staff.create",
-      "staff.manage",
-      "branches.manage",
-    ],
-  },
-  {
-    name: "Cashier",
-    description: "Counter POS checkout, invoice printing, customer receipts, and stock lookup.",
-    isSystem: true,
-    permissions: [
-      "pos.manage",
-      "pos.history",
-      "stock.stock_list",
-      "inventory.product_list",
-    ],
-  },
-  {
-    name: "Inventory Manager",
-    description: "Product catalog, categories, stock batches, transfers, receiving, racks, and supplier records.",
-    isSystem: true,
-    permissions: [
-      "category.manage",
-      "category.subcategories",
-      "inventory.add_product",
-      "inventory.product_list",
-      "stock.add_stock",
-      "stock.stock_list",
-      "stock.stock_history",
-      "stock.allocation",
-      "stock.allocation_history",
-      "stock.transfer",
-      "stock.transfer_history",
-      "stock.receive",
-      "stock.damaged",
-      "location.create_rack",
-      "location.rack_list",
-      "supplier.view",
-      "supplier.manage",
-      "supplier.purchase_history",
-      "supplier.contacts",
-    ],
-  },
-  {
-    name: "Accounts Manager",
-    description: "Financial accounts, fund transfers, revenue reports, bills, supplier dues, and employee payroll.",
-    isSystem: true,
-    permissions: [
-      "dashboard.view",
-      "pos.history",
-      "accounts.overview",
-      "accounts.financial_accounts",
-      "accounts.fund_transfer",
-      "accounts.payment_sales",
-      "accounts.product_sales",
-      "accounts.reports",
-      "accounts.supplier_due",
-      "accounts.transaction_history",
-      "expenses.list",
-      "expenses.pay",
-      "expenses.history",
-      "employee.view",
-      "salary.manage",
-      "salary.history",
-      "salary.deductions",
-      "supplier.view",
-      "supplier.purchase_history",
-      "supplier.payments_due",
-    ],
-  },
-];
+export const DEFAULT_PHARMACY_ROLES: any[] = [];
 
 export class UserService {
   /**
@@ -487,6 +369,7 @@ export class UserService {
       description: r.description,
       permissions: r.permissions || [],
       isSystem: r.isSystem,
+      isActive: r.isActive ?? true,
       userCount: r._count?.users || 0,
       createdAt: r.createdAt,
       updatedAt: r.updatedAt,
@@ -518,6 +401,7 @@ export class UserService {
         description: data.description?.trim() || null,
         permissions: data.permissions || [],
         isSystem: false,
+        isActive: data.isActive !== undefined ? data.isActive : true,
       },
     });
 
@@ -571,6 +455,10 @@ export class UserService {
       updateData.permissions = data.permissions;
     }
 
+    if (data.isActive !== undefined) {
+      updateData.isActive = data.isActive;
+    }
+
     const updated = await (prisma as any).pharmacyRole.update({
       where: { id: roleId },
       data: updateData,
@@ -584,6 +472,35 @@ export class UserService {
     });
 
     return updated;
+  }
+
+  static async batchUpdateRolePermissions(
+    tenantId: string,
+    userId: string,
+    matrix: { roleId: string; permissions: string[] }[]
+  ) {
+    const updatedRoles = [];
+    for (const item of matrix) {
+      const role = await (prisma as any).pharmacyRole.findFirst({
+        where: { id: item.roleId, tenantId },
+      });
+      if (role) {
+        const updated = await (prisma as any).pharmacyRole.update({
+          where: { id: item.roleId },
+          data: { permissions: item.permissions },
+        });
+        updatedRoles.push(updated);
+      }
+    }
+
+    await AuditService.log({
+      tenantId,
+      userId,
+      action: "PHARMACY_ROLE_MATRIX_UPDATE",
+      details: { count: matrix.length },
+    });
+
+    return updatedRoles;
   }
 
   static async deletePharmacyRole(tenantId: string, roleId: string, userId: string) {

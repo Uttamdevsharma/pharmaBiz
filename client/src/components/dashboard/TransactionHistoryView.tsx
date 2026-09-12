@@ -13,6 +13,7 @@ import {
   Wallet,
   Store,
 } from "lucide-react";
+import { Pagination } from "@/components/common/Pagination";
 import { useBranchContext } from "@/context/BranchContext";
 
 interface TransactionItem {
@@ -57,6 +58,8 @@ export function TransactionHistoryView({ onNavigate: _onNavigate, selectedBranch
   const [endDate, setEndDate] = useState<string>("");
   const [search, setSearch] = useState<string>("");
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
 
   // Set default dates based on "thisMonth" on mount
   useEffect(() => {
@@ -150,6 +153,13 @@ export function TransactionHistoryView({ onNavigate: _onNavigate, selectedBranch
       t.user?.name?.toLowerCase().includes(q)
     );
   });
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, startDate, endDate, selectedAccountId]);
+
+  const totalPages = Math.ceil(filteredTransactions.length / pageSize) || 1;
+  const paginatedTransactions = filteredTransactions.slice((page - 1) * pageSize, page * pageSize);
 
   const getTypeName = (type: string) => {
     switch (type) {
@@ -338,7 +348,7 @@ export function TransactionHistoryView({ onNavigate: _onNavigate, selectedBranch
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {filteredTransactions.map((trx) => {
+                {paginatedTransactions.map((trx) => {
                   const amt = Number(trx.amount || 0);
                   const isNegative = trx.type === "EXPENSE" || trx.type === "PURCHASE_PAYMENT" || trx.type === "REFUND";
 
@@ -400,6 +410,14 @@ export function TransactionHistoryView({ onNavigate: _onNavigate, selectedBranch
             </table>
           </div>
         )}
+
+        <Pagination
+          currentPage={page}
+          totalPages={totalPages}
+          totalItems={filteredTransactions.length}
+          pageSize={pageSize}
+          onPageChange={setPage}
+        />
       </div>
     </div>
   );

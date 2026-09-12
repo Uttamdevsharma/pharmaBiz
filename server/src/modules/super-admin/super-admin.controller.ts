@@ -200,6 +200,20 @@ export class SuperAdminController {
     }
   }
 
+  static async batchUpdateRolePermissions(req: Request, res: Response): Promise<void> {
+    try {
+      const { matrix } = req.body;
+      const result = await SuperAdminService.batchUpdateRolePermissions(matrix);
+      res.status(200).json({
+        success: true,
+        message: "Platform role permissions saved successfully",
+        data: result,
+      });
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  }
+
   // ==================== PLATFORM STAFF ====================
   static async listPlatformStaff(req: Request, res: Response): Promise<void> {
     try {

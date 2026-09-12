@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { fetchApi } from "@/lib/api";
 import { Product, Category } from "@/types";
+import { Pagination } from "@/components/common/Pagination";
 import {
   Package,
   Plus,
@@ -29,6 +30,7 @@ export function ProductListView({ onNavigate, onEditProduct }: ProductListViewPr
   const [subcategoryFilter, setSubcategoryFilter] = useState("");
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
 
   const loadVariants = useCallback(async () => {
     try {
@@ -44,7 +46,7 @@ export function ProductListView({ onNavigate, onEditProduct }: ProductListViewPr
       setLoading(true);
       const params = new URLSearchParams();
       params.append("page", page.toString());
-      params.append("limit", "15");
+      params.append("limit", "10");
       if (search) params.append("search", search);
       if (categoryFilter) params.append("categoryId", categoryFilter);
       if (subcategoryFilter) params.append("subcategoryId", subcategoryFilter);
@@ -54,6 +56,7 @@ export function ProductListView({ onNavigate, onEditProduct }: ProductListViewPr
         setProducts(res.data);
         if (res.meta) {
           setTotalPages(res.meta.totalPages || 1);
+          setTotalItems(res.meta.total || res.data.length || 0);
         }
       }
     } catch (err) {
@@ -215,8 +218,8 @@ export function ProductListView({ onNavigate, onEditProduct }: ProductListViewPr
             <p className="text-xs mt-1">Try adjusting your category filters or click "Add Product" to register new items.</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
+          <div className="table-responsive-container">
+            <table className="w-full min-w-[850px] text-left text-xs border-collapse">
               <thead>
                 <tr className="bg-slate-50/75 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 uppercase tracking-wider font-bold text-[10px]">
                   <th className="py-3 px-4">Product & Specs</th>
@@ -322,29 +325,13 @@ export function ProductListView({ onNavigate, onEditProduct }: ProductListViewPr
         )}
 
         {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="p-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs text-slate-500">
-            <div>
-              Page {page} of {totalPages}
-            </div>
-            <div className="flex gap-2">
-              <button
-                disabled={page <= 1}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-50"
-              >
-                Previous
-              </button>
-              <button
-                disabled={page >= totalPages}
-                onClick={() => setPage((p) => p + 1)}
-                className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-50"
-              >
-                Next
-              </button>
-            </div>
-          </div>
-        )}
+        <Pagination
+          currentPage={page}
+          totalPages={totalPages}
+          totalItems={totalItems}
+          pageSize={10}
+          onPageChange={setPage}
+        />
       </div>
     </div>
   );

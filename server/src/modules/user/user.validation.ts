@@ -38,17 +38,28 @@ export const createPharmacyRoleSchema = z.object({
   name: z.string().min(2, "Role name must be at least 2 characters"),
   description: z.string().optional(),
   permissions: z.array(z.string()).default([]),
+  isActive: z.boolean().optional(),
 });
 
 export const updatePharmacyRoleSchema = z.object({
   name: z.string().min(2).optional(),
   description: z.string().optional(),
   permissions: z.array(z.string()).optional(),
+  isActive: z.boolean().optional(),
 });
 
 export const updateRolePermissionsSchema = z.object({
   role: z.string(),
   permissions: z.array(z.string()),
+});
+
+export const batchUpdateRolePermissionsSchema = z.object({
+  matrix: z.array(
+    z.object({
+      roleId: z.string(),
+      permissions: z.array(z.string()),
+    })
+  ),
 });
 
 export const listUsersQuerySchema = z.object({

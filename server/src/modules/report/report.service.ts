@@ -1019,6 +1019,7 @@ export class ReportService {
 
     const lowStockItems: any[] = [];
     const nearExpiryItems: any[] = [];
+    const stockCategoryMap: Record<string, { categoryName: string; stockUnits: number; stockValue: number; itemCount: number }> = {};
 
     inventories.forEach((inv: any) => {
       const qty = Number(inv.quantity || 0);
@@ -1026,6 +1027,19 @@ export class ReportService {
       const unitVal = Number(inv.purchasePrice ?? inv.product?.basePrice ?? 0);
       const lineVal = qty * unitVal;
       totalInventoryCostValue += lineVal;
+
+      // Category Stock Aggregation
+      const catName =
+        inv.product?.categoryRef?.name ||
+        (typeof inv.product?.category === "string" ? inv.product.category : null) ||
+        "General Medicine";
+
+      if (!stockCategoryMap[catName]) {
+        stockCategoryMap[catName] = { categoryName: catName, stockUnits: 0, stockValue: 0, itemCount: 0 };
+      }
+      stockCategoryMap[catName].stockUnits += qty;
+      stockCategoryMap[catName].stockValue += lineVal;
+      stockCategoryMap[catName].itemCount += 1;
 
       if (inv.branchId && branchStatsMap[inv.branchId]) {
         branchStatsMap[inv.branchId].stockUnits += qty;
@@ -1066,6 +1080,15 @@ export class ReportService {
         }
       }
     });
+
+    const totalInvUnitsForPct = totalStockUnits || 1;
+    const stockByCategory = Object.values(stockCategoryMap)
+      .map((c) => ({
+        ...c,
+        stockValue: Math.round(c.stockValue * 100) / 100,
+        percentage: Math.round((c.stockUnits / totalInvUnitsForPct) * 1000) / 10,
+      }))
+      .sort((a, b) => b.stockUnits - a.stockUnits);
 
     // Total Damaged & Missing Stock Loss calculations for period
     let totalDamagedMissingLoss = 0;
@@ -1194,6 +1217,7 @@ export class ReportService {
         dailySalesTrend: Object.values(dynamicTrendMap),
         paymentBreakdown,
         categoryDistribution,
+        stockByCategory,
         topSellingProducts,
       },
       alerts: {
