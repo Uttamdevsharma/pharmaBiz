@@ -45,6 +45,7 @@ export type RegisterOwnerRequest = z.infer<typeof registerOwnerSchema>;
 
 export const verifyOtpSchema = z.object({
   email: z.string().email("Invalid email address"),
+  tenantId: z.string().optional(),
   otpCode: z.string().min(4, "OTP code must be at least 4-6 digits"),
 });
 

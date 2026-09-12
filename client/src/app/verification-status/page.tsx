@@ -108,6 +108,7 @@ function VerificationStatusContent() {
         method: "POST",
         body: JSON.stringify({
           email: data?.email || emailParam,
+          tenantId: data?.tenantId || tenantIdParam || undefined,
           otpCode: otpCode.trim(),
         }),
       });

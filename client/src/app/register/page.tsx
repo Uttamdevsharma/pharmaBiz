@@ -277,6 +277,7 @@ function RegisterContent() {
         method: "POST",
         body: JSON.stringify({
           email: formData.email.trim().toLowerCase(),
+          tenantId: registeredTenantId || undefined,
           otpCode: cleanCode,
         }),
       });
