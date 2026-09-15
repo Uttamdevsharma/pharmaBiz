@@ -285,10 +285,27 @@ export function calculateLocationPackaging(
   locationQuantity: number,
   config?: PackagingConfig
 ): LocationPackagingBreakdown {
-  const isMedicine =
+  const pType = (config?.packageType || "").toUpperCase();
+  const unit = (config?.unit || "").toLowerCase();
+  const isNonMedicine =
+    pType === "BOTTLE" ||
+    pType === "SYRUP" ||
+    pType === "PIECE" ||
+    pType === "EQUIPMENT" ||
+    pType === "VIAL" ||
+    pType === "SALINE" ||
+    pType === "OTHER" ||
+    unit === "bottle" ||
+    unit === "piece" ||
+    unit === "vial" ||
+    unit === "ampoule" ||
+    unit === "pack" ||
+    unit === "tin";
+  const isMedicine = !isNonMedicine && (
     !config?.packageType ||
-    config.packageType.toUpperCase() === "MEDICINE" ||
-    Boolean(config?.stripsPerBox && config?.tabletsPerStrip);
+    pType === "MEDICINE" ||
+    pType === "TABLET"
+  );
 
   const tabsPerStrip = Math.max(1, config?.tabletsPerStrip || 10);
   const stripsPerBox = Math.max(1, config?.stripsPerBox || 10);

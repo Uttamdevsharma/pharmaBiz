@@ -44,6 +44,98 @@ interface CartItem {
 
 type PosStep = "SEARCH" | "SELECT_PRODUCT" | "SELECT_LOCATION" | "SELECT_UNIT";
 
+type PackagingModel = "MEDICINE" | "BOTTLE" | "PIECE" | "VIAL";
+
+function getProductPackagingModel(prod?: any): PackagingModel {
+  if (!prod) return "MEDICINE";
+  const pType = (prod.productType || "").toUpperCase();
+  const packType = (prod.defaultPackType || "").toUpperCase();
+  const unit = (prod.unit || "").toLowerCase();
+  const cat = (prod.category || prod.categoryRef?.name || "").toLowerCase();
+
+  if (
+    packType === "BOTTLE" ||
+    pType === "SYRUP" ||
+    unit === "bottle" ||
+    cat.includes("syrup") ||
+    cat.includes("liquid") ||
+    cat.includes("suspension") ||
+    cat.includes("drop")
+  ) {
+    return "BOTTLE";
+  }
+  if (packType === "VIAL" || unit === "vial" || unit === "ampoule" || cat.includes("injection") || cat.includes("vial")) {
+    return "VIAL";
+  }
+  if (
+    packType === "PIECE" ||
+    pType === "EQUIPMENT" ||
+    pType === "OTHER" ||
+    unit === "piece" ||
+    unit === "pcs" ||
+    unit === "pack" ||
+    unit === "tin" ||
+    cat.includes("equipment") ||
+    cat.includes("device") ||
+    cat.includes("care") ||
+    cat.includes("hygiene")
+  ) {
+    return "PIECE";
+  }
+  return "MEDICINE";
+}
+
+function getAvailableSellingUnits(prod?: any): { id: string; label: string; subtext: string; multiplier: number }[] {
+  const model = getProductPackagingModel(prod);
+  const stripsPerBox = Number(prod?.stripsPerBox) || 10;
+  const tabletsPerStrip = Number(prod?.tabletsPerStrip) || 10;
+  const tabletsPerBox = stripsPerBox * tabletsPerStrip;
+
+  switch (model) {
+    case "BOTTLE":
+      return [
+        { id: "BOTTLE", label: "🧴 Bottle", subtext: "1 bottle", multiplier: 1 },
+      ];
+    case "PIECE":
+      return [
+        { id: "PIECE", label: "📦 Piece", subtext: "1 item", multiplier: 1 },
+        ...(stripsPerBox > 1
+          ? [{ id: "BOX", label: "📦 Box / Pack", subtext: `${stripsPerBox} pieces`, multiplier: stripsPerBox }]
+          : []),
+      ];
+    case "VIAL":
+      return [
+        { id: "VIAL", label: "💉 Vial", subtext: "1 vial / ampoule", multiplier: 1 },
+        ...(stripsPerBox > 1
+          ? [{ id: "BOX", label: "📦 Box", subtext: `${stripsPerBox} vials`, multiplier: stripsPerBox }]
+          : []),
+      ];
+    case "MEDICINE":
+    default:
+      return [
+        { id: "BOX", label: "📦 Box", subtext: `${stripsPerBox} strips`, multiplier: tabletsPerBox },
+        { id: "STRIP", label: "💊 Strip", subtext: `${tabletsPerStrip} tabs`, multiplier: tabletsPerStrip },
+        { id: "TABLET", label: "⚪ Tablet", subtext: "1 unit", multiplier: 1 },
+      ];
+  }
+}
+
+function getProductUnitPrice(p?: any, batch?: any): number {
+  if (batch) {
+    const batchSelling = Number(batch.sellingPrice || batch.boxSellingPrice || 0);
+    if (batchSelling > 0) return batchSelling;
+  }
+  const eff = Number(p?.effectivePrice || 0);
+  if (eff > 0) return eff;
+  const base = Number(p?.basePrice || 0);
+  if (base > 0) return base;
+  if (p?.batches && p.batches.length > 0) {
+    const bPrice = Number(p.batches[0].sellingPrice || p.batches[0].boxSellingPrice || 0);
+    if (bPrice > 0) return bPrice;
+  }
+  return 0;
+}
+
 interface PosModuleProps {
   selectedBranchId?: string;
   onNavigate?: (module: any) => void;
@@ -228,7 +320,9 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
     setSelectedBatch(batch);
     setPosStep("SELECT_LOCATION");
     setSelectedLocation(null);
-    setSelectedUnit("TABLET");
+    const units = getAvailableSellingUnits(selectedProduct);
+    const model = getProductPackagingModel(selectedProduct);
+    setSelectedUnit(model === "MEDICINE" ? "TABLET" : (units[0]?.id || "PIECE"));
     setQuantity(1);
     if (batch.physicalLocations && Array.isArray(batch.physicalLocations) && batch.physicalLocations.length > 0) {
       setSelectedBatchLocations(batch.physicalLocations);
@@ -241,7 +335,9 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
   const selectLocation = (loc: any) => {
     setSelectedLocation(loc);
     setPosStep("SELECT_UNIT");
-    setSelectedUnit("TABLET");
+    const units = getAvailableSellingUnits(selectedProduct);
+    const model = getProductPackagingModel(selectedProduct);
+    setSelectedUnit(model === "MEDICINE" ? "TABLET" : (units[0]?.id || "PIECE"));
     setQuantity(1);
   };
 
@@ -259,15 +355,11 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
   const confirmAddToCart = () => {
     if (!selectedProduct || !selectedBatch || !selectedLocation) return;
     const prod = selectedProduct;
-    const isMed = prod.productType === "MEDICINE" || !prod.productType;
-    const tabletsPerStrip = prod.tabletsPerStrip || 10;
-    const stripsPerBox = prod.stripsPerBox || 10;
-    const tabletsPerBox = isMed ? stripsPerBox * tabletsPerStrip : 1;
-
-    let multiplier = 1, unitType = "PIECE";
-    if (selectedUnit === "BOX") { multiplier = tabletsPerBox; unitType = "BOX"; }
-    else if (selectedUnit === "STRIP") { multiplier = tabletsPerStrip; unitType = "STRIP"; }
-    else if (selectedUnit === "TABLET") { multiplier = 1; unitType = "TABLET"; }
+    const model = getProductPackagingModel(prod);
+    const availableUnits = getAvailableSellingUnits(prod);
+    const unitObj = availableUnits.find((u) => u.id === selectedUnit) || availableUnits[0];
+    const multiplier = unitObj?.multiplier || 1;
+    const unitType = unitObj?.id || selectedUnit;
 
     const totalBaseUnitsNeeded = quantity * multiplier;
     if (selectedLocation.quantity < totalBaseUnitsNeeded) {
@@ -279,7 +371,13 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
       alert("Cannot sell expired batches.");
       return;
     }
-    const unitPrice = Number(prod.basePrice) * multiplier;
+
+    const baseSellingPrice = getProductUnitPrice(prod, selectedBatch);
+    const unitPrice = baseSellingPrice * multiplier;
+
+    const stripsPerBox = Number(prod.stripsPerBox) || 10;
+    const tabletsPerStrip = Number(prod.tabletsPerStrip) || 10;
+    const tabletsPerBox = model === "MEDICINE" ? stripsPerBox * tabletsPerStrip : stripsPerBox;
 
     const existingIdx = cart.findIndex((item) =>
       item.productId === prod.id &&
@@ -297,13 +395,13 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
         return;
       }
       const updated = [...cart];
-      updated[existingIdx] = { ...existing, quantity: newQty, availableBaseStock: selectedLocation.quantity };
+      updated[existingIdx] = { ...existing, quantity: newQty, availableBaseStock: selectedLocation.quantity, unitPrice };
       setCart(updated);
     } else {
       setCart([...cart, {
         productId: prod.id, name: prod.name, genericName: prod.genericName || null, sku: prod.sku, size: prod.size,
-        productType: prod.productType || prod.category || "MEDICINE", unitType, unitMultiplier: multiplier, quantity, unitPrice,
-        basePrice: Number(prod.basePrice), stripsPerBox: stripsPerBox, tabletsPerStrip: tabletsPerStrip, tabletsPerBox,
+        productType: model, unitType, unitMultiplier: multiplier, quantity, unitPrice,
+        basePrice: baseSellingPrice, stripsPerBox, tabletsPerStrip, tabletsPerBox,
         availableBaseStock: selectedLocation.quantity, batchNumber: selectedBatch.batchNumber || null,
         expiryDate: selectedBatch.expiryDate || null, inventoryId: selectedBatch.id, inventoryLocationId: selectedLocation.id,
         shelfLocation: selectedLocation.locationLabel || null, locationLabel: selectedLocation.locationLabel || null,
@@ -318,9 +416,9 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
     setCart((prev) => prev.map((item) => {
       if (item.productId !== productId) return item;
       let multiplier = 1;
-      if (newUnit === "BOX") multiplier = item.stripsPerBox * item.tabletsPerStrip;
+      if (newUnit === "BOX") multiplier = item.tabletsPerBox;
       else if (newUnit === "STRIP") multiplier = item.tabletsPerStrip;
-      else if (newUnit === "TABLET" || newUnit === "PIECE" || newUnit === "BOTTLE") multiplier = 1;
+      else if (newUnit === "TABLET" || newUnit === "PIECE" || newUnit === "BOTTLE" || newUnit === "VIAL") multiplier = 1;
       const unitPrice = item.basePrice * multiplier;
       return { ...item, unitType: newUnit, unitMultiplier: multiplier, unitPrice };
     }));
@@ -590,7 +688,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                           <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-700/60 flex items-center justify-between">
                             <div>
                               <span className="text-xl font-black text-emerald-600 dark:text-emerald-400 font-mono">
-                                ৳{Number(p.basePrice).toFixed(2)}
+                                ৳{getProductUnitPrice(p).toFixed(2)}
                               </span>
                               <span className="text-xs font-bold text-slate-400"> / {p.unit}</span>
                             </div>
@@ -631,7 +729,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                       </div>
                       <div className="text-xs text-slate-600 dark:text-slate-300 mt-0.5 font-medium">
                         {selectedProduct?.genericName && <span className="font-bold text-emerald-700 dark:text-emerald-300">{selectedProduct.genericName} • </span>}
-                        Price: <strong className="text-slate-900 dark:text-white">৳{Number(selectedProduct?.basePrice || 0).toFixed(2)}</strong> per {selectedProduct?.unit || "unit"}
+                        Price: <strong className="text-slate-900 dark:text-white">৳{getProductUnitPrice(selectedProduct, selectedBatch).toFixed(2)}</strong> per {selectedProduct?.unit || "unit"}
                       </div>
                     </div>
                   </div>
@@ -776,6 +874,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                             packageType: selectedProduct?.productType,
                             unit: selectedProduct?.unit || "units",
                           });
+                          const model = getProductPackagingModel(selectedProduct);
                           return (
                             <button
                               key={loc.id}
@@ -801,14 +900,26 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                               </div>
 
                               <div className="flex items-baseline justify-between mb-2">
-                                <span className="text-2xl font-black text-slate-900 dark:text-white font-mono">{loc.quantity.toLocaleString()} <span className="text-xs font-normal text-slate-500">{selectedProduct?.unit || "units"}</span></span>
+                                <span className="text-2xl font-black text-slate-900 dark:text-white font-mono">
+                                  {loc.quantity.toLocaleString()}{" "}
+                                  <span className="text-xs font-normal text-slate-500">{selectedProduct?.unit || "units"}</span>
+                                </span>
                               </div>
 
-                              <div className="flex flex-wrap gap-1 my-2 text-xs">
-                                <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium">📦 {packDetails.fullBoxes} Box</span>
-                                <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium">💊 {packDetails.openBoxRemainingStrips} Strip</span>
-                                <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium">⚪ {packDetails.openBoxRemainingTablets} Tab</span>
-                              </div>
+                              {model === "MEDICINE" ? (
+                                <div className="flex flex-wrap gap-1 my-2 text-xs">
+                                  <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium">📦 {packDetails.fullBoxes} Box</span>
+                                  <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium">💊 {packDetails.openBoxRemainingStrips} Strip</span>
+                                  <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium">⚪ {packDetails.openBoxRemainingTablets} Tab</span>
+                                </div>
+                              ) : (
+                                <div className="my-2 text-xs">
+                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 font-bold border border-emerald-200 dark:border-emerald-800">
+                                    {model === "BOTTLE" ? "🧴" : model === "VIAL" ? "💉" : "📦"}
+                                    <span>{loc.quantity.toLocaleString()} {selectedProduct?.unit || (model === "BOTTLE" ? "bottle" : model === "VIAL" ? "vial" : "piece")}{loc.quantity > 1 ? "s" : ""} in this location</span>
+                                  </span>
+                                </div>
+                              )}
 
                               <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-700/60 text-xs font-black text-emerald-600 dark:text-emerald-400 flex items-center justify-between">
                                 <span>Select Location</span>
@@ -823,142 +934,138 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                 )}
 
                 {/* STEP 3: SELLING UNIT & QUANTITY */}
-                {posStep === "SELECT_UNIT" && selectedLocation && (
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between pb-1 border-b border-slate-100 dark:border-slate-800">
-                      <button onClick={() => setPosStep("SELECT_LOCATION")} className="flex items-center gap-1 text-xs font-black text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-xl cursor-pointer">
-                        <ArrowLeft className="h-4 w-4" /> Back to Locations
-                      </button>
-                      <span className="text-xs font-black text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 px-3 py-1 rounded-xl">
-                        Location: {selectedLocation.locationLabel}
-                      </span>
-                    </div>
+                {posStep === "SELECT_UNIT" && selectedLocation && (() => {
+                  const availableUnits = getAvailableSellingUnits(selectedProduct);
+                  const basePrice = getProductUnitPrice(selectedProduct, selectedBatch);
+                  const selectedUnitObj = availableUnits.find((u) => u.id === selectedUnit) || availableUnits[0];
+                  const mult = selectedUnitObj?.multiplier || 1;
+                  const totalUnits = quantity * mult;
+                  const unitPrice = basePrice * mult;
+                  const linePrice = unitPrice * quantity;
+                  const isEnough = selectedLocation.quantity >= totalUnits;
 
-                    {/* Selling Unit Selection */}
-                    <div className="space-y-2">
-                      <label className="text-xs font-black text-slate-700 dark:text-slate-300 uppercase tracking-wider block">
-                        Selling Unit:
-                      </label>
-                      <div className="grid grid-cols-3 gap-3">
-                        {(["BOX", "STRIP", "TABLET"] as string[]).map((unit) => {
-                          const tabletsPerStrip = selectedProduct?.tabletsPerStrip || 10;
-                          const stripsPerBox = selectedProduct?.stripsPerBox || 10;
-                          const isSelected = selectedUnit === unit;
-                          return (
-                            <button
-                              key={unit}
-                              type="button"
-                              onClick={() => selectUnitType(unit)}
-                              className={`p-4 rounded-2xl border-2 text-center transition cursor-pointer ${isSelected
-                                ? "border-emerald-600 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 font-bold shadow-xs"
-                                : "border-slate-200 dark:border-slate-700 hover:border-slate-300 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300"
-                                }`}
-                            >
-                              <div className="font-black text-lg">
-                                {unit === "BOX" ? "📦 Box" : unit === "STRIP" ? "💊 Strip" : "⚪ Tablet"}
-                              </div>
-                              <div className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">
-                                {unit === "BOX" ? `${stripsPerBox} strips` : unit === "STRIP" ? `${tabletsPerStrip} tabs` : "1 unit"}
-                              </div>
-                            </button>
-                          );
-                        })}
+                  return (
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between pb-1 border-b border-slate-100 dark:border-slate-800">
+                        <button onClick={() => setPosStep("SELECT_LOCATION")} className="flex items-center gap-1 text-xs font-black text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-xl cursor-pointer">
+                          <ArrowLeft className="h-4 w-4" /> Back to Locations
+                        </button>
+                        <span className="text-xs font-black text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 px-3 py-1 rounded-xl">
+                          Location: {selectedLocation.locationLabel}
+                        </span>
                       </div>
-                    </div>
 
-                    {/* Quantity Counter */}
-                    <div className="space-y-2">
-                      <label className="text-xs font-black text-slate-700 dark:text-slate-300 uppercase tracking-wider block">
-                        Quantity ({selectedUnit}):
-                      </label>
-                      <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-800/80 p-4 rounded-2xl border-2 border-slate-200 dark:border-slate-700 gap-3">
-                        <div className="text-xs text-slate-600 dark:text-slate-400">
-                          Stock Available: <strong className="text-slate-900 dark:text-white font-mono text-sm">{selectedLocation.quantity.toLocaleString()}</strong> units
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                            className="p-3.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 transition font-black cursor-pointer"
-                          >
-                            <Minus className="h-6 w-6" />
-                          </button>
-
-                          <input
-                            type="number"
-                            min={1}
-                            value={quantity}
-                            onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value, 10) || 1))}
-                            className="w-24 py-2.5 bg-white dark:bg-slate-900 border-2 border-emerald-600 rounded-xl text-center font-black text-2xl text-slate-900 dark:text-white outline-none"
-                          />
-
-                          <button
-                            type="button"
-                            onClick={() => setQuantity(quantity + 1)}
-                            className="p-3.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 transition font-black cursor-pointer"
-                          >
-                            <Plus className="h-6 w-6" />
-                          </button>
+                      {/* Selling Unit Selection */}
+                      <div className="space-y-2">
+                        <label className="text-xs font-black text-slate-700 dark:text-slate-300 uppercase tracking-wider block">
+                          Selling Unit:
+                        </label>
+                        <div className={`grid ${availableUnits.length === 1 ? "grid-cols-1 sm:grid-cols-2" : availableUnits.length === 2 ? "grid-cols-2" : "grid-cols-3"} gap-3`}>
+                          {availableUnits.map((u) => {
+                            const isSelected = selectedUnit === u.id;
+                            return (
+                              <button
+                                key={u.id}
+                                type="button"
+                                onClick={() => selectUnitType(u.id)}
+                                className={`p-4 rounded-2xl border-2 text-center transition cursor-pointer ${isSelected
+                                  ? "border-emerald-600 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 font-bold shadow-xs"
+                                  : "border-slate-200 dark:border-slate-700 hover:border-slate-300 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300"
+                                  }`}
+                              >
+                                <div className="font-black text-base sm:text-lg">
+                                  {u.label}
+                                </div>
+                                <div className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">
+                                  {u.subtext}
+                                </div>
+                              </button>
+                            );
+                          })}
                         </div>
                       </div>
 
-                      {/* Quick Add Presets */}
-                      <div className="flex items-center gap-1.5 pt-1">
-                        <span className="text-xs text-slate-400 font-bold">Quick Qty:</span>
-                        {[1, 5, 10, 20, 50].map((num) => (
-                          <button
-                            key={num}
-                            type="button"
-                            onClick={() => setQuantity(num)}
-                            className={`px-3 py-1.5 rounded-xl text-xs font-black transition border cursor-pointer ${quantity === num
-                              ? "bg-emerald-600 text-white border-emerald-600"
-                              : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-emerald-600"
-                              }`}
-                          >
-                            +{num}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Line calculation & Add to Cart */}
-                    {(() => {
-                      const mult = selectedUnit === "BOX"
-                        ? (selectedProduct?.stripsPerBox || 10) * (selectedProduct?.tabletsPerStrip || 10)
-                        : selectedUnit === "STRIP"
-                          ? (selectedProduct?.tabletsPerStrip || 10)
-                          : 1;
-                      const totalUnits = quantity * mult;
-                      const unitPrice = Number(selectedProduct?.basePrice || 0) * mult;
-                      const linePrice = unitPrice * quantity;
-                      const isEnough = selectedLocation.quantity >= totalUnits;
-
-                      return (
-                        <div className="space-y-3 pt-2">
-                          <div className="p-4 bg-slate-100 dark:bg-slate-800/90 rounded-2xl text-xs space-y-1.5 border border-slate-200 dark:border-slate-700">
-                            <div className="flex justify-between text-slate-600 dark:text-slate-400">
-                              <span>Total Base Units Needed:</span>
-                              <span className="font-bold text-slate-900 dark:text-white">{totalUnits.toLocaleString()} units</span>
-                            </div>
-                            <div className="flex justify-between items-baseline pt-1 border-t border-slate-200 dark:border-slate-700">
-                              <span className="font-black text-base text-slate-800 dark:text-slate-200">Total Price:</span>
-                              <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono">৳{linePrice.toFixed(2)}</span>
-                            </div>
+                      {/* Quantity Counter */}
+                      <div className="space-y-2">
+                        <label className="text-xs font-black text-slate-700 dark:text-slate-300 uppercase tracking-wider block">
+                          Quantity ({selectedUnitObj?.label || selectedUnit}):
+                        </label>
+                        <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-800/80 p-4 rounded-2xl border-2 border-slate-200 dark:border-slate-700 gap-3">
+                          <div className="text-xs text-slate-600 dark:text-slate-400">
+                            Stock Available: <strong className="text-slate-900 dark:text-white font-mono text-sm">{selectedLocation.quantity.toLocaleString()}</strong> units
                           </div>
 
-                          <button
-                            onClick={confirmAddToCart}
-                            disabled={!isEnough}
-                            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black py-4 rounded-2xl text-lg shadow-md transition flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
-                          >
-                            <CheckCircle2 className="h-6 w-6" /> Add to Cart (৳{linePrice.toFixed(2)})
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                              className="p-3.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 transition font-black cursor-pointer"
+                            >
+                              <Minus className="h-6 w-6" />
+                            </button>
+
+                            <input
+                              type="number"
+                              min={1}
+                              value={quantity}
+                              onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                              className="w-24 py-2.5 bg-white dark:bg-slate-900 border-2 border-emerald-600 rounded-xl text-center font-black text-2xl text-slate-900 dark:text-white outline-none"
+                            />
+
+                            <button
+                              type="button"
+                              onClick={() => setQuantity(quantity + 1)}
+                              className="p-3.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 transition font-black cursor-pointer"
+                            >
+                              <Plus className="h-6 w-6" />
+                            </button>
+                          </div>
                         </div>
-                      );
-                    })()}
-                  </div>
-                )}
+
+                        {/* Quick Add Presets */}
+                        <div className="flex items-center gap-1.5 pt-1">
+                          <span className="text-xs text-slate-400 font-bold">Quick Qty:</span>
+                          {[1, 5, 10, 20, 50].map((num) => (
+                            <button
+                              key={num}
+                              type="button"
+                              onClick={() => setQuantity(num)}
+                              className={`px-3 py-1.5 rounded-xl text-xs font-black transition border cursor-pointer ${quantity === num
+                                ? "bg-emerald-600 text-white border-emerald-600"
+                                : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-emerald-600"
+                                }`}
+                            >
+                              +{num}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Line calculation & Add to Cart */}
+                      <div className="space-y-3 pt-2">
+                        <div className="p-4 bg-slate-100 dark:bg-slate-800/90 rounded-2xl text-xs space-y-1.5 border border-slate-200 dark:border-slate-700">
+                          <div className="flex justify-between text-slate-600 dark:text-slate-400">
+                            <span>Total Base Units Needed:</span>
+                            <span className="font-bold text-slate-900 dark:text-white">{totalUnits.toLocaleString()} {selectedProduct?.unit || "units"}</span>
+                          </div>
+                          <div className="flex justify-between items-baseline pt-1 border-t border-slate-200 dark:border-slate-700">
+                            <span className="font-black text-base text-slate-800 dark:text-slate-200">Total Price:</span>
+                            <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono">৳{linePrice.toFixed(2)}</span>
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={confirmAddToCart}
+                          disabled={!isEnough}
+                          className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black py-4 rounded-2xl text-lg shadow-md transition flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+                        >
+                          <CheckCircle2 className="h-6 w-6" /> Add to Cart (৳{linePrice.toFixed(2)})
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()}
+                {/* End of STEP 3 */}
               </div>
             )}
           </div>

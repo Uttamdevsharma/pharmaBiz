@@ -69,21 +69,21 @@ export function PricingSection() {
 
   return (
     <section id="pricing" className="py-24 bg-slate-100/60 dark:bg-slate-900/40 border-y border-slate-200/60 dark:border-slate-800/60">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
+      <div className="w-full max-w-[1720px] mx-auto px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 2xl:px-16 space-y-12 2xl:space-y-16">
         {/* Section Header */}
-        <div className="text-center max-w-3xl mx-auto space-y-4">
+        <div className="text-center max-w-3xl 2xl:max-w-4xl mx-auto space-y-4">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider brand-subtle-bg text-brand-primary border brand-subtle-border">
             Flexible Subscription Tiers
           </div>
-          <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+          <h2 className="text-3xl sm:text-4xl 2xl:text-5xl font-extrabold text-slate-900 dark:text-white tracking-tight">
             Transparent Pricing Designed To Scale With You
           </h2>
-          <p className="text-base sm:text-lg text-slate-600 dark:text-slate-400">
+          <p className="text-base sm:text-lg 2xl:text-xl text-slate-600 dark:text-slate-400">
             Start with our 7-Day Free Trial, then choose the plan matching your branch scale.
           </p>
 
           {/* Free Trial Highlight Box */}
-          <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-emerald-500/10 border border-emerald-500/30 text-emerald-900 dark:text-emerald-300 text-xs sm:text-sm font-semibold flex flex-col sm:flex-row items-center justify-between gap-4 max-w-2xl mx-auto shadow-sm">
+          <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-emerald-500/10 border border-emerald-500/30 text-emerald-900 dark:text-emerald-300 text-xs sm:text-sm font-semibold flex flex-col sm:flex-row items-center justify-between gap-4 max-w-2xl 2xl:max-w-3xl mx-auto shadow-sm">
             <div className="flex items-center gap-2.5">
               <Clock className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
               <span>
@@ -126,7 +126,7 @@ export function PricingSection() {
         </div>
 
         {/* Pricing Cards Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-stretch">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 2xl:gap-10 items-stretch">
           {paidPlans.map((plan: any) => {
             const isGrowth = plan.tier === "GROWTH";
             const basePrice = Number(plan.price);
@@ -136,7 +136,7 @@ export function PricingSection() {
             return (
               <div
                 key={plan.id}
-                className={`relative rounded-2xl p-8 flex flex-col justify-between transition-all duration-300 ${
+                className={`relative rounded-2xl 2xl:rounded-3xl p-8 2xl:p-10 flex flex-col justify-between transition-all duration-300 ${
                   isGrowth
                     ? "bg-white dark:bg-slate-900 border-2 border-brand-primary shadow-xl scale-105 z-10"
                     : "bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-lg"

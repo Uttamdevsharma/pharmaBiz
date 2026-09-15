@@ -18,18 +18,18 @@ export function Hero() {
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[550px] sm:w-[750px] h-[550px] sm:h-[750px] rounded-full brand-glow -z-10 opacity-25 blur-3xl pointer-events-none" />
       <div className="absolute top-16 right-0 w-96 h-96 rounded-full bg-teal-500/10 -z-10 blur-3xl pointer-events-none" />
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-8 xl:gap-12 items-center">
+      <div className="w-full max-w-[1720px] mx-auto px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 2xl:px-16">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-10 xl:gap-14 2xl:gap-16 items-center">
           {/* Left Column: Content & CTAs */}
-          <div className="lg:col-span-6 xl:col-span-6 flex flex-col items-start text-left space-y-6 sm:space-y-8">
+          <div className="lg:col-span-7 xl:col-span-7 2xl:col-span-7 flex flex-col items-start text-left space-y-6 sm:space-y-8 2xl:space-y-10">
             {/* SaaS Badge */}
             <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border brand-subtle-border brand-subtle-bg text-brand-primary text-xs sm:text-sm font-semibold tracking-wide shadow-sm">
               <Sparkles className="h-4 w-4 shrink-0" />
               <span>{hero.badge || "Next-Gen Multi-Tenant Pharmacy Platform"}</span>
             </div>
 
-            {/* Main Headline (56-64px on desktop) */}
-            <h1 className="text-3xl sm:text-5xl lg:text-[56px] xl:text-[64px] font-extrabold tracking-tight text-slate-900 dark:text-white leading-[1.12] lg:leading-[1.08]">
+            {/* Main Headline (50-68px on desktop) */}
+            <h1 className="text-3xl sm:text-5xl lg:text-[50px] xl:text-[60px] 2xl:text-[68px] font-extrabold tracking-tight text-slate-900 dark:text-white leading-[1.12] lg:leading-[1.08] max-w-3xl 2xl:max-w-4xl">
               {hero.title ? (
                 hero.title
               ) : (
@@ -41,7 +41,7 @@ export function Hero() {
             </h1>
 
             {/* Subtitle */}
-            <p className="text-base sm:text-lg lg:text-xl text-slate-600 dark:text-slate-300 max-w-2xl leading-relaxed">
+            <p className="text-base sm:text-lg lg:text-xl 2xl:text-2xl text-slate-600 dark:text-slate-300 max-w-2xl 2xl:max-w-3xl leading-relaxed">
               {hero.subtitle ||
                 "Centralized pricing, real-time inventory management, multi-branch control, automated POS, and zero downtime even when the internet is disconnected."}
             </p>
@@ -87,9 +87,9 @@ export function Hero() {
             </div>
           </div>
 
-          {/* Right Column: Hero Image Showcase (500-560px on desktop) */}
-          <div className="lg:col-span-6 xl:col-span-6 w-full flex justify-center lg:justify-end">
-            <div className="relative w-full max-w-[480px] sm:max-w-[520px] lg:max-w-[510px] xl:max-w-[560px]">
+          {/* Right Column: Hero Image Showcase (fluid up to 680px on 22-32 inch screens) */}
+          <div className="lg:col-span-5 xl:col-span-5 2xl:col-span-5 w-full flex justify-center lg:justify-end">
+            <div className="relative w-full max-w-[480px] sm:max-w-[520px] lg:max-w-[520px] xl:max-w-[600px] 2xl:max-w-[680px]">
               {/* Subtle background glow */}
               <div className="absolute -inset-2 bg-gradient-to-tr from-emerald-500/30 to-teal-500/30 rounded-3xl blur-2xl opacity-70 -z-10" />
 

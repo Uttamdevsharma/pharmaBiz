@@ -15,12 +15,12 @@ export function Navbar() {
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200/60 dark:border-slate-800/60 transition-colors">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-20">
+      <div className="w-full max-w-[1720px] mx-auto px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 2xl:px-16">
+        <div className="flex items-center justify-between h-20 sm:h-22">
           {/* Logo & Brand */}
-          <Link href="/" className="flex items-center gap-3 group">
+          <Link href="/" className="flex items-center gap-3.5 group">
             {settings.logoUrl ? (
-              <div className="h-11 w-11 rounded-xl overflow-hidden bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center p-1 shadow-sm transition-transform group-hover:scale-105">
+              <div className="h-12 w-12 sm:h-14 sm:w-14 rounded-2xl overflow-hidden bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center p-1.5 shadow-sm transition-transform group-hover:scale-105 shrink-0">
                 <img
                   src={settings.logoUrl}
                   alt={settings.siteName || "Logo"}
@@ -28,18 +28,13 @@ export function Navbar() {
                 />
               </div>
             ) : (
-              <div className="h-11 w-11 rounded-xl bg-brand-primary flex items-center justify-center text-white shadow-md transition-transform group-hover:scale-105">
-                <Pill className="h-6 w-6 transform -rotate-45" />
+              <div className="h-12 w-12 sm:h-14 sm:w-14 rounded-2xl bg-brand-primary flex items-center justify-center text-white shadow-md transition-transform group-hover:scale-105 shrink-0">
+                <Pill className="h-7 w-7 sm:h-8 sm:w-8 transform -rotate-45" />
               </div>
             )}
-            <div className="flex flex-col">
-              <span className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">
-                {settings.siteName || "PharmaBiz"}
-              </span>
-              <span className="text-[10px] uppercase tracking-wider font-semibold text-brand-primary">
-                Multi-Tenant SaaS
-              </span>
-            </div>
+            <span className="text-2xl sm:text-3xl font-extrabold tracking-tight text-brand-primary">
+              {settings.siteName?.replace(/\s+SaaS$/i, "") || "PharmaBiz"}
+            </span>
           </Link>
 
           {/* Centered Desktop Nav Items - Exactly 3 items */}

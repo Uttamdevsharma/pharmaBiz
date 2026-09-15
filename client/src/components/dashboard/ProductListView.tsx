@@ -224,9 +224,7 @@ export function ProductListView({ onNavigate, onEditProduct }: ProductListViewPr
                 <tr className="bg-slate-50/75 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 uppercase tracking-wider font-bold text-[10px]">
                   <th className="py-3 px-4">Product & Specs</th>
                   <th className="py-3 px-4">Category & Subcategory</th>
-                  <th className="py-3 px-4">Selling Price</th>
                   <th className="py-3 px-4">Packaging & Units</th>
-                  <th className="py-3 px-4">Shelf Location</th>
                   <th className="py-3 px-4">Barcode</th>
                   <th className="py-3 px-4 text-right">Actions</th>
                 </tr>
@@ -266,25 +264,18 @@ export function ProductListView({ onNavigate, onEditProduct }: ProductListViewPr
                         )}
                       </td>
 
-                      <td className="py-3.5 px-4 font-black text-slate-900 dark:text-white">
-                        ৳{Number(p.basePrice).toFixed(2)}
-                        <span className="text-[10px] text-slate-400 font-normal"> / {p.unit}</span>
-                      </td>
-
                       <td className="py-3.5 px-4 text-[11px]">
-                        {isMed && p.stripsPerBox && p.tabletsPerStrip ? (
+                        {isMed && p.stripsPerBox && p.tabletsPerStrip && p.tabletsPerStrip > 1 ? (
                           <span>
                             1 Box = {p.stripsPerBox} Strips ({p.stripsPerBox * p.tabletsPerStrip} Tabs)
+                          </span>
+                        ) : p.stripsPerBox && p.stripsPerBox > 1 ? (
+                          <span>
+                            1 Box = {p.stripsPerBox} {p.unit}s
                           </span>
                         ) : (
                           <span>Single {p.unit}</span>
                         )}
-                      </td>
-
-                      <td className="py-3.5 px-4">
-                        <span className="text-slate-500 font-mono text-[11px]">
-                          {p.shelfLocation || "Unassigned"}
-                        </span>
                       </td>
 
                       <td className="py-3.5 px-4 font-mono text-slate-400 text-[11px]">

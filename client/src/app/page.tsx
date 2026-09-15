@@ -20,8 +20,8 @@ export default function Home() {
         <HowItWorks />
 
         {/* Clean Modern Pricing CTA Preview Section */}
-        <section className="py-20 bg-gradient-to-b from-slate-100/80 to-white dark:from-slate-900/50 dark:to-slate-950 border-y border-slate-200/80 dark:border-slate-800/80">
-          <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-6">
+        <section className="py-20 2xl:py-28 bg-gradient-to-b from-slate-100/80 to-white dark:from-slate-900/50 dark:to-slate-950 border-y border-slate-200/80 dark:border-slate-800/80">
+          <div className="w-full max-w-5xl 2xl:max-w-6xl mx-auto px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 2xl:px-16 text-center space-y-6 2xl:space-y-8">
             <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border brand-subtle-border brand-subtle-bg text-brand-primary text-xs font-semibold uppercase tracking-wider shadow-sm">
               <Sparkles className="h-4 w-4" />
               <span>Transparent & Scalable Tiers</span>

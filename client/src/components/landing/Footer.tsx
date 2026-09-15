@@ -10,8 +10,8 @@ export function Footer() {
 
   return (
     <footer className="bg-slate-900 text-slate-400 border-t border-slate-800">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-10 mb-12">
+      <div className="w-full max-w-[1720px] mx-auto px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 2xl:px-16 py-16 2xl:py-20">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-10 2xl:gap-16 mb-12">
           {/* Brand Col */}
           <div className="space-y-4 md:col-span-2">
             <Link href="/" className="flex items-center gap-3">
@@ -28,8 +28,8 @@ export function Footer() {
                   <Pill className="h-5 w-5 transform -rotate-45" />
                 </div>
               )}
-              <span className="text-xl font-bold tracking-tight text-white">
-                {settings.siteName || "PharmaBiz"}
+              <span className="text-2xl font-extrabold tracking-tight text-white">
+                {settings.siteName?.replace(/\s+SaaS$/i, "") || "PharmaBiz"}
               </span>
             </Link>
             <p className="text-sm text-slate-400 max-w-md leading-relaxed">

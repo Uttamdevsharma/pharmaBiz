@@ -51,28 +51,28 @@ export default function ContactPage() {
       <Navbar />
 
       <main className="flex-1 pt-28 pb-24 md:pt-36 md:pb-32 overflow-hidden">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="w-full max-w-[1720px] mx-auto px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 2xl:px-16">
           {/* Header */}
-          <div className="text-center max-w-3xl mx-auto space-y-4 mb-16">
+          <div className="text-center max-w-3xl 2xl:max-w-4xl mx-auto space-y-4 mb-16">
             <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border brand-subtle-border brand-subtle-bg text-brand-primary text-xs sm:text-sm font-semibold tracking-wide shadow-sm">
               <Sparkles className="h-4 w-4" />
               <span>Dedicated Healthcare Support</span>
             </div>
 
-            <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+            <h1 className="text-3xl sm:text-5xl 2xl:text-6xl font-extrabold tracking-tight text-slate-900 dark:text-white">
               Get In Touch With PharmaBiz
             </h1>
 
-            <p className="text-base sm:text-lg text-slate-600 dark:text-slate-300 leading-relaxed">
+            <p className="text-base sm:text-lg 2xl:text-xl text-slate-600 dark:text-slate-300 leading-relaxed">
               Have questions regarding offline POS deployment, branch data migration, or enterprise compliance?
               Our specialized team is here to assist you.
             </p>
           </div>
 
           {/* 2-Column Contact Layout */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-start max-w-6xl mx-auto">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 2xl:gap-16 items-start max-w-6xl 2xl:max-w-7xl mx-auto">
             {/* Left Column: Direct Contact Info */}
-            <div className="lg:col-span-5 space-y-6">
+            <div className="lg:col-span-5 2xl:col-span-5 space-y-6">
               <div className="space-y-3">
                 <h3 className="text-2xl font-bold text-slate-900 dark:text-white">
                   Direct Channels
@@ -152,8 +152,8 @@ export default function ContactPage() {
             </div>
 
             {/* Right Column: Clean Contact Form */}
-            <div className="lg:col-span-7">
-              <div className="p-6 sm:p-8 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xl space-y-6">
+            <div className="lg:col-span-7 2xl:col-span-7">
+              <div className="p-6 sm:p-8 2xl:p-10 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xl space-y-6">
                 <div className="space-y-1">
                   <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-brand-primary">
                     <MessageSquare className="h-4 w-4" />

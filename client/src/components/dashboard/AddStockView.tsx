@@ -23,11 +23,95 @@ import {
   Calculator,
   Info,
   User,
+  Pill,
+  Droplets,
+  Syringe,
+  Sparkles,
 } from "lucide-react";
 
 interface AddStockViewProps {
   onNavigate: (module: any) => void;
 }
+
+export type PackagingModel = "TABLET" | "BOTTLE" | "PIECE" | "VIAL";
+
+export const getPackagingModel = (prod?: Product | null, packageType?: string): PackagingModel => {
+  if (!prod && !packageType) return "TABLET";
+  const unit = (prod?.unit || "").toLowerCase();
+  const packType = (prod?.defaultPackType || "").toUpperCase();
+  const pType = (prod?.productType || "").toUpperCase();
+  const cat = (prod?.category || prod?.categoryRef?.name || packageType || "").toLowerCase();
+  const name = (prod?.name || "").toLowerCase();
+  const generic = (prod?.genericName || "").toLowerCase();
+
+  // 1. Bottle checks
+  if (
+    packType === "BOTTLE" ||
+    packageType === "BOTTLE" ||
+    unit === "bottle" ||
+    pType === "SYRUP" ||
+    cat.includes("syrup") ||
+    cat.includes("liquid") ||
+    cat.includes("suspension") ||
+    cat.includes("drop") ||
+    cat.includes("tonic")
+  ) {
+    return "BOTTLE";
+  }
+
+  // 2. Vial / Injection checks
+  if (
+    packType === "VIAL" ||
+    packageType === "VIAL" ||
+    unit === "vial" ||
+    unit === "ampoule" ||
+    pType === "SALINE" ||
+    cat.includes("inject") ||
+    cat.includes("vial") ||
+    cat.includes("ampoule") ||
+    cat.includes("saline") ||
+    cat.includes("infusion") ||
+    name.includes("injection") ||
+    name.includes("vial") ||
+    name.includes("ampoule") ||
+    generic.includes("injection") ||
+    generic.includes("vial")
+  ) {
+    return "VIAL";
+  }
+
+  // 3. Piece / Unit checks (Diaper, Syringe, Bandage, Device, Surgical, etc.)
+  if (
+    packType === "PIECE" ||
+    packageType === "PIECE" ||
+    unit === "piece" ||
+    unit === "pack" ||
+    unit === "unit" ||
+    unit === "pcs" ||
+    pType === "EQUIPMENT" ||
+    cat.includes("diaper") ||
+    cat.includes("equip") ||
+    cat.includes("device") ||
+    cat.includes("care") ||
+    cat.includes("surgical") ||
+    cat.includes("hygiene") ||
+    cat.includes("essential") ||
+    name.includes("diaper") ||
+    generic.includes("diaper") ||
+    name.includes("syringe") ||
+    generic.includes("syringe") ||
+    name.includes("bandage") ||
+    generic.includes("bandage")
+  ) {
+    return "PIECE";
+  }
+
+  return "TABLET";
+};
+
+const isBottleProduct = (prod?: Product | null, packageType?: string) => {
+  return getPackagingModel(prod, packageType) === "BOTTLE";
+};
 
 export function AddStockView({ onNavigate }: AddStockViewProps) {
   const { user } = useAuth();
@@ -205,35 +289,38 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
   const handleSelectProduct = (prod: Product) => {
     setSelectedProduct(prod);
 
-    const isMed =
-      prod.category === "Medicine" ||
-      prod.categoryRef?.name === "Medicine" ||
-      prod.productType === "MEDICINE" ||
-      !prod.productType;
-    const strips = prod.stripsPerBox || 10;
-    const tablets = prod.tabletsPerStrip || 10;
-    const boxesPer = prod.qtyPerLevel2 || 10;
-    const cartonQty = 5;
-    const looseBoxes = 7;
-    const totalBoxes = receivingUnit === "CARTON" ? cartonQty * boxesPer : looseBoxes;
-    const totalUnits = isMed ? totalBoxes * strips * tablets : 100;
+    const model = getPackagingModel(prod);
+    const isBottle = model === "BOTTLE";
+    const isPiece = model === "PIECE";
+    const isVial = model === "VIAL";
+    const isTablet = model === "TABLET";
 
-    // In product catalog, basePrice is Selling Price per Box
-    const boxSelling = Number(prod.basePrice) || 250;
+    const itemsPerBox = prod.stripsPerBox || (isBottle ? 12 : isPiece ? 1 : 10);
+    const strips = isTablet ? (prod.stripsPerBox || 10) : (isBottle ? 1 : itemsPerBox);
+    const tablets = isTablet ? (prod.tabletsPerStrip || 10) : 1;
+    const unitsPerBox = isBottle ? 1 : (isTablet ? (strips * tablets) : itemsPerBox);
+
+    const boxesPerCarton = prod.qtyPerLevel2 || (isBottle ? (prod.stripsPerBox || 12) : 10);
+    const cartonQty = isBottle ? 2 : 5;
+    const looseBoxes = isBottle ? 10 : (isPiece ? 20 : 7);
+    const totalBoxes = receivingUnit === "CARTON" ? cartonQty * boxesPerCarton : looseBoxes;
+    const totalUnits = isBottle ? totalBoxes : totalBoxes * unitsPerBox;
+
+    // In product catalog, basePrice is Selling Price (per Box or per Bottle)
+    const boxSelling = Number(prod.basePrice) || (isBottle ? 180 : 250);
     const boxPurchase = Math.round(boxSelling * 0.7 * 100) / 100;
-    const tabletsPerBox = strips * tablets;
-    const unitPurchase = tabletsPerBox > 0 ? Math.round((boxPurchase / tabletsPerBox) * 10000) / 10000 : 0;
-    const unitSelling = tabletsPerBox > 0 ? Math.round((boxSelling / tabletsPerBox) * 10000) / 10000 : 0;
+    const unitPurchase = isBottle ? boxPurchase : (unitsPerBox > 0 ? Math.round((boxPurchase / unitsPerBox) * 10000) / 10000 : 0);
+    const unitSelling = isBottle ? boxSelling : (unitsPerBox > 0 ? Math.round((boxSelling / unitsPerBox) * 10000) / 10000 : 0);
     const totalCost = Math.round(totalBoxes * boxPurchase * 100) / 100;
 
     setFormData((prev) => ({
       ...prev,
       productId: prod.id,
       barcode: prod.barcode || prev.barcode,
-      packageType: prod.category || prod.categoryRef?.name || "Medicine",
+      packageType: model,
       cartonQuantity: cartonQty,
       boxesReceived: looseBoxes,
-      boxesPerCarton: boxesPer,
+      boxesPerCarton: boxesPerCarton,
       boxQuantity: totalBoxes,
       stripsPerBox: strips,
       tabletsPerStrip: tablets,
@@ -255,20 +342,27 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
     }
     setSelectedExistingBatch(b);
 
-    const strips = selectedProduct?.stripsPerBox || b.stripsPerBox || 10;
-    const tabs = selectedProduct?.tabletsPerStrip || b.tabletsPerStrip || 10;
-    const tabsPerBox = strips * tabs;
-    const boxesPer = b.boxesPerCarton || formData.boxesPerCarton || 10;
+    const model = getPackagingModel(selectedProduct, formData.packageType);
+    const isBottle = model === "BOTTLE";
+    const isPiece = model === "PIECE";
+    const isVial = model === "VIAL";
+    const isTablet = model === "TABLET";
 
-    const boxPurchase = b.boxPurchasePrice ? Number(b.boxPurchasePrice) : (b.purchasePrice ? Number(b.purchasePrice) * tabsPerBox : formData.boxPurchasePrice);
-    const boxSelling = b.boxSellingPrice ? Number(b.boxSellingPrice) : (b.sellingPrice ? Number(b.sellingPrice) * tabsPerBox : formData.boxSellingPrice);
-    const unitPurchase = tabsPerBox > 0 ? Math.round((boxPurchase / tabsPerBox) * 10000) / 10000 : 0;
-    const unitSelling = tabsPerBox > 0 ? Math.round((boxSelling / tabsPerBox) * 10000) / 10000 : 0;
+    const itemsPerBox = selectedProduct?.stripsPerBox || b.stripsPerBox || (isBottle ? 12 : isPiece ? 1 : 10);
+    const strips = isTablet ? (selectedProduct?.stripsPerBox || b.stripsPerBox || 10) : (isBottle ? 1 : itemsPerBox);
+    const tabs = isTablet ? (selectedProduct?.tabletsPerStrip || b.tabletsPerStrip || 10) : 1;
+    const unitsPerBox = isBottle ? 1 : (isTablet ? (strips * tabs) : itemsPerBox);
+    const boxesPer = b.boxesPerCarton || selectedProduct?.qtyPerLevel2 || formData.boxesPerCarton || (isBottle ? 12 : 10);
+
+    const boxPurchase = b.boxPurchasePrice ? Number(b.boxPurchasePrice) : (b.purchasePrice ? (isBottle ? Number(b.purchasePrice) : Number(b.purchasePrice) * unitsPerBox) : formData.boxPurchasePrice);
+    const boxSelling = b.boxSellingPrice ? Number(b.boxSellingPrice) : (b.sellingPrice ? (isBottle ? Number(b.sellingPrice) : Number(b.sellingPrice) * unitsPerBox) : formData.boxSellingPrice);
+    const unitPurchase = isBottle ? boxPurchase : (unitsPerBox > 0 ? Math.round((boxPurchase / unitsPerBox) * 10000) / 10000 : 0);
+    const unitSelling = isBottle ? boxSelling : (unitsPerBox > 0 ? Math.round((boxSelling / unitsPerBox) * 10000) / 10000 : 0);
 
     setFormData((prev) => {
       const isCarton = receivingUnit === "CARTON";
       const totalBoxes = isCarton ? (prev.cartonQuantity * boxesPer) : prev.boxesReceived;
-      const totalUnits = totalBoxes * tabsPerBox;
+      const totalUnits = isBottle ? totalBoxes : totalBoxes * unitsPerBox;
       const totalCost = Math.round(totalBoxes * boxPurchase * 100) / 100;
       return {
         ...prev,
@@ -293,19 +387,27 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
 
   const handleReceivingUnitToggle = (unit: "CARTON" | "BOX") => {
     setReceivingUnit(unit);
-    const strips = formData.stripsPerBox || 10;
-    const tabs = formData.tabletsPerStrip || 10;
-    const boxesPer = formData.boxesPerCarton || 10;
+    const model = getPackagingModel(selectedProduct, formData.packageType);
+    const isBottle = model === "BOTTLE";
+    const isPiece = model === "PIECE";
+    const isVial = model === "VIAL";
+    const isTablet = model === "TABLET";
+
+    const itemsPerBox = formData.stripsPerBox || (isBottle ? 12 : isPiece ? 1 : 10);
+    const strips = isTablet ? (formData.stripsPerBox || 10) : (isBottle ? 1 : itemsPerBox);
+    const tabs = isTablet ? (formData.tabletsPerStrip || 10) : 1;
+    const unitsPerBox = isBottle ? 1 : (isTablet ? (strips * tabs) : itemsPerBox);
+    const boxesPer = formData.boxesPerCarton || (isBottle ? 12 : 10);
 
     let totalBoxes = 0;
     if (unit === "CARTON") {
-      const cartons = formData.cartonQuantity || 5;
+      const cartons = formData.cartonQuantity || (isBottle ? 2 : 5);
       totalBoxes = cartons * boxesPer;
     } else {
-      totalBoxes = formData.boxesReceived || 7;
+      totalBoxes = formData.boxesReceived || (isBottle ? 10 : (isPiece ? 20 : 7));
     }
 
-    const total = totalBoxes * strips * tabs;
+    const total = isBottle ? totalBoxes : totalBoxes * unitsPerBox;
     const totalCost = Math.round(totalBoxes * formData.boxPurchasePrice * 100) / 100;
     setFormData((prev) => ({
       ...prev,
@@ -316,10 +418,19 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
   };
 
   const handleCartonChange = (cartons: number, boxesPer: number) => {
-    const strips = formData.stripsPerBox || 10;
-    const tabs = formData.tabletsPerStrip || 10;
+    const model = getPackagingModel(selectedProduct, formData.packageType);
+    const isBottle = model === "BOTTLE";
+    const isPiece = model === "PIECE";
+    const isVial = model === "VIAL";
+    const isTablet = model === "TABLET";
+
+    const itemsPerBox = formData.stripsPerBox || (isBottle ? 12 : isPiece ? 1 : 10);
+    const strips = isTablet ? (formData.stripsPerBox || 10) : (isBottle ? 1 : itemsPerBox);
+    const tabs = isTablet ? (formData.tabletsPerStrip || 10) : 1;
+    const unitsPerBox = isBottle ? 1 : (isTablet ? (strips * tabs) : itemsPerBox);
+
     const totalBoxes = cartons * boxesPer;
-    const totalTablets = totalBoxes * strips * tabs;
+    const totalUnits = isBottle ? totalBoxes : totalBoxes * unitsPerBox;
     const totalCost = Math.round(totalBoxes * formData.boxPurchasePrice * 100) / 100;
 
     setFormData((prev) => ({
@@ -327,34 +438,50 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
       cartonQuantity: cartons,
       boxesPerCarton: boxesPer,
       boxQuantity: totalBoxes,
-      quantity: totalTablets,
+      quantity: totalUnits,
       paidAmount: totalCost,
     }));
   };
 
   const handleBoxesReceivedChange = (looseBoxes: number) => {
-    const strips = formData.stripsPerBox || 10;
-    const tabs = formData.tabletsPerStrip || 10;
+    const model = getPackagingModel(selectedProduct, formData.packageType);
+    const isBottle = model === "BOTTLE";
+    const isPiece = model === "PIECE";
+    const isVial = model === "VIAL";
+    const isTablet = model === "TABLET";
+
+    const itemsPerBox = formData.stripsPerBox || (isBottle ? 12 : isPiece ? 1 : 10);
+    const strips = isTablet ? (formData.stripsPerBox || 10) : (isBottle ? 1 : itemsPerBox);
+    const tabs = isTablet ? (formData.tabletsPerStrip || 10) : 1;
+    const unitsPerBox = isBottle ? 1 : (isTablet ? (strips * tabs) : itemsPerBox);
+
     const totalBoxes = looseBoxes;
-    const totalTablets = totalBoxes * strips * tabs;
+    const totalUnits = isBottle ? totalBoxes : totalBoxes * unitsPerBox;
     const totalCost = Math.round(totalBoxes * formData.boxPurchasePrice * 100) / 100;
 
     setFormData((prev) => ({
       ...prev,
       boxesReceived: looseBoxes,
       boxQuantity: totalBoxes,
-      quantity: totalTablets,
+      quantity: totalUnits,
       paidAmount: totalCost,
     }));
   };
 
   const handleBoxPriceChange = (boxPurchase: number, boxSelling: number) => {
-    const strips = formData.stripsPerBox || 10;
-    const tabs = formData.tabletsPerStrip || 10;
-    const tabsPerBox = strips * tabs;
+    const model = getPackagingModel(selectedProduct, formData.packageType);
+    const isBottle = model === "BOTTLE";
+    const isPiece = model === "PIECE";
+    const isVial = model === "VIAL";
+    const isTablet = model === "TABLET";
 
-    const unitPurchase = tabsPerBox > 0 ? Math.round((boxPurchase / tabsPerBox) * 10000) / 10000 : 0;
-    const unitSelling = tabsPerBox > 0 ? Math.round((boxSelling / tabsPerBox) * 10000) / 10000 : 0;
+    const itemsPerBox = formData.stripsPerBox || (isBottle ? 12 : isPiece ? 1 : 10);
+    const strips = isTablet ? (formData.stripsPerBox || 10) : (isBottle ? 1 : itemsPerBox);
+    const tabs = isTablet ? (formData.tabletsPerStrip || 10) : 1;
+    const unitsPerBox = isBottle ? 1 : (isTablet ? (strips * tabs) : itemsPerBox);
+
+    const unitPurchase = isBottle ? boxPurchase : (unitsPerBox > 0 ? Math.round((boxPurchase / unitsPerBox) * 10000) / 10000 : 0);
+    const unitSelling = isBottle ? boxSelling : (unitsPerBox > 0 ? Math.round((boxSelling / unitsPerBox) * 10000) / 10000 : 0);
     const totalBoxes = receivingUnit === "CARTON" ? (formData.cartonQuantity * formData.boxesPerCarton) : formData.boxesReceived;
     const totalCost = Math.round(totalBoxes * boxPurchase * 100) / 100;
 
@@ -385,11 +512,18 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
       setError(null);
       setSuccess(false);
 
-      const isMedicine =
-        formData.packageType?.toLowerCase() === "medicine" ||
-        formData.packageType === "MEDICINE";
+      const model = getPackagingModel(selectedProduct, formData.packageType);
+      const isBottle = model === "BOTTLE";
+      const isPiece = model === "PIECE";
+      const isVial = model === "VIAL";
+      const isTablet = model === "TABLET";
 
       const totalBoxes = receivingUnit === "CARTON" ? (Number(formData.cartonQuantity) * Number(formData.boxesPerCarton)) : Number(formData.boxesReceived);
+      const itemsPerBox = Number(formData.stripsPerBox) || (isBottle ? 1 : isPiece ? 1 : 10);
+      const strips = isTablet ? (Number(formData.stripsPerBox) || 10) : (isBottle ? 1 : itemsPerBox);
+      const tablets = isTablet ? (Number(formData.tabletsPerStrip) || 10) : 1;
+      const unitsPerBox = isBottle ? 1 : (isTablet ? (strips * tablets) : itemsPerBox);
+      const finalQuantity = isBottle ? totalBoxes : totalBoxes * unitsPerBox;
 
       const payload = {
         branchId: selectedBranchId,
@@ -402,16 +536,16 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
         receivedDate: formData.receivedDate ? new Date(formData.receivedDate).toISOString() : new Date().toISOString(),
         mfgDate: formData.mfgDate ? new Date(formData.mfgDate).toISOString() : null,
         expiryDate: formData.expiryDate ? new Date(formData.expiryDate).toISOString() : null,
-        packageType: formData.packageType || "Medicine",
+        packageType: model,
         receivingUnit,
-        cartonsReceived: receivingUnit === "CARTON" ? (isMedicine ? Number(formData.cartonQuantity) || 0 : null) : 0,
-        boxesReceived: receivingUnit === "BOX" ? (isMedicine ? Number(formData.boxesReceived) || 0 : null) : (isMedicine ? Number(formData.boxQuantity) || 0 : null),
-        cartonQuantity: receivingUnit === "CARTON" ? (isMedicine ? Number(formData.cartonQuantity) || null : null) : 0,
-        boxesPerCarton: isMedicine ? Number(formData.boxesPerCarton) || null : null,
+        cartonsReceived: receivingUnit === "CARTON" ? Number(formData.cartonQuantity) || 0 : 0,
+        boxesReceived: receivingUnit === "BOX" ? Number(formData.boxesReceived) || 0 : totalBoxes,
+        cartonQuantity: receivingUnit === "CARTON" ? Number(formData.cartonQuantity) || null : null,
+        boxesPerCarton: Number(formData.boxesPerCarton) || null,
         boxQuantity: totalBoxes,
-        stripsPerBox: isMedicine ? Number(formData.stripsPerBox) || null : null,
-        tabletsPerStrip: isMedicine ? Number(formData.tabletsPerStrip) || null : null,
-        quantity: Number(formData.quantity),
+        stripsPerBox: strips,
+        tabletsPerStrip: tablets,
+        quantity: finalQuantity,
         boxPurchasePrice: Number(formData.boxPurchasePrice),
         boxSellingPrice: Number(formData.boxSellingPrice),
         purchasePrice: Number(formData.unitPurchasePrice),
@@ -445,17 +579,33 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
     }
   };
 
+  const packagingModel = getPackagingModel(selectedProduct, formData.packageType);
+  const isBottle = packagingModel === "BOTTLE";
+  const isPiece = packagingModel === "PIECE";
+  const isVial = packagingModel === "VIAL";
+  const isTablet = packagingModel === "TABLET";
+
   const totalBoxes = receivingUnit === "CARTON" ? (formData.cartonQuantity * formData.boxesPerCarton) : formData.boxesReceived;
   const totalCost = Math.round(totalBoxes * formData.boxPurchasePrice * 100) / 100;
   const dueAmount = Math.max(0, Math.round((totalCost - formData.paidAmount) * 100) / 100);
 
-  const strips = formData.stripsPerBox || 10;
-  const tablets = formData.tabletsPerStrip || 10;
+  const piecesPerBox = isPiece ? (selectedProduct?.stripsPerBox || formData.stripsPerBox || 1) : 1;
+  const vialsPerBox = isVial ? (selectedProduct?.stripsPerBox || formData.stripsPerBox || 10) : 1;
+
+  const strips = isTablet ? (formData.stripsPerBox || 10) : (isPiece ? piecesPerBox : (isVial ? vialsPerBox : 1));
+  const tablets = isTablet ? (formData.tabletsPerStrip || 10) : 1;
   const tabletsPerBox = strips * tablets;
+
   const stripPurchase = strips > 0 ? formData.boxPurchasePrice / strips : 0;
   const tabletPurchase = tabletsPerBox > 0 ? formData.boxPurchasePrice / tabletsPerBox : 0;
   const stripSelling = strips > 0 ? formData.boxSellingPrice / strips : 0;
   const tabletSelling = tabletsPerBox > 0 ? formData.boxSellingPrice / tabletsPerBox : 0;
+
+  const piecePurchase = piecesPerBox > 0 ? formData.boxPurchasePrice / piecesPerBox : 0;
+  const pieceSelling = piecesPerBox > 0 ? formData.boxSellingPrice / piecesPerBox : 0;
+
+  const vialPurchase = vialsPerBox > 0 ? formData.boxPurchasePrice / vialsPerBox : 0;
+  const vialSelling = vialsPerBox > 0 ? formData.boxSellingPrice / vialsPerBox : 0;
 
   return (
     <div className="space-y-6 max-w-5xl">
@@ -548,24 +698,54 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
           </div>
 
           {selectedProduct && (
-            <div className="p-3.5 bg-brand-primary/5 dark:bg-brand-primary/10 border border-brand-primary/20 rounded-xl text-xs flex flex-wrap gap-4 text-slate-700 dark:text-slate-300">
-              <div>
-                <span className="text-slate-400">Generic: </span>
-                <span className="font-bold text-brand-primary">
-                  {selectedProduct.genericName || "—"}
-                </span>
+            <div className="p-3.5 bg-brand-primary/5 dark:bg-brand-primary/10 border border-brand-primary/20 rounded-xl text-xs flex flex-wrap items-center justify-between gap-4 text-slate-700 dark:text-slate-300">
+              <div className="flex flex-wrap items-center gap-4">
+                <div>
+                  <span className="text-slate-400">Generic: </span>
+                  <span className="font-bold text-brand-primary">
+                    {selectedProduct.genericName || "—"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-400">Strength: </span>
+                  <span className="font-bold">{selectedProduct.size || "Standard"}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400">Unit: </span>
+                  <span className="font-bold">{selectedProduct.unit}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400">Base Catalog Price: </span>
+                  <span className="font-bold font-mono">৳{Number(selectedProduct.basePrice).toFixed(2)}</span>
+                </div>
               </div>
-              <div>
-                <span className="text-slate-400">Strength: </span>
-                <span className="font-bold">{selectedProduct.size || "Standard"}</span>
-              </div>
-              <div>
-                <span className="text-slate-400">Unit: </span>
-                <span className="font-bold">{selectedProduct.unit}</span>
-              </div>
-              <div>
-                <span className="text-slate-400">Base Catalog Price: </span>
-                <span className="font-bold font-mono">৳{Number(selectedProduct.basePrice).toFixed(2)}</span>
+
+              {/* Packaging Model Tag */}
+              <div className="flex items-center gap-1.5">
+                {packagingModel === "TABLET" && (
+                  <span className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-300 bg-emerald-100/70 dark:bg-emerald-950/50 border border-emerald-300 dark:border-emerald-800 px-2.5 py-1 rounded-lg font-bold text-[11px]">
+                    <Pill className="h-3.5 w-3.5" />
+                    Strip & Tablet (1 Box = {strips} Strips × {tablets} Tabs)
+                  </span>
+                )}
+                {packagingModel === "BOTTLE" && (
+                  <span className="flex items-center gap-1.5 text-blue-700 dark:text-blue-300 bg-blue-100/70 dark:bg-blue-950/50 border border-blue-300 dark:border-blue-800 px-2.5 py-1 rounded-lg font-bold text-[11px]">
+                    <Droplets className="h-3.5 w-3.5" />
+                    Bottle / Liquid (1 Carton = {formData.boxesPerCarton} Bottles)
+                  </span>
+                )}
+                {packagingModel === "PIECE" && (
+                  <span className="flex items-center gap-1.5 text-purple-700 dark:text-purple-300 bg-purple-100/70 dark:bg-purple-950/50 border border-purple-300 dark:border-purple-800 px-2.5 py-1 rounded-lg font-bold text-[11px]">
+                    <Package className="h-3.5 w-3.5" />
+                    Piece / Unit (1 Box/Pack = {piecesPerBox} Pieces)
+                  </span>
+                )}
+                {packagingModel === "VIAL" && (
+                  <span className="flex items-center gap-1.5 text-amber-700 dark:text-amber-300 bg-amber-100/70 dark:bg-amber-950/50 border border-amber-300 dark:border-amber-800 px-2.5 py-1 rounded-lg font-bold text-[11px]">
+                    <Syringe className="h-3.5 w-3.5" />
+                    Injection / Vial (1 Commercial Box = {vialsPerBox} Vials)
+                  </span>
+                )}
               </div>
             </div>
           )}
@@ -792,7 +972,632 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
         </div>
 
         {/* Step 3: Packaging Quantity Hierarchy */}
-        {(formData.packageType === "Medicine" || formData.packageType === "MEDICINE") ? (
+        {isBottle ? (
+          <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+            <div className="font-black text-sm text-slate-900 dark:text-white flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 flex-wrap gap-2">
+              <span className="flex items-center gap-2">
+                <Layers className="h-4 w-4 text-brand-primary" />
+                3. Receiving Unit & Packaging Breakdown (Syrup / Bottle)
+              </span>
+              <div className="flex items-center gap-2 flex-wrap text-xs font-black">
+                <span className="text-brand-primary bg-brand-primary/10 px-3 py-1 rounded-full">
+                  {receivingUnit === "CARTON" ? `Total Cartons: ${formData.cartonQuantity} Cartons` : "0 Cartons (Loose)"}
+                </span>
+                <span className="text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-1 rounded-full">
+                  Total Bottles: {totalBoxes.toLocaleString()} Bottles
+                </span>
+              </div>
+            </div>
+
+            {/* Receiving Unit Selector */}
+            <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-bold text-slate-800 dark:text-slate-200">How is this syrup/bottle stock being received?</p>
+                <p className="text-[11px] text-slate-500">Choose Carton for whole carton shipments, or Bottle for loose/individual bottles</p>
+              </div>
+              <div className="flex bg-slate-200 dark:bg-slate-700 p-1 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => handleReceivingUnitToggle("CARTON")}
+                  className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition ${
+                    receivingUnit === "CARTON"
+                      ? "bg-white dark:bg-slate-900 text-brand-primary shadow-sm"
+                      : "text-slate-600 dark:text-slate-300 hover:text-slate-900"
+                  }`}
+                >
+                  <Package className="h-3.5 w-3.5" />
+                  Carton Receiving (কার্টুন)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleReceivingUnitToggle("BOX")}
+                  className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition ${
+                    receivingUnit === "BOX"
+                      ? "bg-white dark:bg-slate-900 text-brand-primary shadow-sm"
+                      : "text-slate-600 dark:text-slate-300 hover:text-slate-900"
+                  }`}
+                >
+                  <Boxes className="h-3.5 w-3.5" />
+                  Bottle Receiving (লুজ বোতল)
+                </button>
+              </div>
+            </div>
+
+            {/* Packaging Configuration Notice */}
+            <div className="p-3 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-xl flex items-center justify-between text-xs text-slate-600 dark:text-slate-400">
+              <span className="flex items-center gap-1.5">
+                <Lock className="h-3.5 w-3.5 text-slate-400" />
+                <span>
+                  <strong>Product Packaging (Read-Only):</strong> Bottles per Carton is locked to this product's catalog configuration.
+                </span>
+              </span>
+              <span className="font-bold text-brand-primary font-mono text-[11px]">
+                1 Master Carton = {formData.boxesPerCarton} Bottles
+              </span>
+            </div>
+
+            {receivingUnit === "CARTON" ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Cartons Received *
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={formData.cartonQuantity}
+                    onChange={(e) => {
+                      const c = parseInt(e.target.value) || 0;
+                      handleCartonChange(c, formData.boxesPerCarton);
+                    }}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none"
+                  />
+                  <div className="text-[10px] text-slate-400 mt-1">Whole sealed master cartons received</div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1 flex items-center justify-between">
+                    <span>Bottles per Carton</span>
+                    <span className="text-[9px] text-slate-400 font-normal flex items-center gap-0.5">
+                      <Lock className="h-2.5 w-2.5" /> Read-Only
+                    </span>
+                  </label>
+                  <div className="w-full px-3.5 py-2.5 bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
+                    <span>{formData.boxesPerCarton} Bottles</span>
+                    <span className="text-[10px] text-slate-400 font-mono">per Carton</span>
+                  </div>
+                  <div className="text-[10px] text-brand-primary font-bold mt-1">
+                    = {formData.cartonQuantity * formData.boxesPerCarton} Total Bottles inside cartons
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Bottles Received (Loose) *
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={formData.boxesReceived}
+                    onChange={(e) => {
+                      const b = parseInt(e.target.value) || 0;
+                      handleBoxesReceivedChange(b);
+                    }}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none"
+                  />
+                  <div className="text-[10px] text-amber-600 dark:text-amber-400 font-bold mt-1">
+                    Loose / Standalone Bottles (without master carton)
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1 flex items-center justify-between">
+                    <span>Carton Reference</span>
+                    <span className="text-[9px] text-slate-400 font-normal flex items-center gap-0.5">
+                      <Lock className="h-2.5 w-2.5" /> Product Standard
+                    </span>
+                  </label>
+                  <div className="w-full px-3.5 py-2.5 bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
+                    <span>{formData.boxesPerCarton} Bottles</span>
+                    <span className="text-[10px] text-slate-400 font-mono">1 Standard Carton</span>
+                  </div>
+                  <div className="text-[10px] text-slate-400 mt-1">
+                    Direct stock: {formData.boxesReceived} bottles
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Calculated Breakdown Summary Banner for Bottles */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+              <div className="p-3 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total Cartons</span>
+                <span className="text-lg font-black text-slate-900 dark:text-white font-mono">
+                  {receivingUnit === "CARTON" ? `${formData.cartonQuantity} Cartons` : "0 (Loose)"}
+                </span>
+                <span className="text-[10px] text-slate-500 block mt-0.5">
+                  {receivingUnit === "CARTON" ? `${formData.cartonQuantity} master cartons` : "Loose bottle intake"}
+                </span>
+              </div>
+              <div className="p-3 bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-200 dark:border-indigo-900/40 rounded-xl">
+                <span className="text-[10px] font-bold text-indigo-500 uppercase tracking-wider block">Bottles per Carton</span>
+                <span className="text-lg font-black text-indigo-700 dark:text-indigo-300 font-mono">
+                  {formData.boxesPerCarton} Bottles
+                </span>
+                <span className="text-[10px] text-indigo-500/80 block mt-0.5">
+                  Standard carton capacity
+                </span>
+              </div>
+              <div className="p-3 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/40 rounded-xl">
+                <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider block">Total Bottles Inward</span>
+                <span className="text-lg font-black text-emerald-700 dark:text-emerald-300 font-mono">
+                  {totalBoxes.toLocaleString()} Bottles
+                </span>
+                <span className="text-[10px] text-emerald-600/80 block mt-0.5">
+                  {receivingUnit === "CARTON" ? `${formData.cartonQuantity} cartons × ${formData.boxesPerCarton} bottles` : `${formData.boxesReceived} loose bottles`}
+                </span>
+              </div>
+            </div>
+
+            {/* Same Batch Support Breakdown Preview Banner for Bottles */}
+            <div className="p-4 bg-gradient-to-r from-slate-50 to-indigo-50/40 dark:from-slate-800/50 dark:to-indigo-950/20 border border-indigo-100 dark:border-indigo-900/30 rounded-xl space-y-2">
+              <div className="flex items-center justify-between flex-wrap gap-2 text-xs font-bold text-slate-700 dark:text-slate-300">
+                <span className="flex items-center gap-1.5">
+                  <Package className="h-4 w-4 text-indigo-500" />
+                  Receiving Breakdown Preview:
+                </span>
+                <span className="text-indigo-600 dark:text-indigo-400 font-mono">
+                  {receivingUnit === "CARTON"
+                    ? `${formData.cartonQuantity} Cartons × ${formData.boxesPerCarton} Bottles = ${totalBoxes} Bottles`
+                    : `${formData.boxesReceived} Loose Bottles (0 Cartons)`}
+                </span>
+              </div>
+
+              {selectedExistingBatch ? (
+                <div className="pt-2 border-t border-indigo-100 dark:border-indigo-900/30 text-xs">
+                  <p className="text-slate-600 dark:text-slate-400">
+                    <span className="font-bold text-slate-800 dark:text-slate-200">Existing Batch {selectedExistingBatch.batchNumber}:</span>{" "}
+                    {selectedExistingBatch.cartonQuantity || 0} Full Cartons ({((selectedExistingBatch.cartonQuantity || 0) * (formData.boxesPerCarton || 12))} Bottles) + {selectedExistingBatch.remainingLooseBoxes ?? selectedExistingBatch.looseBoxesReceived ?? 0} Loose Bottles.
+                  </p>
+                  <p className="text-indigo-700 dark:text-indigo-300 font-bold mt-1">
+                    👉 After this {receivingUnit === "CARTON" ? `${formData.cartonQuantity} Carton` : `${formData.boxesReceived} Loose Bottle`} intake, Batch Total will be:{" "}
+                    <span className="underline">
+                      {(selectedExistingBatch.cartonQuantity || 0) + (receivingUnit === "CARTON" ? formData.cartonQuantity : 0)} Full Cartons
+                    </span>{" "}
+                    ({((selectedExistingBatch.cartonQuantity || 0) + (receivingUnit === "CARTON" ? formData.cartonQuantity : 0)) * (formData.boxesPerCarton || 12)} Bottles inside Cartons) +{" "}
+                    <span className="underline">
+                      {(selectedExistingBatch.remainingLooseBoxes ?? selectedExistingBatch.looseBoxesReceived ?? 0) + (receivingUnit === "BOX" ? formData.boxesReceived : 0)} Loose Bottles
+                    </span>{" "}
+                    = <span className="font-black text-indigo-800 dark:text-indigo-200">{
+                      (((selectedExistingBatch.cartonQuantity || 0) + (receivingUnit === "CARTON" ? formData.cartonQuantity : 0)) * (formData.boxesPerCarton || 12)) +
+                      ((selectedExistingBatch.remainingLooseBoxes ?? selectedExistingBatch.looseBoxesReceived ?? 0) + (receivingUnit === "BOX" ? formData.boxesReceived : 0))
+                    } Total Equivalent Bottles</span>.
+                  </p>
+                </div>
+              ) : (
+                <div className="pt-2 border-t border-indigo-100 dark:border-indigo-900/30 text-xs text-slate-500">
+                  {receivingUnit === "CARTON" ? (
+                    <span>
+                      Will record <span className="font-bold text-slate-800 dark:text-slate-200">{formData.cartonQuantity} Full Cartons</span> ({totalBoxes} Bottles) and 0 Loose Bottles.
+                    </span>
+                  ) : (
+                    <span>
+                      Will record <span className="font-bold text-slate-800 dark:text-slate-200">{formData.boxesReceived} Loose Bottles</span> (0 Cartons).
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        ) : isPiece ? (
+          <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+            <div className="font-black text-sm text-slate-900 dark:text-white flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 flex-wrap gap-2">
+              <span className="flex items-center gap-2">
+                <Layers className="h-4 w-4 text-purple-600" />
+                3. Receiving Unit & Piece / Unit Breakdown
+              </span>
+              <div className="flex items-center gap-2 flex-wrap text-xs font-black">
+                <span className="text-purple-600 bg-purple-50 dark:bg-purple-950/40 px-3 py-1 rounded-full">
+                  Total Boxes / Packs: {totalBoxes.toLocaleString()} Boxes
+                </span>
+                <span className="text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-1 rounded-full">
+                  Total Pieces: {formData.quantity.toLocaleString()} Pieces
+                </span>
+              </div>
+            </div>
+
+            {/* Receiving Unit Selector */}
+            <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-bold text-slate-800 dark:text-slate-200">How is this item being received?</p>
+                <p className="text-[11px] text-slate-500">Choose Carton for master carton shipments, or Box / Pack for loose boxes</p>
+              </div>
+              <div className="flex bg-slate-200 dark:bg-slate-700 p-1 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => handleReceivingUnitToggle("CARTON")}
+                  className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition ${
+                    receivingUnit === "CARTON"
+                      ? "bg-white dark:bg-slate-900 text-purple-600 shadow-sm"
+                      : "text-slate-600 dark:text-slate-300 hover:text-slate-900"
+                  }`}
+                >
+                  <Package className="h-3.5 w-3.5" />
+                  Carton Receiving (মাস্টার কার্টুন)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleReceivingUnitToggle("BOX")}
+                  className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition ${
+                    receivingUnit === "BOX"
+                      ? "bg-white dark:bg-slate-900 text-purple-600 shadow-sm"
+                      : "text-slate-600 dark:text-slate-300 hover:text-slate-900"
+                  }`}
+                >
+                  <Boxes className="h-3.5 w-3.5" />
+                  Box / Pack Receiving (লুজ বক্স / প্যাকেট)
+                </button>
+              </div>
+            </div>
+
+            {/* Packaging Configuration Notice */}
+            <div className="p-3 bg-purple-50/50 dark:bg-purple-950/20 border border-purple-100 dark:border-purple-900/40 rounded-xl flex items-center justify-between text-xs text-slate-600 dark:text-slate-400">
+              <span className="flex items-center gap-1.5">
+                <Lock className="h-3.5 w-3.5 text-purple-500" />
+                <span>
+                  <strong>Product Packaging (Read-Only):</strong> Pieces per Box is locked to this product's catalog configuration.
+                </span>
+              </span>
+              <span className="font-bold text-purple-700 dark:text-purple-300 font-mono text-[11px]">
+                1 Box / Pack = {piecesPerBox} Pieces
+              </span>
+            </div>
+
+            {receivingUnit === "CARTON" ? (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Master Cartons Received *
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={formData.cartonQuantity}
+                    onChange={(e) => {
+                      const c = parseInt(e.target.value) || 0;
+                      handleCartonChange(c, formData.boxesPerCarton);
+                    }}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none"
+                  />
+                  <div className="text-[10px] text-slate-400 mt-1">Whole sealed cartons received</div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Boxes / Packs per Carton *
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={formData.boxesPerCarton}
+                    onChange={(e) => {
+                      const b = parseInt(e.target.value) || 1;
+                      handleCartonChange(formData.cartonQuantity, b);
+                    }}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none"
+                  />
+                  <div className="text-[10px] text-purple-600 dark:text-purple-400 font-bold mt-1">
+                    = {formData.cartonQuantity * formData.boxesPerCarton} Total Boxes inside cartons
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1 flex items-center justify-between">
+                    <span>Pieces per Box / Pack</span>
+                    <span className="text-[9px] text-slate-400 font-normal flex items-center gap-0.5">
+                      <Lock className="h-2.5 w-2.5" /> Read-Only
+                    </span>
+                  </label>
+                  <div className="w-full px-3.5 py-2.5 bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
+                    <span>{piecesPerBox} Pieces</span>
+                    <span className="text-[10px] text-slate-400 font-mono">per Box</span>
+                  </div>
+                  <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold mt-1">
+                    = {(formData.cartonQuantity * formData.boxesPerCarton * piecesPerBox).toLocaleString()} Total Pieces
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Boxes / Packs Received (Loose) *
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={formData.boxesReceived}
+                    onChange={(e) => {
+                      const b = parseInt(e.target.value) || 0;
+                      handleBoxesReceivedChange(b);
+                    }}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none"
+                  />
+                  <div className="text-[10px] text-amber-600 dark:text-amber-400 font-bold mt-1">
+                    Loose / Standalone Boxes or Packs
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1 flex items-center justify-between">
+                    <span>Pieces per Box / Pack</span>
+                    <span className="text-[9px] text-slate-400 font-normal flex items-center gap-0.5">
+                      <Lock className="h-2.5 w-2.5" /> Read-Only
+                    </span>
+                  </label>
+                  <div className="w-full px-3.5 py-2.5 bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
+                    <span>{piecesPerBox} Pieces</span>
+                    <span className="text-[10px] text-slate-400 font-mono">per Box</span>
+                  </div>
+                  <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold mt-1">
+                    = {(formData.boxesReceived * piecesPerBox).toLocaleString()} Total Pieces
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Calculated Breakdown Summary Banner for Pieces */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+              <div className="p-3 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total Boxes / Packs</span>
+                <span className="text-lg font-black text-slate-900 dark:text-white font-mono">
+                  {totalBoxes.toLocaleString()}
+                </span>
+                <span className="text-[10px] text-slate-500 block mt-0.5">
+                  {receivingUnit === "CARTON" ? `${formData.cartonQuantity} cartons × ${formData.boxesPerCarton}` : `${formData.boxesReceived} loose boxes`}
+                </span>
+              </div>
+              <div className="p-3 bg-purple-50/50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-900/40 rounded-xl">
+                <span className="text-[10px] font-bold text-purple-600 uppercase tracking-wider block">Pieces per Box</span>
+                <span className="text-lg font-black text-purple-700 dark:text-purple-300 font-mono">
+                  {piecesPerBox.toLocaleString()} Pcs
+                </span>
+                <span className="text-[10px] text-purple-500 block mt-0.5">
+                  Items in 1 commercial box
+                </span>
+              </div>
+              <div className="p-3 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/40 rounded-xl">
+                <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider block">Total Pieces Inward</span>
+                <span className="text-lg font-black text-emerald-700 dark:text-emerald-300 font-mono">
+                  {formData.quantity.toLocaleString()} Pieces
+                </span>
+                <span className="text-[10px] text-emerald-600/80 block mt-0.5">
+                  {totalBoxes} boxes × {piecesPerBox} pieces/box
+                </span>
+              </div>
+            </div>
+
+            {/* Same Batch Support Breakdown Preview Banner for Pieces */}
+            <div className="p-4 bg-gradient-to-r from-slate-50 to-purple-50/40 dark:from-slate-800/50 dark:to-purple-950/20 border border-purple-100 dark:border-purple-900/30 rounded-xl space-y-2">
+              <div className="flex items-center justify-between flex-wrap gap-2 text-xs font-bold text-slate-700 dark:text-slate-300">
+                <span className="flex items-center gap-1.5">
+                  <Package className="h-4 w-4 text-purple-500" />
+                  Receiving Breakdown Preview:
+                </span>
+                <span className="text-purple-600 dark:text-purple-400 font-mono">
+                  {receivingUnit === "CARTON"
+                    ? `${formData.cartonQuantity} Cartons × ${formData.boxesPerCarton} Boxes = ${totalBoxes} Boxes (${formData.quantity.toLocaleString()} Pieces)`
+                    : `${formData.boxesReceived} Loose Boxes = ${formData.quantity.toLocaleString()} Pieces (0 Cartons)`}
+                </span>
+              </div>
+            </div>
+          </div>
+        ) : isVial ? (
+          <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+            <div className="font-black text-sm text-slate-900 dark:text-white flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 flex-wrap gap-2">
+              <span className="flex items-center gap-2">
+                <Syringe className="h-4 w-4 text-amber-600" />
+                3. Receiving Unit & Injection / Vial Breakdown
+              </span>
+              <div className="flex items-center gap-2 flex-wrap text-xs font-black">
+                <span className="text-amber-600 bg-amber-50 dark:bg-amber-950/40 px-3 py-1 rounded-full">
+                  Total Boxes: {totalBoxes.toLocaleString()} Boxes
+                </span>
+                <span className="text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-1 rounded-full">
+                  Total Vials: {formData.quantity.toLocaleString()} Vials
+                </span>
+              </div>
+            </div>
+
+            {/* Receiving Unit Selector */}
+            <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-bold text-slate-800 dark:text-slate-200">How is this injectable stock being received?</p>
+                <p className="text-[11px] text-slate-500">Choose Carton for master carton shipments, or Box for loose commercial boxes</p>
+              </div>
+              <div className="flex bg-slate-200 dark:bg-slate-700 p-1 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => handleReceivingUnitToggle("CARTON")}
+                  className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition ${
+                    receivingUnit === "CARTON"
+                      ? "bg-white dark:bg-slate-900 text-amber-600 shadow-sm"
+                      : "text-slate-600 dark:text-slate-300 hover:text-slate-900"
+                  }`}
+                >
+                  <Package className="h-3.5 w-3.5" />
+                  Carton Receiving (মাস্টার কার্টুন)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleReceivingUnitToggle("BOX")}
+                  className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition ${
+                    receivingUnit === "BOX"
+                      ? "bg-white dark:bg-slate-900 text-amber-600 shadow-sm"
+                      : "text-slate-600 dark:text-slate-300 hover:text-slate-900"
+                  }`}
+                >
+                  <Boxes className="h-3.5 w-3.5" />
+                  Box Receiving (লুজ বক্স)
+                </button>
+              </div>
+            </div>
+
+            {/* Packaging Configuration Notice */}
+            <div className="p-3 bg-amber-50/50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/40 rounded-xl flex items-center justify-between text-xs text-slate-600 dark:text-slate-400">
+              <span className="flex items-center gap-1.5">
+                <Lock className="h-3.5 w-3.5 text-amber-500" />
+                <span>
+                  <strong>Product Packaging (Read-Only):</strong> Vials / Ampoules per Box is locked to this product's catalog configuration.
+                </span>
+              </span>
+              <span className="font-bold text-amber-700 dark:text-amber-300 font-mono text-[11px]">
+                1 Commercial Box = {vialsPerBox} Vials / Ampoules
+              </span>
+            </div>
+
+            {receivingUnit === "CARTON" ? (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Master Cartons Received *
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={formData.cartonQuantity}
+                    onChange={(e) => {
+                      const c = parseInt(e.target.value) || 0;
+                      handleCartonChange(c, formData.boxesPerCarton);
+                    }}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none"
+                  />
+                  <div className="text-[10px] text-slate-400 mt-1">Whole sealed cartons received</div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Boxes per Carton *
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={formData.boxesPerCarton}
+                    onChange={(e) => {
+                      const b = parseInt(e.target.value) || 1;
+                      handleCartonChange(formData.cartonQuantity, b);
+                    }}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none"
+                  />
+                  <div className="text-[10px] text-amber-600 dark:text-amber-400 font-bold mt-1">
+                    = {formData.cartonQuantity * formData.boxesPerCarton} Total Boxes inside cartons
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1 flex items-center justify-between">
+                    <span>Vials per Box</span>
+                    <span className="text-[9px] text-slate-400 font-normal flex items-center gap-0.5">
+                      <Lock className="h-2.5 w-2.5" /> Read-Only
+                    </span>
+                  </label>
+                  <div className="w-full px-3.5 py-2.5 bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
+                    <span>{vialsPerBox} Vials</span>
+                    <span className="text-[10px] text-slate-400 font-mono">per Box</span>
+                  </div>
+                  <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold mt-1">
+                    = {(formData.cartonQuantity * formData.boxesPerCarton * vialsPerBox).toLocaleString()} Total Vials
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Commercial Boxes Received (Loose) *
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={formData.boxesReceived}
+                    onChange={(e) => {
+                      const b = parseInt(e.target.value) || 0;
+                      handleBoxesReceivedChange(b);
+                    }}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none"
+                  />
+                  <div className="text-[10px] text-amber-600 dark:text-amber-400 font-bold mt-1">
+                    Loose / Standalone Commercial Boxes
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1 flex items-center justify-between">
+                    <span>Vials / Ampoules per Box</span>
+                    <span className="text-[9px] text-slate-400 font-normal flex items-center gap-0.5">
+                      <Lock className="h-2.5 w-2.5" /> Read-Only
+                    </span>
+                  </label>
+                  <div className="w-full px-3.5 py-2.5 bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
+                    <span>{vialsPerBox} Vials</span>
+                    <span className="text-[10px] text-slate-400 font-mono">per Box</span>
+                  </div>
+                  <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold mt-1">
+                    = {(formData.boxesReceived * vialsPerBox).toLocaleString()} Total Vials
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Calculated Breakdown Summary Banner for Vials */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+              <div className="p-3 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total Commercial Boxes</span>
+                <span className="text-lg font-black text-slate-900 dark:text-white font-mono">
+                  {totalBoxes.toLocaleString()}
+                </span>
+                <span className="text-[10px] text-slate-500 block mt-0.5">
+                  {receivingUnit === "CARTON" ? `${formData.cartonQuantity} cartons × ${formData.boxesPerCarton}` : `${formData.boxesReceived} loose boxes`}
+                </span>
+              </div>
+              <div className="p-3 bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 rounded-xl">
+                <span className="text-[10px] font-bold text-amber-600 uppercase tracking-wider block">Vials per Box</span>
+                <span className="text-lg font-black text-amber-700 dark:text-amber-300 font-mono">
+                  {vialsPerBox.toLocaleString()} Vials
+                </span>
+                <span className="text-[10px] text-amber-500 block mt-0.5">
+                  Injectables packed per box
+                </span>
+              </div>
+              <div className="p-3 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/40 rounded-xl">
+                <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider block">Total Vials Inward</span>
+                <span className="text-lg font-black text-emerald-700 dark:text-emerald-300 font-mono">
+                  {formData.quantity.toLocaleString()} Vials
+                </span>
+                <span className="text-[10px] text-emerald-600/80 block mt-0.5">
+                  {totalBoxes} boxes × {vialsPerBox} vials/box
+                </span>
+              </div>
+            </div>
+
+            {/* Same Batch Support Breakdown Preview Banner for Vials */}
+            <div className="p-4 bg-gradient-to-r from-slate-50 to-amber-50/40 dark:from-slate-800/50 dark:to-amber-950/20 border border-amber-100 dark:border-amber-900/30 rounded-xl space-y-2">
+              <div className="flex items-center justify-between flex-wrap gap-2 text-xs font-bold text-slate-700 dark:text-slate-300">
+                <span className="flex items-center gap-1.5">
+                  <Package className="h-4 w-4 text-amber-500" />
+                  Receiving Breakdown Preview:
+                </span>
+                <span className="text-amber-600 dark:text-amber-400 font-mono">
+                  {receivingUnit === "CARTON"
+                    ? `${formData.cartonQuantity} Cartons × ${formData.boxesPerCarton} Boxes = ${totalBoxes} Boxes (${formData.quantity.toLocaleString()} Vials)`
+                    : `${formData.boxesReceived} Loose Boxes = ${formData.quantity.toLocaleString()} Vials (0 Cartons)`}
+                </span>
+              </div>
+            </div>
+          </div>
+        ) : (
           <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
             <div className="font-black text-sm text-slate-900 dark:text-white flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 flex-wrap gap-2">
               <span className="flex items-center gap-2">
@@ -1064,53 +1869,40 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
               )}
             </div>
           </div>
-        ) : (
-          <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-            <div className="font-black text-sm text-slate-900 dark:text-white flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
-              <Layers className="h-4 w-4 text-brand-primary" />
-              3. Intake Quantity
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                Total Quantity Received *
-              </label>
-              <input
-                type="number"
-                min="1"
-                required
-                value={formData.quantity}
-                onChange={(e) => {
-                  const q = parseInt(e.target.value) || 1;
-                  setFormData((prev) => ({
-                    ...prev,
-                    quantity: q,
-                    paidAmount: Math.round(q * prev.unitPurchasePrice * 100) / 100,
-                  }));
-                }}
-                className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none"
-              />
-            </div>
-          </div>
         )}
 
-        {/* Step 4: Purchase Financials & Selling Price (Entered per Box) */}
+        {/* Step 4: Purchase Financials & Selling Price */}
         <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-          <div className="font-black text-sm text-slate-900 dark:text-white flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+          <div className="font-black text-sm text-slate-900 dark:text-white flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 flex-wrap gap-2">
             <span className="flex items-center gap-2">
               <DollarSign className="h-4 w-4 text-brand-primary" />
-              4. Financials & Pricing (Entered per Box)
+              {isBottle
+                ? "4. Financials & Pricing (Entered per Bottle)"
+                : isPiece
+                ? "4. Financials & Pricing (Entered per Box / Pack)"
+                : isVial
+                ? "4. Financials & Pricing (Entered per Commercial Box)"
+                : "4. Financials & Pricing (Entered per Box)"}
             </span>
             <div className="text-xs">
               <span className="text-slate-400">Total Purchase: </span>
               <span className="font-black font-mono text-slate-900 dark:text-white">৳{totalCost.toFixed(2)}</span>
-              <span className="text-[10px] text-slate-400 ml-1">({totalBoxes} Boxes × ৳{formData.boxPurchasePrice.toFixed(2)})</span>
+              <span className="text-[10px] text-slate-400 ml-1">
+                ({totalBoxes} {isBottle ? "Bottles" : "Boxes"} × ৳{formData.boxPurchasePrice.toFixed(2)})
+              </span>
             </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                Purchase Price per Box (৳) *
+                {isBottle
+                  ? "Purchase Price per Bottle (৳) *"
+                  : isPiece
+                  ? "Purchase Price per Box / Pack (৳) *"
+                  : isVial
+                  ? "Purchase Price per Box (৳) *"
+                  : "Purchase Price per Box (৳) *"}
               </label>
               <input
                 type="number"
@@ -1124,12 +1916,26 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
                 }}
                 className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none"
               />
-              <div className="text-[10px] text-slate-400 mt-1">Distributor invoice price per full box</div>
+              <div className="text-[10px] text-slate-400 mt-1">
+                {isBottle
+                  ? "Distributor invoice price per individual bottle"
+                  : isPiece
+                  ? `Distributor invoice cost for 1 full box (${piecesPerBox} pieces)`
+                  : isVial
+                  ? `Distributor invoice cost for 1 commercial box (${vialsPerBox} vials)`
+                  : "Distributor invoice price per full box"}
+              </div>
             </div>
 
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                Selling Price per Box (৳) *
+                {isBottle
+                  ? "Selling Price (MRP) per Bottle (৳) *"
+                  : isPiece
+                  ? "Selling Price (MRP) per Box / Pack (৳) *"
+                  : isVial
+                  ? "Selling Price (MRP) per Box (৳) *"
+                  : "Selling Price per Box (৳) *"}
               </label>
               <input
                 type="number"
@@ -1143,7 +1949,15 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
                 }}
                 className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none text-emerald-600"
               />
-              <div className="text-[10px] text-slate-400 mt-1">Counter MRP / retail price per full box</div>
+              <div className="text-[10px] text-slate-400 mt-1">
+                {isBottle
+                  ? "Counter MRP / retail price per bottle"
+                  : isPiece
+                  ? `Counter retail price (MRP) for 1 full box (${piecesPerBox} pieces)`
+                  : isVial
+                  ? `Counter retail price (MRP) for 1 full box (${vialsPerBox} vials)`
+                  : "Counter MRP / retail price per full box"}
+              </div>
             </div>
 
             <div>
@@ -1169,41 +1983,160 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
           </div>
 
           {/* Automatic Price Derivation Banner */}
-          <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2 text-xs">
-            <div className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-              <Calculator className="h-4 w-4 text-brand-primary" />
-              Automatic Unit Price Derivation (Box Price → Strip Price → Tablet Price):
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
-              <div className="p-3 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 space-y-1">
-                <div className="text-[11px] font-bold text-slate-400">Purchase Price Flow</div>
-                <div className="text-xs font-mono font-bold text-slate-800 dark:text-slate-200">
-                  ৳{formData.boxPurchasePrice.toFixed(2)} / Box
-                  <span className="text-slate-400 font-normal"> → </span>
-                  ৳{stripPurchase.toFixed(2)} / Strip
-                  <span className="text-slate-400 font-normal"> → </span>
-                  <span className="text-brand-primary font-black">৳{tabletPurchase.toFixed(2)} / Tablet</span>
-                </div>
-                <div className="text-[10px] text-slate-400">
-                  1 Box ({strips} Strips × {tablets} Tablets = {tabletsPerBox} Tablets)
-                </div>
+          {isBottle ? (
+            <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2 text-xs">
+              <div className="font-bold text-slate-800 dark:text-slate-200 flex items-center justify-between flex-wrap gap-2">
+                <span className="flex items-center gap-1.5">
+                  <Calculator className="h-4 w-4 text-brand-primary" />
+                  Automatic Bottle Pricing & Carton Equivalent:
+                </span>
+                {formData.boxSellingPrice > formData.boxPurchasePrice && (
+                  <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100/70 dark:bg-emerald-950/50 px-2.5 py-0.5 rounded-full">
+                    Profit Margin: ৳{(formData.boxSellingPrice - formData.boxPurchasePrice).toFixed(2)} / Bottle ({formData.boxSellingPrice > 0 ? Math.round(((formData.boxSellingPrice - formData.boxPurchasePrice) / formData.boxSellingPrice) * 100) : 0}%)
+                  </span>
+                )}
               </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                <div className="p-3 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 space-y-1">
+                  <div className="text-[11px] font-bold text-slate-400">Purchase Price Flow</div>
+                  <div className="text-xs font-mono font-bold text-slate-800 dark:text-slate-200">
+                    ৳{formData.boxPurchasePrice.toFixed(2)} / Bottle
+                    <span className="text-slate-400 font-normal"> → </span>
+                    <span className="text-brand-primary font-black">1 Carton ({formData.boxesPerCarton} Bottles) = ৳{(formData.boxPurchasePrice * formData.boxesPerCarton).toFixed(2)}</span>
+                  </div>
+                  <div className="text-[10px] text-slate-400">
+                    Distributor invoice cost per bottle & full carton equivalent
+                  </div>
+                </div>
 
-              <div className="p-3 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 space-y-1">
-                <div className="text-[11px] font-bold text-slate-400">Selling Price Flow</div>
-                <div className="text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                  ৳{formData.boxSellingPrice.toFixed(2)} / Box
-                  <span className="text-slate-400 font-normal"> → </span>
-                  ৳{stripSelling.toFixed(2)} / Strip
-                  <span className="text-slate-400 font-normal"> → </span>
-                  <span className="font-black">৳{tabletSelling.toFixed(2)} / Tablet</span>
-                </div>
-                <div className="text-[10px] text-slate-400">
-                  1 Box ({strips} Strips × {tablets} Tablets = {tabletsPerBox} Tablets)
+                <div className="p-3 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 space-y-1">
+                  <div className="text-[11px] font-bold text-slate-400">Selling Price Flow (MRP)</div>
+                  <div className="text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                    ৳{formData.boxSellingPrice.toFixed(2)} / Bottle
+                    <span className="text-slate-400 font-normal"> → </span>
+                    <span className="font-black">1 Carton ({formData.boxesPerCarton} Bottles) = ৳{(formData.boxSellingPrice * formData.boxesPerCarton).toFixed(2)}</span>
+                  </div>
+                  <div className="text-[10px] text-slate-400">
+                    Counter retail price (MRP) per bottle & full carton equivalent
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
+          ) : isPiece ? (
+            <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2 text-xs">
+              <div className="font-bold text-slate-800 dark:text-slate-200 flex items-center justify-between flex-wrap gap-2">
+                <span className="flex items-center gap-1.5">
+                  <Calculator className="h-4 w-4 text-purple-600" />
+                  Automatic Piece / Unit Pricing & Box Derivation:
+                </span>
+                {formData.boxSellingPrice > formData.boxPurchasePrice && (
+                  <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100/70 dark:bg-emerald-950/50 px-2.5 py-0.5 rounded-full">
+                    Profit Margin: ৳{(formData.boxSellingPrice - formData.boxPurchasePrice).toFixed(2)} / Box (৳{(pieceSelling - piecePurchase).toFixed(2)} / Piece) ({formData.boxSellingPrice > 0 ? Math.round(((formData.boxSellingPrice - formData.boxPurchasePrice) / formData.boxSellingPrice) * 100) : 0}%)
+                  </span>
+                )}
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                <div className="p-3 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 space-y-1">
+                  <div className="text-[11px] font-bold text-slate-400">Purchase Price Flow</div>
+                  <div className="text-xs font-mono font-bold text-slate-800 dark:text-slate-200">
+                    ৳{formData.boxPurchasePrice.toFixed(2)} / Box
+                    <span className="text-slate-400 font-normal"> → </span>
+                    <span className="text-purple-600 font-black">৳{piecePurchase.toFixed(2)} / Piece</span>
+                  </div>
+                  <div className="text-[10px] text-slate-400">
+                    1 Box / Pack = {piecesPerBox} Pieces (Unit purchase cost derived)
+                  </div>
+                </div>
+
+                <div className="p-3 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 space-y-1">
+                  <div className="text-[11px] font-bold text-slate-400">Selling Price Flow (MRP)</div>
+                  <div className="text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                    ৳{formData.boxSellingPrice.toFixed(2)} / Box
+                    <span className="text-slate-400 font-normal"> → </span>
+                    <span className="font-black">৳{pieceSelling.toFixed(2)} / Piece</span>
+                  </div>
+                  <div className="text-[10px] text-slate-400">
+                    1 Box / Pack = {piecesPerBox} Pieces (Counter retail MRP per piece derived)
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : isVial ? (
+            <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2 text-xs">
+              <div className="font-bold text-slate-800 dark:text-slate-200 flex items-center justify-between flex-wrap gap-2">
+                <span className="flex items-center gap-1.5">
+                  <Calculator className="h-4 w-4 text-amber-600" />
+                  Automatic Injection / Vial Pricing & Box Derivation:
+                </span>
+                {formData.boxSellingPrice > formData.boxPurchasePrice && (
+                  <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100/70 dark:bg-emerald-950/50 px-2.5 py-0.5 rounded-full">
+                    Profit Margin: ৳{(formData.boxSellingPrice - formData.boxPurchasePrice).toFixed(2)} / Box (৳{(vialSelling - vialPurchase).toFixed(2)} / Vial) ({formData.boxSellingPrice > 0 ? Math.round(((formData.boxSellingPrice - formData.boxPurchasePrice) / formData.boxSellingPrice) * 100) : 0}%)
+                  </span>
+                )}
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                <div className="p-3 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 space-y-1">
+                  <div className="text-[11px] font-bold text-slate-400">Purchase Price Flow</div>
+                  <div className="text-xs font-mono font-bold text-slate-800 dark:text-slate-200">
+                    ৳{formData.boxPurchasePrice.toFixed(2)} / Box
+                    <span className="text-slate-400 font-normal"> → </span>
+                    <span className="text-amber-600 font-black">৳{vialPurchase.toFixed(2)} / Vial</span>
+                  </div>
+                  <div className="text-[10px] text-slate-400">
+                    1 Commercial Box = {vialsPerBox} Vials / Ampoules (Unit purchase cost derived)
+                  </div>
+                </div>
+
+                <div className="p-3 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 space-y-1">
+                  <div className="text-[11px] font-bold text-slate-400">Selling Price Flow (MRP)</div>
+                  <div className="text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                    ৳{formData.boxSellingPrice.toFixed(2)} / Box
+                    <span className="text-slate-400 font-normal"> → </span>
+                    <span className="font-black">৳{vialSelling.toFixed(2)} / Vial</span>
+                  </div>
+                  <div className="text-[10px] text-slate-400">
+                    1 Commercial Box = {vialsPerBox} Vials / Ampoules (Counter retail MRP per vial derived)
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2 text-xs">
+              <div className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                <Calculator className="h-4 w-4 text-brand-primary" />
+                Automatic Unit Price Derivation (Box Price → Strip Price → Tablet Price):
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                <div className="p-3 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 space-y-1">
+                  <div className="text-[11px] font-bold text-slate-400">Purchase Price Flow</div>
+                  <div className="text-xs font-mono font-bold text-slate-800 dark:text-slate-200">
+                    ৳{formData.boxPurchasePrice.toFixed(2)} / Box
+                    <span className="text-slate-400 font-normal"> → </span>
+                    ৳{stripPurchase.toFixed(2)} / Strip
+                    <span className="text-slate-400 font-normal"> → </span>
+                    <span className="text-brand-primary font-black">৳{tabletPurchase.toFixed(2)} / Tablet</span>
+                  </div>
+                  <div className="text-[10px] text-slate-400">
+                    1 Box ({strips} Strips × {tablets} Tablets = {tabletsPerBox} Tablets)
+                  </div>
+                </div>
+
+                <div className="p-3 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 space-y-1">
+                  <div className="text-[11px] font-bold text-slate-400">Selling Price Flow</div>
+                  <div className="text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                    ৳{formData.boxSellingPrice.toFixed(2)} / Box
+                    <span className="text-slate-400 font-normal"> → </span>
+                    ৳{stripSelling.toFixed(2)} / Strip
+                    <span className="text-slate-400 font-normal"> → </span>
+                    <span className="font-black">৳{tabletSelling.toFixed(2)} / Tablet</span>
+                  </div>
+                  <div className="text-[10px] text-slate-400">
+                    1 Box ({strips} Strips × {tablets} Tablets = {tabletsPerBox} Tablets)
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {formData.paidAmount > 0 && (
             <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
