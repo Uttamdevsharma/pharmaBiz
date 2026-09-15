@@ -35,6 +35,7 @@ router.get("/analytics", (0, requirePermission_1.requirePermission)("reports.vie
 // ==================== DYNAMIC ROLES & PERMISSIONS ====================
 router.get("/roles", (0, requirePermission_1.requirePermission)("roles.manage"), super_admin_controller_1.SuperAdminController.listRoles);
 router.post("/roles", (0, requirePermission_1.requirePermission)("roles.manage"), (0, validate_1.validateRequest)({ body: super_admin_validation_1.createRoleSchema }), super_admin_controller_1.SuperAdminController.createRole);
+router.post("/roles/matrix", (0, requirePermission_1.requirePermission)("roles.manage"), (0, validate_1.validateRequest)({ body: super_admin_validation_1.batchUpdatePlatformRolePermissionsSchema }), super_admin_controller_1.SuperAdminController.batchUpdateRolePermissions);
 router.patch("/roles/:id", (0, requirePermission_1.requirePermission)("roles.manage"), (0, validate_1.validateRequest)({ body: super_admin_validation_1.updateRoleSchema }), super_admin_controller_1.SuperAdminController.updateRole);
 router.delete("/roles/:id", (0, requirePermission_1.requirePermission)("roles.manage"), super_admin_controller_1.SuperAdminController.deleteRole);
 // ==================== PLATFORM STAFF ====================

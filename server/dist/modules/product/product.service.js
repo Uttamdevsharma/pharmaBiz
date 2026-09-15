@@ -95,7 +95,7 @@ function mapCategoryNameToProductType(categoryName) {
 }
 class ProductService {
     /**
-     * Seed default Catalog Categories, Subcategories, Units, and Brands for a Tenant
+     * Seed default Units for a Tenant
      */
     static async seedDefaultCatalogVariants(tenantId) {
         const defaultUnits = [
@@ -113,40 +113,6 @@ class ProductService {
             { name: "Tin", symbol: "tin", productType: "OTHER" },
             { name: "Tube", symbol: "tube", productType: "MEDICINE" },
         ];
-        for (const mainCat of exports.CANONICAL_MAIN_CATEGORIES) {
-            let rootCat = await prisma_1.prisma.category.findFirst({
-                where: { tenantId, name: mainCat.name, parentId: null },
-            });
-            if (!rootCat) {
-                rootCat = await prisma_1.prisma.category.create({
-                    data: {
-                        tenantId,
-                        name: mainCat.name,
-                        productType: mainCat.productType,
-                        defaultUnit: mainCat.defaultUnit,
-                        description: mainCat.description,
-                        parentId: null,
-                    },
-                });
-            }
-            for (const sub of mainCat.subcategories) {
-                const existingSub = await prisma_1.prisma.category.findFirst({
-                    where: { tenantId, name: sub.name, parentId: rootCat.id },
-                });
-                if (!existingSub) {
-                    await prisma_1.prisma.category.create({
-                        data: {
-                            tenantId,
-                            name: sub.name,
-                            parentId: rootCat.id,
-                            productType: mainCat.productType,
-                            defaultUnit: sub.defaultUnit,
-                            description: sub.description,
-                        },
-                    });
-                }
-            }
-        }
         for (const unit of defaultUnits) {
             const existingUnit = await prisma_1.prisma.unit.findFirst({
                 where: { tenantId, name: unit.name },
@@ -159,76 +125,10 @@ class ProductService {
         }
     }
     /**
-     * Automatically reconcile legacy categories, product types and subcategories
+     * Automatically reconcile legacy category references on products if needed
      */
     static async reconcileLegacyCategories(tenantId) {
         try {
-            // 1. Ensure the 5 canonical main categories exist
-            const mainCatMap = new Map();
-            for (const mainCatDef of exports.CANONICAL_MAIN_CATEGORIES) {
-                let root = await prisma_1.prisma.category.findFirst({
-                    where: { tenantId, name: mainCatDef.name, parentId: null },
-                });
-                // Check if legacy name exists (e.g., "Saline & IV" or "General Healthcare")
-                if (!root && mainCatDef.name === "Saline (IV Fluid)") {
-                    root = await prisma_1.prisma.category.findFirst({
-                        where: { tenantId, name: "Saline & IV", parentId: null },
-                    });
-                    if (root) {
-                        root = await prisma_1.prisma.category.update({
-                            where: { id: root.id },
-                            data: { name: "Saline (IV Fluid)" },
-                        });
-                    }
-                }
-                if (!root && mainCatDef.name === "Other Health Product") {
-                    root = await prisma_1.prisma.category.findFirst({
-                        where: { tenantId, name: "General Healthcare", parentId: null },
-                    });
-                    if (root) {
-                        root = await prisma_1.prisma.category.update({
-                            where: { id: root.id },
-                            data: { name: "Other Health Product" },
-                        });
-                    }
-                }
-                if (!root) {
-                    root = await prisma_1.prisma.category.create({
-                        data: {
-                            tenantId,
-                            name: mainCatDef.name,
-                            productType: mainCatDef.productType,
-                            defaultUnit: mainCatDef.defaultUnit,
-                            description: mainCatDef.description,
-                            parentId: null,
-                        },
-                    });
-                }
-                mainCatMap.set(mainCatDef.name, root);
-                mainCatMap.set(mainCatDef.productType, root);
-            }
-            // 2. Identify any category that is NOT one of the 5 canonical main categories and has parentId = null
-            const nonMainRoots = await prisma_1.prisma.category.findMany({
-                where: {
-                    tenantId,
-                    parentId: null,
-                    name: {
-                        notIn: exports.CANONICAL_MAIN_CATEGORIES.map((c) => c.name),
-                    },
-                },
-            });
-            for (const cat of nonMainRoots) {
-                // Convert to a subcategory under the appropriate main category
-                const parentType = cat.productType || mapCategoryNameToProductType(cat.name);
-                const parentCat = mainCatMap.get(parentType) || mainCatMap.get("Medicine");
-                if (parentCat && parentCat.id !== cat.id) {
-                    await prisma_1.prisma.category.update({
-                        where: { id: cat.id },
-                        data: { parentId: parentCat.id },
-                    });
-                }
-            }
-            // 3. Reconcile existing products to have valid categoryId, subcategoryId, category, subcategory
             const products = await prisma_1.prisma.product.findMany({
                 where: { tenantId },
                 include: { categoryRef: true, subcategoryRef: true },
@@ -252,29 +152,14 @@ class ProductService {
                     }
                     needsUpdate = true;
                 }
-                else if (!mainCatId || !mainCatName) {
-                    // Resolve main category from productType or category name
-                    const pType = prod.productType || mapCategoryNameToProductType(prod.category);
-                    const parent = mainCatMap.get(pType) || mainCatMap.get("Medicine");
-                    if (parent) {
-                        mainCatId = parent.id;
-                        mainCatName = parent.name;
-                        needsUpdate = true;
-                    }
-                }
-                const calculatedType = mapCategoryNameToProductType(mainCatName);
-                if (prod.productType !== calculatedType) {
-                    needsUpdate = true;
-                }
                 if (needsUpdate) {
                     await prisma_1.prisma.product.update({
                         where: { id: prod.id },
                         data: {
                             categoryId: mainCatId || null,
-                            category: mainCatName || "Medicine",
+                            category: mainCatName || null,
                             subcategoryId: subCatId || null,
                             subcategory: subCatName || null,
-                            productType: calculatedType,
                         },
                     });
                 }
@@ -286,7 +171,7 @@ class ProductService {
     }
     // ==================== CATEGORIES ====================
     static async listCategories(tenantId) {
-        let mainCategories = await prisma_1.prisma.category.findMany({
+        return prisma_1.prisma.category.findMany({
             where: { tenantId, parentId: null },
             include: {
                 subcategories: {
@@ -299,23 +184,6 @@ class ProductService {
             },
             orderBy: { name: "asc" },
         });
-        if (mainCategories.length === 0) {
-            await this.seedDefaultCatalogVariants(tenantId);
-            mainCategories = await prisma_1.prisma.category.findMany({
-                where: { tenantId, parentId: null },
-                include: {
-                    subcategories: {
-                        orderBy: { name: "asc" },
-                        include: {
-                            _count: { select: { subProducts: true } },
-                        },
-                    },
-                    _count: { select: { products: true, subcategories: true } },
-                },
-                orderBy: { name: "asc" },
-            });
-        }
-        return mainCategories;
     }
     static async createCategory(tenantId, userId, data) {
         let parentCategory = null;
@@ -616,7 +484,7 @@ class ProductService {
                 genericName: data.genericName ? data.genericName.trim() : null,
                 sku,
                 barcode: data.barcode || null,
-                basePrice: data.basePrice,
+                basePrice: data.basePrice ?? 0,
                 category: mainCategoryName,
                 categoryId: mainCategoryId,
                 subcategory: subcategoryName,

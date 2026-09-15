@@ -912,12 +912,23 @@ class ReportService {
         let expiredCount = 0;
         const lowStockItems = [];
         const nearExpiryItems = [];
+        const stockCategoryMap = {};
         inventories.forEach((inv) => {
             const qty = Number(inv.quantity || 0);
             totalStockUnits += qty;
             const unitVal = Number(inv.purchasePrice ?? inv.product?.basePrice ?? 0);
             const lineVal = qty * unitVal;
             totalInventoryCostValue += lineVal;
+            // Category Stock Aggregation
+            const catName = inv.product?.categoryRef?.name ||
+                (typeof inv.product?.category === "string" ? inv.product.category : null) ||
+                "General Medicine";
+            if (!stockCategoryMap[catName]) {
+                stockCategoryMap[catName] = { categoryName: catName, stockUnits: 0, stockValue: 0, itemCount: 0 };
+            }
+            stockCategoryMap[catName].stockUnits += qty;
+            stockCategoryMap[catName].stockValue += lineVal;
+            stockCategoryMap[catName].itemCount += 1;
             if (inv.branchId && branchStatsMap[inv.branchId]) {
                 branchStatsMap[inv.branchId].stockUnits += qty;
                 branchStatsMap[inv.branchId].inventoryValue += lineVal;
@@ -956,6 +967,14 @@ class ReportService {
                 }
             }
         });
+        const totalInvUnitsForPct = totalStockUnits || 1;
+        const stockByCategory = Object.values(stockCategoryMap)
+            .map((c) => ({
+            ...c,
+            stockValue: Math.round(c.stockValue * 100) / 100,
+            percentage: Math.round((c.stockUnits / totalInvUnitsForPct) * 1000) / 10,
+        }))
+            .sort((a, b) => b.stockUnits - a.stockUnits);
         // Total Damaged & Missing Stock Loss calculations for period
         let totalDamagedMissingLoss = 0;
         let damagedMissingUnitsCount = 0;
@@ -1066,6 +1085,7 @@ class ReportService {
                 dailySalesTrend: Object.values(dynamicTrendMap),
                 paymentBreakdown,
                 categoryDistribution,
+                stockByCategory,
                 topSellingProducts,
             },
             alerts: {

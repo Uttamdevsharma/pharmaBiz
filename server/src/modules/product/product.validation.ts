@@ -38,7 +38,7 @@ export const createProductSchema = z.object({
   genericName: z.string().optional().nullable(),
   sku: z.string().optional().nullable(),
   barcode: z.string().optional().nullable(),
-  basePrice: z.number().positive("Base price must be greater than 0"),
+  basePrice: z.number().min(0, "Base price cannot be negative").optional().default(0),
   category: z.string().optional().nullable(),
   categoryId: z.string().optional().nullable(),
   subcategory: z.string().optional().nullable(),
@@ -51,6 +51,9 @@ export const createProductSchema = z.object({
   unit: z.string().default("piece"),
   size: z.string().optional().nullable(),
   defaultPackType: z.string().default("BOX"),
+  qtyPerLevel2: z.number().int().positive().optional().nullable(),
+  qtyPerLevel3: z.number().int().positive().optional().nullable(),
+  qtyPerLevel4: z.number().int().positive().optional().nullable(),
   stripsPerBox: z.number().int().positive().optional().nullable(),
   tabletsPerStrip: z.number().int().positive().optional().nullable(),
 

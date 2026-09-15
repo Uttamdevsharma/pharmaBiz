@@ -34,7 +34,7 @@ exports.createProductSchema = zod_1.z.object({
     genericName: zod_1.z.string().optional().nullable(),
     sku: zod_1.z.string().optional().nullable(),
     barcode: zod_1.z.string().optional().nullable(),
-    basePrice: zod_1.z.number().positive("Base price must be greater than 0"),
+    basePrice: zod_1.z.number().min(0, "Base price cannot be negative").optional().default(0),
     category: zod_1.z.string().optional().nullable(),
     categoryId: zod_1.z.string().optional().nullable(),
     subcategory: zod_1.z.string().optional().nullable(),

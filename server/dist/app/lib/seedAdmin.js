@@ -73,6 +73,132 @@ async function seedSuperAdmin() {
             console.log(` Role             : ${superAdmin.role}`);
             console.log(`-----------------------------------------------`);
         }
+        else {
+            // Ensure super admin password is up to date
+            const passwordHash = await bcryptjs_1.default.hash(adminPassword, 10);
+            await prisma_1.prisma.user.update({
+                where: { id: existingAdmin.id },
+                data: { passwordHash, isActive: true },
+            });
+        }
+        // 4b. Seed Demo Tenant & Demo Staff Accounts
+        let demoTenant = await prisma_1.prisma.tenant.findFirst({
+            where: { email: "uttam23412@gmail.com" },
+        });
+        if (!demoTenant) {
+            demoTenant = await prisma_1.prisma.tenant.findFirst({
+                where: { name: "Demo Pharmacy" },
+            });
+        }
+        if (!demoTenant) {
+            demoTenant = await prisma_1.prisma.tenant.create({
+                data: {
+                    name: "Demo Pharmacy",
+                    tier: "ENTERPRISE",
+                    email: "uttam23412@gmail.com",
+                    phone: "01711112233",
+                    address: "Gulshan, Dhaka, Bangladesh",
+                    isActive: true,
+                    verificationStatus: "ACTIVE",
+                },
+            });
+            console.log("[Seed] Created Demo Pharmacy tenant.");
+        }
+        else {
+            await prisma_1.prisma.tenant.update({
+                where: { id: demoTenant.id },
+                data: { isActive: true, verificationStatus: "ACTIVE" },
+            });
+        }
+        let demoBranch = await prisma_1.prisma.branch.findFirst({
+            where: { tenantId: demoTenant.id },
+        });
+        if (!demoBranch) {
+            demoBranch = await prisma_1.prisma.branch.create({
+                data: {
+                    tenantId: demoTenant.id,
+                    name: "Main Branch",
+                    phone: "01711112233",
+                    location: "Gulshan, Dhaka",
+                    isActive: true,
+                },
+            });
+            console.log("[Seed] Created Main Branch for Demo Pharmacy.");
+        }
+        const demoUsers = [
+            {
+                email: "uttam23412@gmail.com",
+                username: "uttam23412@gmail.com",
+                password: "uttam1234",
+                name: "Uttam Sharma",
+                role: "COMPANY_OWNER",
+                tenantId: demoTenant.id,
+                branchId: demoBranch.id,
+            },
+            {
+                email: "akash@gmail.com",
+                username: "akash@gmail.com",
+                password: "akash1234",
+                name: "Akash Rahman",
+                role: "BRANCH_MANAGER",
+                tenantId: demoTenant.id,
+                branchId: demoBranch.id,
+            },
+            {
+                email: "reday@gmail.com",
+                username: "reday@gmail.com",
+                password: "reday1234",
+                name: "Reday Ahmed",
+                role: "CASHIER",
+                tenantId: demoTenant.id,
+                branchId: demoBranch.id,
+            },
+            {
+                email: "alif@gmail.com",
+                username: "alif@gmail.com",
+                password: "alif1234",
+                name: "Alif Hossain",
+                role: "INVENTORY_EXECUTIVE",
+                tenantId: demoTenant.id,
+                branchId: demoBranch.id,
+            },
+        ];
+        for (const dUser of demoUsers) {
+            const existing = await prisma_1.prisma.user.findFirst({
+                where: {
+                    OR: [
+                        { email: dUser.email },
+                        { username: dUser.username },
+                    ],
+                },
+            });
+            const passwordHash = await bcryptjs_1.default.hash(dUser.password, 10);
+            if (!existing) {
+                await prisma_1.prisma.user.create({
+                    data: {
+                        tenantId: dUser.tenantId,
+                        branchId: dUser.branchId,
+                        username: dUser.username,
+                        email: dUser.email,
+                        name: dUser.name,
+                        role: dUser.role,
+                        passwordHash,
+                        isActive: true,
+                    },
+                });
+                console.log(`[Seed] Demo account created: ${dUser.email} (${dUser.role})`);
+            }
+            else {
+                await prisma_1.prisma.user.update({
+                    where: { id: existing.id },
+                    data: {
+                        passwordHash,
+                        isActive: true,
+                        role: dUser.role,
+                    },
+                });
+            }
+        }
         // 5. Seed / Upsert all 4 subscription plans: Plan 0 (Free Trial), Plan 1 (Starter), Plan 2 (Growth), Plan 3 (Enterprise)
         const tiers = ["TRIAL", "STARTER", "GROWTH", "ENTERPRISE"];
         for (const tier of tiers) {

@@ -17,6 +17,7 @@ router.patch("/profile", (0, validate_1.validateRequest)({ body: user_validation
 // Dynamic Pharmacy Roles CRUD
 router.get("/roles", (0, requirePermission_1.requirePermission)("roles.manage"), user_controller_1.UserController.listRoles);
 router.post("/roles", (0, requirePermission_1.requirePermission)("roles.manage"), (0, validate_1.validateRequest)({ body: user_validation_1.createPharmacyRoleSchema }), user_controller_1.UserController.createRole);
+router.post("/roles/matrix", (0, requirePermission_1.requirePermission)("roles.manage"), (0, validate_1.validateRequest)({ body: user_validation_1.batchUpdateRolePermissionsSchema }), user_controller_1.UserController.batchUpdateRolePermissions);
 router.patch("/roles/:id", (0, requirePermission_1.requirePermission)("roles.manage"), (0, validate_1.validateRequest)({ body: user_validation_1.updatePharmacyRoleSchema }), user_controller_1.UserController.updateRole);
 router.delete("/roles/:id", (0, requirePermission_1.requirePermission)("roles.manage"), user_controller_1.UserController.deleteRole);
 // RBAC Permissions Info

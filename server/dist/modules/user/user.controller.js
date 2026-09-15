@@ -89,6 +89,18 @@ class UserController {
             res.status(400).json({ success: false, message: error.message });
         }
     }
+    static async batchUpdateRolePermissions(req, res) {
+        try {
+            const tenantId = req.user.tenantId;
+            const userId = req.user.id;
+            const { matrix } = req.body;
+            const updated = await user_service_1.UserService.batchUpdateRolePermissions(tenantId, userId, matrix);
+            res.status(200).json({ success: true, message: "Permission matrix updated successfully", data: updated });
+        }
+        catch (error) {
+            res.status(400).json({ success: false, message: error.message });
+        }
+    }
     /**
      * ==================== PHARMACY STAFF CONTROLLERS ====================
      */

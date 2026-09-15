@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateProfileSchema = exports.changePasswordSchema = exports.listUsersQuerySchema = exports.updateRolePermissionsSchema = exports.updatePharmacyRoleSchema = exports.createPharmacyRoleSchema = exports.updateUserSchema = exports.createUserSchema = exports.RoleEnum = void 0;
+exports.updateProfileSchema = exports.changePasswordSchema = exports.listUsersQuerySchema = exports.batchUpdateRolePermissionsSchema = exports.updateRolePermissionsSchema = exports.updatePharmacyRoleSchema = exports.createPharmacyRoleSchema = exports.updateUserSchema = exports.createUserSchema = exports.RoleEnum = void 0;
 const zod_1 = require("zod");
 exports.RoleEnum = zod_1.z.enum([
     "SUPER_ADMIN",
@@ -37,15 +37,23 @@ exports.createPharmacyRoleSchema = zod_1.z.object({
     name: zod_1.z.string().min(2, "Role name must be at least 2 characters"),
     description: zod_1.z.string().optional(),
     permissions: zod_1.z.array(zod_1.z.string()).default([]),
+    isActive: zod_1.z.boolean().optional(),
 });
 exports.updatePharmacyRoleSchema = zod_1.z.object({
     name: zod_1.z.string().min(2).optional(),
     description: zod_1.z.string().optional(),
     permissions: zod_1.z.array(zod_1.z.string()).optional(),
+    isActive: zod_1.z.boolean().optional(),
 });
 exports.updateRolePermissionsSchema = zod_1.z.object({
     role: zod_1.z.string(),
     permissions: zod_1.z.array(zod_1.z.string()),
+});
+exports.batchUpdateRolePermissionsSchema = zod_1.z.object({
+    matrix: zod_1.z.array(zod_1.z.object({
+        roleId: zod_1.z.string(),
+        permissions: zod_1.z.array(zod_1.z.string()),
+    })),
 });
 exports.listUsersQuerySchema = zod_1.z.object({
     page: zod_1.z.union([zod_1.z.string(), zod_1.z.number()]).optional().transform(v => (v ? parseInt(String(v), 10) : 1)),

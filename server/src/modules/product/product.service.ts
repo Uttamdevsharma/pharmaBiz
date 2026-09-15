@@ -543,7 +543,7 @@ export class ProductService {
         genericName: data.genericName ? data.genericName.trim() : null,
         sku,
         barcode: data.barcode || null,
-        basePrice: data.basePrice,
+        basePrice: data.basePrice ?? 0,
         category: mainCategoryName,
         categoryId: mainCategoryId,
         subcategory: subcategoryName,
@@ -555,7 +555,10 @@ export class ProductService {
         manufacturer: data.manufacturer || brandName || null,
         unit: data.unit || (isMed ? "tablet" : "piece"),
         size: data.size || null,
-        defaultPackType: "BOX",
+        defaultPackType: data.defaultPackType || (data.unit === "bottle" ? "BOTTLE" : "BOX"),
+        qtyPerLevel2: data.qtyPerLevel2 ? Number(data.qtyPerLevel2) : (data.unit === "bottle" ? (data.stripsPerBox ? Number(data.stripsPerBox) : 12) : 10),
+        qtyPerLevel3: data.qtyPerLevel3 ? Number(data.qtyPerLevel3) : null,
+        qtyPerLevel4: data.qtyPerLevel4 ? Number(data.qtyPerLevel4) : null,
         stripsPerBox: data.stripsPerBox ? Number(data.stripsPerBox) : 10,
         tabletsPerStrip: data.tabletsPerStrip ? Number(data.tabletsPerStrip) : 10,
 
@@ -690,9 +693,16 @@ export class ProductService {
     const data = products.map((p: any) => {
       const override = p.branchOverrides && p.branchOverrides[0];
       const totalStock = (p.inventories || []).reduce((acc: number, inv: any) => acc + (inv.quantity || 0), 0);
+      const latestBatch = p.inventories && p.inventories.length > 0 ? p.inventories[0] : null;
+      const batchSellingPrice = latestBatch ? Number(latestBatch.sellingPrice || latestBatch.boxSellingPrice || 0) : 0;
+      const computedPrice = override
+        ? Number(override.price)
+        : (Number(p.basePrice) > 0 ? Number(p.basePrice) : batchSellingPrice);
+
       return {
         ...p,
-        effectivePrice: override ? Number(override.price) : Number(p.basePrice),
+        basePrice: Number(p.basePrice) > 0 ? Number(p.basePrice) : computedPrice,
+        effectivePrice: computedPrice,
         hasBranchOverride: !!override,
         currentStock: totalStock,
         batches: p.inventories || [],
@@ -748,10 +758,16 @@ export class ProductService {
 
     const override = branchId && product.branchOverrides && product.branchOverrides[0];
     const totalStock = (product.inventories || []).reduce((acc: number, inv: any) => acc + (inv.quantity || 0), 0);
+    const latestBatch = product.inventories && product.inventories.length > 0 ? product.inventories[0] : null;
+    const batchSellingPrice = latestBatch ? Number(latestBatch.sellingPrice || latestBatch.boxSellingPrice || 0) : 0;
+    const computedPrice = override
+      ? Number(override.price)
+      : (Number(product.basePrice) > 0 ? Number(product.basePrice) : batchSellingPrice);
 
     return {
       ...product,
-      effectivePrice: override ? Number(override.price) : Number(product.basePrice),
+      basePrice: Number(product.basePrice) > 0 ? Number(product.basePrice) : computedPrice,
+      effectivePrice: computedPrice,
       hasBranchOverride: !!override,
       currentStock: totalStock,
       batches: product.inventories || [],
@@ -796,10 +812,16 @@ export class ProductService {
 
     const override = branchId && product.branchOverrides && product.branchOverrides[0];
     const totalStock = (product.inventories || []).reduce((acc: number, inv: any) => acc + (inv.quantity || 0), 0);
+    const latestBatch = product.inventories && product.inventories.length > 0 ? product.inventories[0] : null;
+    const batchSellingPrice = latestBatch ? Number(latestBatch.sellingPrice || latestBatch.boxSellingPrice || 0) : 0;
+    const computedPrice = override
+      ? Number(override.price)
+      : (Number(product.basePrice) > 0 ? Number(product.basePrice) : batchSellingPrice);
 
     return {
       ...product,
-      effectivePrice: override ? Number(override.price) : Number(product.basePrice),
+      basePrice: Number(product.basePrice) > 0 ? Number(product.basePrice) : computedPrice,
+      effectivePrice: computedPrice,
       hasBranchOverride: !!override,
       currentStock: totalStock,
       batches: product.inventories || [],
@@ -878,7 +900,10 @@ export class ProductService {
         ...(data.manufacturer !== undefined && { manufacturer: data.manufacturer }),
         ...(data.unit !== undefined && { unit: data.unit }),
         ...(data.size !== undefined && { size: data.size }),
-        defaultPackType: "BOX",
+        defaultPackType: data.defaultPackType !== undefined ? data.defaultPackType : product.defaultPackType,
+        qtyPerLevel2: data.qtyPerLevel2 !== undefined ? (data.qtyPerLevel2 ? Number(data.qtyPerLevel2) : null) : product.qtyPerLevel2,
+        qtyPerLevel3: data.qtyPerLevel3 !== undefined ? (data.qtyPerLevel3 ? Number(data.qtyPerLevel3) : null) : product.qtyPerLevel3,
+        qtyPerLevel4: data.qtyPerLevel4 !== undefined ? (data.qtyPerLevel4 ? Number(data.qtyPerLevel4) : null) : product.qtyPerLevel4,
         stripsPerBox: data.stripsPerBox !== undefined ? (data.stripsPerBox ? Number(data.stripsPerBox) : null) : product.stripsPerBox,
         tabletsPerStrip: data.tabletsPerStrip !== undefined ? (data.tabletsPerStrip ? Number(data.tabletsPerStrip) : null) : product.tabletsPerStrip,
         ...(data.minStockAlert !== undefined && { minStockAlert: data.minStockAlert }),

@@ -22,16 +22,24 @@ export class InventoryService {
    * handles physical location allocations cleanly.
    */
   static calculateBatchPackagingMetrics(inv: any) {
-    const stripsPerBox = Math.max(1, inv.stripsPerBox || inv.product?.stripsPerBox || 10);
-    const tabletsPerStrip = Math.max(1, inv.tabletsPerStrip || inv.product?.tabletsPerStrip || 10);
-    const isMedicine =
+    const isBottle =
+      inv.packageType === "BOTTLE" ||
+      inv.packageType === "SYRUP" ||
+      inv.product?.unit === "bottle" ||
+      inv.product?.defaultPackType === "BOTTLE" ||
+      inv.product?.productType === "SYRUP" ||
+      inv.product?.category === "Syrup";
+    const isMedicine = !isBottle && (
       inv.packageType === "MEDICINE" ||
       inv.product?.productType === "MEDICINE" ||
       inv.product?.category === "Medicine" ||
       !inv.product?.productType ||
-      Boolean(inv.stripsPerBox && inv.tabletsPerStrip);
+      Boolean(inv.stripsPerBox && inv.tabletsPerStrip)
+    );
+    const stripsPerBox = isBottle ? 1 : Math.max(1, inv.stripsPerBox || inv.product?.stripsPerBox || 10);
+    const tabletsPerStrip = isBottle ? 1 : Math.max(1, inv.tabletsPerStrip || inv.product?.tabletsPerStrip || 10);
     const tabletsPerBox = isMedicine ? stripsPerBox * tabletsPerStrip : 1;
-    const boxesPerCarton = Math.max(1, inv.boxesPerCarton || inv.product?.qtyPerLevel2 || 10);
+    const boxesPerCarton = Math.max(1, inv.boxesPerCarton || inv.product?.qtyPerLevel2 || (isBottle ? (inv.product?.stripsPerBox || 12) : 10));
     const tabletsPerCarton = boxesPerCarton * tabletsPerBox;
 
     // 1. Tier 1: Aggregate receiving records if available
@@ -137,7 +145,9 @@ export class InventoryService {
     const totalStrips = (totalEquivalentBoxes * stripsPerBox) + unboxedStrips;
     const totalTablets = (totalEquivalentBoxes * tabletsPerBox) + bulkUnitsAfterBoxes;
 
-    const formulaText = `${fullCartons} Full Carton${fullCartons !== 1 ? "s" : ""} × ${boxesPerCarton} Boxes = ${boxesInsideCartons} Boxes Inside Cartons + ${remainingLooseBoxes} Loose Box${remainingLooseBoxes !== 1 ? "es" : ""} = ${totalEquivalentBoxes} Total Boxes`;
+    const formulaText = isBottle
+      ? `${fullCartons} Full Carton${fullCartons !== 1 ? "s" : ""} × ${boxesPerCarton} Bottles = ${boxesInsideCartons} Bottles Inside Cartons + ${remainingLooseBoxes} Loose Bottle${remainingLooseBoxes !== 1 ? "s" : ""} = ${totalEquivalentBoxes} Total Bottles`
+      : `${fullCartons} Full Carton${fullCartons !== 1 ? "s" : ""} × ${boxesPerCarton} Boxes = ${boxesInsideCartons} Boxes Inside Cartons + ${remainingLooseBoxes} Loose Box${remainingLooseBoxes !== 1 ? "es" : ""} = ${totalEquivalentBoxes} Total Boxes`;
 
     return {
       stripsPerBox,
@@ -436,11 +446,17 @@ export class InventoryService {
 
     const result = await (prisma as any).$transaction(async (tx: any) => {
       // 1. Determine receiving unit breakdown using saved product packaging
+      const isBottle =
+        product.unit === "bottle" ||
+        product.defaultPackType === "BOTTLE" ||
+        product.productType === "SYRUP" ||
+        product.category === "Syrup" ||
+        data.packageType === "BOTTLE";
       const isBoxReceiving = data.receivingUnit === "BOX";
-      const boxesPerCarton = data.boxesPerCarton || product.qtyPerLevel2 || 10;
-      const stripsPerBox = product.stripsPerBox || data.stripsPerBox || 10;
-      const tabletsPerStrip = product.tabletsPerStrip || data.tabletsPerStrip || 10;
-      const tabletsPerBox = stripsPerBox * tabletsPerStrip;
+      const boxesPerCarton = data.boxesPerCarton || product.qtyPerLevel2 || (isBottle ? (product.stripsPerBox || 12) : 10);
+      const stripsPerBox = isBottle ? 1 : (product.stripsPerBox || data.stripsPerBox || 10);
+      const tabletsPerStrip = isBottle ? 1 : (product.tabletsPerStrip || data.tabletsPerStrip || 10);
+      const tabletsPerBox = isBottle ? 1 : (stripsPerBox * tabletsPerStrip);
 
       let cartonsReceived = 0;
       let boxesReceived = 0;
@@ -454,23 +470,33 @@ export class InventoryService {
         boxesReceived = cartonsReceived * boxesPerCarton;
       }
 
-      // Price Derivation: Box Price -> Strip Price -> Tablet Price
+      // Price Derivation: Box Price -> Strip Price -> Tablet Price (or per Bottle)
       let boxPurchasePrice: number | null = data.boxPurchasePrice !== undefined && data.boxPurchasePrice !== null ? Number(data.boxPurchasePrice) : null;
       let purchasePrice: number | null = data.purchasePrice !== undefined && data.purchasePrice !== null ? Number(data.purchasePrice) : null;
 
-      if (boxPurchasePrice !== null && purchasePrice === null) {
-        purchasePrice = Math.round((boxPurchasePrice / tabletsPerBox) * 100) / 100;
-      } else if (purchasePrice !== null && boxPurchasePrice === null) {
-        boxPurchasePrice = Math.round((purchasePrice * tabletsPerBox) * 100) / 100;
+      if (isBottle) {
+        if (purchasePrice === null && boxPurchasePrice !== null) purchasePrice = boxPurchasePrice;
+        if (boxPurchasePrice === null && purchasePrice !== null) boxPurchasePrice = purchasePrice;
+      } else {
+        if (boxPurchasePrice !== null && purchasePrice === null) {
+          purchasePrice = Math.round((boxPurchasePrice / tabletsPerBox) * 100) / 100;
+        } else if (purchasePrice !== null && boxPurchasePrice === null) {
+          boxPurchasePrice = Math.round((purchasePrice * tabletsPerBox) * 100) / 100;
+        }
       }
 
       let boxSellingPrice: number | null = data.boxSellingPrice !== undefined && data.boxSellingPrice !== null ? Number(data.boxSellingPrice) : null;
       let sellingPrice: number | null = data.sellingPrice !== undefined && data.sellingPrice !== null ? Number(data.sellingPrice) : null;
 
-      if (boxSellingPrice !== null && sellingPrice === null) {
-        sellingPrice = Math.round((boxSellingPrice / tabletsPerBox) * 100) / 100;
-      } else if (sellingPrice !== null && boxSellingPrice === null) {
-        boxSellingPrice = Math.round((sellingPrice * tabletsPerBox) * 100) / 100;
+      if (isBottle) {
+        if (sellingPrice === null && boxSellingPrice !== null) sellingPrice = boxSellingPrice;
+        if (boxSellingPrice === null && sellingPrice !== null) boxSellingPrice = sellingPrice;
+      } else {
+        if (boxSellingPrice !== null && sellingPrice === null) {
+          sellingPrice = Math.round((boxSellingPrice / tabletsPerBox) * 100) / 100;
+        } else if (sellingPrice !== null && boxSellingPrice === null) {
+          boxSellingPrice = Math.round((sellingPrice * tabletsPerBox) * 100) / 100;
+        }
       }
 
       // 2. Look for existing batch

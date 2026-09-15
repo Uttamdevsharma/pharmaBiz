@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updatePlatformRolePermissionsSchema = exports.updatePlatformStaffSchema = exports.createPlatformStaffSchema = exports.updateRoleSchema = exports.createRoleSchema = exports.listTenantsQuerySchema = exports.updateTenantStatusSchema = exports.updatePlanSchema = exports.createPlanSchema = void 0;
+exports.updatePlatformRolePermissionsSchema = exports.updatePlatformStaffSchema = exports.createPlatformStaffSchema = exports.batchUpdatePlatformRolePermissionsSchema = exports.updateRoleSchema = exports.createRoleSchema = exports.listTenantsQuerySchema = exports.updateTenantStatusSchema = exports.updatePlanSchema = exports.createPlanSchema = void 0;
 const zod_1 = require("zod");
 exports.createPlanSchema = zod_1.z.object({
     name: zod_1.z.string().min(2, "Plan name must be at least 2 characters"),
@@ -34,14 +34,22 @@ exports.listTenantsQuerySchema = zod_1.z.object({
     endDate: zod_1.z.string().optional(),
 });
 exports.createRoleSchema = zod_1.z.object({
-    name: zod_1.z.string().min(2, "Role name must be at least 2 characters"),
+    name: zod_1.z.string().min(1, "Role name is required"),
     description: zod_1.z.string().optional(),
     permissions: zod_1.z.array(zod_1.z.string()).default([]),
+    isActive: zod_1.z.boolean().default(true),
 });
 exports.updateRoleSchema = zod_1.z.object({
-    name: zod_1.z.string().min(2, "Role name must be at least 2 characters").optional(),
+    name: zod_1.z.string().min(1, "Role name is required").optional(),
     description: zod_1.z.string().optional(),
     permissions: zod_1.z.array(zod_1.z.string()).optional(),
+    isActive: zod_1.z.boolean().optional(),
+});
+exports.batchUpdatePlatformRolePermissionsSchema = zod_1.z.object({
+    matrix: zod_1.z.array(zod_1.z.object({
+        roleId: zod_1.z.string(),
+        permissions: zod_1.z.array(zod_1.z.string()),
+    })),
 });
 exports.createPlatformStaffSchema = zod_1.z.object({
     name: zod_1.z.string().min(2, "Name must be at least 2 characters"),
