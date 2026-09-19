@@ -1,13 +1,18 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { fetchApi } from "@/lib/api";
 import { CENTRAL_CLIENT_PLANS, calculateRemainingTrialDays } from "@/lib/planLimits";
 import { useBranchContext } from "@/context/BranchContext";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { DashboardSidebar, OwnerModule } from "@/components/dashboard/DashboardSidebar";
+import {
+  getModuleFromPathname,
+  getPathFromModule,
+  getDefaultModuleForRole,
+} from "@/lib/dashboardRoutes";
 import { OverviewModule } from "@/components/dashboard/OverviewModule";
 import { ProfileModule } from "@/components/dashboard/ProfileModule";
 import { BranchModule } from "@/components/dashboard/BranchModule";
@@ -76,36 +81,84 @@ import {
   Users,
 } from "lucide-react";
 
-function getDefaultModuleForRole(role?: string): OwnerModule {
-  switch (role) {
-    case "ACCOUNTS":
-      return "acc_overview";
-    case "CASHIER":
-      return "pos";
-    case "INVENTORY_EXECUTIVE":
-      return "stock_stock_list";
-    case "BRANCH_MANAGER":
-    case "MANAGER":
-    case "COMPANY_OWNER":
-    case "REGIONAL_ADMIN":
-    case "AUDITOR":
-    default:
-      return "overview";
-  }
-}
+// Persistent in-memory cache across dashboard transitions to prevent full-screen loaders
+let cachedTenantProfile: any = null;
+let cachedCurrentSub: any = null;
+let cachedAvailablePlans: any[] | null = null;
 
 export default function RoleBasedDashboard() {
   const router = useRouter();
+  const pathname = usePathname();
   const { user, isAuthenticated, isSuperAdmin, isPlatformStaff, hasPermission, loading: authLoading } = useAuth();
 
-  const [activeModule, setActiveModule] = useState<OwnerModule>(getDefaultModuleForRole(user?.role));
+  const [activeModule, setActiveModule] = useState<OwnerModule>(() => {
+    const currentPath = typeof window !== "undefined" ? window.location.pathname : pathname;
+    return getModuleFromPathname(currentPath, user?.role);
+  });
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [preselectedBatchId, setPreselectedBatchId] = useState<string>("");
   const [preselectedProductId, setPreselectedProductId] = useState<string>("");
   const [inspectionTransferId, setInspectionTransferId] = useState<string>("");
-  const [tenantProfile, setTenantProfile] = useState<any>(null);
-  const [currentSub, setCurrentSub] = useState<any>(null);
+  const [tenantProfile, setTenantProfile] = useState<any>(() => cachedTenantProfile);
+  const [currentSub, setCurrentSub] = useState<any>(() => cachedCurrentSub);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("pharma_sidebar_collapsed") === "true";
+    }
+    return false;
+  });
+
+  const toggleSidebarCollapse = () => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      if (typeof window !== "undefined") {
+        localStorage.setItem("pharma_sidebar_collapsed", String(next));
+      }
+      return next;
+    });
+  };
+
+  // Keyboard shortcut Ctrl+B or Cmd+B to toggle sidebar collapse
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "b") {
+        e.preventDefault();
+        toggleSidebarCollapse();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  // Instant seamless navigation: update state directly and push URL without unmounting layout
+  const handleNavigate = (mod: OwnerModule) => {
+    if (mod !== "inv_add_product") {
+      setEditingProduct(null);
+    }
+    if (mod === "sup_suppliers") {
+      setSelectedSupplierDetailId(null);
+    }
+    setActiveModule(mod);
+    const targetPath = getPathFromModule(mod);
+    if (typeof window !== "undefined" && window.location.pathname !== targetPath) {
+      window.history.pushState({ module: mod }, "", targetPath);
+    }
+  };
+
+  // Handle browser Back / Forward buttons instantly without full page reload or unmount
+  useEffect(() => {
+    const handlePopState = () => {
+      const currentPath = window.location.pathname;
+      const resolved = getModuleFromPathname(currentPath, user?.role);
+      setActiveModule(resolved);
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, [user?.role]);
 
   // Global Branch Context
   const {
@@ -117,11 +170,11 @@ export default function RoleBasedDashboard() {
   const [selectedSupplierDetailId, setSelectedSupplierDetailId] = useState<string | null>(null);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("");
   const [selectedRecurringForPay, setSelectedRecurringForPay] = useState<any | null>(null);
-  const [dataLoading, setDataLoading] = useState(true);
+  const [dataLoading, setDataLoading] = useState(() => !cachedTenantProfile);
   const [initiatingPay, setInitiatingPay] = useState(false);
   const [upgradePlanId, setUpgradePlanId] = useState<string>("");
   const [upgradeBilling, setUpgradeBilling] = useState<"MONTHLY" | "YEARLY">("MONTHLY");
-  const [availablePlans, setAvailablePlans] = useState<any[]>([]);
+  const [availablePlans, setAvailablePlans] = useState<any[]>(() => cachedAvailablePlans || []);
 
   useEffect(() => {
     if (authLoading) return;
@@ -141,11 +194,16 @@ export default function RoleBasedDashboard() {
       return;
     }
 
-    if (user?.role) {
+    const currentPath = typeof window !== "undefined" ? window.location.pathname : pathname;
+    if (user?.role && (currentPath === "/dashboard" || currentPath === "/dashboard/")) {
       setActiveModule(getDefaultModuleForRole(user.role));
     }
 
     async function loadTenantData() {
+      if (cachedTenantProfile && cachedCurrentSub && cachedAvailablePlans) {
+        setDataLoading(false);
+        return;
+      }
       try {
         setDataLoading(true);
         const [profileRes, subRes, plansRes] = await Promise.all([
@@ -154,11 +212,18 @@ export default function RoleBasedDashboard() {
           fetchApi("/subscriptions/plans"),
         ]);
 
-        if (profileRes.success) setTenantProfile(profileRes.data);
-        if (subRes.success) setCurrentSub(subRes.data?.subscription || subRes.data);
+        if (profileRes.success) {
+          cachedTenantProfile = profileRes.data;
+          setTenantProfile(profileRes.data);
+        }
+        if (subRes.success) {
+          const sub = subRes.data?.subscription || subRes.data;
+          cachedCurrentSub = sub;
+          setCurrentSub(sub);
+        }
         if (plansRes.success && plansRes.data) {
-          // Filter to paid plans for upgrade options
           const paidOnly = plansRes.data.filter((p: any) => p.tier !== "TRIAL");
+          cachedAvailablePlans = paidOnly;
           setAvailablePlans(paidOnly);
           if (paidOnly.length > 0 && !upgradePlanId) {
             setUpgradePlanId(paidOnly[0].id);
@@ -357,9 +422,11 @@ export default function RoleBasedDashboard() {
         tier={effectiveTier}
         trialDaysRemaining={isTrial ? trialDaysRemaining : undefined}
         isTrial={isTrial}
-        onNavigate={setActiveModule}
+        onNavigate={handleNavigate}
         onToggleMobileSidebar={() => setMobileSidebarOpen(!mobileSidebarOpen)}
         isMobileSidebarOpen={mobileSidebarOpen}
+        isSidebarCollapsed={sidebarCollapsed}
+        onToggleDesktopSidebar={toggleSidebarCollapse}
       />
 
       {/* Main Workspace Layout */}
@@ -370,21 +437,30 @@ export default function RoleBasedDashboard() {
           userRole={user?.role}
           mobileOpen={mobileSidebarOpen}
           onCloseMobile={() => setMobileSidebarOpen(false)}
-          onModuleChange={(mod) => {
-            if (mod !== "inv_add_product") {
-              setEditingProduct(null);
-            }
-            if (mod === "sup_suppliers") {
-              setSelectedSupplierDetailId(null);
-            }
-            setActiveModule(mod);
-          }}
+          onModuleChange={handleNavigate}
+          collapsed={sidebarCollapsed}
+          onToggleCollapse={toggleSidebarCollapse}
         />
 
         {/* Content Area */}
-        <main className="flex-1 h-full min-h-0 p-3 sm:p-5 lg:p-6 xl:p-8 2xl:p-10 content-scrollbar w-full min-w-0">
-          {renderModuleContent()}
-        </main>
+        {(() => {
+          const isPosActive = activeModule === "pos" || activeModule === "pos_sale";
+          return (
+            <main className={`flex-1 h-full min-h-0 w-full min-w-0 ${
+              isPosActive
+                ? "p-1.5 sm:p-2.5 overflow-hidden"
+                : "p-3 sm:p-4 md:p-6 lg:p-7 xl:p-8 2xl:p-10 content-scrollbar"
+            }`}>
+              <div className={`w-full min-w-0 ${
+                isPosActive
+                  ? "h-full flex flex-col min-h-0"
+                  : "max-w-[1920px] 3xl:max-w-[2400px] 4xl:max-w-[3000px] mx-auto"
+              }`}>
+                {renderModuleContent()}
+              </div>
+            </main>
+          );
+        })()}
       </div>
     </div>
   );
@@ -399,7 +475,7 @@ export default function RoleBasedDashboard() {
         if (!isOwner && !hasPermission("dashboard.view")) {
           return <TenantAccessRestricted moduleName="Dashboard" requiredPerm="dashboard.view" />;
         }
-        return <OverviewModule onNavigate={setActiveModule} />;
+        return <OverviewModule onNavigate={handleNavigate} />;
 
       // 🛒 Sales & POS Subpages
       case "pos":
@@ -413,13 +489,13 @@ export default function RoleBasedDashboard() {
         if (!isOwner && !hasPermission("pos.history")) {
           return <TenantAccessRestricted moduleName="Sales History" requiredPerm="pos.history" />;
         }
-        return <SalesHistoryView onNavigate={setActiveModule} />;
+        return <SalesHistoryView onNavigate={handleNavigate} />;
 
       case "pos_vat":
         if (!isOwner && !hasPermission("pos.vat")) {
           return <TenantAccessRestricted moduleName="VAT Settings" requiredPerm="pos.vat" />;
         }
-        return <VatSettingsView onNavigate={setActiveModule} />;
+        return <VatSettingsView onNavigate={handleNavigate} />;
 
       // 💳 Accounts & Finance Subpages
       case "acc_overview":
@@ -427,25 +503,25 @@ export default function RoleBasedDashboard() {
         if (!isOwner && !hasPermission("accounts.manage")) {
           return <TenantAccessRestricted moduleName="Accounts & Finance Overview" requiredPerm="accounts.manage" />;
         }
-        return <AccountsOverviewView onNavigate={setActiveModule} />;
+        return <AccountsOverviewView onNavigate={handleNavigate} />;
 
       case "acc_financial_accounts":
         if (!isOwner && !hasPermission("accounts.financial_accounts")) {
           return <TenantAccessRestricted moduleName="Financial Accounts" requiredPerm="accounts.financial_accounts" />;
         }
-        return <FinancialAccountsView onNavigate={setActiveModule} />;
+        return <FinancialAccountsView onNavigate={handleNavigate} />;
 
       case "acc_fund_transfer":
         if (!isOwner && !hasPermission("accounts.fund_transfer")) {
           return <TenantAccessRestricted moduleName="Fund Transfer" requiredPerm="accounts.fund_transfer" />;
         }
-        return <FundTransferView onNavigate={setActiveModule} />;
+        return <FundTransferView onNavigate={handleNavigate} />;
 
       case "acc_transaction_history":
         if (!isOwner && !hasPermission("accounts.transaction_history")) {
           return <TenantAccessRestricted moduleName="Transaction History" requiredPerm="accounts.transaction_history" />;
         }
-        return <TransactionHistoryView onNavigate={setActiveModule} />;
+        return <TransactionHistoryView onNavigate={handleNavigate} />;
 
       // 💸 Expenses & Bills (Redesigned 3-Submenu Structure)
       case "exp_list":
@@ -457,10 +533,10 @@ export default function RoleBasedDashboard() {
         return (
           <BillListView
             selectedBranchId={selectedBranchId}
-            onNavigate={setActiveModule}
+            onNavigate={handleNavigate}
             onSelectForPayment={(bill) => {
               setSelectedRecurringForPay(bill);
-              setActiveModule("exp_pay");
+              handleNavigate("exp_pay");
             }}
           />
         );
@@ -472,7 +548,7 @@ export default function RoleBasedDashboard() {
         return (
           <PayBillView
             selectedBranchId={selectedBranchId}
-            onNavigate={setActiveModule}
+            onNavigate={handleNavigate}
             preSelectedBill={selectedRecurringForPay}
           />
         );
@@ -486,7 +562,7 @@ export default function RoleBasedDashboard() {
         return (
           <BillHistoryView
             selectedBranchId={selectedBranchId}
-            onNavigate={setActiveModule}
+            onNavigate={handleNavigate}
           />
         );
 
@@ -500,9 +576,9 @@ export default function RoleBasedDashboard() {
             selectedBranchId={selectedBranchId}
             onSelectEmployee={(empId) => {
               setSelectedEmployeeId(empId);
-              setActiveModule("employee_details");
+              handleNavigate("employee_details");
             }}
-            onNavigate={setActiveModule}
+            onNavigate={handleNavigate}
           />
         );
 
@@ -513,11 +589,11 @@ export default function RoleBasedDashboard() {
         return (
           <AttendanceView
             selectedBranchId={selectedBranchId}
-            onNavigate={setActiveModule}
+            onNavigate={handleNavigate}
             initialTab="daily"
             onSelectEmployee={(empId) => {
               setSelectedEmployeeId(empId);
-              setActiveModule("employee_details");
+              handleNavigate("employee_details");
             }}
           />
         );
@@ -529,11 +605,11 @@ export default function RoleBasedDashboard() {
         return (
           <AttendanceView
             selectedBranchId={selectedBranchId}
-            onNavigate={setActiveModule}
+            onNavigate={handleNavigate}
             initialTab="offdays"
             onSelectEmployee={(empId) => {
               setSelectedEmployeeId(empId);
-              setActiveModule("employee_details");
+              handleNavigate("employee_details");
             }}
           />
         );
@@ -556,9 +632,9 @@ export default function RoleBasedDashboard() {
             selectedBranchId={selectedBranchId}
             onSelectEmployee={(empId) => {
               setSelectedEmployeeId(empId);
-              setActiveModule("employee_details");
+              handleNavigate("employee_details");
             }}
-            onNavigate={setActiveModule}
+            onNavigate={handleNavigate}
           />
         );
 
@@ -569,10 +645,10 @@ export default function RoleBasedDashboard() {
         return (
           <BranchSalaryHistoryView
             selectedBranchId={selectedBranchId}
-            onNavigate={setActiveModule}
+            onNavigate={handleNavigate}
             onSelectEmployee={(empId) => {
               setSelectedEmployeeId(empId);
-              setActiveModule("employee_details");
+              handleNavigate("employee_details");
             }}
           />
         );
@@ -585,14 +661,14 @@ export default function RoleBasedDashboard() {
           <EmployeeDetailsView
             employeeId={selectedEmployeeId}
             selectedBranchId={selectedBranchId}
-            onBack={() => setActiveModule("sal_management")}
+            onBack={() => handleNavigate("sal_management")}
           />
         );
 
       case "staff_salary_history":
         return (
           <StaffSalaryHistoryView
-            onBack={() => setActiveModule("overview")}
+            onBack={() => handleNavigate("overview")}
           />
         );
 
@@ -601,13 +677,13 @@ export default function RoleBasedDashboard() {
         if (!isOwner && !hasPermission("category.manage")) {
           return <TenantAccessRestricted moduleName="Manage Categories" requiredPerm="category.manage" />;
         }
-        return <CreateCategoryView onNavigate={setActiveModule} />;
+        return <CreateCategoryView onNavigate={handleNavigate} />;
 
       case "cat_list":
         if (!isOwner && !hasPermission("category.subcategories") && !hasPermission("category.manage")) {
           return <TenantAccessRestricted moduleName="Manage Subcategories" requiredPerm="category.subcategories" />;
         }
-        return <CategoryListView onNavigate={setActiveModule} />;
+        return <CategoryListView onNavigate={handleNavigate} />;
 
       // 📦 Inventory Subpages
       case "inv_add_product":
@@ -617,7 +693,7 @@ export default function RoleBasedDashboard() {
         return (
           <AddProductView
             editingProduct={editingProduct}
-            onNavigate={setActiveModule}
+            onNavigate={handleNavigate}
             onClearEditing={() => setEditingProduct(null)}
           />
         );
@@ -628,10 +704,10 @@ export default function RoleBasedDashboard() {
         }
         return (
           <ProductListView
-            onNavigate={setActiveModule}
+            onNavigate={handleNavigate}
             onEditProduct={(p) => {
               setEditingProduct(p);
-              setActiveModule("inv_add_product");
+              handleNavigate("inv_add_product");
             }}
           />
         );
@@ -653,7 +729,7 @@ export default function RoleBasedDashboard() {
         if (!isOwner && !hasPermission("stock.add_stock")) {
           return <TenantAccessRestricted moduleName="Add Stock" requiredPerm="stock.add_stock" />;
         }
-        return <AddStockView onNavigate={setActiveModule} />;
+        return <AddStockView onNavigate={handleNavigate} />;
 
       case "stock_stock_list":
         if (!isOwner && !hasPermission("stock.stock_list")) {
@@ -671,7 +747,7 @@ export default function RoleBasedDashboard() {
                   setPreselectedProductId("");
                 }
               }
-              setActiveModule(module);
+              handleNavigate(module);
             }}
           />
         );
@@ -689,7 +765,7 @@ export default function RoleBasedDashboard() {
               setPreselectedBatchId("");
               setPreselectedProductId("");
             }}
-            onNavigate={setActiveModule}
+            onNavigate={handleNavigate}
           />
         );
 
@@ -700,7 +776,7 @@ export default function RoleBasedDashboard() {
         return (
           <StockAllocationHistoryView
             selectedBranchId={selectedBranchId}
-            onNavigate={setActiveModule}
+            onNavigate={handleNavigate}
           />
         );
 
@@ -714,13 +790,13 @@ export default function RoleBasedDashboard() {
         if (!isOwner && !hasPermission("stock.transfer")) {
           return <TenantAccessRestricted moduleName="Transfer Stock" requiredPerm="stock.transfer" />;
         }
-        return <TransferStockView onNavigate={setActiveModule} />;
+        return <TransferStockView onNavigate={handleNavigate} />;
 
       case "stock_transfer_history":
         if (!isOwner && !hasPermission("stock.transfer_history")) {
           return <TenantAccessRestricted moduleName="Transfer History" requiredPerm="stock.transfer_history" />;
         }
-        return <TransferHistoryView onNavigate={setActiveModule} />;
+        return <TransferHistoryView onNavigate={handleNavigate} />;
 
       case "stock_stock_receive":
         if (!isOwner && !hasPermission("stock.receive")) {
@@ -728,10 +804,10 @@ export default function RoleBasedDashboard() {
         }
         return (
           <StockReceiveView
-            onNavigate={setActiveModule}
+            onNavigate={handleNavigate}
             onInspectTransfer={(transferId) => {
               setInspectionTransferId(transferId);
-              setActiveModule("stock_inspection");
+              handleNavigate("stock_inspection");
             }}
           />
         );
@@ -743,7 +819,7 @@ export default function RoleBasedDashboard() {
         return (
           <StockInspectionView
             transferId={inspectionTransferId}
-            onNavigate={setActiveModule}
+            onNavigate={handleNavigate}
           />
         );
 
@@ -751,7 +827,7 @@ export default function RoleBasedDashboard() {
         if (!isOwner && !hasPermission("stock.damaged")) {
           return <TenantAccessRestricted moduleName="Damaged Products" requiredPerm="stock.damaged" />;
         }
-        return <DamagedProductsView onNavigate={setActiveModule} />;
+        return <DamagedProductsView onNavigate={handleNavigate} />;
 
       // 📍 Location Management Subpages
       case "loc_create_rack":
@@ -761,7 +837,7 @@ export default function RoleBasedDashboard() {
         return (
           <CreateRackView
             selectedBranchId={selectedBranchId}
-            onNavigate={setActiveModule}
+            onNavigate={handleNavigate}
           />
         );
 
@@ -772,7 +848,7 @@ export default function RoleBasedDashboard() {
         return (
           <RackListView
             selectedBranchId={selectedBranchId}
-            onNavigate={setActiveModule}
+            onNavigate={handleNavigate}
           />
         );
 
@@ -781,7 +857,7 @@ export default function RoleBasedDashboard() {
         if (!isOwner && !hasPermission("supplier.manage")) {
           return <TenantAccessRestricted moduleName="Create Supplier" requiredPerm="supplier.manage" />;
         }
-        return <CreateSupplierView onNavigate={setActiveModule} />;
+        return <CreateSupplierView onNavigate={handleNavigate} />;
 
       case "sup_suppliers":
         if (!isOwner && !hasPermission("supplier.view")) {
@@ -792,13 +868,13 @@ export default function RoleBasedDashboard() {
             <SupplierDetailsView
               supplierId={selectedSupplierDetailId}
               onBack={() => setSelectedSupplierDetailId(null)}
-              onNavigate={setActiveModule}
+              onNavigate={handleNavigate}
             />
           );
         }
         return (
           <SuppliersView
-            onNavigate={setActiveModule}
+            onNavigate={handleNavigate}
             onSelectSupplier={(id) => setSelectedSupplierDetailId(id)}
           />
         );
@@ -807,13 +883,13 @@ export default function RoleBasedDashboard() {
         if (!isOwner && !hasPermission("supplier.purchase_history")) {
           return <TenantAccessRestricted moduleName="Purchase History" requiredPerm="supplier.purchase_history" />;
         }
-        return <PurchaseHistoryView onNavigate={setActiveModule} />;
+        return <PurchaseHistoryView onNavigate={handleNavigate} />;
 
       case "sup_payments_due":
         if (!isOwner && !hasPermission("supplier.payments_due")) {
           return <TenantAccessRestricted moduleName="Payments / Due" requiredPerm="supplier.payments_due" />;
         }
-        return <PaymentsDueView onNavigate={setActiveModule} />;
+        return <PaymentsDueView onNavigate={handleNavigate} />;
 
       // 👥 Staff & Roles Administration
       case "branches":
@@ -826,13 +902,13 @@ export default function RoleBasedDashboard() {
         if (!isOwner && !hasPermission("staff.view")) {
           return <TenantAccessRestricted moduleName="Staff List" requiredPerm="staff.view" />;
         }
-        return <StaffModule onNavigate={setActiveModule} />;
+        return <StaffModule onNavigate={handleNavigate} />;
 
       case "staff_create":
         if (!isOwner && !hasPermission("staff.create")) {
           return <TenantAccessRestricted moduleName="Create Staff" requiredPerm="staff.create" />;
         }
-        return <CreateStaffTab onNavigate={setActiveModule} />;
+        return <CreateStaffTab onNavigate={handleNavigate} />;
 
       case "create_role":
       case "roles":
@@ -873,7 +949,7 @@ export default function RoleBasedDashboard() {
         return <SettingsModule />;
 
       default:
-        return <OverviewModule onNavigate={setActiveModule} />;
+        return <OverviewModule onNavigate={handleNavigate} />;
     }
   }
 }

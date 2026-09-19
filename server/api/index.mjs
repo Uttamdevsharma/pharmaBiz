@@ -495,6 +495,127 @@ async function seedSuperAdmin() {
       console.log(` Password         : ${adminPassword}`);
       console.log(` Role             : ${superAdmin.role}`);
       console.log(`-----------------------------------------------`);
+    } else {
+      const passwordHash = await bcrypt.hash(adminPassword, 10);
+      await prisma.user.update({
+        where: { id: existingAdmin.id },
+        data: { passwordHash, isActive: true }
+      });
+    }
+    let demoTenant = await prisma.tenant.findFirst({
+      where: { email: "uttam23412@gmail.com" }
+    });
+    if (!demoTenant) {
+      demoTenant = await prisma.tenant.findFirst({
+        where: { name: "Demo Pharmacy" }
+      });
+    }
+    if (!demoTenant) {
+      demoTenant = await prisma.tenant.create({
+        data: {
+          name: "Demo Pharmacy",
+          tier: "ENTERPRISE",
+          email: "uttam23412@gmail.com",
+          phone: "01711112233",
+          address: "Gulshan, Dhaka, Bangladesh",
+          isActive: true,
+          verificationStatus: "ACTIVE"
+        }
+      });
+      console.log("[Seed] Created Demo Pharmacy tenant.");
+    } else {
+      await prisma.tenant.update({
+        where: { id: demoTenant.id },
+        data: { isActive: true, verificationStatus: "ACTIVE" }
+      });
+    }
+    let demoBranch = await prisma.branch.findFirst({
+      where: { tenantId: demoTenant.id }
+    });
+    if (!demoBranch) {
+      demoBranch = await prisma.branch.create({
+        data: {
+          tenantId: demoTenant.id,
+          name: "Main Branch",
+          phone: "01711112233",
+          location: "Gulshan, Dhaka",
+          isActive: true
+        }
+      });
+      console.log("[Seed] Created Main Branch for Demo Pharmacy.");
+    }
+    const demoUsers = [
+      {
+        email: "uttam23412@gmail.com",
+        username: "uttam23412@gmail.com",
+        password: "uttam1234",
+        name: "Uttam Sharma",
+        role: "COMPANY_OWNER",
+        tenantId: demoTenant.id,
+        branchId: demoBranch.id
+      },
+      {
+        email: "akash@gmail.com",
+        username: "akash@gmail.com",
+        password: "akash1234",
+        name: "Akash Rahman",
+        role: "BRANCH_MANAGER",
+        tenantId: demoTenant.id,
+        branchId: demoBranch.id
+      },
+      {
+        email: "reday@gmail.com",
+        username: "reday@gmail.com",
+        password: "reday1234",
+        name: "Reday Ahmed",
+        role: "CASHIER",
+        tenantId: demoTenant.id,
+        branchId: demoBranch.id
+      },
+      {
+        email: "alif@gmail.com",
+        username: "alif@gmail.com",
+        password: "alif1234",
+        name: "Alif Hossain",
+        role: "INVENTORY_EXECUTIVE",
+        tenantId: demoTenant.id,
+        branchId: demoBranch.id
+      }
+    ];
+    for (const dUser of demoUsers) {
+      const existing = await prisma.user.findFirst({
+        where: {
+          OR: [
+            { email: dUser.email },
+            { username: dUser.username }
+          ]
+        }
+      });
+      const passwordHash = await bcrypt.hash(dUser.password, 10);
+      if (!existing) {
+        await prisma.user.create({
+          data: {
+            tenantId: dUser.tenantId,
+            branchId: dUser.branchId,
+            username: dUser.username,
+            email: dUser.email,
+            name: dUser.name,
+            role: dUser.role,
+            passwordHash,
+            isActive: true
+          }
+        });
+        console.log(`[Seed] Demo account created: ${dUser.email} (${dUser.role})`);
+      } else {
+        await prisma.user.update({
+          where: { id: existing.id },
+          data: {
+            passwordHash,
+            isActive: true,
+            role: dUser.role
+          }
+        });
+      }
     }
     const tiers = ["TRIAL", "STARTER", "GROWTH", "ENTERPRISE"];
     for (const tier of tiers) {
@@ -668,6 +789,7 @@ var registerOwnerSchema = z.object({
 });
 var verifyOtpSchema = z.object({
   email: z.string().email("Invalid email address"),
+  tenantId: z.string().optional(),
   otpCode: z.string().min(4, "OTP code must be at least 4-6 digits")
 });
 var resendOtpSchema = z.object({
@@ -700,81 +822,6 @@ var AuditService = class {
 };
 
 // src/modules/product/product.service.ts
-var CANONICAL_MAIN_CATEGORIES = [
-  {
-    name: "Medicine",
-    productType: "MEDICINE",
-    defaultUnit: "tablet",
-    description: "Tablets, capsules, pills, oral solids & prescription medications",
-    subcategories: [
-      { name: "Antibiotics", defaultUnit: "capsule", description: "Antibacterial and antimicrobial drugs" },
-      { name: "Antipyretics & Pain Relief", defaultUnit: "tablet", description: "Fever and pain management (NSAIDs, Paracetamol)" },
-      { name: "Antihistamines & Allergy", defaultUnit: "tablet", description: "Allergy, cold and sinus relief" },
-      { name: "Cardiovascular & BP", defaultUnit: "tablet", description: "Heart, hypertension and cholesterol medications" },
-      { name: "Gastrointestinal & Antacids", defaultUnit: "tablet", description: "Gastric, ulcer, and acid reflux care" },
-      { name: "Eye & Ear Drops", defaultUnit: "bottle", description: "Ophthalmic and otic formulations" },
-      { name: "Vitamins & Multivitamins", defaultUnit: "tablet", description: "Daily vitamins, iron, and mineral supplements" },
-      { name: "Antifungal & Dermatological", defaultUnit: "tube", description: "Topical and oral antifungal treatments" },
-      { name: "Anti-Diabetic & Insulin", defaultUnit: "tablet", description: "Blood glucose management and insulin products" },
-      { name: "Respiratory & Inhalers", defaultUnit: "piece", description: "Inhalers, rotacaps, and bronchodilators" }
-    ]
-  },
-  {
-    name: "Syrup",
-    productType: "SYRUP",
-    defaultUnit: "bottle",
-    description: "Liquid oral suspensions, cough syrups, and pediatric drops",
-    subcategories: [
-      { name: "Cough Syrups & Expectorants", defaultUnit: "bottle", description: "Dry and productive cough formulations" },
-      { name: "Digestive & Antacid Syrups", defaultUnit: "bottle", description: "Liquid antacids and digestive enzymes" },
-      { name: "Pediatric Syrups & Drops", defaultUnit: "bottle", description: "Infant and children liquid medications" },
-      { name: "Vitamin & Tonic Syrups", defaultUnit: "bottle", description: "Liquid vitamins, iron tonics, appetite stimulants" },
-      { name: "Antipyretic & Pain Syrups", defaultUnit: "bottle", description: "Liquid paracetamol and ibuprofen for children" },
-      { name: "Antihistamine & Cold Syrups", defaultUnit: "bottle", description: "Liquid allergy and cold relief" }
-    ]
-  },
-  {
-    name: "Medical Equipment",
-    productType: "EQUIPMENT",
-    defaultUnit: "piece",
-    description: "Diagnostic devices, surgical disposables, monitoring equipment",
-    subcategories: [
-      { name: "Diagnostic Devices", defaultUnit: "piece", description: "BP monitors, thermometers, glucometers, oximeters" },
-      { name: "Surgical Supplies & Disposables", defaultUnit: "piece", description: "Syringes, needles, cannula, surgical gloves" },
-      { name: "Nebulizers & Respiratory", defaultUnit: "piece", description: "Nebulizer machines, masks, oxygen cannulas" },
-      { name: "Bandages & Wound Dressing", defaultUnit: "piece", description: "Cotton, gauze, crepe bandage, adhesive tapes" },
-      { name: "Orthopedic & Rehabilitation", defaultUnit: "piece", description: "Belts, collars, braces, walking aids" }
-    ]
-  },
-  {
-    name: "Saline (IV Fluid)",
-    productType: "SALINE",
-    defaultUnit: "bag",
-    description: "Intravenous fluids, infusion bags, electrolytes, and irrigation solutions",
-    subcategories: [
-      { name: "0.9% Normal Saline (NS)", defaultUnit: "bag", description: "Isotonic intravenous sodium chloride" },
-      { name: "5% Dextrose in Water (D5W)", defaultUnit: "bag", description: "Dextrose infusion fluid" },
-      { name: "Dextrose Normal Saline (DNS)", defaultUnit: "bag", description: "Combined dextrose and saline infusion" },
-      { name: "Cholera Saline / Hartmann's Solution", defaultUnit: "bag", description: "Electrolyte replacement fluids" },
-      { name: "3% Hypertonic Saline", defaultUnit: "bag", description: "Concentrated saline infusion" },
-      { name: "Irrigation & Sterile Solutions", defaultUnit: "bottle", description: "Wound wash and sterile irrigation fluids" }
-    ]
-  },
-  {
-    name: "Other Health Product",
-    productType: "OTHER",
-    defaultUnit: "piece",
-    description: "Personal care, baby care, hygiene, and consumer health goods",
-    subcategories: [
-      { name: "Baby Care & Diapers", defaultUnit: "pack", description: "Baby wipes, diapers, baby wash, lotions" },
-      { name: "Personal Hygiene & Skin Care", defaultUnit: "piece", description: "Antiseptic soaps, moisturizers, sanitizers" },
-      { name: "Nutritional Supplements & Milk", defaultUnit: "tin", description: "Adult & baby milk formula, protein powders" },
-      { name: "First Aid & Antiseptic Liquids", defaultUnit: "bottle", description: "Savlon, Dettol, Povidone Iodine, surgical spirit" },
-      { name: "Oral & Dental Care", defaultUnit: "piece", description: "Toothpaste, toothbrushes, mouthwash" },
-      { name: "Women's Health & Sanitary", defaultUnit: "pack", description: "Sanitary pads, maternity care products" }
-    ]
-  }
-];
 function mapCategoryNameToProductType(categoryName) {
   if (!categoryName) return "MEDICINE";
   const lower = categoryName.toLowerCase();
@@ -786,7 +833,7 @@ function mapCategoryNameToProductType(categoryName) {
 }
 var ProductService = class {
   /**
-   * Seed default Catalog Categories, Subcategories, Units, and Brands for a Tenant
+   * Seed default Units for a Tenant
    */
   static async seedDefaultCatalogVariants(tenantId) {
     const defaultUnits = [
@@ -804,40 +851,6 @@ var ProductService = class {
       { name: "Tin", symbol: "tin", productType: "OTHER" },
       { name: "Tube", symbol: "tube", productType: "MEDICINE" }
     ];
-    for (const mainCat of CANONICAL_MAIN_CATEGORIES) {
-      let rootCat = await prisma.category.findFirst({
-        where: { tenantId, name: mainCat.name, parentId: null }
-      });
-      if (!rootCat) {
-        rootCat = await prisma.category.create({
-          data: {
-            tenantId,
-            name: mainCat.name,
-            productType: mainCat.productType,
-            defaultUnit: mainCat.defaultUnit,
-            description: mainCat.description,
-            parentId: null
-          }
-        });
-      }
-      for (const sub of mainCat.subcategories) {
-        const existingSub = await prisma.category.findFirst({
-          where: { tenantId, name: sub.name, parentId: rootCat.id }
-        });
-        if (!existingSub) {
-          await prisma.category.create({
-            data: {
-              tenantId,
-              name: sub.name,
-              parentId: rootCat.id,
-              productType: mainCat.productType,
-              defaultUnit: sub.defaultUnit,
-              description: sub.description
-            }
-          });
-        }
-      }
-    }
     for (const unit of defaultUnits) {
       const existingUnit = await prisma.unit.findFirst({
         where: { tenantId, name: unit.name }
@@ -850,71 +863,10 @@ var ProductService = class {
     }
   }
   /**
-   * Automatically reconcile legacy categories, product types and subcategories
+   * Automatically reconcile legacy category references on products if needed
    */
   static async reconcileLegacyCategories(tenantId) {
     try {
-      const mainCatMap = /* @__PURE__ */ new Map();
-      for (const mainCatDef of CANONICAL_MAIN_CATEGORIES) {
-        let root = await prisma.category.findFirst({
-          where: { tenantId, name: mainCatDef.name, parentId: null }
-        });
-        if (!root && mainCatDef.name === "Saline (IV Fluid)") {
-          root = await prisma.category.findFirst({
-            where: { tenantId, name: "Saline & IV", parentId: null }
-          });
-          if (root) {
-            root = await prisma.category.update({
-              where: { id: root.id },
-              data: { name: "Saline (IV Fluid)" }
-            });
-          }
-        }
-        if (!root && mainCatDef.name === "Other Health Product") {
-          root = await prisma.category.findFirst({
-            where: { tenantId, name: "General Healthcare", parentId: null }
-          });
-          if (root) {
-            root = await prisma.category.update({
-              where: { id: root.id },
-              data: { name: "Other Health Product" }
-            });
-          }
-        }
-        if (!root) {
-          root = await prisma.category.create({
-            data: {
-              tenantId,
-              name: mainCatDef.name,
-              productType: mainCatDef.productType,
-              defaultUnit: mainCatDef.defaultUnit,
-              description: mainCatDef.description,
-              parentId: null
-            }
-          });
-        }
-        mainCatMap.set(mainCatDef.name, root);
-        mainCatMap.set(mainCatDef.productType, root);
-      }
-      const nonMainRoots = await prisma.category.findMany({
-        where: {
-          tenantId,
-          parentId: null,
-          name: {
-            notIn: CANONICAL_MAIN_CATEGORIES.map((c) => c.name)
-          }
-        }
-      });
-      for (const cat of nonMainRoots) {
-        const parentType = cat.productType || mapCategoryNameToProductType(cat.name);
-        const parentCat = mainCatMap.get(parentType) || mainCatMap.get("Medicine");
-        if (parentCat && parentCat.id !== cat.id) {
-          await prisma.category.update({
-            where: { id: cat.id },
-            data: { parentId: parentCat.id }
-          });
-        }
-      }
       const products = await prisma.product.findMany({
         where: { tenantId },
         include: { categoryRef: true, subcategoryRef: true }
@@ -936,28 +888,15 @@ var ProductService = class {
             mainCatName = parent.name;
           }
           needsUpdate = true;
-        } else if (!mainCatId || !mainCatName) {
-          const pType = prod.productType || mapCategoryNameToProductType(prod.category);
-          const parent = mainCatMap.get(pType) || mainCatMap.get("Medicine");
-          if (parent) {
-            mainCatId = parent.id;
-            mainCatName = parent.name;
-            needsUpdate = true;
-          }
-        }
-        const calculatedType = mapCategoryNameToProductType(mainCatName);
-        if (prod.productType !== calculatedType) {
-          needsUpdate = true;
         }
         if (needsUpdate) {
           await prisma.product.update({
             where: { id: prod.id },
             data: {
               categoryId: mainCatId || null,
-              category: mainCatName || "Medicine",
+              category: mainCatName || null,
               subcategoryId: subCatId || null,
-              subcategory: subCatName || null,
-              productType: calculatedType
+              subcategory: subCatName || null
             }
           });
         }
@@ -968,7 +907,7 @@ var ProductService = class {
   }
   // ==================== CATEGORIES ====================
   static async listCategories(tenantId) {
-    let mainCategories = await prisma.category.findMany({
+    return prisma.category.findMany({
       where: { tenantId, parentId: null },
       include: {
         subcategories: {
@@ -981,23 +920,6 @@ var ProductService = class {
       },
       orderBy: { name: "asc" }
     });
-    if (mainCategories.length === 0) {
-      await this.seedDefaultCatalogVariants(tenantId);
-      mainCategories = await prisma.category.findMany({
-        where: { tenantId, parentId: null },
-        include: {
-          subcategories: {
-            orderBy: { name: "asc" },
-            include: {
-              _count: { select: { subProducts: true } }
-            }
-          },
-          _count: { select: { products: true, subcategories: true } }
-        },
-        orderBy: { name: "asc" }
-      });
-    }
-    return mainCategories;
   }
   static async createCategory(tenantId, userId, data) {
     let parentCategory = null;
@@ -1283,7 +1205,7 @@ var ProductService = class {
         genericName: data.genericName ? data.genericName.trim() : null,
         sku,
         barcode: data.barcode || null,
-        basePrice: data.basePrice,
+        basePrice: data.basePrice ?? 0,
         category: mainCategoryName,
         categoryId: mainCategoryId,
         subcategory: subcategoryName,
@@ -1295,7 +1217,10 @@ var ProductService = class {
         manufacturer: data.manufacturer || brandName || null,
         unit: data.unit || (isMed ? "tablet" : "piece"),
         size: data.size || null,
-        defaultPackType: "BOX",
+        defaultPackType: data.defaultPackType || (data.unit === "bottle" ? "BOTTLE" : "BOX"),
+        qtyPerLevel2: data.qtyPerLevel2 ? Number(data.qtyPerLevel2) : data.unit === "bottle" ? data.stripsPerBox ? Number(data.stripsPerBox) : 12 : 10,
+        qtyPerLevel3: data.qtyPerLevel3 ? Number(data.qtyPerLevel3) : null,
+        qtyPerLevel4: data.qtyPerLevel4 ? Number(data.qtyPerLevel4) : null,
         stripsPerBox: data.stripsPerBox ? Number(data.stripsPerBox) : 10,
         tabletsPerStrip: data.tabletsPerStrip ? Number(data.tabletsPerStrip) : 10,
         minStockAlert: data.minStockAlert !== void 0 ? data.minStockAlert : 10,
@@ -1412,9 +1337,13 @@ var ProductService = class {
     const data = products.map((p) => {
       const override = p.branchOverrides && p.branchOverrides[0];
       const totalStock = (p.inventories || []).reduce((acc, inv) => acc + (inv.quantity || 0), 0);
+      const latestBatch = p.inventories && p.inventories.length > 0 ? p.inventories[0] : null;
+      const batchSellingPrice = latestBatch ? Number(latestBatch.sellingPrice || latestBatch.boxSellingPrice || 0) : 0;
+      const computedPrice = override ? Number(override.price) : Number(p.basePrice) > 0 ? Number(p.basePrice) : batchSellingPrice;
       return {
         ...p,
-        effectivePrice: override ? Number(override.price) : Number(p.basePrice),
+        basePrice: Number(p.basePrice) > 0 ? Number(p.basePrice) : computedPrice,
+        effectivePrice: computedPrice,
         hasBranchOverride: !!override,
         currentStock: totalStock,
         batches: p.inventories || []
@@ -1464,9 +1393,13 @@ var ProductService = class {
     }
     const override = branchId && product.branchOverrides && product.branchOverrides[0];
     const totalStock = (product.inventories || []).reduce((acc, inv) => acc + (inv.quantity || 0), 0);
+    const latestBatch = product.inventories && product.inventories.length > 0 ? product.inventories[0] : null;
+    const batchSellingPrice = latestBatch ? Number(latestBatch.sellingPrice || latestBatch.boxSellingPrice || 0) : 0;
+    const computedPrice = override ? Number(override.price) : Number(product.basePrice) > 0 ? Number(product.basePrice) : batchSellingPrice;
     return {
       ...product,
-      effectivePrice: override ? Number(override.price) : Number(product.basePrice),
+      basePrice: Number(product.basePrice) > 0 ? Number(product.basePrice) : computedPrice,
+      effectivePrice: computedPrice,
       hasBranchOverride: !!override,
       currentStock: totalStock,
       batches: product.inventories || []
@@ -1506,9 +1439,13 @@ var ProductService = class {
     }
     const override = branchId && product.branchOverrides && product.branchOverrides[0];
     const totalStock = (product.inventories || []).reduce((acc, inv) => acc + (inv.quantity || 0), 0);
+    const latestBatch = product.inventories && product.inventories.length > 0 ? product.inventories[0] : null;
+    const batchSellingPrice = latestBatch ? Number(latestBatch.sellingPrice || latestBatch.boxSellingPrice || 0) : 0;
+    const computedPrice = override ? Number(override.price) : Number(product.basePrice) > 0 ? Number(product.basePrice) : batchSellingPrice;
     return {
       ...product,
-      effectivePrice: override ? Number(override.price) : Number(product.basePrice),
+      basePrice: Number(product.basePrice) > 0 ? Number(product.basePrice) : computedPrice,
+      effectivePrice: computedPrice,
       hasBranchOverride: !!override,
       currentStock: totalStock,
       batches: product.inventories || []
@@ -1575,7 +1512,10 @@ var ProductService = class {
         ...data.manufacturer !== void 0 && { manufacturer: data.manufacturer },
         ...data.unit !== void 0 && { unit: data.unit },
         ...data.size !== void 0 && { size: data.size },
-        defaultPackType: "BOX",
+        defaultPackType: data.defaultPackType !== void 0 ? data.defaultPackType : product.defaultPackType,
+        qtyPerLevel2: data.qtyPerLevel2 !== void 0 ? data.qtyPerLevel2 ? Number(data.qtyPerLevel2) : null : product.qtyPerLevel2,
+        qtyPerLevel3: data.qtyPerLevel3 !== void 0 ? data.qtyPerLevel3 ? Number(data.qtyPerLevel3) : null : product.qtyPerLevel3,
+        qtyPerLevel4: data.qtyPerLevel4 !== void 0 ? data.qtyPerLevel4 ? Number(data.qtyPerLevel4) : null : product.qtyPerLevel4,
         stripsPerBox: data.stripsPerBox !== void 0 ? data.stripsPerBox ? Number(data.stripsPerBox) : null : product.stripsPerBox,
         tabletsPerStrip: data.tabletsPerStrip !== void 0 ? data.tabletsPerStrip ? Number(data.tabletsPerStrip) : null : product.tabletsPerStrip,
         ...data.minStockAlert !== void 0 && { minStockAlert: data.minStockAlert },
@@ -2906,23 +2846,44 @@ var AuthService = class {
       verificationStatus: tenantVerificationStatus,
       rejectionReason: user.tenant?.rejectionReason || null,
       requiresOtp,
-      paymentRequired
+      paymentRequired,
+      tenant: user.tenant ? {
+        id: user.tenant.id,
+        name: user.tenant.name,
+        logoUrl: user.tenant.logoUrl || null,
+        logoPublicId: user.tenant.logoPublicId || null,
+        email: user.tenant.email || null,
+        phone: user.tenant.phone || null,
+        address: user.tenant.address || null
+      } : null
     };
   }
   /**
    * Register Pharmacy Owner with Regulatory Documents, OTP dispatch, and initial verification state
    */
   static async registerOwner(data) {
+    const normalizedEmail = data.email.trim().toLowerCase();
     const existingUser = await prisma.user.findFirst({
       where: {
         OR: [
-          { email: data.email },
-          { username: data.email }
+          { email: { equals: normalizedEmail, mode: "insensitive" } },
+          { username: { equals: normalizedEmail, mode: "insensitive" } }
         ]
-      }
+      },
+      include: { tenant: true }
     });
     if (existingUser) {
-      throw new Error("An account with this email address already exists. Please login instead.");
+      if (existingUser.tenant && existingUser.tenant.verificationStatus === "PENDING_OTP") {
+        try {
+          await prisma.tenant.delete({
+            where: { id: existingUser.tenant.id }
+          });
+        } catch (e) {
+          console.warn("[registerOwner] Could not delete stale PENDING_OTP tenant:", e);
+        }
+      } else {
+        throw new Error("An account or pending application already exists for this email address. Please login instead.");
+      }
     }
     const nidFront = data.nidFrontDocument || data.nidDocument;
     const nidBack = data.nidBackDocument;
@@ -2994,7 +2955,7 @@ var AuthService = class {
         data: {
           name: data.companyName,
           tier: plan ? plan.tier : "STARTER",
-          email: data.email,
+          email: normalizedEmail,
           phone: data.phone,
           address: data.address || "HQ Location",
           isActive: false,
@@ -3043,8 +3004,8 @@ var AuthService = class {
         data: {
           tenantId: tenant.id,
           branchId: mainBranch.id,
-          username: data.email,
-          email: data.email,
+          username: normalizedEmail,
+          email: normalizedEmail,
           name: data.ownerName,
           phone: data.phone,
           role: "COMPANY_OWNER",
@@ -3070,9 +3031,8 @@ var AuthService = class {
     ProductService.seedDefaultCatalogVariants(result.tenant.id).catch((err) => {
       console.error("[registerOwner] Error seeding default catalog variants:", err);
     });
-    const ownerEmail = data.email.trim().toLowerCase();
     await EmailService.sendOtpEmail({
-      to: ownerEmail,
+      to: normalizedEmail,
       name: data.ownerName,
       otpCode,
       companyName: data.companyName
@@ -3107,10 +3067,21 @@ var AuthService = class {
    * Verify 6-digit email OTP
    */
   static async verifyOtp(data) {
-    const { email, otpCode } = data;
-    const tenant = await prisma.tenant.findFirst({
-      where: { email }
-    });
+    const normalizedEmail = (data.email || "").trim().toLowerCase();
+    const cleanOtpCode = (data.otpCode || "").replace(/\D/g, "").trim();
+    const tenantId = data.tenantId?.trim();
+    let tenant = null;
+    if (tenantId) {
+      tenant = await prisma.tenant.findUnique({
+        where: { id: tenantId }
+      });
+    }
+    if (!tenant && normalizedEmail) {
+      tenant = await prisma.tenant.findFirst({
+        where: { email: { equals: normalizedEmail, mode: "insensitive" } },
+        orderBy: { createdAt: "desc" }
+      });
+    }
     if (!tenant) {
       throw new Error("No pharmacy registration found for this email address.");
     }
@@ -3119,23 +3090,43 @@ var AuthService = class {
         success: true,
         alreadyVerified: true,
         verificationStatus: tenant.verificationStatus,
-        message: "Email has already been verified."
+        message: "Email has already been verified.",
+        tenant
       };
     }
-    if (!tenant.otpCode || tenant.otpCode !== otpCode.trim()) {
+    if (!tenant.otpCode || tenant.otpCode !== cleanOtpCode) {
       throw new Error("Invalid verification OTP code. Please check your email and try again.");
     }
     if (tenant.otpExpiresAt && /* @__PURE__ */ new Date() > new Date(tenant.otpExpiresAt)) {
       throw new Error("This verification OTP has expired. Please click 'Resend OTP' to get a new code.");
     }
-    const updatedTenant = await prisma.tenant.update({
-      where: { id: tenant.id },
+    const updateResult = await prisma.tenant.updateMany({
+      where: {
+        id: tenant.id,
+        verificationStatus: "PENDING_OTP",
+        otpCode: cleanOtpCode
+      },
       data: {
         verificationStatus: "PENDING_APPROVAL",
         otpVerifiedAt: /* @__PURE__ */ new Date(),
-        otpCode: null
+        otpCode: null,
+        otpExpiresAt: null
       }
     });
+    if (updateResult.count === 0) {
+      const reFetched = await prisma.tenant.findUnique({ where: { id: tenant.id } });
+      if (reFetched && reFetched.verificationStatus !== "PENDING_OTP") {
+        return {
+          success: true,
+          alreadyVerified: true,
+          verificationStatus: reFetched.verificationStatus,
+          message: "Email has already been verified.",
+          tenant: reFetched
+        };
+      }
+      throw new Error("OTP verification could not be completed. Please try again.");
+    }
+    const updatedTenant = await prisma.tenant.findUnique({ where: { id: tenant.id } });
     return {
       success: true,
       verificationStatus: "PENDING_APPROVAL",
@@ -3147,9 +3138,10 @@ var AuthService = class {
    * Resend 6-digit email OTP
    */
   static async resendOtp(data) {
-    const { email } = data;
+    const normalizedEmail = data.email.trim().toLowerCase();
     const tenant = await prisma.tenant.findFirst({
-      where: { email },
+      where: { email: { equals: normalizedEmail, mode: "insensitive" } },
+      orderBy: { createdAt: "desc" },
       include: { users: { where: { role: "COMPANY_OWNER" }, take: 1 } }
     });
     if (!tenant) {
@@ -3169,7 +3161,7 @@ var AuthService = class {
     });
     const ownerUser = tenant.users?.[0];
     await EmailService.sendOtpEmail({
-      to: email,
+      to: normalizedEmail,
       name: ownerUser?.name || tenant.name,
       otpCode: newOtp,
       companyName: tenant.name
@@ -3183,13 +3175,15 @@ var AuthService = class {
    * Check verification and subscription status
    */
   static async getVerificationStatus(identifier) {
+    const cleanIdentifier = identifier.trim();
     const tenant = await prisma.tenant.findFirst({
       where: {
         OR: [
-          { id: identifier },
-          { email: identifier }
+          { id: cleanIdentifier },
+          { email: { equals: cleanIdentifier, mode: "insensitive" } }
         ]
       },
+      orderBy: { createdAt: "desc" },
       include: {
         users: { where: { role: "COMPANY_OWNER" }, take: 1 },
         subscriptions: {
@@ -3470,7 +3464,9 @@ var SuperAdminService = class _SuperAdminService {
     if (datePreset === "CUSTOM") {
       const filter = {};
       if (startDate) {
-        filter.gte = new Date(startDate);
+        const s = new Date(startDate);
+        s.setHours(0, 0, 0, 0);
+        filter.gte = s;
       }
       if (endDate) {
         const e = new Date(endDate);
@@ -3807,41 +3803,218 @@ var SuperAdminService = class _SuperAdminService {
     };
   }
   /**
-   * Platform Analytics (No tenant sales data)
+   * Helper: Generate time-series buckets for Pharmacy Growth line graph
+   */
+  static generatePharmacyGrowthSeries(datePreset, startDateStr, endDateStr, approvedTenants = []) {
+    const now = /* @__PURE__ */ new Date();
+    const preset = datePreset || "ALL";
+    const buckets = [];
+    if (preset === "TODAY" || preset === "YESTERDAY") {
+      const targetDate = preset === "TODAY" ? new Date(now) : new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+      const y = targetDate.getFullYear();
+      const m = targetDate.getMonth();
+      const d = targetDate.getDate();
+      const hours = [0, 4, 8, 12, 16, 20, 24];
+      for (let i = 0; i < hours.length - 1; i++) {
+        const hStart = hours[i];
+        const hEnd = hours[i + 1];
+        const start = new Date(y, m, d, hStart, 0, 0, 0);
+        const end = new Date(y, m, d, hEnd - 1, 59, 59, 999);
+        const pad = (n) => n.toString().padStart(2, "0");
+        buckets.push({
+          label: `${pad(hStart)}:00`,
+          date: start.toISOString(),
+          start,
+          end
+        });
+      }
+    } else if (preset === "THIS_MONTH" || preset === "LAST_MONTH") {
+      const mOffset = preset === "THIS_MONTH" ? 0 : -1;
+      const targetMonthDate = new Date(now.getFullYear(), now.getMonth() + mOffset, 1);
+      const y = targetMonthDate.getFullYear();
+      const m = targetMonthDate.getMonth();
+      const daysInMonth = new Date(y, m + 1, 0).getDate();
+      const monthShort = targetMonthDate.toLocaleString("en-US", { month: "short" });
+      for (let day = 1; day <= daysInMonth; day++) {
+        const start = new Date(y, m, day, 0, 0, 0, 0);
+        const end = new Date(y, m, day, 23, 59, 59, 999);
+        buckets.push({
+          label: `${monthShort} ${day}`,
+          date: start.toISOString(),
+          start,
+          end
+        });
+      }
+    } else if (preset === "THIS_YEAR") {
+      const y = now.getFullYear();
+      const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      for (let m = 0; m < 12; m++) {
+        const start = new Date(y, m, 1, 0, 0, 0, 0);
+        const end = new Date(y, m + 1, 0, 23, 59, 59, 999);
+        buckets.push({
+          label: monthNames[m],
+          date: start.toISOString(),
+          start,
+          end
+        });
+      }
+    } else if (preset === "CUSTOM" && (startDateStr || endDateStr)) {
+      const s = startDateStr ? new Date(startDateStr) : new Date(now.getFullYear(), now.getMonth(), 1);
+      s.setHours(0, 0, 0, 0);
+      const e = endDateStr ? new Date(endDateStr) : new Date(now);
+      e.setHours(23, 59, 59, 999);
+      const diffDays = Math.max(1, Math.ceil((e.getTime() - s.getTime()) / (1e3 * 60 * 60 * 24)));
+      if (diffDays <= 2) {
+        const totalHours = diffDays * 24;
+        const step = Math.max(3, Math.floor(totalHours / 6));
+        for (let h = 0; h < totalHours; h += step) {
+          const start = new Date(s.getTime() + h * 3600 * 1e3);
+          const end = new Date(Math.min(e.getTime(), start.getTime() + step * 3600 * 1e3 - 1));
+          const monthShort = start.toLocaleString("en-US", { month: "short" });
+          buckets.push({
+            label: `${monthShort} ${start.getDate()} ${start.getHours()}:00`,
+            date: start.toISOString(),
+            start,
+            end
+          });
+        }
+      } else if (diffDays <= 35) {
+        for (let d = 0; d < diffDays; d++) {
+          const start = new Date(s.getFullYear(), s.getMonth(), s.getDate() + d, 0, 0, 0, 0);
+          const end = new Date(s.getFullYear(), s.getMonth(), s.getDate() + d, 23, 59, 59, 999);
+          const monthShort = start.toLocaleString("en-US", { month: "short" });
+          buckets.push({
+            label: `${monthShort} ${start.getDate()}`,
+            date: start.toISOString(),
+            start,
+            end
+          });
+        }
+      } else {
+        let cur = new Date(s.getFullYear(), s.getMonth(), 1);
+        while (cur <= e) {
+          const start = new Date(cur);
+          const end = new Date(cur.getFullYear(), cur.getMonth() + 1, 0, 23, 59, 59, 999);
+          const label = cur.toLocaleString("en-US", { month: "short", year: "2-digit" });
+          buckets.push({
+            label,
+            date: start.toISOString(),
+            start,
+            end
+          });
+          cur = new Date(cur.getFullYear(), cur.getMonth() + 1, 1);
+        }
+      }
+    } else {
+      const y = now.getFullYear();
+      const m = now.getMonth();
+      for (let i = 11; i >= 0; i--) {
+        const d = new Date(y, m - i, 1);
+        const start = new Date(d.getFullYear(), d.getMonth(), 1, 0, 0, 0, 0);
+        const end = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999);
+        const label = d.toLocaleString("en-US", { month: "short", year: "2-digit" });
+        buckets.push({
+          label,
+          date: start.toISOString(),
+          start,
+          end
+        });
+      }
+    }
+    const validApprovedTimestamps = approvedTenants.map((t) => new Date(t.approvedAt).getTime()).filter((ts) => !isNaN(ts)).sort((a, b) => a - b);
+    let cumulative = 0;
+    const firstBucketStart = buckets[0]?.start.getTime() || 0;
+    const priorCount = validApprovedTimestamps.filter((ts) => ts < firstBucketStart).length;
+    cumulative = priorCount;
+    return buckets.map((b) => {
+      const bStart = b.start.getTime();
+      const bEnd = b.end.getTime();
+      const count = validApprovedTimestamps.filter((ts) => ts >= bStart && ts <= bEnd).length;
+      cumulative += count;
+      return {
+        label: b.label,
+        date: b.date,
+        count,
+        cumulative
+      };
+    });
+  }
+  /**
+   * Platform Analytics (Filtered by pharmacy approval date, subscription start date, and payment date)
    */
   static async getPlatformAnalytics(query) {
     const dateRange = _SuperAdminService.getDateRangeFilter(query?.datePreset, query?.startDate, query?.endDate);
-    const tenantFilter = { name: { not: "Platform HQ" } };
-    if (dateRange) {
-      tenantFilter.createdAt = dateRange;
-    }
-    const paymentFilter = { status: "VALIDATED", tenant: { name: { not: "Platform HQ" } } };
-    if (dateRange) {
-      paymentFilter.createdAt = dateRange;
-    }
-    const subFilter = { tenant: { name: { not: "Platform HQ" } } };
-    if (dateRange) {
-      subFilter.createdAt = dateRange;
-    }
+    const approvedFilter = {
+      name: { not: "Platform HQ" },
+      ...dateRange ? { approvedAt: dateRange } : {
+        OR: [
+          { approvedAt: { not: null } },
+          { verificationStatus: { in: ["APPROVED_PENDING_PAYMENT", "ACTIVE"] } }
+        ]
+      }
+    };
+    const subFilter = {
+      tenant: { name: { not: "Platform HQ" } },
+      ...dateRange ? { startDate: dateRange } : {}
+    };
+    const paymentFilter = {
+      status: "VALIDATED",
+      tenant: { name: { not: "Platform HQ" } },
+      ...dateRange ? { createdAt: dateRange } : {}
+    };
+    const tenantFilter = {
+      name: { not: "Platform HQ" },
+      ...dateRange ? { createdAt: dateRange } : {}
+    };
     const [
+      newPharmacies,
+      newSubscriptions,
+      paymentsInRange,
+      pendingReview,
+      allApprovedTenants,
+      subscriptionsInRange,
       totalTenants,
       activeTenants,
       suspendedTenants,
       totalSubscriptions,
       activeSubscriptions,
-      successfulPayments,
       activeSubsWithPlans,
       recentTenants
     ] = await Promise.all([
+      prisma.tenant.count({ where: approvedFilter }),
+      prisma.subscription.count({ where: subFilter }),
+      prisma.payment.findMany({
+        where: paymentFilter,
+        select: { amount: true, createdAt: true }
+      }),
+      // 4. Pending Review: Current live status, independent of date filter
+      prisma.tenant.count({
+        where: { name: { not: "Platform HQ" }, verificationStatus: "PENDING_APPROVAL" }
+      }),
+      // For Pharmacy Growth Line Graph
+      prisma.tenant.findMany({
+        where: {
+          name: { not: "Platform HQ" },
+          OR: [
+            { approvedAt: { not: null } },
+            { verificationStatus: { in: ["APPROVED_PENDING_PAYMENT", "ACTIVE"] } }
+          ]
+        },
+        select: { approvedAt: true, createdAt: true }
+      }),
+      // For Subscription by Plan Donut Chart
+      prisma.subscription.findMany({
+        where: subFilter,
+        include: {
+          plan: { select: { tier: true, name: true } },
+          tenant: { select: { tier: true } }
+        }
+      }),
       prisma.tenant.count({ where: tenantFilter }),
       prisma.tenant.count({ where: { ...tenantFilter, isActive: true } }),
       prisma.tenant.count({ where: { ...tenantFilter, isActive: false } }),
       prisma.subscription.count({ where: subFilter }),
       prisma.subscription.count({ where: { ...subFilter, status: "ACTIVE" } }),
-      prisma.payment.findMany({
-        where: paymentFilter,
-        select: { amount: true, createdAt: true }
-      }),
       prisma.subscription.findMany({
         where: { ...subFilter, status: "ACTIVE" },
         include: { plan: true, tenant: { select: { tier: true } } }
@@ -3853,39 +4026,84 @@ var SuperAdminService = class _SuperAdminService {
         include: { _count: { select: { branches: true, users: true } } }
       })
     ]);
-    const totalPlatformRevenue = successfulPayments.reduce(
-      (sum, p) => sum + Number(p.amount),
+    const subscriptionRevenue = paymentsInRange.reduce(
+      (sum, p) => sum + Number(p.amount || 0),
       0
     );
+    const mappedApproved = allApprovedTenants.map((t) => ({
+      approvedAt: t.approvedAt || t.createdAt
+    }));
+    const pharmacyGrowth = _SuperAdminService.generatePharmacyGrowthSeries(
+      query?.datePreset,
+      query?.startDate,
+      query?.endDate,
+      mappedApproved
+    );
+    let starterCount = 0;
+    let growthCount = 0;
+    let enterpriseCount = 0;
+    for (const sub of subscriptionsInRange) {
+      const tier = sub.plan?.tier || sub.tenant?.tier;
+      if (tier === "STARTER") starterCount++;
+      else if (tier === "GROWTH") growthCount++;
+      else if (tier === "ENTERPRISE") enterpriseCount++;
+    }
+    const subTotal = starterCount + growthCount + enterpriseCount;
+    const subscriptionByPlan = {
+      starter: starterCount,
+      growth: growthCount,
+      enterprise: enterpriseCount,
+      total: subTotal,
+      breakdown: [
+        {
+          tier: "STARTER",
+          name: "Starter",
+          count: starterCount,
+          percentage: subTotal > 0 ? Math.round(starterCount / subTotal * 100) : 0,
+          color: "#3B82F6"
+        },
+        {
+          tier: "GROWTH",
+          name: "Growth",
+          count: growthCount,
+          percentage: subTotal > 0 ? Math.round(growthCount / subTotal * 100) : 0,
+          color: "#10B981"
+        },
+        {
+          tier: "ENTERPRISE",
+          name: "Enterprise",
+          count: enterpriseCount,
+          percentage: subTotal > 0 ? Math.round(enterpriseCount / subTotal * 100) : 0,
+          color: "#8B5CF6"
+        }
+      ]
+    };
     const monthlyRecurringRevenue = activeSubsWithPlans.reduce((sum, s) => {
       const price = Number(s.plan?.price || 0);
       const isYearly = s.plan?.billingCycle === "YEARLY" || new Date(s.endDate).getTime() - new Date(s.startDate).getTime() > 45 * 24 * 60 * 60 * 1e3;
       return isYearly ? sum + price / 12 : sum + price;
     }, 0);
-    let trialCount = 0;
-    let starterCount = 0;
-    let growthCount = 0;
-    let enterpriseCount = 0;
-    for (const sub of activeSubsWithPlans) {
-      const tier = sub.plan?.tier || sub.tenant?.tier;
-      if (tier === "TRIAL") trialCount++;
-      else if (tier === "STARTER") starterCount++;
-      else if (tier === "GROWTH") growthCount++;
-      else if (tier === "ENTERPRISE") enterpriseCount++;
-    }
     return {
+      // 4 Target Stat Cards
+      newPharmacies,
+      newSubscriptions,
+      subscriptionRevenue: Math.round(subscriptionRevenue * 100) / 100,
+      pendingReview,
+      // 2 Target Charts
+      pharmacyGrowth,
+      subscriptionByPlan,
+      // Preserved for legacy & analytics tab compatibility
       totalTenants,
       activeTenants,
       suspendedTenants,
       tierBreakdown: {
-        trial: trialCount,
         starter: starterCount,
         growth: growthCount,
         enterprise: enterpriseCount
       },
       totalSubscriptions,
       activeSubscriptions,
-      totalPlatformRevenue: Math.round(totalPlatformRevenue * 100) / 100,
+      totalPlatformRevenue: Math.round(subscriptionRevenue * 100) / 100,
       monthlyRecurringRevenue: Math.round(monthlyRecurringRevenue * 100) / 100,
       recentTenants: recentTenants.map((t) => ({
         id: t.id,
@@ -3916,6 +4134,7 @@ var SuperAdminService = class _SuperAdminService {
       description: r.description,
       permissions: r.permissions || [],
       isSystem: r.isSystem,
+      isActive: r.isActive !== false,
       userCount: r._count?.users || 0,
       createdAt: r.createdAt,
       updatedAt: r.updatedAt
@@ -3942,7 +4161,8 @@ var SuperAdminService = class _SuperAdminService {
         name: nameTrimmed,
         description: data.description || null,
         permissions: data.permissions || [],
-        isSystem: false
+        isSystem: false,
+        isActive: data.isActive !== void 0 ? data.isActive : true
       }
     });
   }
@@ -3951,10 +4171,13 @@ var SuperAdminService = class _SuperAdminService {
     if (!role) {
       throw new Error("Role not found");
     }
+    if (role.isSystem || role.name.toUpperCase() === "SUPER_ADMIN" || role.name.toUpperCase() === "SUPER ADMIN") {
+      throw new Error("Super Admin role is permanent and cannot be modified.");
+    }
     const updateData = {};
     if (data.name !== void 0) {
       const nameTrimmed = data.name.trim();
-      if (nameTrimmed.toUpperCase() === "SUPER_ADMIN") {
+      if (nameTrimmed.toUpperCase() === "SUPER_ADMIN" || nameTrimmed.toUpperCase() === "SUPER ADMIN") {
         throw new Error("Cannot rename role to Super Admin.");
       }
       updateData.name = nameTrimmed;
@@ -3964,6 +4187,9 @@ var SuperAdminService = class _SuperAdminService {
     }
     if (data.permissions !== void 0) {
       updateData.permissions = data.permissions;
+    }
+    if (data.isActive !== void 0) {
+      updateData.isActive = data.isActive;
     }
     return await prisma.platformRole.update({
       where: { id },
@@ -3978,14 +4204,30 @@ var SuperAdminService = class _SuperAdminService {
     if (!role) {
       throw new Error("Role not found");
     }
-    if (role.isSystem) {
-      throw new Error("Protected system roles cannot be deleted.");
+    if (role.isSystem || role.name.toUpperCase() === "SUPER_ADMIN" || role.name.toUpperCase() === "SUPER ADMIN") {
+      throw new Error("Super Admin role is permanent and cannot be deleted.");
     }
     if (role._count?.users > 0) {
       throw new Error(`Cannot delete role "${role.name}" because ${role._count.users} staff member(s) are currently assigned to it. Please reassign their roles first.`);
     }
     await prisma.platformRole.delete({ where: { id } });
     return { success: true, message: `Role "${role.name}" removed successfully` };
+  }
+  static async batchUpdateRolePermissions(matrix) {
+    const updatedRoles = [];
+    for (const item of matrix) {
+      const role = await prisma.platformRole.findUnique({
+        where: { id: item.roleId }
+      });
+      if (role && !role.isSystem && role.name.toUpperCase() !== "SUPER_ADMIN") {
+        const updated = await prisma.platformRole.update({
+          where: { id: item.roleId },
+          data: { permissions: item.permissions }
+        });
+        updatedRoles.push(updated);
+      }
+    }
+    return updatedRoles;
   }
   /**
    * ==================== PLATFORM STAFF MANAGEMENT ====================
@@ -4332,7 +4574,9 @@ var SuperAdminService = class _SuperAdminService {
     const page = Math.max(1, Number(query?.page) || 1);
     const limit = Math.max(1, Math.min(100, Number(query?.limit) || 20));
     const skip = (page - 1) * limit;
-    const where = {};
+    const where = {
+      name: { not: "Platform HQ" }
+    };
     if (query?.status && query.status !== "ALL") {
       where.verificationStatus = query.status;
     }
@@ -4342,17 +4586,27 @@ var SuperAdminService = class _SuperAdminService {
     }
     if (query?.search) {
       const search = query.search.trim();
-      where.OR = [
-        { name: { contains: search, mode: "insensitive" } },
-        { email: { contains: search, mode: "insensitive" } },
-        { phone: { contains: search, mode: "insensitive" } },
-        { nidNumber: { contains: search, mode: "insensitive" } },
-        { tradeLicenseNumber: { contains: search, mode: "insensitive" } },
-        { drugLicenseNumber: { contains: search, mode: "insensitive" } },
-        { users: { some: { name: { contains: search, mode: "insensitive" }, role: "COMPANY_OWNER" } } }
+      where.AND = [
+        {
+          OR: [
+            { name: { contains: search, mode: "insensitive" } },
+            { email: { contains: search, mode: "insensitive" } },
+            { phone: { contains: search, mode: "insensitive" } },
+            { nidNumber: { contains: search, mode: "insensitive" } },
+            { tradeLicenseNumber: { contains: search, mode: "insensitive" } },
+            { drugLicenseNumber: { contains: search, mode: "insensitive" } },
+            { users: { some: { name: { contains: search, mode: "insensitive" }, role: "COMPANY_OWNER" } } }
+          ]
+        }
       ];
     }
-    const [tenants, total, pendingCount, approvedCount, rejectedCount, activeCount] = await Promise.all([
+    const baseMetricWhere = {
+      name: { not: "Platform HQ" }
+    };
+    if (dateRange) {
+      baseMetricWhere.createdAt = dateRange;
+    }
+    const [tenants, total, pendingCount, approvedCount, rejectedCount, activeCount, totalMetricsCount] = await Promise.all([
       prisma.tenant.findMany({
         where,
         skip,
@@ -4372,10 +4626,11 @@ var SuperAdminService = class _SuperAdminService {
         }
       }),
       prisma.tenant.count({ where }),
-      prisma.tenant.count({ where: { verificationStatus: "PENDING_APPROVAL" } }),
-      prisma.tenant.count({ where: { verificationStatus: "APPROVED_PENDING_PAYMENT" } }),
-      prisma.tenant.count({ where: { verificationStatus: "REJECTED" } }),
-      prisma.tenant.count({ where: { verificationStatus: "ACTIVE" } })
+      prisma.tenant.count({ where: { ...baseMetricWhere, verificationStatus: "PENDING_APPROVAL" } }),
+      prisma.tenant.count({ where: { ...baseMetricWhere, verificationStatus: "APPROVED_PENDING_PAYMENT" } }),
+      prisma.tenant.count({ where: { ...baseMetricWhere, verificationStatus: "REJECTED" } }),
+      prisma.tenant.count({ where: { ...baseMetricWhere, verificationStatus: "ACTIVE" } }),
+      prisma.tenant.count({ where: baseMetricWhere })
     ]);
     const formatted = tenants.map((t) => {
       const owner = t.users?.[0] || null;
@@ -4418,7 +4673,7 @@ var SuperAdminService = class _SuperAdminService {
     return {
       data: formatted,
       metrics: {
-        total,
+        total: totalMetricsCount,
         pendingReview: pendingCount,
         approved: approvedCount,
         rejected: rejectedCount,
@@ -4768,6 +5023,19 @@ var SuperAdminController = class {
       res.status(400).json({ success: false, message: error.message });
     }
   }
+  static async batchUpdateRolePermissions(req, res) {
+    try {
+      const { matrix } = req.body;
+      const result = await SuperAdminService.batchUpdateRolePermissions(matrix);
+      res.status(200).json({
+        success: true,
+        message: "Platform role permissions saved successfully",
+        data: result
+      });
+    } catch (error) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  }
   // ==================== PLATFORM STAFF ====================
   static async listPlatformStaff(req, res) {
     try {
@@ -5009,14 +5277,24 @@ var listTenantsQuerySchema = z2.object({
   endDate: z2.string().optional()
 });
 var createRoleSchema = z2.object({
-  name: z2.string().min(2, "Role name must be at least 2 characters"),
+  name: z2.string().min(1, "Role name is required"),
   description: z2.string().optional(),
-  permissions: z2.array(z2.string()).default([])
+  permissions: z2.array(z2.string()).default([]),
+  isActive: z2.boolean().default(true)
 });
 var updateRoleSchema = z2.object({
-  name: z2.string().min(2, "Role name must be at least 2 characters").optional(),
+  name: z2.string().min(1, "Role name is required").optional(),
   description: z2.string().optional(),
-  permissions: z2.array(z2.string()).optional()
+  permissions: z2.array(z2.string()).optional(),
+  isActive: z2.boolean().optional()
+});
+var batchUpdatePlatformRolePermissionsSchema = z2.object({
+  matrix: z2.array(
+    z2.object({
+      roleId: z2.string(),
+      permissions: z2.array(z2.string())
+    })
+  )
 });
 var createPlatformStaffSchema = z2.object({
   name: z2.string().min(2, "Name must be at least 2 characters"),
@@ -5067,6 +5345,12 @@ router2.get("/payments", requirePermission("payments.view"), SuperAdminControlle
 router2.get("/analytics", requirePermission("reports.view"), SuperAdminController.getAnalytics);
 router2.get("/roles", requirePermission("roles.manage"), SuperAdminController.listRoles);
 router2.post("/roles", requirePermission("roles.manage"), validateRequest({ body: createRoleSchema }), SuperAdminController.createRole);
+router2.post(
+  "/roles/matrix",
+  requirePermission("roles.manage"),
+  validateRequest({ body: batchUpdatePlatformRolePermissionsSchema }),
+  SuperAdminController.batchUpdateRolePermissions
+);
 router2.patch("/roles/:id", requirePermission("roles.manage"), validateRequest({ body: updateRoleSchema }), SuperAdminController.updateRole);
 router2.delete("/roles/:id", requirePermission("roles.manage"), SuperAdminController.deleteRole);
 router2.get(
@@ -7038,125 +7322,7 @@ var ALL_PHARMACY_PERMISSIONS = [
     description: "Update pharmacy business profile, company information, and organizational preferences."
   }
 ];
-var DEFAULT_PHARMACY_ROLES = [
-  {
-    name: "Branch Manager",
-    description: "Full operational oversight over branch sales, inventory, stock, suppliers, finance, payroll, and staff.",
-    isSystem: true,
-    permissions: [
-      "dashboard.view",
-      "pos.manage",
-      "pos.history",
-      "pos.vat",
-      "accounts.payment_sales",
-      "accounts.product_sales",
-      "accounts.reports",
-      "category.manage",
-      "category.subcategories",
-      "inventory.add_product",
-      "inventory.product_list",
-      "stock.add_stock",
-      "stock.stock_list",
-      "stock.stock_history",
-      "stock.allocation",
-      "stock.allocation_history",
-      "stock.transfer",
-      "stock.transfer_history",
-      "stock.receive",
-      "stock.damaged",
-      "location.create_rack",
-      "location.rack_list",
-      "supplier.view",
-      "supplier.manage",
-      "supplier.purchase_history",
-      "supplier.payments_due",
-      "supplier.contacts",
-      "accounts.overview",
-      "accounts.financial_accounts",
-      "accounts.fund_transfer",
-      "accounts.supplier_due",
-      "accounts.transaction_history",
-      "expenses.list",
-      "expenses.pay",
-      "expenses.history",
-      "employee.view",
-      "attendance.manage",
-      "attendance.offdays",
-      "salary.deductions",
-      "salary.manage",
-      "salary.history",
-      "salaries.base_salary.edit",
-      "staff.view",
-      "staff.create",
-      "staff.manage",
-      "branches.manage"
-    ]
-  },
-  {
-    name: "Cashier",
-    description: "Counter POS checkout, invoice printing, customer receipts, and stock lookup.",
-    isSystem: true,
-    permissions: [
-      "pos.manage",
-      "pos.history",
-      "stock.stock_list",
-      "inventory.product_list"
-    ]
-  },
-  {
-    name: "Inventory Manager",
-    description: "Product catalog, categories, stock batches, transfers, receiving, racks, and supplier records.",
-    isSystem: true,
-    permissions: [
-      "category.manage",
-      "category.subcategories",
-      "inventory.add_product",
-      "inventory.product_list",
-      "stock.add_stock",
-      "stock.stock_list",
-      "stock.stock_history",
-      "stock.allocation",
-      "stock.allocation_history",
-      "stock.transfer",
-      "stock.transfer_history",
-      "stock.receive",
-      "stock.damaged",
-      "location.create_rack",
-      "location.rack_list",
-      "supplier.view",
-      "supplier.manage",
-      "supplier.purchase_history",
-      "supplier.contacts"
-    ]
-  },
-  {
-    name: "Accounts Manager",
-    description: "Financial accounts, fund transfers, revenue reports, bills, supplier dues, and employee payroll.",
-    isSystem: true,
-    permissions: [
-      "dashboard.view",
-      "pos.history",
-      "accounts.overview",
-      "accounts.financial_accounts",
-      "accounts.fund_transfer",
-      "accounts.payment_sales",
-      "accounts.product_sales",
-      "accounts.reports",
-      "accounts.supplier_due",
-      "accounts.transaction_history",
-      "expenses.list",
-      "expenses.pay",
-      "expenses.history",
-      "employee.view",
-      "salary.manage",
-      "salary.history",
-      "salary.deductions",
-      "supplier.view",
-      "supplier.purchase_history",
-      "supplier.payments_due"
-    ]
-  }
-];
+var DEFAULT_PHARMACY_ROLES = [];
 var UserService = class {
   /**
    * Ensure default pharmacy roles are seeded for a tenant
@@ -7200,6 +7366,7 @@ var UserService = class {
       description: r.description,
       permissions: r.permissions || [],
       isSystem: r.isSystem,
+      isActive: r.isActive ?? true,
       userCount: r._count?.users || 0,
       createdAt: r.createdAt,
       updatedAt: r.updatedAt
@@ -7225,7 +7392,8 @@ var UserService = class {
         name: nameTrimmed,
         description: data.description?.trim() || null,
         permissions: data.permissions || [],
-        isSystem: false
+        isSystem: false,
+        isActive: data.isActive !== void 0 ? data.isActive : true
       }
     });
     await AuditService.log({
@@ -7267,6 +7435,9 @@ var UserService = class {
     if (data.permissions !== void 0) {
       updateData.permissions = data.permissions;
     }
+    if (data.isActive !== void 0) {
+      updateData.isActive = data.isActive;
+    }
     const updated = await prisma.pharmacyRole.update({
       where: { id: roleId },
       data: updateData
@@ -7278,6 +7449,28 @@ var UserService = class {
       details: { roleId, changes: Object.keys(data) }
     });
     return updated;
+  }
+  static async batchUpdateRolePermissions(tenantId, userId, matrix) {
+    const updatedRoles = [];
+    for (const item of matrix) {
+      const role = await prisma.pharmacyRole.findFirst({
+        where: { id: item.roleId, tenantId }
+      });
+      if (role) {
+        const updated = await prisma.pharmacyRole.update({
+          where: { id: item.roleId },
+          data: { permissions: item.permissions }
+        });
+        updatedRoles.push(updated);
+      }
+    }
+    await AuditService.log({
+      tenantId,
+      userId,
+      action: "PHARMACY_ROLE_MATRIX_UPDATE",
+      details: { count: matrix.length }
+    });
+    return updatedRoles;
   }
   static async deletePharmacyRole(tenantId, roleId, userId) {
     const role = await prisma.pharmacyRole.findFirst({
@@ -7788,6 +7981,17 @@ var UserController = class {
       res.status(400).json({ success: false, message: error.message });
     }
   }
+  static async batchUpdateRolePermissions(req, res) {
+    try {
+      const tenantId = req.user.tenantId;
+      const userId = req.user.id;
+      const { matrix } = req.body;
+      const updated = await UserService.batchUpdateRolePermissions(tenantId, userId, matrix);
+      res.status(200).json({ success: true, message: "Permission matrix updated successfully", data: updated });
+    } catch (error) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  }
   /**
    * ==================== PHARMACY STAFF CONTROLLERS ====================
    */
@@ -7929,16 +8133,26 @@ var updateUserSchema = z7.object({
 var createPharmacyRoleSchema = z7.object({
   name: z7.string().min(2, "Role name must be at least 2 characters"),
   description: z7.string().optional(),
-  permissions: z7.array(z7.string()).default([])
+  permissions: z7.array(z7.string()).default([]),
+  isActive: z7.boolean().optional()
 });
 var updatePharmacyRoleSchema = z7.object({
   name: z7.string().min(2).optional(),
   description: z7.string().optional(),
-  permissions: z7.array(z7.string()).optional()
+  permissions: z7.array(z7.string()).optional(),
+  isActive: z7.boolean().optional()
 });
 var updateRolePermissionsSchema = z7.object({
   role: z7.string(),
   permissions: z7.array(z7.string())
+});
+var batchUpdateRolePermissionsSchema = z7.object({
+  matrix: z7.array(
+    z7.object({
+      roleId: z7.string(),
+      permissions: z7.array(z7.string())
+    })
+  )
 });
 var listUsersQuerySchema = z7.object({
   page: z7.union([z7.string(), z7.number()]).optional().transform((v) => v ? parseInt(String(v), 10) : 1),
@@ -7978,6 +8192,12 @@ router7.post(
   requirePermission("roles.manage"),
   validateRequest({ body: createPharmacyRoleSchema }),
   UserController.createRole
+);
+router7.post(
+  "/roles/matrix",
+  requirePermission("roles.manage"),
+  validateRequest({ body: batchUpdateRolePermissionsSchema }),
+  UserController.batchUpdateRolePermissions
 );
 router7.patch(
   "/roles/:id",
@@ -8300,7 +8520,7 @@ var createProductSchema = z8.object({
   genericName: z8.string().optional().nullable(),
   sku: z8.string().optional().nullable(),
   barcode: z8.string().optional().nullable(),
-  basePrice: z8.number().positive("Base price must be greater than 0"),
+  basePrice: z8.number().min(0, "Base price cannot be negative").optional().default(0),
   category: z8.string().optional().nullable(),
   categoryId: z8.string().optional().nullable(),
   subcategory: z8.string().optional().nullable(),
@@ -8313,6 +8533,9 @@ var createProductSchema = z8.object({
   unit: z8.string().default("piece"),
   size: z8.string().optional().nullable(),
   defaultPackType: z8.string().default("BOX"),
+  qtyPerLevel2: z8.number().int().positive().optional().nullable(),
+  qtyPerLevel3: z8.number().int().positive().optional().nullable(),
+  qtyPerLevel4: z8.number().int().positive().optional().nullable(),
   stripsPerBox: z8.number().int().positive().optional().nullable(),
   tabletsPerStrip: z8.number().int().positive().optional().nullable(),
   minStockAlert: z8.number().int().nonnegative().optional().default(10),
@@ -8480,11 +8703,12 @@ var InventoryService = class _InventoryService {
    * handles physical location allocations cleanly.
    */
   static calculateBatchPackagingMetrics(inv) {
-    const stripsPerBox = Math.max(1, inv.stripsPerBox || inv.product?.stripsPerBox || 10);
-    const tabletsPerStrip = Math.max(1, inv.tabletsPerStrip || inv.product?.tabletsPerStrip || 10);
-    const isMedicine = inv.packageType === "MEDICINE" || inv.product?.productType === "MEDICINE" || inv.product?.category === "Medicine" || !inv.product?.productType || Boolean(inv.stripsPerBox && inv.tabletsPerStrip);
+    const isBottle = inv.packageType === "BOTTLE" || inv.packageType === "SYRUP" || inv.product?.unit === "bottle" || inv.product?.defaultPackType === "BOTTLE" || inv.product?.productType === "SYRUP" || inv.product?.category === "Syrup";
+    const isMedicine = !isBottle && (inv.packageType === "MEDICINE" || inv.product?.productType === "MEDICINE" || inv.product?.category === "Medicine" || !inv.product?.productType || Boolean(inv.stripsPerBox && inv.tabletsPerStrip));
+    const stripsPerBox = isBottle ? 1 : Math.max(1, inv.stripsPerBox || inv.product?.stripsPerBox || 10);
+    const tabletsPerStrip = isBottle ? 1 : Math.max(1, inv.tabletsPerStrip || inv.product?.tabletsPerStrip || 10);
     const tabletsPerBox = isMedicine ? stripsPerBox * tabletsPerStrip : 1;
-    const boxesPerCarton = Math.max(1, inv.boxesPerCarton || inv.product?.qtyPerLevel2 || 10);
+    const boxesPerCarton = Math.max(1, inv.boxesPerCarton || inv.product?.qtyPerLevel2 || (isBottle ? inv.product?.stripsPerBox || 12 : 10));
     const tabletsPerCarton = boxesPerCarton * tabletsPerBox;
     let recCartons = 0;
     let recLooseBoxes = 0;
@@ -8564,7 +8788,7 @@ var InventoryService = class _InventoryService {
     const unboxedTablets = bulkUnitsAfterBoxes % tabletsPerStrip;
     const totalStrips = totalEquivalentBoxes * stripsPerBox + unboxedStrips;
     const totalTablets = totalEquivalentBoxes * tabletsPerBox + bulkUnitsAfterBoxes;
-    const formulaText = `${fullCartons} Full Carton${fullCartons !== 1 ? "s" : ""} \xD7 ${boxesPerCarton} Boxes = ${boxesInsideCartons} Boxes Inside Cartons + ${remainingLooseBoxes} Loose Box${remainingLooseBoxes !== 1 ? "es" : ""} = ${totalEquivalentBoxes} Total Boxes`;
+    const formulaText = isBottle ? `${fullCartons} Full Carton${fullCartons !== 1 ? "s" : ""} \xD7 ${boxesPerCarton} Bottles = ${boxesInsideCartons} Bottles Inside Cartons + ${remainingLooseBoxes} Loose Bottle${remainingLooseBoxes !== 1 ? "s" : ""} = ${totalEquivalentBoxes} Total Bottles` : `${fullCartons} Full Carton${fullCartons !== 1 ? "s" : ""} \xD7 ${boxesPerCarton} Boxes = ${boxesInsideCartons} Boxes Inside Cartons + ${remainingLooseBoxes} Loose Box${remainingLooseBoxes !== 1 ? "es" : ""} = ${totalEquivalentBoxes} Total Boxes`;
     return {
       stripsPerBox,
       tabletsPerStrip,
@@ -8827,34 +9051,64 @@ var InventoryService = class _InventoryService {
     const expiryDate = data.expiryDate ? new Date(data.expiryDate) : null;
     const receivedDate = data.receivedDate ? new Date(data.receivedDate) : /* @__PURE__ */ new Date();
     const result = await prisma.$transaction(async (tx) => {
+      const unit = (product.unit || "").toLowerCase();
+      const defaultPack = (product.defaultPackType || "").toUpperCase();
+      const pType = (product.productType || "").toUpperCase();
+      const cat = (product.category || "").toLowerCase();
+      const reqPack = (data.packageType || "").toUpperCase();
+      const name = (product.name || "").toLowerCase();
+      const generic = (product.genericName || "").toLowerCase();
+      let packagingModel = "TABLET";
+      if (defaultPack === "BOTTLE" || reqPack === "BOTTLE" || unit === "bottle" || pType === "SYRUP" || cat.includes("syrup") || cat.includes("liquid") || cat.includes("suspension") || cat.includes("drop") || cat.includes("tonic")) {
+        packagingModel = "BOTTLE";
+      } else if (defaultPack === "VIAL" || reqPack === "VIAL" || unit === "vial" || unit === "ampoule" || pType === "SALINE" || cat.includes("inject") || cat.includes("vial") || cat.includes("ampoule") || cat.includes("saline") || cat.includes("infusion") || name.includes("injection") || name.includes("vial") || name.includes("ampoule") || generic.includes("injection") || generic.includes("vial")) {
+        packagingModel = "VIAL";
+      } else if (defaultPack === "PIECE" || reqPack === "PIECE" || unit === "piece" || unit === "pack" || unit === "unit" || unit === "pcs" || pType === "EQUIPMENT" || cat.includes("diaper") || cat.includes("equip") || cat.includes("device") || cat.includes("care") || cat.includes("surgical") || cat.includes("hygiene") || name.includes("diaper") || generic.includes("diaper") || name.includes("syringe") || generic.includes("syringe")) {
+        packagingModel = "PIECE";
+      }
+      const isBottle = packagingModel === "BOTTLE";
+      const isPiece = packagingModel === "PIECE";
+      const isVial = packagingModel === "VIAL";
+      const isTablet = packagingModel === "TABLET";
       const isBoxReceiving = data.receivingUnit === "BOX";
-      const boxesPerCarton = data.boxesPerCarton || product.qtyPerLevel2 || 10;
-      const stripsPerBox = product.stripsPerBox || data.stripsPerBox || 10;
-      const tabletsPerStrip = product.tabletsPerStrip || data.tabletsPerStrip || 10;
-      const tabletsPerBox = stripsPerBox * tabletsPerStrip;
+      const boxesPerCarton = data.boxesPerCarton || product.qtyPerLevel2 || (isBottle ? product.stripsPerBox || 12 : 10);
+      const piecesOrVialsPerBox = product.stripsPerBox || data.stripsPerBox || 1;
+      const stripsPerBox = isTablet ? product.stripsPerBox || data.stripsPerBox || 10 : isPiece || isVial ? piecesOrVialsPerBox : 1;
+      const tabletsPerStrip = isTablet ? product.tabletsPerStrip || data.tabletsPerStrip || 10 : 1;
+      const unitsPerBox = isBottle ? 1 : isTablet ? stripsPerBox * tabletsPerStrip : piecesOrVialsPerBox;
       let cartonsReceived = 0;
       let boxesReceived = 0;
       let looseBoxesReceived = 0;
       if (isBoxReceiving) {
-        boxesReceived = data.boxesReceived ?? data.boxQuantity ?? Math.max(1, Math.round(data.quantity / tabletsPerBox));
+        boxesReceived = data.boxesReceived ?? data.boxQuantity ?? Math.max(1, Math.round(data.quantity / unitsPerBox));
         looseBoxesReceived = boxesReceived;
       } else {
-        cartonsReceived = data.cartonsReceived ?? data.cartonQuantity ?? Math.max(1, Math.round(data.quantity / (boxesPerCarton * tabletsPerBox)));
+        cartonsReceived = data.cartonsReceived ?? data.cartonQuantity ?? Math.max(1, Math.round(data.quantity / (boxesPerCarton * unitsPerBox)));
         boxesReceived = cartonsReceived * boxesPerCarton;
       }
       let boxPurchasePrice = data.boxPurchasePrice !== void 0 && data.boxPurchasePrice !== null ? Number(data.boxPurchasePrice) : null;
       let purchasePrice = data.purchasePrice !== void 0 && data.purchasePrice !== null ? Number(data.purchasePrice) : null;
-      if (boxPurchasePrice !== null && purchasePrice === null) {
-        purchasePrice = Math.round(boxPurchasePrice / tabletsPerBox * 100) / 100;
-      } else if (purchasePrice !== null && boxPurchasePrice === null) {
-        boxPurchasePrice = Math.round(purchasePrice * tabletsPerBox * 100) / 100;
+      if (isBottle) {
+        if (purchasePrice === null && boxPurchasePrice !== null) purchasePrice = boxPurchasePrice;
+        if (boxPurchasePrice === null && purchasePrice !== null) boxPurchasePrice = purchasePrice;
+      } else {
+        if (boxPurchasePrice !== null && purchasePrice === null) {
+          purchasePrice = unitsPerBox > 0 ? Math.round(boxPurchasePrice / unitsPerBox * 100) / 100 : 0;
+        } else if (purchasePrice !== null && boxPurchasePrice === null) {
+          boxPurchasePrice = Math.round(purchasePrice * unitsPerBox * 100) / 100;
+        }
       }
       let boxSellingPrice = data.boxSellingPrice !== void 0 && data.boxSellingPrice !== null ? Number(data.boxSellingPrice) : null;
       let sellingPrice = data.sellingPrice !== void 0 && data.sellingPrice !== null ? Number(data.sellingPrice) : null;
-      if (boxSellingPrice !== null && sellingPrice === null) {
-        sellingPrice = Math.round(boxSellingPrice / tabletsPerBox * 100) / 100;
-      } else if (sellingPrice !== null && boxSellingPrice === null) {
-        boxSellingPrice = Math.round(sellingPrice * tabletsPerBox * 100) / 100;
+      if (isBottle) {
+        if (sellingPrice === null && boxSellingPrice !== null) sellingPrice = boxSellingPrice;
+        if (boxSellingPrice === null && sellingPrice !== null) boxSellingPrice = sellingPrice;
+      } else {
+        if (boxSellingPrice !== null && sellingPrice === null) {
+          sellingPrice = unitsPerBox > 0 ? Math.round(boxSellingPrice / unitsPerBox * 100) / 100 : 0;
+        } else if (sellingPrice !== null && boxSellingPrice === null) {
+          boxSellingPrice = Math.round(sellingPrice * unitsPerBox * 100) / 100;
+        }
       }
       let existingInv = null;
       if (data.batchNumber) {
@@ -8899,7 +9153,7 @@ var InventoryService = class _InventoryService {
             mfgDate,
             expiryDate,
             receivedDate,
-            packageType: data.packageType || product.category || "Medicine",
+            packageType: packagingModel,
             cartonQuantity: isBoxReceiving ? 0 : cartonsReceived,
             cartonsReceived: isBoxReceiving ? 0 : cartonsReceived,
             looseBoxesReceived: isBoxReceiving ? looseBoxesReceived : 0,
@@ -13538,12 +13792,20 @@ var ReportService = class {
     let expiredCount = 0;
     const lowStockItems = [];
     const nearExpiryItems = [];
+    const stockCategoryMap = {};
     inventories.forEach((inv) => {
       const qty = Number(inv.quantity || 0);
       totalStockUnits += qty;
       const unitVal = Number(inv.purchasePrice ?? inv.product?.basePrice ?? 0);
       const lineVal = qty * unitVal;
       totalInventoryCostValue += lineVal;
+      const catName = inv.product?.categoryRef?.name || (typeof inv.product?.category === "string" ? inv.product.category : null) || "General Medicine";
+      if (!stockCategoryMap[catName]) {
+        stockCategoryMap[catName] = { categoryName: catName, stockUnits: 0, stockValue: 0, itemCount: 0 };
+      }
+      stockCategoryMap[catName].stockUnits += qty;
+      stockCategoryMap[catName].stockValue += lineVal;
+      stockCategoryMap[catName].itemCount += 1;
       if (inv.branchId && branchStatsMap[inv.branchId]) {
         branchStatsMap[inv.branchId].stockUnits += qty;
         branchStatsMap[inv.branchId].inventoryValue += lineVal;
@@ -13581,6 +13843,12 @@ var ReportService = class {
         }
       }
     });
+    const totalInvUnitsForPct = totalStockUnits || 1;
+    const stockByCategory = Object.values(stockCategoryMap).map((c) => ({
+      ...c,
+      stockValue: Math.round(c.stockValue * 100) / 100,
+      percentage: Math.round(c.stockUnits / totalInvUnitsForPct * 1e3) / 10
+    })).sort((a, b) => b.stockUnits - a.stockUnits);
     let totalDamagedMissingLoss = 0;
     let damagedMissingUnitsCount = 0;
     transferLossItems.forEach((item) => {
@@ -13679,6 +13947,7 @@ var ReportService = class {
         dailySalesTrend: Object.values(dynamicTrendMap),
         paymentBreakdown,
         categoryDistribution,
+        stockByCategory,
         topSellingProducts
       },
       alerts: {

@@ -1,32 +1,31 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo, useRef } from "react";
 import { fetchApi } from "@/lib/api";
 import { Product, Supplier, Branch, SupplierContact } from "@/types";
 import { useAuth } from "@/context/AuthContext";
 import {
-  PackagePlus,
-  ArrowLeft,
-  Barcode,
+  Search,
+  Plus,
+  Trash2,
   Save,
   CheckCircle2,
   AlertCircle,
   Loader2,
-  Store,
-  Layers,
-  DollarSign,
   Calendar,
-  Package,
-  Boxes,
-  Archive,
-  Lock,
-  Calculator,
-  Info,
+  Building,
   User,
+  ArrowLeft,
+  CreditCard,
+  FileText,
+  Boxes,
+  Package,
+  X,
+  Store,
+  Clock,
   Pill,
   Droplets,
   Syringe,
-  Sparkles,
 } from "lucide-react";
 
 interface AddStockViewProps {
@@ -40,11 +39,11 @@ export const getPackagingModel = (prod?: Product | null, packageType?: string): 
   const unit = (prod?.unit || "").toLowerCase();
   const packType = (prod?.defaultPackType || "").toUpperCase();
   const pType = (prod?.productType || "").toUpperCase();
-  const cat = (prod?.category || prod?.categoryRef?.name || packageType || "").toLowerCase();
+  const cat = (prod?.category || "").toLowerCase();
   const name = (prod?.name || "").toLowerCase();
   const generic = (prod?.genericName || "").toLowerCase();
 
-  // 1. Bottle checks
+  // 1. Bottle checks (Syrups, Suspensions, Drops, Tonics)
   if (
     packType === "BOTTLE" ||
     packageType === "BOTTLE" ||
@@ -80,7 +79,7 @@ export const getPackagingModel = (prod?: Product | null, packageType?: string): 
     return "VIAL";
   }
 
-  // 3. Piece / Unit checks (Diaper, Syringe, Bandage, Device, Surgical, etc.)
+  // 3. Piece / Unit checks (Diaper, Syringe, Bandage, Equipment, Surgical)
   if (
     packType === "PIECE" ||
     packageType === "PIECE" ||
@@ -95,7 +94,6 @@ export const getPackagingModel = (prod?: Product | null, packageType?: string): 
     cat.includes("care") ||
     cat.includes("surgical") ||
     cat.includes("hygiene") ||
-    cat.includes("essential") ||
     name.includes("diaper") ||
     generic.includes("diaper") ||
     name.includes("syringe") ||
@@ -109,72 +107,115 @@ export const getPackagingModel = (prod?: Product | null, packageType?: string): 
   return "TABLET";
 };
 
-const isBottleProduct = (prod?: Product | null, packageType?: string) => {
-  return getPackagingModel(prod, packageType) === "BOTTLE";
-};
+export interface StockLineItem {
+  id: string;
+  productId: string;
+  product: Product;
+  packagingModel: PackagingModel;
+  currentStock: number;
+
+  // Packaging hierarchy config
+  boxesPerCarton: number;
+  stripsPerBox: number;
+  tabletsPerStrip: number;
+
+  // Stock In Mode
+  receivingMode: "CARTON" | "BOX" | "BOTTLE" | "PIECE" | "PACK" | "VIAL";
+
+  // Quantity entered
+  enteredQuantity: number;
+
+  // Calculated totals
+  totalBoxesOrPacks: number;
+  totalLowestUnits: number;
+
+  // Pricing
+  unitCostBeforeDiscount: number;
+  discountPercent: number;
+  unitCostBeforeTax: number;
+  lineTotal: number;
+  unitSellingPrice: number;
+
+  // Lowest unit prices
+  lowestUnitCost: number;
+  lowestUnitSelling: number;
+
+  // Metadata
+  lotNumber: string;
+  mfgDate: string;
+  expiryDate: string;
+  shelfLocation: string;
+}
 
 export function AddStockView({ onNavigate }: AddStockViewProps) {
   const { user } = useAuth();
+
+  // Basic Setup Data
   const [branches, setBranches] = useState<Branch[]>([]);
   const [selectedBranchId, setSelectedBranchId] = useState<string>(user?.branchId || "");
-  const [products, setProducts] = useState<Product[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [selectedSupplierId, setSelectedSupplierId] = useState<string>("");
   const [supplierContacts, setSupplierContacts] = useState<SupplierContact[]>([]);
-  const [loadingContacts, setLoadingContacts] = useState(false);
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [selectedContactId, setSelectedContactId] = useState<string>("");
   const [financialAccounts, setFinancialAccounts] = useState<any[]>([]);
+  const [selectedAccountId, setSelectedAccountId] = useState<string>("");
 
+  const [invoiceNo, setInvoiceNo] = useState<string>(`INV-${Date.now().toString().slice(-6)}`);
+  const [purchaseDate, setPurchaseDate] = useState<string>(new Date().toISOString().slice(0, 10));
+
+  // Search & Products
+  const [allProducts, setAllProducts] = useState<Product[]>([]);
+  const [searchTerm, setSearchTerm] = useState<string>("");
+  const [searchResults, setSearchResults] = useState<Product[]>([]);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
+
+  // Table Line Items
+  const [lineItems, setLineItems] = useState<StockLineItem[]>([]);
+
+  // Invoice-Level Discount & Tax
+  const [discountType, setDiscountType] = useState<"NONE" | "FIXED" | "PERCENT">("NONE");
+  const [discountAmount, setDiscountAmount] = useState<number>(0);
+  const [purchaseTaxOption, setPurchaseTaxOption] = useState<string>("NONE");
+  const [customTaxPercent, setCustomTaxPercent] = useState<number>(0);
+  const [additionalNotes, setAdditionalNotes] = useState<string>("");
+
+  // Payment Section
+  const [paidAmount, setPaidAmount] = useState<number>(0);
+  const [paidOnDate, setPaidOnDate] = useState<string>(
+    new Date().toISOString().slice(0, 16)
+  );
+  const [paymentMethod, setPaymentMethod] = useState<string>("Cash");
+  const [paymentNote, setPaymentNote] = useState<string>("");
+
+  // Form State
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
-  // Receiving unit selection: CARTON vs BOX
-  const [receivingUnit, setReceivingUnit] = useState<"CARTON" | "BOX">("CARTON");
-  const [batchMode, setBatchMode] = useState<"NEW" | "EXISTING">("NEW");
-  const [existingBatches, setExistingBatches] = useState<any[]>([]);
-  const [selectedExistingBatch, setSelectedExistingBatch] = useState<any | null>(null);
-  const [loadingBatches, setLoadingBatches] = useState(false);
+  // Quick Add Product Modal
+  const [showAddProductModal, setShowAddProductModal] = useState(false);
+  const [newProdName, setNewProdName] = useState("");
+  const [newProdGeneric, setNewProdGeneric] = useState("");
+  const [newProdType, setNewProdType] = useState<"MEDICINE" | "SYRUP" | "EQUIPMENT" | "SALINE">("MEDICINE");
+  const [newProdCost, setNewProdCost] = useState<number>(10);
+  const [newProdPrice, setNewProdPrice] = useState<number>(12);
+  const [savingNewProduct, setSavingNewProduct] = useState(false);
 
-  const [formData, setFormData] = useState({
-    productId: "",
-    supplierId: "",
-    contactPersonId: "",
-    contactPersonName: "",
-    batchNumber: `BAT-${Date.now().toString().slice(-6)}`,
-    barcode: `${Math.floor(100000000000 + Math.random() * 900000000000)}`,
-    receivedDate: new Date().toISOString().slice(0, 10),
-    mfgDate: new Date().toISOString().slice(0, 10),
-    expiryDate: new Date(Date.now() + 1000 * 60 * 60 * 24 * 365 * 2).toISOString().slice(0, 10),
-    packageType: "MEDICINE",
-    cartonQuantity: 5,
-    boxesReceived: 7,
-    boxesPerCarton: 10,
-    boxQuantity: 50,
-    stripsPerBox: 10,
-    tabletsPerStrip: 10,
-    quantity: 5000,
-    boxPurchasePrice: 150,
-    boxSellingPrice: 250,
-    unitPurchasePrice: 1.5,
-    unitSellingPrice: 2.5,
-    paidAmount: 7500,
-    financialAccountId: "",
-    shelfLocation: "Rack A-1",
-    notes: "Direct distributor shipment",
-  });
-
+  // Branch lock check
   const isBranchLocked = Boolean(
     user?.branchId && user?.role !== "COMPANY_OWNER" && user?.role !== "SUPER_ADMIN"
   );
 
+  // Initial Data Fetching
   useEffect(() => {
-    async function loadData() {
+    async function loadInitial() {
       try {
         setLoading(true);
-        const [bRes, pRes, sRes] = await Promise.all([
+        const [bRes, sRes] = await Promise.all([
           fetchApi("/branches"),
-          fetchApi("/products?limit=150"),
           fetchApi("/suppliers"),
         ]);
 
@@ -184,2015 +225,1469 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
             setSelectedBranchId(user?.branchId || bRes.data[0].id);
           }
         }
-        if (pRes.success && pRes.data) {
-          setProducts(pRes.data);
-          if (pRes.data.length > 0) {
-            handleSelectProduct(pRes.data[0]);
-          }
-        }
-        if (sRes.success && sRes.data) {
+
+        if (sRes.success && sRes.data && sRes.data.length > 0) {
           setSuppliers(sRes.data);
-          if (sRes.data.length > 0) {
-            setFormData((prev) => ({ ...prev, supplierId: sRes.data[0].id }));
-          }
+          setSelectedSupplierId(sRes.data[0].id);
         }
       } catch (err) {
-        console.error("Failed to load inward setup data", err);
+        console.error("Failed to load initial purchase setup", err);
       } finally {
         setLoading(false);
       }
     }
-    loadData();
+    loadInitial();
   }, [user]);
+
+  // Load products with stock for selected branch
+  useEffect(() => {
+    if (!selectedBranchId) return;
+    async function loadBranchProducts() {
+      try {
+        const pRes = await fetchApi(`/products?branchId=${selectedBranchId}&limit=300`);
+        if (pRes.success && pRes.data) {
+          setAllProducts(pRes.data);
+        }
+      } catch (err) {
+        console.error("Failed to load branch products", err);
+      }
+    }
+    loadBranchProducts();
+  }, [selectedBranchId]);
 
   // Load contacts for selected supplier
   useEffect(() => {
-    if (!formData.supplierId) {
+    if (!selectedSupplierId) {
       setSupplierContacts([]);
-      setFormData((prev) => ({ ...prev, contactPersonId: "", contactPersonName: "" }));
+      setSelectedContactId("");
       return;
     }
     async function loadContacts() {
       try {
-        setLoadingContacts(true);
-        const res = await fetchApi<SupplierContact[]>(`/suppliers/${formData.supplierId}/contacts`);
+        const res = await fetchApi<SupplierContact[]>(`/suppliers/${selectedSupplierId}/contacts`);
         if (res.success && res.data && res.data.length > 0) {
           const activeList = res.data.filter((c) => c.isActive);
           setSupplierContacts(activeList);
-          // Auto select primary contact or first contact
           const primary = activeList.find((c) => c.isPrimary) || activeList[0];
-          if (primary) {
-            setFormData((prev) => ({
-              ...prev,
-              contactPersonId: primary.id,
-              contactPersonName: primary.name,
-            }));
-          } else {
-            setFormData((prev) => ({ ...prev, contactPersonId: "", contactPersonName: "" }));
-          }
+          setSelectedContactId(primary ? primary.id : "");
         } else {
           setSupplierContacts([]);
-          setFormData((prev) => ({ ...prev, contactPersonId: "", contactPersonName: "" }));
+          setSelectedContactId("");
         }
-      } catch (err) {
-        console.error("Failed to load supplier contacts", err);
+      } catch {
         setSupplierContacts([]);
-      } finally {
-        setLoadingContacts(false);
+        setSelectedContactId("");
       }
     }
     loadContacts();
-  }, [formData.supplierId]);
+  }, [selectedSupplierId]);
 
-  // Load existing batches for the selected product and branch
+  // Load financial accounts
   useEffect(() => {
-    if (!selectedProduct || !selectedBranchId) return;
-    async function loadBatches() {
-      try {
-        setLoadingBatches(true);
-        const res = await fetchApi<any>(`/inventory/branch/${selectedBranchId}?limit=100`);
-        if (res.success && Array.isArray(res.data)) {
-          const matching = res.data.filter((i: any) => i.productId === selectedProduct!.id);
-          setExistingBatches(matching);
-        } else {
-          setExistingBatches([]);
-        }
-      } catch {
-        setExistingBatches([]);
-      } finally {
-        setLoadingBatches(false);
-      }
-    }
-    loadBatches();
-  }, [selectedProduct, selectedBranchId]);
-
-  useEffect(() => {
+    if (!selectedBranchId) return;
     async function loadBranchAccounts() {
-      if (!selectedBranchId) return;
       try {
         const res = await fetchApi<any>(`/accounting/accounts?branchId=${selectedBranchId}`);
-        if (res.success && res.data) {
+        if (res.success && res.data && res.data.length > 0) {
           setFinancialAccounts(res.data);
-          if (res.data.length > 0) {
-            setFormData((prev) => ({ ...prev, financialAccountId: res.data[0].id }));
-          } else {
-            setFormData((prev) => ({ ...prev, financialAccountId: "" }));
-          }
+          const defaultAcc = res.data.find((a: any) => a.isDefault) || res.data[0];
+          setSelectedAccountId(defaultAcc.id);
+          setPaymentMethod(defaultAcc.type || "CASH");
+        } else {
+          setFinancialAccounts([]);
+          setSelectedAccountId("");
         }
-      } catch (err) {
-        console.error("Failed to load branch financial accounts", err);
+      } catch {
+        setFinancialAccounts([]);
       }
     }
     loadBranchAccounts();
   }, [selectedBranchId]);
 
-  const handleSelectProduct = (prod: Product) => {
-    setSelectedProduct(prod);
-
-    const model = getPackagingModel(prod);
-    const isBottle = model === "BOTTLE";
-    const isPiece = model === "PIECE";
-    const isVial = model === "VIAL";
-    const isTablet = model === "TABLET";
-
-    const itemsPerBox = prod.stripsPerBox || (isBottle ? 12 : isPiece ? 1 : 10);
-    const strips = isTablet ? (prod.stripsPerBox || 10) : (isBottle ? 1 : itemsPerBox);
-    const tablets = isTablet ? (prod.tabletsPerStrip || 10) : 1;
-    const unitsPerBox = isBottle ? 1 : (isTablet ? (strips * tablets) : itemsPerBox);
-
-    const boxesPerCarton = prod.qtyPerLevel2 || (isBottle ? (prod.stripsPerBox || 12) : 10);
-    const cartonQty = isBottle ? 2 : 5;
-    const looseBoxes = isBottle ? 10 : (isPiece ? 20 : 7);
-    const totalBoxes = receivingUnit === "CARTON" ? cartonQty * boxesPerCarton : looseBoxes;
-    const totalUnits = isBottle ? totalBoxes : totalBoxes * unitsPerBox;
-
-    // In product catalog, basePrice is Selling Price (per Box or per Bottle)
-    const boxSelling = Number(prod.basePrice) || (isBottle ? 180 : 250);
-    const boxPurchase = Math.round(boxSelling * 0.7 * 100) / 100;
-    const unitPurchase = isBottle ? boxPurchase : (unitsPerBox > 0 ? Math.round((boxPurchase / unitsPerBox) * 10000) / 10000 : 0);
-    const unitSelling = isBottle ? boxSelling : (unitsPerBox > 0 ? Math.round((boxSelling / unitsPerBox) * 10000) / 10000 : 0);
-    const totalCost = Math.round(totalBoxes * boxPurchase * 100) / 100;
-
-    setFormData((prev) => ({
-      ...prev,
-      productId: prod.id,
-      barcode: prod.barcode || prev.barcode,
-      packageType: model,
-      cartonQuantity: cartonQty,
-      boxesReceived: looseBoxes,
-      boxesPerCarton: boxesPerCarton,
-      boxQuantity: totalBoxes,
-      stripsPerBox: strips,
-      tabletsPerStrip: tablets,
-      quantity: totalUnits,
-      boxPurchasePrice: boxPurchase,
-      boxSellingPrice: boxSelling,
-      unitPurchasePrice: unitPurchase,
-      unitSellingPrice: unitSelling,
-      paidAmount: totalCost,
-      shelfLocation: prod.shelfLocation || "Rack A-1",
-    }));
-  };
-
-  const handleSelectExistingBatch = (batchId: string) => {
-    const b = existingBatches.find((item) => item.id === batchId);
-    if (!b) {
-      setSelectedExistingBatch(null);
+  // Search logic - opens dropdown instantly on focus or typing
+  useEffect(() => {
+    if (!searchTerm.trim()) {
+      setSearchResults(allProducts.slice(0, 20));
       return;
     }
-    setSelectedExistingBatch(b);
+    const query = searchTerm.toLowerCase().trim();
+    const filtered = allProducts
+      .filter((p) => {
+        const name = (p.name || "").toLowerCase();
+        const generic = (p.genericName || "").toLowerCase();
+        const sku = (p.sku || "").toLowerCase();
+        const barcode = (p.barcode || "").toLowerCase();
+        return (
+          name.includes(query) ||
+          generic.includes(query) ||
+          sku.includes(query) ||
+          barcode.includes(query)
+        );
+      })
+      .slice(0, 30);
 
-    const model = getPackagingModel(selectedProduct, formData.packageType);
-    const isBottle = model === "BOTTLE";
-    const isPiece = model === "PIECE";
-    const isVial = model === "VIAL";
-    const isTablet = model === "TABLET";
+    setSearchResults(filtered);
+  }, [searchTerm, allProducts]);
 
-    const itemsPerBox = selectedProduct?.stripsPerBox || b.stripsPerBox || (isBottle ? 12 : isPiece ? 1 : 10);
-    const strips = isTablet ? (selectedProduct?.stripsPerBox || b.stripsPerBox || 10) : (isBottle ? 1 : itemsPerBox);
-    const tabs = isTablet ? (selectedProduct?.tabletsPerStrip || b.tabletsPerStrip || 10) : 1;
-    const unitsPerBox = isBottle ? 1 : (isTablet ? (strips * tabs) : itemsPerBox);
-    const boxesPer = b.boxesPerCarton || selectedProduct?.qtyPerLevel2 || formData.boxesPerCarton || (isBottle ? 12 : 10);
+  // Click outside search container to close dropdown
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        searchContainerRef.current &&
+        !searchContainerRef.current.contains(event.target as Node)
+      ) {
+        setIsSearchOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
-    const boxPurchase = b.boxPurchasePrice ? Number(b.boxPurchasePrice) : (b.purchasePrice ? (isBottle ? Number(b.purchasePrice) : Number(b.purchasePrice) * unitsPerBox) : formData.boxPurchasePrice);
-    const boxSelling = b.boxSellingPrice ? Number(b.boxSellingPrice) : (b.sellingPrice ? (isBottle ? Number(b.sellingPrice) : Number(b.sellingPrice) * unitsPerBox) : formData.boxSellingPrice);
-    const unitPurchase = isBottle ? boxPurchase : (unitsPerBox > 0 ? Math.round((boxPurchase / unitsPerBox) * 10000) / 10000 : 0);
-    const unitSelling = isBottle ? boxSelling : (unitsPerBox > 0 ? Math.round((boxSelling / unitsPerBox) * 10000) / 10000 : 0);
-
-    setFormData((prev) => {
-      const isCarton = receivingUnit === "CARTON";
-      const totalBoxes = isCarton ? (prev.cartonQuantity * boxesPer) : prev.boxesReceived;
-      const totalUnits = isBottle ? totalBoxes : totalBoxes * unitsPerBox;
-      const totalCost = Math.round(totalBoxes * boxPurchase * 100) / 100;
-      return {
-        ...prev,
-        batchNumber: b.batchNumber || prev.batchNumber,
-        expiryDate: b.expiryDate ? new Date(b.expiryDate).toISOString().slice(0, 10) : prev.expiryDate,
-        mfgDate: b.mfgDate ? new Date(b.mfgDate).toISOString().slice(0, 10) : prev.mfgDate,
-        shelfLocation: b.shelfLocation || prev.shelfLocation,
-        supplierId: b.supplier?.id || b.supplierId || prev.supplierId,
-        boxesPerCarton: boxesPer,
-        stripsPerBox: strips,
-        tabletsPerStrip: tabs,
-        boxPurchasePrice: boxPurchase,
-        boxSellingPrice: boxSelling,
-        unitPurchasePrice: unitPurchase,
-        unitSellingPrice: unitSelling,
-        quantity: totalUnits,
-        boxQuantity: totalBoxes,
-        paidAmount: totalCost,
-      };
-    });
+  // Helper to calculate total lowest units for a given product
+  const getProductStockCount = (prod: Product): number => {
+    const invs = (prod as any)?.inventories;
+    if (!invs || !Array.isArray(invs)) return 0;
+    return invs.reduce((sum: number, inv: any) => sum + (inv.quantity || 0), 0);
   };
 
-  const handleReceivingUnitToggle = (unit: "CARTON" | "BOX") => {
-    setReceivingUnit(unit);
-    const model = getPackagingModel(selectedProduct, formData.packageType);
-    const isBottle = model === "BOTTLE";
-    const isPiece = model === "PIECE";
-    const isVial = model === "VIAL";
-    const isTablet = model === "TABLET";
+  // Helper to calculate line item derived fields
+  const computeLineCalculations = (
+    model: PackagingModel,
+    mode: StockLineItem["receivingMode"],
+    enteredQty: number,
+    boxesPerCtn: number,
+    stripsPerBx: number,
+    tabsPerStr: number,
+    costInput: number,
+    discPct: number,
+    sellInput: number
+  ) => {
+    const costBeforeDisc = Number(costInput) || 0;
+    const costNet = costBeforeDisc; // Table line discount removed
+    const qty = Math.max(1, Number(enteredQty) || 1);
+    const selling = Number(sellInput) || 0;
 
-    const itemsPerBox = formData.stripsPerBox || (isBottle ? 12 : isPiece ? 1 : 10);
-    const strips = isTablet ? (formData.stripsPerBox || 10) : (isBottle ? 1 : itemsPerBox);
-    const tabs = isTablet ? (formData.tabletsPerStrip || 10) : 1;
-    const unitsPerBox = isBottle ? 1 : (isTablet ? (strips * tabs) : itemsPerBox);
-    const boxesPer = formData.boxesPerCarton || (isBottle ? 12 : 10);
+    let totalBoxesOrPacks = 0;
+    let totalLowestUnits = 0;
+    let lineTotal = 0;
+    let lowestUnitCost = 0;
+    let lowestUnitSelling = 0;
 
-    let totalBoxes = 0;
-    if (unit === "CARTON") {
-      const cartons = formData.cartonQuantity || (isBottle ? 2 : 5);
-      totalBoxes = cartons * boxesPer;
+    if (model === "TABLET") {
+      const tabsPerBox = (stripsPerBx || 10) * (tabsPerStr || 10);
+      if (mode === "CARTON") {
+        totalBoxesOrPacks = qty * (boxesPerCtn || 10);
+      } else {
+        totalBoxesOrPacks = qty;
+      }
+      totalLowestUnits = totalBoxesOrPacks * tabsPerBox;
+
+      lineTotal = Math.round(totalBoxesOrPacks * costNet * 100) / 100;
+      lowestUnitCost = tabsPerBox > 0 ? Math.round((costNet / tabsPerBox) * 1000) / 1000 : costNet;
+      lowestUnitSelling = tabsPerBox > 0 ? Math.round((selling / tabsPerBox) * 1000) / 1000 : selling;
+    } else if (model === "BOTTLE") {
+      if (mode === "CARTON") {
+        const bottlesPerCtn = boxesPerCtn || 12;
+        totalLowestUnits = qty * bottlesPerCtn;
+        totalBoxesOrPacks = qty;
+      } else {
+        totalLowestUnits = qty;
+        totalBoxesOrPacks = 0;
+      }
+      lineTotal = Math.round(totalLowestUnits * costNet * 100) / 100;
+      lowestUnitCost = costNet;
+      lowestUnitSelling = selling;
+    } else if (model === "PIECE") {
+      if (mode === "PACK") {
+        const pcsPerPack = stripsPerBx || 10;
+        totalBoxesOrPacks = qty;
+        totalLowestUnits = qty * pcsPerPack;
+        lineTotal = Math.round(qty * costNet * 100) / 100;
+        lowestUnitCost = pcsPerPack > 0 ? Math.round((costNet / pcsPerPack) * 100) / 100 : costNet;
+        lowestUnitSelling = pcsPerPack > 0 ? Math.round((selling / pcsPerPack) * 100) / 100 : selling;
+      } else {
+        totalLowestUnits = qty;
+        totalBoxesOrPacks = 0;
+        lineTotal = Math.round(qty * costNet * 100) / 100;
+        lowestUnitCost = costNet;
+        lowestUnitSelling = selling;
+      }
     } else {
-      totalBoxes = formData.boxesReceived || (isBottle ? 10 : (isPiece ? 20 : 7));
+      if (mode === "BOX" || mode === "CARTON") {
+        const vialsPerBox = stripsPerBx || 10;
+        totalBoxesOrPacks = qty;
+        totalLowestUnits = qty * vialsPerBox;
+        lineTotal = Math.round(qty * costNet * 100) / 100;
+        lowestUnitCost = vialsPerBox > 0 ? Math.round((costNet / vialsPerBox) * 100) / 100 : costNet;
+        lowestUnitSelling = vialsPerBox > 0 ? Math.round((selling / vialsPerBox) * 100) / 100 : selling;
+      } else {
+        totalLowestUnits = qty;
+        totalBoxesOrPacks = 0;
+        lineTotal = Math.round(qty * costNet * 100) / 100;
+        lowestUnitCost = costNet;
+        lowestUnitSelling = selling;
+      }
     }
 
-    const total = isBottle ? totalBoxes : totalBoxes * unitsPerBox;
-    const totalCost = Math.round(totalBoxes * formData.boxPurchasePrice * 100) / 100;
-    setFormData((prev) => ({
-      ...prev,
-      boxQuantity: totalBoxes,
-      quantity: total,
-      paidAmount: totalCost,
-    }));
+    return {
+      unitCostBeforeTax: costNet,
+      lineTotal,
+      totalBoxesOrPacks,
+      totalLowestUnits,
+      lowestUnitCost,
+      lowestUnitSelling,
+    };
   };
 
-  const handleCartonChange = (cartons: number, boxesPer: number) => {
-    const model = getPackagingModel(selectedProduct, formData.packageType);
-    const isBottle = model === "BOTTLE";
-    const isPiece = model === "PIECE";
-    const isVial = model === "VIAL";
-    const isTablet = model === "TABLET";
+  // Add Product to Table
+  const handleAddProductToTable = (prod: Product) => {
+    const packagingModel = getPackagingModel(prod);
+    const isTablet = packagingModel === "TABLET";
+    const isBottle = packagingModel === "BOTTLE";
+    const isPiece = packagingModel === "PIECE";
 
-    const itemsPerBox = formData.stripsPerBox || (isBottle ? 12 : isPiece ? 1 : 10);
-    const strips = isTablet ? (formData.stripsPerBox || 10) : (isBottle ? 1 : itemsPerBox);
-    const tabs = isTablet ? (formData.tabletsPerStrip || 10) : 1;
-    const unitsPerBox = isBottle ? 1 : (isTablet ? (strips * tabs) : itemsPerBox);
+    const boxesPerCarton = (prod as any).boxesPerCarton || 10;
+    const stripsPerBox = prod.stripsPerBox || (isTablet ? 10 : isBottle ? 12 : isPiece ? 10 : 10);
+    const tabletsPerStrip = prod.tabletsPerStrip || (isTablet ? 10 : 1);
 
-    const totalBoxes = cartons * boxesPer;
-    const totalUnits = isBottle ? totalBoxes : totalBoxes * unitsPerBox;
-    const totalCost = Math.round(totalBoxes * formData.boxPurchasePrice * 100) / 100;
+    const baseSelling = Number(prod.effectivePrice || prod.basePrice || 10);
 
-    setFormData((prev) => ({
-      ...prev,
-      cartonQuantity: cartons,
-      boxesPerCarton: boxesPer,
-      boxQuantity: totalBoxes,
-      quantity: totalUnits,
-      paidAmount: totalCost,
-    }));
+    let initialCost = 0;
+    let initialSelling = 0;
+    let defaultMode: StockLineItem["receivingMode"] = "BOX";
+
+    if (isTablet) {
+      defaultMode = "BOX";
+      const tabsPerBox = stripsPerBox * tabletsPerStrip;
+      initialSelling = Math.round(baseSelling * tabsPerBox * 100) / 100;
+      initialCost = Math.round(initialSelling * 0.85 * 100) / 100;
+    } else if (isBottle) {
+      defaultMode = "BOTTLE";
+      initialSelling = baseSelling;
+      initialCost = Math.round(initialSelling * 0.82 * 100) / 100;
+    } else if (isPiece) {
+      defaultMode = "PIECE";
+      initialSelling = baseSelling;
+      initialCost = Math.round(initialSelling * 0.85 * 100) / 100;
+    } else {
+      defaultMode = "VIAL";
+      initialSelling = baseSelling;
+      initialCost = Math.round(initialSelling * 0.85 * 100) / 100;
+    }
+
+    const currentStock = getProductStockCount(prod);
+
+    const calc = computeLineCalculations(
+      packagingModel,
+      defaultMode,
+      1,
+      boxesPerCarton,
+      stripsPerBox,
+      tabletsPerStrip,
+      initialCost,
+      0,
+      initialSelling
+    );
+
+    const twoYearsLater = new Date(Date.now() + 1000 * 60 * 60 * 24 * 365 * 2)
+      .toISOString()
+      .slice(0, 10);
+
+    const newItem: StockLineItem = {
+      id: `item-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      productId: prod.id,
+      product: prod,
+      packagingModel,
+      currentStock,
+      boxesPerCarton,
+      stripsPerBox,
+      tabletsPerStrip,
+      receivingMode: defaultMode,
+      enteredQuantity: 1,
+      unitCostBeforeDiscount: initialCost,
+      discountPercent: 0,
+      unitSellingPrice: initialSelling,
+      lotNumber: `BAT-${Math.floor(10000 + Math.random() * 90000)}`,
+      mfgDate: new Date().toISOString().slice(0, 10),
+      expiryDate: twoYearsLater,
+      shelfLocation: prod.shelfLocation || "Main Shelf",
+      ...calc,
+    };
+
+    setLineItems((prev) => [...prev, newItem]);
+    setSearchTerm("");
+    setIsSearchOpen(false);
+    if (searchInputRef.current) {
+      searchInputRef.current.focus();
+    }
   };
 
-  const handleBoxesReceivedChange = (looseBoxes: number) => {
-    const model = getPackagingModel(selectedProduct, formData.packageType);
-    const isBottle = model === "BOTTLE";
-    const isPiece = model === "PIECE";
-    const isVial = model === "VIAL";
-    const isTablet = model === "TABLET";
+  // Update a line item
+  const updateLineItem = (id: string, updates: Partial<StockLineItem>) => {
+    setLineItems((prev) =>
+      prev.map((item) => {
+        if (item.id !== id) return item;
 
-    const itemsPerBox = formData.stripsPerBox || (isBottle ? 12 : isPiece ? 1 : 10);
-    const strips = isTablet ? (formData.stripsPerBox || 10) : (isBottle ? 1 : itemsPerBox);
-    const tabs = isTablet ? (formData.tabletsPerStrip || 10) : 1;
-    const unitsPerBox = isBottle ? 1 : (isTablet ? (strips * tabs) : itemsPerBox);
+        const merged = { ...item, ...updates };
 
-    const totalBoxes = looseBoxes;
-    const totalUnits = isBottle ? totalBoxes : totalBoxes * unitsPerBox;
-    const totalCost = Math.round(totalBoxes * formData.boxPurchasePrice * 100) / 100;
+        const calc = computeLineCalculations(
+          merged.packagingModel,
+          merged.receivingMode,
+          merged.enteredQuantity,
+          merged.boxesPerCarton,
+          merged.stripsPerBox,
+          merged.tabletsPerStrip,
+          merged.unitCostBeforeDiscount,
+          merged.discountPercent,
+          merged.unitSellingPrice
+        );
 
-    setFormData((prev) => ({
-      ...prev,
-      boxesReceived: looseBoxes,
-      boxQuantity: totalBoxes,
-      quantity: totalUnits,
-      paidAmount: totalCost,
-    }));
+        return {
+          ...merged,
+          ...calc,
+        };
+      })
+    );
   };
 
-  const handleBoxPriceChange = (boxPurchase: number, boxSelling: number) => {
-    const model = getPackagingModel(selectedProduct, formData.packageType);
-    const isBottle = model === "BOTTLE";
-    const isPiece = model === "PIECE";
-    const isVial = model === "VIAL";
-    const isTablet = model === "TABLET";
-
-    const itemsPerBox = formData.stripsPerBox || (isBottle ? 12 : isPiece ? 1 : 10);
-    const strips = isTablet ? (formData.stripsPerBox || 10) : (isBottle ? 1 : itemsPerBox);
-    const tabs = isTablet ? (formData.tabletsPerStrip || 10) : 1;
-    const unitsPerBox = isBottle ? 1 : (isTablet ? (strips * tabs) : itemsPerBox);
-
-    const unitPurchase = isBottle ? boxPurchase : (unitsPerBox > 0 ? Math.round((boxPurchase / unitsPerBox) * 10000) / 10000 : 0);
-    const unitSelling = isBottle ? boxSelling : (unitsPerBox > 0 ? Math.round((boxSelling / unitsPerBox) * 10000) / 10000 : 0);
-    const totalBoxes = receivingUnit === "CARTON" ? (formData.cartonQuantity * formData.boxesPerCarton) : formData.boxesReceived;
-    const totalCost = Math.round(totalBoxes * boxPurchase * 100) / 100;
-
-    setFormData((prev) => ({
-      ...prev,
-      boxPurchasePrice: boxPurchase,
-      boxSellingPrice: boxSelling,
-      unitPurchasePrice: unitPurchase,
-      unitSellingPrice: unitSelling,
-      paidAmount: totalCost,
-    }));
+  // Remove line item
+  const removeLineItem = (id: string) => {
+    setLineItems((prev) => prev.filter((i) => i.id !== id));
   };
 
-  const handleInwardSubmit = async (e: React.FormEvent) => {
+  // Calculate totals
+  const subtotal = useMemo(() => {
+    return lineItems.reduce((sum, item) => sum + (item.lineTotal || 0), 0);
+  }, [lineItems]);
+
+  const totalItemsCount = useMemo(() => {
+    return lineItems.reduce((sum, item) => sum + (Number(item.enteredQuantity) || 0), 0);
+  }, [lineItems]);
+
+  // Overall Discount calculation
+  const calculatedInvoiceDiscount = useMemo(() => {
+    if (discountType === "PERCENT") {
+      return Math.round(((subtotal * (Number(discountAmount) || 0)) / 100) * 100) / 100;
+    }
+    if (discountType === "FIXED") {
+      return Math.min(subtotal, Number(discountAmount) || 0);
+    }
+    return 0;
+  }, [subtotal, discountType, discountAmount]);
+
+  // Purchase Tax calculation
+  const calculatedTax = useMemo(() => {
+    let pct = 0;
+    if (purchaseTaxOption === "5") pct = 5;
+    else if (purchaseTaxOption === "7.5") pct = 7.5;
+    else if (purchaseTaxOption === "10") pct = 10;
+    else if (purchaseTaxOption === "15") pct = 15;
+    else if (purchaseTaxOption === "CUSTOM") pct = Number(customTaxPercent) || 0;
+
+    const baseForTax = Math.max(0, subtotal - calculatedInvoiceDiscount);
+    return Math.round(((baseForTax * pct) / 100) * 100) / 100;
+  }, [subtotal, calculatedInvoiceDiscount, purchaseTaxOption, customTaxPercent]);
+
+  // Grand Net Total
+  const netTotalAmount = useMemo(() => {
+    return Math.max(0, Math.round((subtotal - calculatedInvoiceDiscount) * 100) / 100);
+  }, [subtotal, calculatedInvoiceDiscount]);
+
+  // Payment Due
+  const paymentDue = useMemo(() => {
+    return Math.max(0, Math.round((netTotalAmount - (Number(paidAmount) || 0)) * 100) / 100);
+  }, [netTotalAmount, paidAmount]);
+
+  // Selected supplier details
+  const currentSupplier = useMemo(() => {
+    return suppliers.find((s) => s.id === selectedSupplierId) || null;
+  }, [suppliers, selectedSupplierId]);
+
+  // Selected financial account
+  const selectedAccount = useMemo(() => {
+    return (
+      financialAccounts.find((a) => a.id === selectedAccountId) ||
+      (financialAccounts.length > 0 ? financialAccounts[0] : null)
+    );
+  }, [financialAccounts, selectedAccountId]);
+
+  // Handle Quick Add Product Modal Save
+  const handleCreateQuickProduct = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedBranchId || !formData.productId) {
-      setError("Please select both a target branch and catalog product");
-      return;
-    }
-
-    if (Number(formData.paidAmount || 0) > 0 && !formData.financialAccountId) {
-      setError("A valid financial account for the selected branch is required when making a payment to a supplier.");
-      return;
-    }
+    if (!newProdName.trim()) return;
 
     try {
-      setSubmitting(true);
-      setError(null);
-      setSuccess(false);
+      setSavingNewProduct(true);
+      const res = await fetchApi<any>("/products", {
+        method: "POST",
+        body: JSON.stringify({
+          name: newProdName.trim(),
+          genericName: newProdGeneric.trim() || null,
+          productType: newProdType,
+          basePrice: Number(newProdPrice) || 10,
+          unit: newProdType === "SYRUP" ? "bottle" : newProdType === "EQUIPMENT" ? "piece" : "tablet",
+          stripsPerBox: 10,
+          tabletsPerStrip: 10,
+        }),
+      });
 
-      const model = getPackagingModel(selectedProduct, formData.packageType);
-      const isBottle = model === "BOTTLE";
-      const isPiece = model === "PIECE";
-      const isVial = model === "VIAL";
-      const isTablet = model === "TABLET";
+      if (res.success && res.data) {
+        const createdProd: Product = res.data;
+        setAllProducts((prev) => [createdProd, ...prev]);
+        handleAddProductToTable(createdProd);
+        setShowAddProductModal(false);
+        setNewProdName("");
+        setNewProdGeneric("");
+      } else {
+        alert(res.message || "Failed to create product");
+      }
+    } catch (err: any) {
+      alert(err.message || "Failed to create product");
+    } finally {
+      setSavingNewProduct(false);
+    }
+  };
 
-      const totalBoxes = receivingUnit === "CARTON" ? (Number(formData.cartonQuantity) * Number(formData.boxesPerCarton)) : Number(formData.boxesReceived);
-      const itemsPerBox = Number(formData.stripsPerBox) || (isBottle ? 1 : isPiece ? 1 : 10);
-      const strips = isTablet ? (Number(formData.stripsPerBox) || 10) : (isBottle ? 1 : itemsPerBox);
-      const tablets = isTablet ? (Number(formData.tabletsPerStrip) || 10) : 1;
-      const unitsPerBox = isBottle ? 1 : (isTablet ? (strips * tablets) : itemsPerBox);
-      const finalQuantity = isBottle ? totalBoxes : totalBoxes * unitsPerBox;
+  // Submit Stock Inward
+  const handleSubmitStock = async () => {
+    if (lineItems.length === 0) {
+      setError("Please add at least one product to the stock table.");
+      return;
+    }
+
+    if (!selectedBranchId) {
+      setError("Please select a branch.");
+      return;
+    }
+
+    const effectiveAcc = financialAccounts.find((a) => a.id === selectedAccountId) || (financialAccounts.length > 0 ? financialAccounts[0] : null);
+
+    if (Number(paidAmount) > 0 && !effectiveAcc) {
+      setError("Please ensure a financial account is configured in Accounting for this branch before making payment.");
+      return;
+    }
+
+    setError(null);
+    setSubmitting(true);
+
+    try {
+      const selectedContact = supplierContacts.find((c) => c.id === selectedContactId);
+
+      const preparedItems = lineItems.map((item) => {
+        const isCarton = item.receivingMode === "CARTON";
+        const isBox = item.receivingMode === "BOX" || item.receivingMode === "PACK";
+        const receivingUnit = isCarton ? "CARTON" : (isBox ? "BOX" : "PIECE");
+
+        return {
+          productId: item.productId,
+          batchNumber: item.lotNumber || `BAT-${Date.now().toString().slice(-6)}`,
+          barcode: item.product.barcode || null,
+          mfgDate: item.mfgDate || null,
+          expiryDate: item.expiryDate || null,
+          packageType: item.product.productType || "Medicine",
+          receivingUnit,
+          cartonQuantity: isCarton ? item.enteredQuantity : null,
+          boxQuantity: isBox ? item.enteredQuantity : (isCarton ? item.totalBoxesOrPacks : null),
+          stripsPerBox: item.stripsPerBox,
+          tabletsPerStrip: item.tabletsPerStrip,
+          quantity: item.totalLowestUnits,
+          unitPurchasePrice: item.lowestUnitCost,
+          unitSellingPrice: item.lowestUnitSelling,
+          unitCostBeforeDiscount: item.unitCostBeforeDiscount,
+          discountPercent: item.discountPercent,
+          lineTotal: item.lineTotal,
+          shelfLocation: item.shelfLocation || null,
+        };
+      });
 
       const payload = {
         branchId: selectedBranchId,
-        productId: formData.productId,
-        supplierId: formData.supplierId || null,
-        contactPersonId: formData.contactPersonId || null,
-        contactPersonName: formData.contactPersonName || null,
-        batchNumber: formData.batchNumber?.trim() || null,
-        barcode: formData.barcode?.trim() || null,
-        receivedDate: formData.receivedDate ? new Date(formData.receivedDate).toISOString() : new Date().toISOString(),
-        mfgDate: formData.mfgDate ? new Date(formData.mfgDate).toISOString() : null,
-        expiryDate: formData.expiryDate ? new Date(formData.expiryDate).toISOString() : null,
-        packageType: model,
-        receivingUnit,
-        cartonsReceived: receivingUnit === "CARTON" ? Number(formData.cartonQuantity) || 0 : 0,
-        boxesReceived: receivingUnit === "BOX" ? Number(formData.boxesReceived) || 0 : totalBoxes,
-        cartonQuantity: receivingUnit === "CARTON" ? Number(formData.cartonQuantity) || null : null,
-        boxesPerCarton: Number(formData.boxesPerCarton) || null,
-        boxQuantity: totalBoxes,
-        stripsPerBox: strips,
-        tabletsPerStrip: tablets,
-        quantity: finalQuantity,
-        boxPurchasePrice: Number(formData.boxPurchasePrice),
-        boxSellingPrice: Number(formData.boxSellingPrice),
-        purchasePrice: Number(formData.unitPurchasePrice),
-        sellingPrice: Number(formData.unitSellingPrice),
-        paidAmount: Number(formData.paidAmount || 0),
-        financialAccountId: Number(formData.paidAmount || 0) > 0 ? formData.financialAccountId || null : null,
-        shelfLocation: formData.shelfLocation || null,
-        notes: formData.notes || null,
+        supplierId: selectedSupplierId || null,
+        contactPersonId: selectedContactId || null,
+        contactPersonName: selectedContact ? selectedContact.name : null,
+        invoiceNo: invoiceNo.trim() || `PUR-${Date.now().toString().slice(-6)}`,
+        purchaseDate,
+        items: preparedItems,
+        discountType,
+        discountAmount: Number(discountAmount) || 0,
+        taxAmount: 0,
+        subtotal,
+        totalAmount: netTotalAmount,
+        paidAmount: Number(paidAmount) || 0,
+        paymentMethod: (effectiveAcc?.type || paymentMethod || "CASH").toUpperCase(),
+        financialAccountId: Number(paidAmount) > 0 ? (effectiveAcc?.id || null) : null,
+        notes: null,
       };
 
-      const res = await fetchApi("/inventory/inward", {
+      const res = await fetchApi("/suppliers/purchases", {
         method: "POST",
         body: JSON.stringify(payload),
       });
 
       if (!res.success) {
-        const errorDetail = res.errors?.length
-          ? res.errors.map((e: any) => `${e.field}: ${e.message}`).join("; ")
-          : res.message || "Failed to record stock inward";
-        throw new Error(errorDetail);
+        throw new Error(res.message || "Failed to record purchase stock");
       }
 
       setSuccess(true);
       setTimeout(() => {
         onNavigate("stock_stock_list");
-      }, 1200);
+      }, 1500);
     } catch (err: any) {
-      setError(err.message || "Failed to record stock intake");
+      setError(err.message || "An error occurred while saving stock");
     } finally {
       setSubmitting(false);
     }
   };
 
-  const packagingModel = getPackagingModel(selectedProduct, formData.packageType);
-  const isBottle = packagingModel === "BOTTLE";
-  const isPiece = packagingModel === "PIECE";
-  const isVial = packagingModel === "VIAL";
-  const isTablet = packagingModel === "TABLET";
-
-  const totalBoxes = receivingUnit === "CARTON" ? (formData.cartonQuantity * formData.boxesPerCarton) : formData.boxesReceived;
-  const totalCost = Math.round(totalBoxes * formData.boxPurchasePrice * 100) / 100;
-  const dueAmount = Math.max(0, Math.round((totalCost - formData.paidAmount) * 100) / 100);
-
-  const piecesPerBox = isPiece ? (selectedProduct?.stripsPerBox || formData.stripsPerBox || 1) : 1;
-  const vialsPerBox = isVial ? (selectedProduct?.stripsPerBox || formData.stripsPerBox || 10) : 1;
-
-  const strips = isTablet ? (formData.stripsPerBox || 10) : (isPiece ? piecesPerBox : (isVial ? vialsPerBox : 1));
-  const tablets = isTablet ? (formData.tabletsPerStrip || 10) : 1;
-  const tabletsPerBox = strips * tablets;
-
-  const stripPurchase = strips > 0 ? formData.boxPurchasePrice / strips : 0;
-  const tabletPurchase = tabletsPerBox > 0 ? formData.boxPurchasePrice / tabletsPerBox : 0;
-  const stripSelling = strips > 0 ? formData.boxSellingPrice / strips : 0;
-  const tabletSelling = tabletsPerBox > 0 ? formData.boxSellingPrice / tabletsPerBox : 0;
-
-  const piecePurchase = piecesPerBox > 0 ? formData.boxPurchasePrice / piecesPerBox : 0;
-  const pieceSelling = piecesPerBox > 0 ? formData.boxSellingPrice / piecesPerBox : 0;
-
-  const vialPurchase = vialsPerBox > 0 ? formData.boxPurchasePrice / vialsPerBox : 0;
-  const vialSelling = vialsPerBox > 0 ? formData.boxSellingPrice / vialsPerBox : 0;
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[450px] space-y-4">
+        <Loader2 className="w-12 h-12 text-emerald-600 animate-spin" />
+        <p className="text-base font-bold text-slate-600 dark:text-slate-300">Loading stock intake interface...</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6 max-w-5xl">
-      {/* Top Header */}
+    <div className="space-y-6 w-full mx-auto pb-20 px-2 sm:px-4 md:px-6">
+      {/* Top Header & Page Title */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
         <div>
-          <div className="flex items-center gap-2 text-xs text-slate-400 mb-1">
-            <span>Stock Management</span>
-            <span>/</span>
-            <span className="text-brand-primary font-bold">Add Stock (Inward Batch)</span>
-          </div>
-          <h2 className="text-xl font-black text-slate-900 dark:text-white flex items-center gap-2">
-            <PackagePlus className="h-6 w-6 text-brand-primary" />
-            Inward Stock & Batch Intake
-          </h2>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Receive inventory shipments from distributors, generate batch numbers, track expiry dates, and update branch stock.
-          </p>
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-black text-slate-900 dark:text-white flex items-center gap-3">
+            <Boxes className="w-8 h-8 sm:w-9 sm:h-9 text-emerald-600" />
+            Add Stock
+          </h1>
         </div>
 
-        {/* Branch Selector */}
-        <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3.5 py-2 rounded-xl">
-          <Store className="h-4 w-4 text-slate-400" />
-          <select
-            disabled={isBranchLocked}
-            value={selectedBranchId}
-            onChange={(e) => setSelectedBranchId(e.target.value)}
-            className="bg-transparent text-xs font-bold text-slate-800 dark:text-white outline-none disabled:opacity-60"
+        <div>
+          <button
+            type="button"
+            onClick={() => onNavigate("stock_stock_list")}
+            className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-bold rounded-xl bg-white dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-700 transition shadow-sm"
           >
-            {branches.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name}
-              </option>
-            ))}
-          </select>
+            <ArrowLeft className="w-4 h-4" />
+            Back to Stock List
+          </button>
         </div>
       </div>
 
-      {/* Success Notification */}
-      {success && (
-        <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 rounded-2xl flex items-center gap-3 animate-in fade-in">
-          <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
-          <div>
-            <div className="font-bold text-xs text-emerald-900 dark:text-emerald-200">
-              Stock Inward Recorded Successfully!
-            </div>
-            <div className="text-[11px] text-emerald-700 dark:text-emerald-400">
-              Inventory batches updated. Redirecting to Stock List...
-            </div>
-          </div>
-        </div>
-      )}
-
+      {/* Notifications */}
       {error && (
-        <div className="p-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-2xl flex items-center gap-3 text-rose-700 dark:text-rose-300 text-xs">
-          <AlertCircle className="h-5 w-5 text-rose-600 shrink-0" />
-          <span>{error}</span>
+        <div className="p-4 bg-rose-50 dark:bg-rose-950/50 border-2 border-rose-300 dark:border-rose-900 rounded-xl flex items-start gap-3 text-rose-900 dark:text-rose-200 shadow-md">
+          <AlertCircle className="w-6 h-6 mt-0.5 flex-shrink-0 text-rose-600" />
+          <div className="flex-1 text-base font-bold">{error}</div>
+          <button onClick={() => setError(null)} className="text-rose-400 hover:text-rose-600">
+            <X className="w-5 h-5" />
+          </button>
         </div>
       )}
 
-      {/* Main Inward Form */}
-      <form onSubmit={handleInwardSubmit} className="space-y-6">
-        {/* Step 1: Select Catalog Product */}
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-          <div className="font-black text-sm text-slate-900 dark:text-white flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
-            <Layers className="h-4 w-4 text-brand-primary" />
-            1. Select Catalog Product
-          </div>
-
+      {success && (
+        <div className="p-4 bg-emerald-50 dark:bg-emerald-950/50 border-2 border-emerald-300 dark:border-emerald-800 rounded-xl flex items-center gap-3 text-emerald-900 dark:text-emerald-200 shadow-md">
+          <CheckCircle2 className="w-7 h-7 text-emerald-600 flex-shrink-0" />
           <div>
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-              Select Product from Central Catalog *
+            <h4 className="font-black text-base sm:text-lg">Stock Added Successfully!</h4>
+            <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-300 mt-0.5">
+              Cartons, boxes, bottles, pieces, and accounts have been updated. Redirecting...
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Section 1: Supplier & Invoice Metadata Header */}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border-2 border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-sm space-y-4">
+        <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white flex items-center gap-2 pb-2 border-b border-slate-100 dark:border-slate-800">
+          <Building className="w-5 h-5 text-emerald-600" />
+          Supplier Information
+        </h2>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 sm:gap-5">
+          {/* Branch */}
+          <div>
+            <label className="block text-sm font-black text-slate-800 dark:text-slate-200 mb-2 flex items-center gap-1.5">
+              <Store className="w-4 h-4 text-slate-400" />
+              Branch / Store *
             </label>
             <select
-              required
-              value={formData.productId}
-              onChange={(e) => {
-                const prod = products.find((p) => p.id === e.target.value);
-                if (prod) handleSelectProduct(prod);
-              }}
-              className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white outline-none font-bold"
+              disabled={isBranchLocked}
+              value={selectedBranchId}
+              onChange={(e) => setSelectedBranchId(e.target.value)}
+              className="w-full text-sm font-bold bg-slate-50 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 disabled:opacity-70 h-11"
             >
-              <option value="">-- Choose Product from Catalog --</option>
-              {products.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name} {p.size ? `(${p.size})` : ""} {p.genericName ? `[${p.genericName}]` : ""} - {p.brandName || "Generic"} [{p.category || p.categoryRef?.name || "Medicine"}]
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
                 </option>
               ))}
             </select>
           </div>
 
-          {selectedProduct && (
-            <div className="p-3.5 bg-brand-primary/5 dark:bg-brand-primary/10 border border-brand-primary/20 rounded-xl text-xs flex flex-wrap items-center justify-between gap-4 text-slate-700 dark:text-slate-300">
-              <div className="flex flex-wrap items-center gap-4">
-                <div>
-                  <span className="text-slate-400">Generic: </span>
-                  <span className="font-bold text-brand-primary">
-                    {selectedProduct.genericName || "—"}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-slate-400">Strength: </span>
-                  <span className="font-bold">{selectedProduct.size || "Standard"}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400">Unit: </span>
-                  <span className="font-bold">{selectedProduct.unit}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400">Base Catalog Price: </span>
-                  <span className="font-bold font-mono">৳{Number(selectedProduct.basePrice).toFixed(2)}</span>
-                </div>
-              </div>
-
-              {/* Packaging Model Tag */}
-              <div className="flex items-center gap-1.5">
-                {packagingModel === "TABLET" && (
-                  <span className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-300 bg-emerald-100/70 dark:bg-emerald-950/50 border border-emerald-300 dark:border-emerald-800 px-2.5 py-1 rounded-lg font-bold text-[11px]">
-                    <Pill className="h-3.5 w-3.5" />
-                    Strip & Tablet (1 Box = {strips} Strips × {tablets} Tabs)
-                  </span>
-                )}
-                {packagingModel === "BOTTLE" && (
-                  <span className="flex items-center gap-1.5 text-blue-700 dark:text-blue-300 bg-blue-100/70 dark:bg-blue-950/50 border border-blue-300 dark:border-blue-800 px-2.5 py-1 rounded-lg font-bold text-[11px]">
-                    <Droplets className="h-3.5 w-3.5" />
-                    Bottle / Liquid (1 Carton = {formData.boxesPerCarton} Bottles)
-                  </span>
-                )}
-                {packagingModel === "PIECE" && (
-                  <span className="flex items-center gap-1.5 text-purple-700 dark:text-purple-300 bg-purple-100/70 dark:bg-purple-950/50 border border-purple-300 dark:border-purple-800 px-2.5 py-1 rounded-lg font-bold text-[11px]">
-                    <Package className="h-3.5 w-3.5" />
-                    Piece / Unit (1 Box/Pack = {piecesPerBox} Pieces)
-                  </span>
-                )}
-                {packagingModel === "VIAL" && (
-                  <span className="flex items-center gap-1.5 text-amber-700 dark:text-amber-300 bg-amber-100/70 dark:bg-amber-950/50 border border-amber-300 dark:border-amber-800 px-2.5 py-1 rounded-lg font-bold text-[11px]">
-                    <Syringe className="h-3.5 w-3.5" />
-                    Injection / Vial (1 Commercial Box = {vialsPerBox} Vials)
-                  </span>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Step 2: Batch Number, Expiry & Supplier */}
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-          <div className="font-black text-sm text-slate-900 dark:text-white flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 flex-wrap gap-2">
-            <span className="flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-brand-primary" />
-              2. Batch Number, Expiry Date & Supplier
-            </span>
-            {selectedProduct && existingBatches.length > 0 && (
-              <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl gap-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setBatchMode("NEW");
-                    setSelectedExistingBatch(null);
-                    setFormData((prev) => ({
-                      ...prev,
-                      batchNumber: `BAT-${Date.now().toString().slice(-6)}`,
-                    }));
-                  }}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
-                    batchMode === "NEW"
-                      ? "bg-white dark:bg-slate-700 text-brand-primary shadow-sm"
-                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
-                  }`}
-                >
-                  + New Batch
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setBatchMode("EXISTING");
-                    if (existingBatches.length > 0) {
-                      handleSelectExistingBatch(existingBatches[0].id);
-                    }
-                  }}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
-                    batchMode === "EXISTING"
-                      ? "bg-white dark:bg-slate-700 text-brand-primary shadow-sm"
-                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
-                  }`}
-                >
-                  Existing Batch ({existingBatches.length})
-                </button>
-              </div>
-            )}
-          </div>
-
-          {batchMode === "EXISTING" && existingBatches.length > 0 && (
-            <div className="p-3.5 bg-blue-50/70 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl space-y-2">
-              <label className="block text-xs font-bold text-blue-900 dark:text-blue-300">
-                Choose Existing Batch to Receive Into *
+          {/* Supplier */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm font-black text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                <Building className="w-4 h-4 text-slate-400" />
+                Supplier *
               </label>
-              <select
-                value={selectedExistingBatch?.id || ""}
-                onChange={(e) => handleSelectExistingBatch(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-800 border border-blue-300 dark:border-blue-700 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-100 outline-none"
-              >
-                {existingBatches.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    Batch: {b.batchNumber || "Unassigned"} • In Stock: {b.quantity} {selectedProduct?.unit || "units"} • Expiry: {b.expiryDate ? new Date(b.expiryDate).toLocaleDateString() : "—"}
-                  </option>
-                ))}
-              </select>
-              {selectedExistingBatch && (
-                <div className="text-[11px] text-blue-800 dark:text-blue-300 font-medium">
-                  Current Batch Stock: <span className="font-bold">{selectedExistingBatch.cartonQuantity || 0} Full Cartons</span> ({((selectedExistingBatch.cartonQuantity || 0) * (selectedExistingBatch.boxesPerCarton || 10))} Boxes) + <span className="font-bold">{selectedExistingBatch.remainingLooseBoxes ?? selectedExistingBatch.looseBoxesReceived ?? 0} Loose Boxes</span>.
-                </div>
+              {currentSupplier && (
+                <span className="text-xs text-rose-600 dark:text-rose-400 font-black">
+                  Due: ৳{Number(currentSupplier.totalDue || 0).toLocaleString()}
+                </span>
               )}
             </div>
-          )}
+            <select
+              value={selectedSupplierId}
+              onChange={(e) => setSelectedSupplierId(e.target.value)}
+              className="w-full text-sm font-bold bg-slate-50 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 h-11"
+            >
+              <option value="">-- Select Supplier --</option>
+              {suppliers.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name} {s.company ? `(${s.company})` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
-                <span>Batch Number *</span>
-                {batchMode === "NEW" && (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setFormData({
-                        ...formData,
-                        batchNumber: `BAT-${Date.now().toString().slice(-6)}`,
-                      })
-                    }
-                    className="text-[11px] text-brand-primary hover:underline font-bold"
-                  >
-                    Auto Batch No
-                  </button>
-                )}
-              </label>
+          {/* Contact Person (MR / SR) */}
+          <div>
+            <label className="block text-sm font-black text-slate-800 dark:text-slate-200 mb-2 flex items-center gap-1.5">
+              <User className="w-4 h-4 text-slate-400" />
+              Representative (MR / SR)
+            </label>
+            <select
+              value={selectedContactId}
+              onChange={(e) => setSelectedContactId(e.target.value)}
+              className="w-full text-sm font-bold bg-slate-50 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 h-11"
+            >
+              <option value="">-- Direct / General --</option>
+              {supplierContacts.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name} {c.phone ? `(${c.phone})` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Purchase Date */}
+          <div>
+            <label className="block text-sm font-black text-slate-800 dark:text-slate-200 mb-2 flex items-center gap-1.5">
+              <Calendar className="w-4 h-4 text-slate-400" />
+              Challan Date *
+            </label>
+            <input
+              type="date"
+              value={purchaseDate}
+              onChange={(e) => setPurchaseDate(e.target.value)}
+              className="w-full text-sm font-bold bg-slate-50 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 h-11 font-mono"
+            />
+          </div>
+
+          {/* Invoice / Challan No */}
+          <div>
+            <label className="block text-sm font-black text-slate-800 dark:text-slate-200 mb-2 flex items-center gap-1.5">
+              <FileText className="w-4 h-4 text-slate-400" />
+              Challan / Invoice No *
+            </label>
+            <input
+              type="text"
+              value={invoiceNo}
+              onChange={(e) => setInvoiceNo(e.target.value)}
+              placeholder="e.g. INV-98421"
+              className="w-full text-sm font-bold bg-slate-50 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 font-mono h-11"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Section 2: Product Search & Dynamic Stock Items Grid */}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border-2 border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+        {/* Search Header Bar */}
+        <div className="p-4 sm:p-5 bg-slate-50/80 dark:bg-slate-800/60 border-b-2 border-slate-200 dark:border-slate-800 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+          <div className="flex items-center gap-3 flex-1 relative" ref={searchContainerRef}>
+            {/* Live Search Input - Clicking shows dropdown automatically */}
+            <div className="relative flex-1">
+              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                <Search className="w-5 h-5" />
+              </div>
               <input
+                ref={searchInputRef}
                 type="text"
-                required
-                value={formData.batchNumber}
-                onChange={(e) => setFormData({ ...formData, batchNumber: e.target.value })}
-                readOnly={batchMode === "EXISTING"}
-                className={`w-full px-3.5 py-2.5 border rounded-xl text-xs font-mono font-bold outline-none ${
-                  batchMode === "EXISTING"
-                    ? "bg-slate-100 dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700 cursor-not-allowed"
-                    : "bg-slate-50 dark:bg-slate-800/70 border-slate-200 dark:border-slate-700"
-                }`}
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                Company / Supplier *
-              </label>
-              <select
-                required
-                value={formData.supplierId}
-                onChange={(e) => setFormData({ ...formData, supplierId: e.target.value })}
-                className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none"
-              >
-                <option value="">-- Choose Company / Supplier --</option>
-                {suppliers.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
-                <span>Contact Person / SR</span>
-                {loadingContacts && <Loader2 className="h-3 w-3 animate-spin text-brand-primary" />}
-              </label>
-              <select
-                value={formData.contactPersonId}
-                onChange={(e) => {
-                  const cId = e.target.value;
-                  const found = supplierContacts.find((c) => c.id === cId);
-                  setFormData({
-                    ...formData,
-                    contactPersonId: cId,
-                    contactPersonName: found ? found.name : "",
-                  });
+                value={searchTerm}
+                onClick={() => {
+                  setSearchResults(searchTerm.trim() ? searchResults : allProducts.slice(0, 20));
+                  setIsSearchOpen(true);
                 }}
-                className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none"
-              >
-                <option value="">Direct / General (No SR)</option>
-                {supplierContacts.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name} {c.designation ? `(${c.designation})` : ""} {c.phone ? `- ${c.phone}` : ""}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
-                <span>Received Date *</span>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      receivedDate: new Date().toISOString().slice(0, 10),
-                    }))
-                  }
-                  className="text-[11px] text-brand-primary hover:underline font-bold"
-                >
-                  Today
-                </button>
-              </label>
-              <input
-                type="date"
-                required
-                value={formData.receivedDate}
-                onChange={(e) => setFormData({ ...formData, receivedDate: e.target.value })}
-                className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                Manufacturing Date
-              </label>
-              <input
-                type="date"
-                value={formData.mfgDate}
-                onChange={(e) => setFormData({ ...formData, mfgDate: e.target.value })}
-                className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                Expiry Date (FEFO Mandatory) *
-              </label>
-              <input
-                type="date"
-                required
-                value={formData.expiryDate}
-                onChange={(e) => setFormData({ ...formData, expiryDate: e.target.value })}
-                className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none font-bold text-brand-primary"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                Barcode
-              </label>
-              <div className="relative">
-                <Barcode className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                <input
-                  type="text"
-                  value={formData.barcode}
-                  onChange={(e) => setFormData({ ...formData, barcode: e.target.value })}
-                  placeholder="Scan or enter barcode"
-                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono outline-none"
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Step 3: Packaging Quantity Hierarchy */}
-        {isBottle ? (
-          <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-            <div className="font-black text-sm text-slate-900 dark:text-white flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 flex-wrap gap-2">
-              <span className="flex items-center gap-2">
-                <Layers className="h-4 w-4 text-brand-primary" />
-                3. Receiving Unit & Packaging Breakdown (Syrup / Bottle)
-              </span>
-              <div className="flex items-center gap-2 flex-wrap text-xs font-black">
-                <span className="text-brand-primary bg-brand-primary/10 px-3 py-1 rounded-full">
-                  {receivingUnit === "CARTON" ? `Total Cartons: ${formData.cartonQuantity} Cartons` : "0 Cartons (Loose)"}
-                </span>
-                <span className="text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-1 rounded-full">
-                  Total Bottles: {totalBoxes.toLocaleString()} Bottles
-                </span>
-              </div>
-            </div>
-
-            {/* Receiving Unit Selector */}
-            <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="text-xs font-bold text-slate-800 dark:text-slate-200">How is this syrup/bottle stock being received?</p>
-                <p className="text-[11px] text-slate-500">Choose Carton for whole carton shipments, or Bottle for loose/individual bottles</p>
-              </div>
-              <div className="flex bg-slate-200 dark:bg-slate-700 p-1 rounded-xl">
-                <button
-                  type="button"
-                  onClick={() => handleReceivingUnitToggle("CARTON")}
-                  className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition ${
-                    receivingUnit === "CARTON"
-                      ? "bg-white dark:bg-slate-900 text-brand-primary shadow-sm"
-                      : "text-slate-600 dark:text-slate-300 hover:text-slate-900"
-                  }`}
-                >
-                  <Package className="h-3.5 w-3.5" />
-                  Carton Receiving (কার্টুন)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleReceivingUnitToggle("BOX")}
-                  className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition ${
-                    receivingUnit === "BOX"
-                      ? "bg-white dark:bg-slate-900 text-brand-primary shadow-sm"
-                      : "text-slate-600 dark:text-slate-300 hover:text-slate-900"
-                  }`}
-                >
-                  <Boxes className="h-3.5 w-3.5" />
-                  Bottle Receiving (লুজ বোতল)
-                </button>
-              </div>
-            </div>
-
-            {/* Packaging Configuration Notice */}
-            <div className="p-3 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-xl flex items-center justify-between text-xs text-slate-600 dark:text-slate-400">
-              <span className="flex items-center gap-1.5">
-                <Lock className="h-3.5 w-3.5 text-slate-400" />
-                <span>
-                  <strong>Product Packaging (Read-Only):</strong> Bottles per Carton is locked to this product's catalog configuration.
-                </span>
-              </span>
-              <span className="font-bold text-brand-primary font-mono text-[11px]">
-                1 Master Carton = {formData.boxesPerCarton} Bottles
-              </span>
-            </div>
-
-            {receivingUnit === "CARTON" ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Cartons Received *
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={formData.cartonQuantity}
-                    onChange={(e) => {
-                      const c = parseInt(e.target.value) || 0;
-                      handleCartonChange(c, formData.boxesPerCarton);
-                    }}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none"
-                  />
-                  <div className="text-[10px] text-slate-400 mt-1">Whole sealed master cartons received</div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1 flex items-center justify-between">
-                    <span>Bottles per Carton</span>
-                    <span className="text-[9px] text-slate-400 font-normal flex items-center gap-0.5">
-                      <Lock className="h-2.5 w-2.5" /> Read-Only
-                    </span>
-                  </label>
-                  <div className="w-full px-3.5 py-2.5 bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
-                    <span>{formData.boxesPerCarton} Bottles</span>
-                    <span className="text-[10px] text-slate-400 font-mono">per Carton</span>
-                  </div>
-                  <div className="text-[10px] text-brand-primary font-bold mt-1">
-                    = {formData.cartonQuantity * formData.boxesPerCarton} Total Bottles inside cartons
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Bottles Received (Loose) *
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={formData.boxesReceived}
-                    onChange={(e) => {
-                      const b = parseInt(e.target.value) || 0;
-                      handleBoxesReceivedChange(b);
-                    }}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none"
-                  />
-                  <div className="text-[10px] text-amber-600 dark:text-amber-400 font-bold mt-1">
-                    Loose / Standalone Bottles (without master carton)
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1 flex items-center justify-between">
-                    <span>Carton Reference</span>
-                    <span className="text-[9px] text-slate-400 font-normal flex items-center gap-0.5">
-                      <Lock className="h-2.5 w-2.5" /> Product Standard
-                    </span>
-                  </label>
-                  <div className="w-full px-3.5 py-2.5 bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
-                    <span>{formData.boxesPerCarton} Bottles</span>
-                    <span className="text-[10px] text-slate-400 font-mono">1 Standard Carton</span>
-                  </div>
-                  <div className="text-[10px] text-slate-400 mt-1">
-                    Direct stock: {formData.boxesReceived} bottles
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Calculated Breakdown Summary Banner for Bottles */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
-              <div className="p-3 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total Cartons</span>
-                <span className="text-lg font-black text-slate-900 dark:text-white font-mono">
-                  {receivingUnit === "CARTON" ? `${formData.cartonQuantity} Cartons` : "0 (Loose)"}
-                </span>
-                <span className="text-[10px] text-slate-500 block mt-0.5">
-                  {receivingUnit === "CARTON" ? `${formData.cartonQuantity} master cartons` : "Loose bottle intake"}
-                </span>
-              </div>
-              <div className="p-3 bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-200 dark:border-indigo-900/40 rounded-xl">
-                <span className="text-[10px] font-bold text-indigo-500 uppercase tracking-wider block">Bottles per Carton</span>
-                <span className="text-lg font-black text-indigo-700 dark:text-indigo-300 font-mono">
-                  {formData.boxesPerCarton} Bottles
-                </span>
-                <span className="text-[10px] text-indigo-500/80 block mt-0.5">
-                  Standard carton capacity
-                </span>
-              </div>
-              <div className="p-3 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/40 rounded-xl">
-                <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider block">Total Bottles Inward</span>
-                <span className="text-lg font-black text-emerald-700 dark:text-emerald-300 font-mono">
-                  {totalBoxes.toLocaleString()} Bottles
-                </span>
-                <span className="text-[10px] text-emerald-600/80 block mt-0.5">
-                  {receivingUnit === "CARTON" ? `${formData.cartonQuantity} cartons × ${formData.boxesPerCarton} bottles` : `${formData.boxesReceived} loose bottles`}
-                </span>
-              </div>
-            </div>
-
-            {/* Same Batch Support Breakdown Preview Banner for Bottles */}
-            <div className="p-4 bg-gradient-to-r from-slate-50 to-indigo-50/40 dark:from-slate-800/50 dark:to-indigo-950/20 border border-indigo-100 dark:border-indigo-900/30 rounded-xl space-y-2">
-              <div className="flex items-center justify-between flex-wrap gap-2 text-xs font-bold text-slate-700 dark:text-slate-300">
-                <span className="flex items-center gap-1.5">
-                  <Package className="h-4 w-4 text-indigo-500" />
-                  Receiving Breakdown Preview:
-                </span>
-                <span className="text-indigo-600 dark:text-indigo-400 font-mono">
-                  {receivingUnit === "CARTON"
-                    ? `${formData.cartonQuantity} Cartons × ${formData.boxesPerCarton} Bottles = ${totalBoxes} Bottles`
-                    : `${formData.boxesReceived} Loose Bottles (0 Cartons)`}
-                </span>
-              </div>
-
-              {selectedExistingBatch ? (
-                <div className="pt-2 border-t border-indigo-100 dark:border-indigo-900/30 text-xs">
-                  <p className="text-slate-600 dark:text-slate-400">
-                    <span className="font-bold text-slate-800 dark:text-slate-200">Existing Batch {selectedExistingBatch.batchNumber}:</span>{" "}
-                    {selectedExistingBatch.cartonQuantity || 0} Full Cartons ({((selectedExistingBatch.cartonQuantity || 0) * (formData.boxesPerCarton || 12))} Bottles) + {selectedExistingBatch.remainingLooseBoxes ?? selectedExistingBatch.looseBoxesReceived ?? 0} Loose Bottles.
-                  </p>
-                  <p className="text-indigo-700 dark:text-indigo-300 font-bold mt-1">
-                    👉 After this {receivingUnit === "CARTON" ? `${formData.cartonQuantity} Carton` : `${formData.boxesReceived} Loose Bottle`} intake, Batch Total will be:{" "}
-                    <span className="underline">
-                      {(selectedExistingBatch.cartonQuantity || 0) + (receivingUnit === "CARTON" ? formData.cartonQuantity : 0)} Full Cartons
-                    </span>{" "}
-                    ({((selectedExistingBatch.cartonQuantity || 0) + (receivingUnit === "CARTON" ? formData.cartonQuantity : 0)) * (formData.boxesPerCarton || 12)} Bottles inside Cartons) +{" "}
-                    <span className="underline">
-                      {(selectedExistingBatch.remainingLooseBoxes ?? selectedExistingBatch.looseBoxesReceived ?? 0) + (receivingUnit === "BOX" ? formData.boxesReceived : 0)} Loose Bottles
-                    </span>{" "}
-                    = <span className="font-black text-indigo-800 dark:text-indigo-200">{
-                      (((selectedExistingBatch.cartonQuantity || 0) + (receivingUnit === "CARTON" ? formData.cartonQuantity : 0)) * (formData.boxesPerCarton || 12)) +
-                      ((selectedExistingBatch.remainingLooseBoxes ?? selectedExistingBatch.looseBoxesReceived ?? 0) + (receivingUnit === "BOX" ? formData.boxesReceived : 0))
-                    } Total Equivalent Bottles</span>.
-                  </p>
-                </div>
-              ) : (
-                <div className="pt-2 border-t border-indigo-100 dark:border-indigo-900/30 text-xs text-slate-500">
-                  {receivingUnit === "CARTON" ? (
-                    <span>
-                      Will record <span className="font-bold text-slate-800 dark:text-slate-200">{formData.cartonQuantity} Full Cartons</span> ({totalBoxes} Bottles) and 0 Loose Bottles.
-                    </span>
-                  ) : (
-                    <span>
-                      Will record <span className="font-bold text-slate-800 dark:text-slate-200">{formData.boxesReceived} Loose Bottles</span> (0 Cartons).
-                    </span>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        ) : isPiece ? (
-          <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-            <div className="font-black text-sm text-slate-900 dark:text-white flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 flex-wrap gap-2">
-              <span className="flex items-center gap-2">
-                <Layers className="h-4 w-4 text-purple-600" />
-                3. Receiving Unit & Piece / Unit Breakdown
-              </span>
-              <div className="flex items-center gap-2 flex-wrap text-xs font-black">
-                <span className="text-purple-600 bg-purple-50 dark:bg-purple-950/40 px-3 py-1 rounded-full">
-                  Total Boxes / Packs: {totalBoxes.toLocaleString()} Boxes
-                </span>
-                <span className="text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-1 rounded-full">
-                  Total Pieces: {formData.quantity.toLocaleString()} Pieces
-                </span>
-              </div>
-            </div>
-
-            {/* Receiving Unit Selector */}
-            <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="text-xs font-bold text-slate-800 dark:text-slate-200">How is this item being received?</p>
-                <p className="text-[11px] text-slate-500">Choose Carton for master carton shipments, or Box / Pack for loose boxes</p>
-              </div>
-              <div className="flex bg-slate-200 dark:bg-slate-700 p-1 rounded-xl">
-                <button
-                  type="button"
-                  onClick={() => handleReceivingUnitToggle("CARTON")}
-                  className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition ${
-                    receivingUnit === "CARTON"
-                      ? "bg-white dark:bg-slate-900 text-purple-600 shadow-sm"
-                      : "text-slate-600 dark:text-slate-300 hover:text-slate-900"
-                  }`}
-                >
-                  <Package className="h-3.5 w-3.5" />
-                  Carton Receiving (মাস্টার কার্টুন)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleReceivingUnitToggle("BOX")}
-                  className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition ${
-                    receivingUnit === "BOX"
-                      ? "bg-white dark:bg-slate-900 text-purple-600 shadow-sm"
-                      : "text-slate-600 dark:text-slate-300 hover:text-slate-900"
-                  }`}
-                >
-                  <Boxes className="h-3.5 w-3.5" />
-                  Box / Pack Receiving (লুজ বক্স / প্যাকেট)
-                </button>
-              </div>
-            </div>
-
-            {/* Packaging Configuration Notice */}
-            <div className="p-3 bg-purple-50/50 dark:bg-purple-950/20 border border-purple-100 dark:border-purple-900/40 rounded-xl flex items-center justify-between text-xs text-slate-600 dark:text-slate-400">
-              <span className="flex items-center gap-1.5">
-                <Lock className="h-3.5 w-3.5 text-purple-500" />
-                <span>
-                  <strong>Product Packaging (Read-Only):</strong> Pieces per Box is locked to this product's catalog configuration.
-                </span>
-              </span>
-              <span className="font-bold text-purple-700 dark:text-purple-300 font-mono text-[11px]">
-                1 Box / Pack = {piecesPerBox} Pieces
-              </span>
-            </div>
-
-            {receivingUnit === "CARTON" ? (
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Master Cartons Received *
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={formData.cartonQuantity}
-                    onChange={(e) => {
-                      const c = parseInt(e.target.value) || 0;
-                      handleCartonChange(c, formData.boxesPerCarton);
-                    }}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none"
-                  />
-                  <div className="text-[10px] text-slate-400 mt-1">Whole sealed cartons received</div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Boxes / Packs per Carton *
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={formData.boxesPerCarton}
-                    onChange={(e) => {
-                      const b = parseInt(e.target.value) || 1;
-                      handleCartonChange(formData.cartonQuantity, b);
-                    }}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none"
-                  />
-                  <div className="text-[10px] text-purple-600 dark:text-purple-400 font-bold mt-1">
-                    = {formData.cartonQuantity * formData.boxesPerCarton} Total Boxes inside cartons
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1 flex items-center justify-between">
-                    <span>Pieces per Box / Pack</span>
-                    <span className="text-[9px] text-slate-400 font-normal flex items-center gap-0.5">
-                      <Lock className="h-2.5 w-2.5" /> Read-Only
-                    </span>
-                  </label>
-                  <div className="w-full px-3.5 py-2.5 bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
-                    <span>{piecesPerBox} Pieces</span>
-                    <span className="text-[10px] text-slate-400 font-mono">per Box</span>
-                  </div>
-                  <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold mt-1">
-                    = {(formData.cartonQuantity * formData.boxesPerCarton * piecesPerBox).toLocaleString()} Total Pieces
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Boxes / Packs Received (Loose) *
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={formData.boxesReceived}
-                    onChange={(e) => {
-                      const b = parseInt(e.target.value) || 0;
-                      handleBoxesReceivedChange(b);
-                    }}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none"
-                  />
-                  <div className="text-[10px] text-amber-600 dark:text-amber-400 font-bold mt-1">
-                    Loose / Standalone Boxes or Packs
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1 flex items-center justify-between">
-                    <span>Pieces per Box / Pack</span>
-                    <span className="text-[9px] text-slate-400 font-normal flex items-center gap-0.5">
-                      <Lock className="h-2.5 w-2.5" /> Read-Only
-                    </span>
-                  </label>
-                  <div className="w-full px-3.5 py-2.5 bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
-                    <span>{piecesPerBox} Pieces</span>
-                    <span className="text-[10px] text-slate-400 font-mono">per Box</span>
-                  </div>
-                  <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold mt-1">
-                    = {(formData.boxesReceived * piecesPerBox).toLocaleString()} Total Pieces
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Calculated Breakdown Summary Banner for Pieces */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
-              <div className="p-3 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total Boxes / Packs</span>
-                <span className="text-lg font-black text-slate-900 dark:text-white font-mono">
-                  {totalBoxes.toLocaleString()}
-                </span>
-                <span className="text-[10px] text-slate-500 block mt-0.5">
-                  {receivingUnit === "CARTON" ? `${formData.cartonQuantity} cartons × ${formData.boxesPerCarton}` : `${formData.boxesReceived} loose boxes`}
-                </span>
-              </div>
-              <div className="p-3 bg-purple-50/50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-900/40 rounded-xl">
-                <span className="text-[10px] font-bold text-purple-600 uppercase tracking-wider block">Pieces per Box</span>
-                <span className="text-lg font-black text-purple-700 dark:text-purple-300 font-mono">
-                  {piecesPerBox.toLocaleString()} Pcs
-                </span>
-                <span className="text-[10px] text-purple-500 block mt-0.5">
-                  Items in 1 commercial box
-                </span>
-              </div>
-              <div className="p-3 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/40 rounded-xl">
-                <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider block">Total Pieces Inward</span>
-                <span className="text-lg font-black text-emerald-700 dark:text-emerald-300 font-mono">
-                  {formData.quantity.toLocaleString()} Pieces
-                </span>
-                <span className="text-[10px] text-emerald-600/80 block mt-0.5">
-                  {totalBoxes} boxes × {piecesPerBox} pieces/box
-                </span>
-              </div>
-            </div>
-
-            {/* Same Batch Support Breakdown Preview Banner for Pieces */}
-            <div className="p-4 bg-gradient-to-r from-slate-50 to-purple-50/40 dark:from-slate-800/50 dark:to-purple-950/20 border border-purple-100 dark:border-purple-900/30 rounded-xl space-y-2">
-              <div className="flex items-center justify-between flex-wrap gap-2 text-xs font-bold text-slate-700 dark:text-slate-300">
-                <span className="flex items-center gap-1.5">
-                  <Package className="h-4 w-4 text-purple-500" />
-                  Receiving Breakdown Preview:
-                </span>
-                <span className="text-purple-600 dark:text-purple-400 font-mono">
-                  {receivingUnit === "CARTON"
-                    ? `${formData.cartonQuantity} Cartons × ${formData.boxesPerCarton} Boxes = ${totalBoxes} Boxes (${formData.quantity.toLocaleString()} Pieces)`
-                    : `${formData.boxesReceived} Loose Boxes = ${formData.quantity.toLocaleString()} Pieces (0 Cartons)`}
-                </span>
-              </div>
-            </div>
-          </div>
-        ) : isVial ? (
-          <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-            <div className="font-black text-sm text-slate-900 dark:text-white flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 flex-wrap gap-2">
-              <span className="flex items-center gap-2">
-                <Syringe className="h-4 w-4 text-amber-600" />
-                3. Receiving Unit & Injection / Vial Breakdown
-              </span>
-              <div className="flex items-center gap-2 flex-wrap text-xs font-black">
-                <span className="text-amber-600 bg-amber-50 dark:bg-amber-950/40 px-3 py-1 rounded-full">
-                  Total Boxes: {totalBoxes.toLocaleString()} Boxes
-                </span>
-                <span className="text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-1 rounded-full">
-                  Total Vials: {formData.quantity.toLocaleString()} Vials
-                </span>
-              </div>
-            </div>
-
-            {/* Receiving Unit Selector */}
-            <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="text-xs font-bold text-slate-800 dark:text-slate-200">How is this injectable stock being received?</p>
-                <p className="text-[11px] text-slate-500">Choose Carton for master carton shipments, or Box for loose commercial boxes</p>
-              </div>
-              <div className="flex bg-slate-200 dark:bg-slate-700 p-1 rounded-xl">
-                <button
-                  type="button"
-                  onClick={() => handleReceivingUnitToggle("CARTON")}
-                  className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition ${
-                    receivingUnit === "CARTON"
-                      ? "bg-white dark:bg-slate-900 text-amber-600 shadow-sm"
-                      : "text-slate-600 dark:text-slate-300 hover:text-slate-900"
-                  }`}
-                >
-                  <Package className="h-3.5 w-3.5" />
-                  Carton Receiving (মাস্টার কার্টুন)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleReceivingUnitToggle("BOX")}
-                  className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition ${
-                    receivingUnit === "BOX"
-                      ? "bg-white dark:bg-slate-900 text-amber-600 shadow-sm"
-                      : "text-slate-600 dark:text-slate-300 hover:text-slate-900"
-                  }`}
-                >
-                  <Boxes className="h-3.5 w-3.5" />
-                  Box Receiving (লুজ বক্স)
-                </button>
-              </div>
-            </div>
-
-            {/* Packaging Configuration Notice */}
-            <div className="p-3 bg-amber-50/50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/40 rounded-xl flex items-center justify-between text-xs text-slate-600 dark:text-slate-400">
-              <span className="flex items-center gap-1.5">
-                <Lock className="h-3.5 w-3.5 text-amber-500" />
-                <span>
-                  <strong>Product Packaging (Read-Only):</strong> Vials / Ampoules per Box is locked to this product's catalog configuration.
-                </span>
-              </span>
-              <span className="font-bold text-amber-700 dark:text-amber-300 font-mono text-[11px]">
-                1 Commercial Box = {vialsPerBox} Vials / Ampoules
-              </span>
-            </div>
-
-            {receivingUnit === "CARTON" ? (
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Master Cartons Received *
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={formData.cartonQuantity}
-                    onChange={(e) => {
-                      const c = parseInt(e.target.value) || 0;
-                      handleCartonChange(c, formData.boxesPerCarton);
-                    }}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none"
-                  />
-                  <div className="text-[10px] text-slate-400 mt-1">Whole sealed cartons received</div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Boxes per Carton *
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={formData.boxesPerCarton}
-                    onChange={(e) => {
-                      const b = parseInt(e.target.value) || 1;
-                      handleCartonChange(formData.cartonQuantity, b);
-                    }}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none"
-                  />
-                  <div className="text-[10px] text-amber-600 dark:text-amber-400 font-bold mt-1">
-                    = {formData.cartonQuantity * formData.boxesPerCarton} Total Boxes inside cartons
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1 flex items-center justify-between">
-                    <span>Vials per Box</span>
-                    <span className="text-[9px] text-slate-400 font-normal flex items-center gap-0.5">
-                      <Lock className="h-2.5 w-2.5" /> Read-Only
-                    </span>
-                  </label>
-                  <div className="w-full px-3.5 py-2.5 bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
-                    <span>{vialsPerBox} Vials</span>
-                    <span className="text-[10px] text-slate-400 font-mono">per Box</span>
-                  </div>
-                  <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold mt-1">
-                    = {(formData.cartonQuantity * formData.boxesPerCarton * vialsPerBox).toLocaleString()} Total Vials
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Commercial Boxes Received (Loose) *
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={formData.boxesReceived}
-                    onChange={(e) => {
-                      const b = parseInt(e.target.value) || 0;
-                      handleBoxesReceivedChange(b);
-                    }}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none"
-                  />
-                  <div className="text-[10px] text-amber-600 dark:text-amber-400 font-bold mt-1">
-                    Loose / Standalone Commercial Boxes
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1 flex items-center justify-between">
-                    <span>Vials / Ampoules per Box</span>
-                    <span className="text-[9px] text-slate-400 font-normal flex items-center gap-0.5">
-                      <Lock className="h-2.5 w-2.5" /> Read-Only
-                    </span>
-                  </label>
-                  <div className="w-full px-3.5 py-2.5 bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
-                    <span>{vialsPerBox} Vials</span>
-                    <span className="text-[10px] text-slate-400 font-mono">per Box</span>
-                  </div>
-                  <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold mt-1">
-                    = {(formData.boxesReceived * vialsPerBox).toLocaleString()} Total Vials
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Calculated Breakdown Summary Banner for Vials */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
-              <div className="p-3 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total Commercial Boxes</span>
-                <span className="text-lg font-black text-slate-900 dark:text-white font-mono">
-                  {totalBoxes.toLocaleString()}
-                </span>
-                <span className="text-[10px] text-slate-500 block mt-0.5">
-                  {receivingUnit === "CARTON" ? `${formData.cartonQuantity} cartons × ${formData.boxesPerCarton}` : `${formData.boxesReceived} loose boxes`}
-                </span>
-              </div>
-              <div className="p-3 bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 rounded-xl">
-                <span className="text-[10px] font-bold text-amber-600 uppercase tracking-wider block">Vials per Box</span>
-                <span className="text-lg font-black text-amber-700 dark:text-amber-300 font-mono">
-                  {vialsPerBox.toLocaleString()} Vials
-                </span>
-                <span className="text-[10px] text-amber-500 block mt-0.5">
-                  Injectables packed per box
-                </span>
-              </div>
-              <div className="p-3 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/40 rounded-xl">
-                <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider block">Total Vials Inward</span>
-                <span className="text-lg font-black text-emerald-700 dark:text-emerald-300 font-mono">
-                  {formData.quantity.toLocaleString()} Vials
-                </span>
-                <span className="text-[10px] text-emerald-600/80 block mt-0.5">
-                  {totalBoxes} boxes × {vialsPerBox} vials/box
-                </span>
-              </div>
-            </div>
-
-            {/* Same Batch Support Breakdown Preview Banner for Vials */}
-            <div className="p-4 bg-gradient-to-r from-slate-50 to-amber-50/40 dark:from-slate-800/50 dark:to-amber-950/20 border border-amber-100 dark:border-amber-900/30 rounded-xl space-y-2">
-              <div className="flex items-center justify-between flex-wrap gap-2 text-xs font-bold text-slate-700 dark:text-slate-300">
-                <span className="flex items-center gap-1.5">
-                  <Package className="h-4 w-4 text-amber-500" />
-                  Receiving Breakdown Preview:
-                </span>
-                <span className="text-amber-600 dark:text-amber-400 font-mono">
-                  {receivingUnit === "CARTON"
-                    ? `${formData.cartonQuantity} Cartons × ${formData.boxesPerCarton} Boxes = ${totalBoxes} Boxes (${formData.quantity.toLocaleString()} Vials)`
-                    : `${formData.boxesReceived} Loose Boxes = ${formData.quantity.toLocaleString()} Vials (0 Cartons)`}
-                </span>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-            <div className="font-black text-sm text-slate-900 dark:text-white flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 flex-wrap gap-2">
-              <span className="flex items-center gap-2">
-                <Layers className="h-4 w-4 text-brand-primary" />
-                3. Receiving Unit & Packaging Hierarchy
-              </span>
-              <div className="flex items-center gap-2 flex-wrap text-xs font-black">
-                <span className="text-brand-primary bg-brand-primary/10 px-3 py-1 rounded-full">
-                  Total Boxes: {totalBoxes.toLocaleString()} Boxes
-                </span>
-                <span className="text-indigo-600 bg-indigo-50 dark:bg-indigo-950/40 px-3 py-1 rounded-full">
-                  Total Strips: {(totalBoxes * strips).toLocaleString()} Strips
-                </span>
-                <span className="text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-1 rounded-full">
-                  Total Tablets: {formData.quantity.toLocaleString()} Tablets
-                </span>
-              </div>
-            </div>
-
-            {/* Receiving Unit Selector */}
-            <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="text-xs font-bold text-slate-800 dark:text-slate-200">How is this stock being received?</p>
-                <p className="text-[11px] text-slate-500">Choose Carton for whole carton shipments, or Box for loose/standalone boxes</p>
-              </div>
-              <div className="flex bg-slate-200 dark:bg-slate-700 p-1 rounded-xl">
-                <button
-                  type="button"
-                  onClick={() => handleReceivingUnitToggle("CARTON")}
-                  className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition ${
-                    receivingUnit === "CARTON"
-                      ? "bg-white dark:bg-slate-900 text-brand-primary shadow-sm"
-                      : "text-slate-600 dark:text-slate-300 hover:text-slate-900"
-                  }`}
-                >
-                  <Package className="h-3.5 w-3.5" />
-                  Carton Receiving
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleReceivingUnitToggle("BOX")}
-                  className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition ${
-                    receivingUnit === "BOX"
-                      ? "bg-white dark:bg-slate-900 text-brand-primary shadow-sm"
-                      : "text-slate-600 dark:text-slate-300 hover:text-slate-900"
-                  }`}
-                >
-                  <Boxes className="h-3.5 w-3.5" />
-                  Box Receiving
-                </button>
-              </div>
-            </div>
-
-            {/* Packaging Configuration Notice */}
-            <div className="p-3 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-xl flex items-center justify-between text-xs text-slate-600 dark:text-slate-400">
-              <span className="flex items-center gap-1.5">
-                <Lock className="h-3.5 w-3.5 text-slate-400" />
-                <span>
-                  <strong>Product Packaging (Read-Only):</strong> Strips per Box and Tablets per Strip are locked to this product's catalog configuration.
-                </span>
-              </span>
-              <span className="font-bold text-brand-primary font-mono text-[11px]">
-                1 Box = {strips} Strips = {tabletsPerBox} Tablets
-              </span>
-            </div>
-
-            {receivingUnit === "CARTON" ? (
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Cartons Received *
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={formData.cartonQuantity}
-                    onChange={(e) => {
-                      const c = parseInt(e.target.value) || 0;
-                      handleCartonChange(c, formData.boxesPerCarton);
-                    }}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none"
-                  />
-                  <div className="text-[10px] text-slate-400 mt-1">Whole sealed cartons received</div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Boxes per Carton *
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={formData.boxesPerCarton}
-                    onChange={(e) => {
-                      const b = parseInt(e.target.value) || 1;
-                      handleCartonChange(formData.cartonQuantity, b);
-                    }}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none"
-                  />
-                  <div className="text-[10px] text-brand-primary font-bold mt-1">
-                    = {formData.cartonQuantity * formData.boxesPerCarton} Total Boxes inside cartons
-                  </div>
-                </div>
-
-                {/* Read-Only Strips per Box */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1 flex items-center justify-between">
-                    <span>Strips per Box</span>
-                    <span className="text-[9px] text-slate-400 font-normal flex items-center gap-0.5">
-                      <Lock className="h-2.5 w-2.5" /> Read-Only
-                    </span>
-                  </label>
-                  <div className="w-full px-3.5 py-2.5 bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
-                    <span>{strips} Strips</span>
-                    <span className="text-[10px] text-slate-400 font-mono">per Box</span>
-                  </div>
-                  <div className="text-[10px] text-slate-400 mt-1">Saved with product</div>
-                </div>
-
-                {/* Read-Only Tablets per Strip */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1 flex items-center justify-between">
-                    <span>Tablets per Strip</span>
-                    <span className="text-[9px] text-slate-400 font-normal flex items-center gap-0.5">
-                      <Lock className="h-2.5 w-2.5" /> Read-Only
-                    </span>
-                  </label>
-                  <div className="w-full px-3.5 py-2.5 bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
-                    <span>{tablets} Tablets</span>
-                    <span className="text-[10px] text-slate-400 font-mono">per Strip</span>
-                  </div>
-                  <div className="text-[10px] text-slate-400 mt-1">Saved with product</div>
-                </div>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Boxes Received *
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={formData.boxesReceived}
-                    onChange={(e) => {
-                      const b = parseInt(e.target.value) || 0;
-                      handleBoxesReceivedChange(b);
-                    }}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none"
-                  />
-                  <div className="text-[10px] text-amber-600 dark:text-amber-400 font-bold mt-1">
-                    Loose / Standalone Boxes (not cartons)
-                  </div>
-                </div>
-
-                {/* Read-Only Strips per Box */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1 flex items-center justify-between">
-                    <span>Strips per Box</span>
-                    <span className="text-[9px] text-slate-400 font-normal flex items-center gap-0.5">
-                      <Lock className="h-2.5 w-2.5" /> Read-Only
-                    </span>
-                  </label>
-                  <div className="w-full px-3.5 py-2.5 bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
-                    <span>{strips} Strips</span>
-                    <span className="text-[10px] text-slate-400 font-mono">per Box</span>
-                  </div>
-                  <div className="text-[10px] text-slate-400 mt-1">Saved with product</div>
-                </div>
-
-                {/* Read-Only Tablets per Strip */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1 flex items-center justify-between">
-                    <span>Tablets per Strip</span>
-                    <span className="text-[9px] text-slate-400 font-normal flex items-center gap-0.5">
-                      <Lock className="h-2.5 w-2.5" /> Read-Only
-                    </span>
-                  </label>
-                  <div className="w-full px-3.5 py-2.5 bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
-                    <span>{tablets} Tablets</span>
-                    <span className="text-[10px] text-slate-400 font-mono">per Strip</span>
-                  </div>
-                  <div className="text-[10px] text-slate-400 mt-1">Saved with product</div>
-                </div>
-              </div>
-            )}
-
-            {/* Calculated Breakdown Summary Banner */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
-              <div className="p-3 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total Boxes</span>
-                <span className="text-lg font-black text-slate-900 dark:text-white font-mono">
-                  {totalBoxes.toLocaleString()}
-                </span>
-                <span className="text-[10px] text-slate-500 block mt-0.5">
-                  {receivingUnit === "CARTON" ? `${formData.cartonQuantity} cartons × ${formData.boxesPerCarton}` : `${formData.boxesReceived} loose boxes`}
-                </span>
-              </div>
-              <div className="p-3 bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-200 dark:border-indigo-900/40 rounded-xl">
-                <span className="text-[10px] font-bold text-indigo-500 uppercase tracking-wider block">Total Strips</span>
-                <span className="text-lg font-black text-indigo-700 dark:text-indigo-300 font-mono">
-                  {(totalBoxes * strips).toLocaleString()}
-                </span>
-                <span className="text-[10px] text-indigo-500/80 block mt-0.5">
-                  {totalBoxes} boxes × {strips} strips/box
-                </span>
-              </div>
-              <div className="p-3 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/40 rounded-xl">
-                <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider block">Total Tablets</span>
-                <span className="text-lg font-black text-emerald-700 dark:text-emerald-300 font-mono">
-                  {formData.quantity.toLocaleString()}
-                </span>
-                <span className="text-[10px] text-emerald-600/80 block mt-0.5">
-                  {totalBoxes * strips} strips × {tablets} tabs/strip
-                </span>
-              </div>
-            </div>
-
-            {/* Same Batch Support Breakdown Preview Banner */}
-            <div className="p-4 bg-gradient-to-r from-slate-50 to-indigo-50/40 dark:from-slate-800/50 dark:to-indigo-950/20 border border-indigo-100 dark:border-indigo-900/30 rounded-xl space-y-2">
-              <div className="flex items-center justify-between flex-wrap gap-2 text-xs font-bold text-slate-700 dark:text-slate-300">
-                <span className="flex items-center gap-1.5">
-                  <Package className="h-4 w-4 text-indigo-500" />
-                  Receiving Breakdown Preview:
-                </span>
-                <span className="text-indigo-600 dark:text-indigo-400 font-mono">
-                  {receivingUnit === "CARTON"
-                    ? `${formData.cartonQuantity} Cartons × ${formData.boxesPerCarton} Boxes = ${formData.cartonQuantity * formData.boxesPerCarton} Boxes`
-                    : `${formData.boxesReceived} Loose Boxes (0 Cartons)`}
-                </span>
-              </div>
-
-              {selectedExistingBatch ? (
-                <div className="pt-2 border-t border-indigo-100 dark:border-indigo-900/30 text-xs">
-                  <p className="text-slate-600 dark:text-slate-400">
-                    <span className="font-bold text-slate-800 dark:text-slate-200">Existing Batch {selectedExistingBatch.batchNumber}:</span>{" "}
-                    {selectedExistingBatch.cartonQuantity || 0} Full Cartons ({((selectedExistingBatch.cartonQuantity || 0) * (formData.boxesPerCarton || 10))} Boxes) + {selectedExistingBatch.remainingLooseBoxes ?? selectedExistingBatch.looseBoxesReceived ?? 0} Loose Boxes.
-                  </p>
-                  <p className="text-indigo-700 dark:text-indigo-300 font-bold mt-1">
-                    👉 After this {receivingUnit === "CARTON" ? `${formData.cartonQuantity} Carton` : `${formData.boxesReceived} Loose Box`} intake, Batch Total will be:{" "}
-                    <span className="underline">
-                      {(selectedExistingBatch.cartonQuantity || 0) + (receivingUnit === "CARTON" ? formData.cartonQuantity : 0)} Full Cartons
-                    </span>{" "}
-                    ({((selectedExistingBatch.cartonQuantity || 0) + (receivingUnit === "CARTON" ? formData.cartonQuantity : 0)) * (formData.boxesPerCarton || 10)} Boxes inside Cartons) +{" "}
-                    <span className="underline">
-                      {(selectedExistingBatch.remainingLooseBoxes ?? selectedExistingBatch.looseBoxesReceived ?? 0) + (receivingUnit === "BOX" ? formData.boxesReceived : 0)} Loose Boxes
-                    </span>{" "}
-                    = <span className="font-black text-indigo-800 dark:text-indigo-200">{
-                      (((selectedExistingBatch.cartonQuantity || 0) + (receivingUnit === "CARTON" ? formData.cartonQuantity : 0)) * (formData.boxesPerCarton || 10)) +
-                      ((selectedExistingBatch.remainingLooseBoxes ?? selectedExistingBatch.looseBoxesReceived ?? 0) + (receivingUnit === "BOX" ? formData.boxesReceived : 0))
-                    } Total Equivalent Boxes</span>.
-                  </p>
-                  <p className="text-[10px] text-slate-400 mt-0.5">
-                    (Loose boxes will remain separate and will NOT increase carton count or convert loose boxes into cartons.)
-                  </p>
-                </div>
-              ) : (
-                <div className="pt-2 border-t border-indigo-100 dark:border-indigo-900/30 text-xs text-slate-500">
-                  {receivingUnit === "CARTON" ? (
-                    <span>
-                      Will record <span className="font-bold text-slate-800 dark:text-slate-200">{formData.cartonQuantity} Full Cartons</span> ({formData.cartonQuantity * formData.boxesPerCarton} Boxes) and 0 Loose Boxes.
-                    </span>
-                  ) : (
-                    <span>
-                      Will record <span className="font-bold text-slate-800 dark:text-slate-200">{formData.boxesReceived} Loose/Standalone Boxes</span> (0 Cartons).
-                    </span>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Step 4: Purchase Financials & Selling Price */}
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-          <div className="font-black text-sm text-slate-900 dark:text-white flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 flex-wrap gap-2">
-            <span className="flex items-center gap-2">
-              <DollarSign className="h-4 w-4 text-brand-primary" />
-              {isBottle
-                ? "4. Financials & Pricing (Entered per Bottle)"
-                : isPiece
-                ? "4. Financials & Pricing (Entered per Box / Pack)"
-                : isVial
-                ? "4. Financials & Pricing (Entered per Commercial Box)"
-                : "4. Financials & Pricing (Entered per Box)"}
-            </span>
-            <div className="text-xs">
-              <span className="text-slate-400">Total Purchase: </span>
-              <span className="font-black font-mono text-slate-900 dark:text-white">৳{totalCost.toFixed(2)}</span>
-              <span className="text-[10px] text-slate-400 ml-1">
-                ({totalBoxes} {isBottle ? "Bottles" : "Boxes"} × ৳{formData.boxPurchasePrice.toFixed(2)})
-              </span>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                {isBottle
-                  ? "Purchase Price per Bottle (৳) *"
-                  : isPiece
-                  ? "Purchase Price per Box / Pack (৳) *"
-                  : isVial
-                  ? "Purchase Price per Box (৳) *"
-                  : "Purchase Price per Box (৳) *"}
-              </label>
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                required
-                value={formData.boxPurchasePrice}
-                onChange={(e) => {
-                  const p = parseFloat(e.target.value) || 0;
-                  handleBoxPriceChange(p, formData.boxSellingPrice);
+                onFocus={() => {
+                  setSearchResults(searchTerm.trim() ? searchResults : allProducts.slice(0, 20));
+                  setIsSearchOpen(true);
                 }}
-                className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none"
-              />
-              <div className="text-[10px] text-slate-400 mt-1">
-                {isBottle
-                  ? "Distributor invoice price per individual bottle"
-                  : isPiece
-                  ? `Distributor invoice cost for 1 full box (${piecesPerBox} pieces)`
-                  : isVial
-                  ? `Distributor invoice cost for 1 commercial box (${vialsPerBox} vials)`
-                  : "Distributor invoice price per full box"}
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                {isBottle
-                  ? "Selling Price (MRP) per Bottle (৳) *"
-                  : isPiece
-                  ? "Selling Price (MRP) per Box / Pack (৳) *"
-                  : isVial
-                  ? "Selling Price (MRP) per Box (৳) *"
-                  : "Selling Price per Box (৳) *"}
-              </label>
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                required
-                value={formData.boxSellingPrice}
                 onChange={(e) => {
-                  const s = parseFloat(e.target.value) || 0;
-                  handleBoxPriceChange(formData.boxPurchasePrice, s);
+                  setSearchTerm(e.target.value);
+                  setIsSearchOpen(true);
                 }}
-                className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none text-emerald-600"
+                placeholder="Click here or type medicine (Napa, Seclo), syrup, diaper or scan barcode..."
+                className="w-full pl-11 pr-4 py-3 bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl text-sm sm:text-base text-slate-900 dark:text-white placeholder-slate-400 font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition shadow-sm h-12"
               />
-              <div className="text-[10px] text-slate-400 mt-1">
-                {isBottle
-                  ? "Counter MRP / retail price per bottle"
-                  : isPiece
-                  ? `Counter retail price (MRP) for 1 full box (${piecesPerBox} pieces)`
-                  : isVial
-                  ? `Counter retail price (MRP) for 1 full box (${vialsPerBox} vials)`
-                  : "Counter MRP / retail price per full box"}
-              </div>
-            </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                Amount Paid to Supplier Now (৳)
-              </label>
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                value={formData.paidAmount}
-                onChange={(e) =>
-                  setFormData({ ...formData, paidAmount: parseFloat(e.target.value) || 0 })
-                }
-                className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none"
-              />
-              {dueAmount > 0 && (
-                <div className="text-[10px] text-rose-500 font-bold mt-1">
-                  Supplier Due: ৳{dueAmount.toFixed(2)}
+              {/* Autocomplete Dropdown List */}
+              {isSearchOpen && searchResults.length > 0 && (
+                <div className="absolute left-0 right-0 top-full mt-2 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl z-50 max-h-80 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
+                  {searchResults.map((prod) => {
+                    const stock = getProductStockCount(prod);
+                    const model = getPackagingModel(prod);
+                    return (
+                      <div
+                        key={prod.id}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          handleAddProductToTable(prod);
+                        }}
+                        className="px-4 py-3.5 hover:bg-emerald-50 dark:hover:bg-emerald-950/50 cursor-pointer flex items-center justify-between transition"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200">
+                            {model === "TABLET" && <Pill className="w-5 h-5 text-emerald-600" />}
+                            {model === "BOTTLE" && <Droplets className="w-5 h-5 text-blue-600" />}
+                            {model === "PIECE" && <Package className="w-5 h-5 text-amber-600" />}
+                            {model === "VIAL" && <Syringe className="w-5 h-5 text-purple-600" />}
+                          </div>
+                          <div>
+                            <div className="text-sm sm:text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
+                              <span>{prod.name}</span>
+                              <span
+                                className={`text-xs px-2 py-0.5 rounded-md font-bold uppercase tracking-wider ${
+                                  model === "TABLET"
+                                    ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/70 dark:text-emerald-300"
+                                    : model === "BOTTLE"
+                                    ? "bg-blue-100 text-blue-800 dark:bg-blue-900/70 dark:text-blue-300"
+                                    : model === "PIECE"
+                                    ? "bg-amber-100 text-amber-800 dark:bg-amber-900/70 dark:text-amber-300"
+                                    : "bg-purple-100 text-purple-800 dark:bg-purple-900/70 dark:text-purple-300"
+                                }`}
+                              >
+                                {model === "TABLET"
+                                  ? "Tablet / Box"
+                                  : model === "BOTTLE"
+                                  ? "Syrup / Bottle"
+                                  : model === "PIECE"
+                                  ? "Diaper / Piece"
+                                  : "Injection / Vial"}
+                              </span>
+                            </div>
+                            <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
+                              {prod.genericName || "—"}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="text-right flex items-center gap-3">
+                          <div>
+                            <span
+                              className={`text-xs font-black px-2.5 py-1 rounded-full ${
+                                stock > 0
+                                  ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-300"
+                                  : "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300"
+                              }`}
+                            >
+                              Stock: {stock} {prod.unit || "Pcs"}
+                            </span>
+                            <div className="text-sm font-black text-slate-800 dark:text-slate-200 mt-1">
+                              MRP: ৳{Number(prod.effectivePrice || prod.basePrice || 0).toFixed(2)}
+                            </div>
+                          </div>
+                          <div className="p-2 rounded-lg bg-emerald-600 text-white shadow-sm">
+                            <Plus className="w-4 h-4" />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
           </div>
 
-          {/* Automatic Price Derivation Banner */}
-          {isBottle ? (
-            <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2 text-xs">
-              <div className="font-bold text-slate-800 dark:text-slate-200 flex items-center justify-between flex-wrap gap-2">
-                <span className="flex items-center gap-1.5">
-                  <Calculator className="h-4 w-4 text-brand-primary" />
-                  Automatic Bottle Pricing & Carton Equivalent:
-                </span>
-                {formData.boxSellingPrice > formData.boxPurchasePrice && (
-                  <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100/70 dark:bg-emerald-950/50 px-2.5 py-0.5 rounded-full">
-                    Profit Margin: ৳{(formData.boxSellingPrice - formData.boxPurchasePrice).toFixed(2)} / Bottle ({formData.boxSellingPrice > 0 ? Math.round(((formData.boxSellingPrice - formData.boxPurchasePrice) / formData.boxSellingPrice) * 100) : 0}%)
-                  </span>
-                )}
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
-                <div className="p-3 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 space-y-1">
-                  <div className="text-[11px] font-bold text-slate-400">Purchase Price Flow</div>
-                  <div className="text-xs font-mono font-bold text-slate-800 dark:text-slate-200">
-                    ৳{formData.boxPurchasePrice.toFixed(2)} / Bottle
-                    <span className="text-slate-400 font-normal"> → </span>
-                    <span className="text-brand-primary font-black">1 Carton ({formData.boxesPerCarton} Bottles) = ৳{(formData.boxPurchasePrice * formData.boxesPerCarton).toFixed(2)}</span>
-                  </div>
-                  <div className="text-[10px] text-slate-400">
-                    Distributor invoice cost per bottle & full carton equivalent
-                  </div>
-                </div>
-
-                <div className="p-3 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 space-y-1">
-                  <div className="text-[11px] font-bold text-slate-400">Selling Price Flow (MRP)</div>
-                  <div className="text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                    ৳{formData.boxSellingPrice.toFixed(2)} / Bottle
-                    <span className="text-slate-400 font-normal"> → </span>
-                    <span className="font-black">1 Carton ({formData.boxesPerCarton} Bottles) = ৳{(formData.boxSellingPrice * formData.boxesPerCarton).toFixed(2)}</span>
-                  </div>
-                  <div className="text-[10px] text-slate-400">
-                    Counter retail price (MRP) per bottle & full carton equivalent
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : isPiece ? (
-            <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2 text-xs">
-              <div className="font-bold text-slate-800 dark:text-slate-200 flex items-center justify-between flex-wrap gap-2">
-                <span className="flex items-center gap-1.5">
-                  <Calculator className="h-4 w-4 text-purple-600" />
-                  Automatic Piece / Unit Pricing & Box Derivation:
-                </span>
-                {formData.boxSellingPrice > formData.boxPurchasePrice && (
-                  <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100/70 dark:bg-emerald-950/50 px-2.5 py-0.5 rounded-full">
-                    Profit Margin: ৳{(formData.boxSellingPrice - formData.boxPurchasePrice).toFixed(2)} / Box (৳{(pieceSelling - piecePurchase).toFixed(2)} / Piece) ({formData.boxSellingPrice > 0 ? Math.round(((formData.boxSellingPrice - formData.boxPurchasePrice) / formData.boxSellingPrice) * 100) : 0}%)
-                  </span>
-                )}
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
-                <div className="p-3 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 space-y-1">
-                  <div className="text-[11px] font-bold text-slate-400">Purchase Price Flow</div>
-                  <div className="text-xs font-mono font-bold text-slate-800 dark:text-slate-200">
-                    ৳{formData.boxPurchasePrice.toFixed(2)} / Box
-                    <span className="text-slate-400 font-normal"> → </span>
-                    <span className="text-purple-600 font-black">৳{piecePurchase.toFixed(2)} / Piece</span>
-                  </div>
-                  <div className="text-[10px] text-slate-400">
-                    1 Box / Pack = {piecesPerBox} Pieces (Unit purchase cost derived)
-                  </div>
-                </div>
-
-                <div className="p-3 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 space-y-1">
-                  <div className="text-[11px] font-bold text-slate-400">Selling Price Flow (MRP)</div>
-                  <div className="text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                    ৳{formData.boxSellingPrice.toFixed(2)} / Box
-                    <span className="text-slate-400 font-normal"> → </span>
-                    <span className="font-black">৳{pieceSelling.toFixed(2)} / Piece</span>
-                  </div>
-                  <div className="text-[10px] text-slate-400">
-                    1 Box / Pack = {piecesPerBox} Pieces (Counter retail MRP per piece derived)
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : isVial ? (
-            <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2 text-xs">
-              <div className="font-bold text-slate-800 dark:text-slate-200 flex items-center justify-between flex-wrap gap-2">
-                <span className="flex items-center gap-1.5">
-                  <Calculator className="h-4 w-4 text-amber-600" />
-                  Automatic Injection / Vial Pricing & Box Derivation:
-                </span>
-                {formData.boxSellingPrice > formData.boxPurchasePrice && (
-                  <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100/70 dark:bg-emerald-950/50 px-2.5 py-0.5 rounded-full">
-                    Profit Margin: ৳{(formData.boxSellingPrice - formData.boxPurchasePrice).toFixed(2)} / Box (৳{(vialSelling - vialPurchase).toFixed(2)} / Vial) ({formData.boxSellingPrice > 0 ? Math.round(((formData.boxSellingPrice - formData.boxPurchasePrice) / formData.boxSellingPrice) * 100) : 0}%)
-                  </span>
-                )}
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
-                <div className="p-3 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 space-y-1">
-                  <div className="text-[11px] font-bold text-slate-400">Purchase Price Flow</div>
-                  <div className="text-xs font-mono font-bold text-slate-800 dark:text-slate-200">
-                    ৳{formData.boxPurchasePrice.toFixed(2)} / Box
-                    <span className="text-slate-400 font-normal"> → </span>
-                    <span className="text-amber-600 font-black">৳{vialPurchase.toFixed(2)} / Vial</span>
-                  </div>
-                  <div className="text-[10px] text-slate-400">
-                    1 Commercial Box = {vialsPerBox} Vials / Ampoules (Unit purchase cost derived)
-                  </div>
-                </div>
-
-                <div className="p-3 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 space-y-1">
-                  <div className="text-[11px] font-bold text-slate-400">Selling Price Flow (MRP)</div>
-                  <div className="text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                    ৳{formData.boxSellingPrice.toFixed(2)} / Box
-                    <span className="text-slate-400 font-normal"> → </span>
-                    <span className="font-black">৳{vialSelling.toFixed(2)} / Vial</span>
-                  </div>
-                  <div className="text-[10px] text-slate-400">
-                    1 Commercial Box = {vialsPerBox} Vials / Ampoules (Counter retail MRP per vial derived)
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2 text-xs">
-              <div className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                <Calculator className="h-4 w-4 text-brand-primary" />
-                Automatic Unit Price Derivation (Box Price → Strip Price → Tablet Price):
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
-                <div className="p-3 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 space-y-1">
-                  <div className="text-[11px] font-bold text-slate-400">Purchase Price Flow</div>
-                  <div className="text-xs font-mono font-bold text-slate-800 dark:text-slate-200">
-                    ৳{formData.boxPurchasePrice.toFixed(2)} / Box
-                    <span className="text-slate-400 font-normal"> → </span>
-                    ৳{stripPurchase.toFixed(2)} / Strip
-                    <span className="text-slate-400 font-normal"> → </span>
-                    <span className="text-brand-primary font-black">৳{tabletPurchase.toFixed(2)} / Tablet</span>
-                  </div>
-                  <div className="text-[10px] text-slate-400">
-                    1 Box ({strips} Strips × {tablets} Tablets = {tabletsPerBox} Tablets)
-                  </div>
-                </div>
-
-                <div className="p-3 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 space-y-1">
-                  <div className="text-[11px] font-bold text-slate-400">Selling Price Flow</div>
-                  <div className="text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                    ৳{formData.boxSellingPrice.toFixed(2)} / Box
-                    <span className="text-slate-400 font-normal"> → </span>
-                    ৳{stripSelling.toFixed(2)} / Strip
-                    <span className="text-slate-400 font-normal"> → </span>
-                    <span className="font-black">৳{tabletSelling.toFixed(2)} / Tablet</span>
-                  </div>
-                  <div className="text-[10px] text-slate-400">
-                    1 Box ({strips} Strips × {tablets} Tablets = {tabletsPerBox} Tablets)
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {formData.paidAmount > 0 && (
-            <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                Select Branch Payment Account (Debited) *
-              </label>
-              {financialAccounts.length === 0 ? (
-                <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-xl text-xs text-rose-700 dark:text-rose-300 font-bold">
-                  ⚠️ No active financial account created for this branch. Please create an account in Accounts & Finance first before completing supplier payments.
-                </div>
-              ) : (
-                <select
-                  required
-                  value={formData.financialAccountId}
-                  onChange={(e) => setFormData({ ...formData, financialAccountId: e.target.value })}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none"
-                >
-                  {financialAccounts.map((acc) => (
-                    <option key={acc.id} value={acc.id}>
-                      {acc.name} ({acc.type}){acc.accountNumber ? ` - A/C: ${acc.accountNumber}` : ""} [Balance: ৳{Number(acc.balance).toFixed(2)}]
-                    </option>
-                  ))}
-                </select>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Submit Action */}
-        <div className="flex items-center justify-end gap-3 pt-2">
+          {/* Add New Product Quick Button */}
           <button
             type="button"
-            onClick={() => onNavigate("stock_stock_list")}
-            className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition"
+            onClick={() => setShowAddProductModal(true)}
+            className="inline-flex items-center justify-center gap-2 px-5 py-3 text-sm sm:text-base font-black rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition h-12"
           >
-            Cancel
+            <Plus className="w-5 h-5" />
+            Add New Product
           </button>
+        </div>
+
+        {/* Dynamic Multi-Product Items Table - Clean & Large Typography */}
+        <div className="overflow-x-auto w-full">
+          <table className="w-full text-left border-collapse min-w-[1050px]">
+            <thead>
+              <tr className="bg-[#1b5e20] dark:bg-emerald-900 text-white text-xs sm:text-sm font-black tracking-wider divide-x divide-emerald-700/50">
+                <th className="py-4 px-3 text-center w-12">#</th>
+                <th className="py-4 px-4 min-w-[260px]">Product / Medicine</th>
+                <th className="py-4 px-4 min-w-[260px]">Stock In Unit & Intake Qty</th>
+                <th className="py-4 px-4 min-w-[160px]">Purchase Cost (৳)</th>
+                <th className="py-4 px-4 min-w-[140px] text-right">Total (৳)</th>
+                <th className="py-4 px-4 min-w-[160px]">Selling Price (MRP)</th>
+                <th className="py-4 px-4 min-w-[170px]">Lot / Batch & EXP Date</th>
+                <th className="py-4 px-3 text-center w-14">
+                  <Trash2 className="w-5 h-5 mx-auto text-emerald-200" />
+                </th>
+              </tr>
+            </thead>
+
+            <tbody className="divide-y-2 divide-slate-100 dark:divide-slate-800 text-sm">
+              {lineItems.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="py-14 text-center text-slate-400">
+                    <div className="flex flex-col items-center justify-center space-y-2">
+                      <Search className="w-10 h-10 text-slate-300 dark:text-slate-600 stroke-[1.5]" />
+                      <p className="text-base font-black text-slate-600 dark:text-slate-300">
+                        No products added yet.
+                      </p>
+                      <p className="text-sm font-semibold text-slate-400">
+                        Click search above or scan barcode to add medicines to this challan.
+                      </p>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                lineItems.map((item, index) => {
+                  const isTablet = item.packagingModel === "TABLET";
+                  const isBottle = item.packagingModel === "BOTTLE";
+                  const isPiece = item.packagingModel === "PIECE";
+                  const isVial = item.packagingModel === "VIAL";
+
+                  return (
+                    <tr
+                      key={item.id}
+                      className="hover:bg-slate-50/70 dark:hover:bg-slate-800/50 transition divide-x-2 divide-slate-100 dark:divide-slate-800 align-top"
+                    >
+                      {/* # */}
+                      <td className="py-4 px-3 text-center text-slate-400 font-mono font-bold text-sm">
+                        {index + 1}
+                      </td>
+
+                      {/* Product Name & Packaging Type Badge */}
+                      <td className="py-4 px-3.5">
+                        <div className="font-black text-base sm:text-lg text-slate-900 dark:text-white leading-tight">
+                          {item.product.name}
+                        </div>
+                        <div className="text-xs font-bold text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-2 flex-wrap">
+                          <span
+                            className={`px-2 py-0.5 rounded font-black uppercase text-[10px] ${
+                              isTablet
+                                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                                : isBottle
+                                ? "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300"
+                                : isPiece
+                                ? "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                                : "bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300"
+                            }`}
+                          >
+                            {isTablet ? "Tablet / Capsule" : isBottle ? "Syrup" : isPiece ? "Diaper / Piece" : "Injection"}
+                          </span>
+                          <span>•</span>
+                          <span className="text-emerald-600 dark:text-emerald-400 font-black">
+                            Stock: {item.currentStock} {item.product.unit || "Pcs"}
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* Stock In Unit & Intake Qty Input */}
+                      <td className="py-4 px-3.5 space-y-2.5">
+                        {/* Packaging Unit Switcher Pill */}
+                        <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-black">
+                          {isTablet && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => updateLineItem(item.id, { receivingMode: "BOX" })}
+                                className={`flex-1 py-1.5 px-2 rounded-lg text-center transition ${
+                                  item.receivingMode === "BOX"
+                                    ? "bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-300 shadow-sm"
+                                    : "text-slate-500 hover:text-slate-900"
+                                }`}
+                              >
+                                🗃️ Box Intake
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => updateLineItem(item.id, { receivingMode: "CARTON" })}
+                                className={`flex-1 py-1.5 px-2 rounded-lg text-center transition ${
+                                  item.receivingMode === "CARTON"
+                                    ? "bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-300 shadow-sm"
+                                    : "text-slate-500 hover:text-slate-900"
+                                }`}
+                              >
+                                📦 Carton Intake
+                              </button>
+                            </>
+                          )}
+
+                          {isBottle && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => updateLineItem(item.id, { receivingMode: "BOTTLE" })}
+                                className={`flex-1 py-1.5 px-2 rounded-lg text-center transition ${
+                                  item.receivingMode === "BOTTLE"
+                                    ? "bg-white dark:bg-slate-900 text-blue-700 dark:text-blue-300 shadow-sm"
+                                    : "text-slate-500 hover:text-slate-900"
+                                }`}
+                              >
+                                🍾 Bottle
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => updateLineItem(item.id, { receivingMode: "CARTON" })}
+                                className={`flex-1 py-1.5 px-2 rounded-lg text-center transition ${
+                                  item.receivingMode === "CARTON"
+                                    ? "bg-white dark:bg-slate-900 text-blue-700 dark:text-blue-300 shadow-sm"
+                                    : "text-slate-500 hover:text-slate-900"
+                                }`}
+                              >
+                                📦 Carton ({item.boxesPerCarton} btl)
+                              </button>
+                            </>
+                          )}
+
+                          {isPiece && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => updateLineItem(item.id, { receivingMode: "PIECE" })}
+                                className={`flex-1 py-1.5 px-2 rounded-lg text-center transition ${
+                                  item.receivingMode === "PIECE"
+                                    ? "bg-white dark:bg-slate-900 text-amber-700 dark:text-amber-300 shadow-sm"
+                                    : "text-slate-500 hover:text-slate-900"
+                                }`}
+                              >
+                                🧩 Piece / Unit
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => updateLineItem(item.id, { receivingMode: "PACK" })}
+                                className={`flex-1 py-1.5 px-2 rounded-lg text-center transition ${
+                                  item.receivingMode === "PACK"
+                                    ? "bg-white dark:bg-slate-900 text-amber-700 dark:text-amber-300 shadow-sm"
+                                    : "text-slate-500 hover:text-slate-900"
+                                }`}
+                              >
+                                📦 Pack ({item.stripsPerBox} pcs)
+                              </button>
+                            </>
+                          )}
+
+                          {isVial && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => updateLineItem(item.id, { receivingMode: "VIAL" })}
+                                className={`flex-1 py-1.5 px-2 rounded-lg text-center transition ${
+                                  item.receivingMode === "VIAL"
+                                    ? "bg-white dark:bg-slate-900 text-purple-700 dark:text-purple-300 shadow-sm"
+                                    : "text-slate-500 hover:text-slate-900"
+                                }`}
+                              >
+                                💉 Vial
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => updateLineItem(item.id, { receivingMode: "BOX" })}
+                                className={`flex-1 py-1.5 px-2 rounded-lg text-center transition ${
+                                  item.receivingMode === "BOX"
+                                    ? "bg-white dark:bg-slate-900 text-purple-700 dark:text-purple-300 shadow-sm"
+                                    : "text-slate-500 hover:text-slate-900"
+                                }`}
+                              >
+                                📦 Box ({item.stripsPerBox} vials)
+                              </button>
+                            </>
+                          )}
+                        </div>
+
+                        {/* Quantity Input */}
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            min="1"
+                            step="1"
+                            value={item.enteredQuantity}
+                            onChange={(e) =>
+                              updateLineItem(item.id, {
+                                enteredQuantity: Math.max(1, Number(e.target.value) || 1),
+                              })
+                            }
+                            className="w-28 text-sm sm:text-base font-black text-slate-900 dark:text-white bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-right focus:ring-2 focus:ring-emerald-500 font-mono shadow-sm"
+                          />
+                          <span className="text-sm font-black text-slate-800 dark:text-slate-200">
+                            {item.receivingMode === "CARTON"
+                              ? "Cartons"
+                              : item.receivingMode === "BOX"
+                              ? "Boxes"
+                              : item.receivingMode === "PACK"
+                              ? "Packs"
+                              : item.receivingMode === "BOTTLE"
+                              ? "Bottles"
+                              : "Pieces"}
+                          </span>
+                        </div>
+
+                        {/* Breakdown Calculation Banner */}
+                        <div className="text-xs font-black text-slate-700 dark:text-slate-300">
+                          {isTablet && (
+                            <span>
+                              = {item.totalBoxesOrPacks} Boxes ({item.totalLowestUnits.toLocaleString()} Tablets)
+                            </span>
+                          )}
+                          {isBottle && (
+                            <span>
+                              = {item.totalLowestUnits} Bottles
+                            </span>
+                          )}
+                          {isPiece && (
+                            <span>
+                              = {item.totalLowestUnits} Pieces
+                            </span>
+                          )}
+                          {isVial && (
+                            <span>
+                              = {item.totalLowestUnits} Vials
+                            </span>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Purchase Cost */}
+                      <td className="py-4 px-3.5">
+                        <div className="text-xs font-black text-slate-500 dark:text-slate-400 mb-1.5">
+                          {isTablet
+                            ? "Cost / Box (৳):"
+                            : isBottle
+                            ? "Cost / Bottle (৳):"
+                            : item.receivingMode === "PACK"
+                            ? "Cost / Pack (৳):"
+                            : "Cost / Piece (৳):"}
+                        </div>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={item.unitCostBeforeDiscount}
+                          onChange={(e) =>
+                            updateLineItem(item.id, {
+                              unitCostBeforeDiscount: Math.max(0, Number(e.target.value) || 0),
+                            })
+                          }
+                          className="w-full text-sm sm:text-base font-black text-slate-900 dark:text-white bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-right focus:ring-2 focus:ring-emerald-500 font-mono"
+                        />
+                        {isTablet && (
+                          <div className="text-xs font-bold text-slate-500 mt-1 text-right font-mono">
+                            ৳{item.lowestUnitCost.toFixed(2)}/tab
+                          </div>
+                        )}
+                      </td>
+
+                      {/* Total (৳) */}
+                      <td className="py-4 px-4 text-right align-middle">
+                        <div className="inline-flex items-center justify-end px-3.5 py-2.5 rounded-xl bg-emerald-50/80 dark:bg-emerald-950/60 border-2 border-emerald-200 dark:border-emerald-800/80 shadow-sm">
+                          <span className="text-base sm:text-xl font-black text-emerald-700 dark:text-emerald-300 font-mono">
+                            ৳{item.lineTotal.toFixed(2)}
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* Selling Price / MRP */}
+                      <td className="py-4 px-3.5">
+                        <div className="text-xs font-black text-slate-500 dark:text-slate-400 mb-1.5">
+                          {isTablet
+                            ? "MRP / Box (৳):"
+                            : isBottle
+                            ? "MRP / Bottle (৳):"
+                            : item.receivingMode === "PACK"
+                            ? "MRP / Pack (৳):"
+                            : "MRP / Piece (৳):"}
+                        </div>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={item.unitSellingPrice}
+                          onChange={(e) =>
+                            updateLineItem(item.id, {
+                              unitSellingPrice: Math.max(0, Number(e.target.value) || 0),
+                            })
+                          }
+                          className="w-full text-sm sm:text-base font-black text-slate-900 dark:text-white bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-right focus:ring-2 focus:ring-emerald-500 font-mono"
+                        />
+                        {isTablet && (
+                          <div className="text-xs font-bold text-slate-500 mt-1 text-right font-mono">
+                            ৳{item.lowestUnitSelling.toFixed(2)}/tab
+                          </div>
+                        )}
+                      </td>
+
+                      {/* Lot / Batch & Expiry Date */}
+                      <td className="py-4 px-3.5 space-y-2">
+                        <input
+                          type="text"
+                          value={item.lotNumber}
+                          onChange={(e) =>
+                            updateLineItem(item.id, {
+                              lotNumber: e.target.value,
+                            })
+                          }
+                          placeholder="Batch / Lot #"
+                          className="w-full text-xs sm:text-sm font-bold font-mono bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-2.5 py-1.5 focus:ring-2 focus:ring-emerald-500"
+                        />
+                        <div className="flex items-center gap-1 text-xs font-black text-slate-500">
+                          <span>EXP:</span>
+                          <input
+                            type="date"
+                            value={item.expiryDate}
+                            onChange={(e) =>
+                              updateLineItem(item.id, {
+                                expiryDate: e.target.value,
+                              })
+                            }
+                            className="text-xs font-black bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-2 py-1 text-slate-900 dark:text-white font-mono w-full"
+                          />
+                        </div>
+                      </td>
+
+                      {/* Action: Delete */}
+                      <td className="py-4 px-2.5 text-center">
+                        <button
+                          type="button"
+                          onClick={() => removeLineItem(item.id)}
+                          className="p-2 rounded-xl text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition"
+                          title="Remove item"
+                        >
+                          <X className="w-5 h-5 mx-auto" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Table Bottom Summary Bar */}
+        <div className="p-4 sm:p-5 bg-slate-50 dark:bg-slate-800/60 border-t-2 border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row justify-end items-end sm:items-center gap-6 sm:gap-10">
+          <div className="flex items-center gap-2.5">
+            <span className="text-sm font-black text-slate-600 dark:text-slate-300">Total Items:</span>
+            <span className="font-black text-slate-900 dark:text-white font-mono text-base sm:text-lg">
+              {totalItemsCount.toFixed(2)}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2.5">
+            <span className="text-sm font-black text-slate-600 dark:text-slate-300">Subtotal Amount:</span>
+            <span className="font-black text-slate-900 dark:text-white font-mono text-xl sm:text-2xl">
+              ৳{subtotal.toFixed(2)}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Section 3: Discount Section */}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border-2 border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-sm">
+        <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white mb-4 pb-2 border-b border-slate-100 dark:border-slate-800">
+          Discount
+        </h2>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
+          {/* Left Column: Discount Controls */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-black text-slate-800 dark:text-slate-200 mb-2">
+                Discount Type:
+              </label>
+              <select
+                value={discountType}
+                onChange={(e) => setDiscountType(e.target.value as any)}
+                className="w-full text-sm font-bold bg-slate-50 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 h-11"
+              >
+                <option value="NONE">None</option>
+                <option value="FIXED">Fixed Amount (৳)</option>
+                <option value="PERCENT">Percentage (%)</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-black text-slate-800 dark:text-slate-200 mb-2">
+                Discount Amount:
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                disabled={discountType === "NONE"}
+                value={discountAmount}
+                onChange={(e) => setDiscountAmount(Math.max(0, Number(e.target.value) || 0))}
+                placeholder="0.00"
+                className="w-full text-sm font-bold bg-slate-50 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 disabled:opacity-50 h-11 font-mono"
+              />
+            </div>
+          </div>
+
+          {/* Right Column: Financial Breakdown Summary */}
+          <div className="bg-slate-50 dark:bg-slate-800/50 rounded-2xl p-6 border-2 border-slate-200 dark:border-slate-800 flex flex-col justify-between space-y-4">
+            <div className="space-y-4 divide-y-2 divide-slate-200 dark:divide-slate-700/60">
+              <div className="flex justify-between items-center py-1">
+                <span className="text-sm sm:text-base font-bold text-slate-600 dark:text-slate-400">Subtotal:</span>
+                <span className="font-black text-slate-900 dark:text-white font-mono text-base sm:text-lg">
+                  ৳{subtotal.toFixed(2)}
+                </span>
+              </div>
+
+              <div className="flex justify-between items-center pt-3">
+                <span className="text-sm sm:text-base font-bold text-slate-600 dark:text-slate-400">Discount:(-)</span>
+                <span className="font-black text-rose-600 dark:text-rose-400 font-mono text-base sm:text-lg">
+                  ৳{calculatedInvoiceDiscount.toFixed(2)}
+                </span>
+              </div>
+
+              <div className="flex justify-between items-center pt-4">
+                <span className="text-base sm:text-lg font-black text-slate-900 dark:text-white">Net Total Amount:</span>
+                <span className="text-2xl sm:text-3xl font-black text-emerald-600 dark:text-emerald-400 font-mono">
+                  ৳{netTotalAmount.toFixed(2)}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Section 4: Add Payment Section */}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border-2 border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-sm space-y-5">
+        <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white flex items-center gap-2 pb-2 border-b border-slate-100 dark:border-slate-800">
+          <CreditCard className="w-6 h-6 text-emerald-600" />
+          Payment
+        </h2>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
+          {/* Amount Paid */}
+          <div>
+            <label className="block text-sm font-black text-slate-800 dark:text-slate-200 mb-2">
+              Paid Amount:*
+            </label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400 font-black text-sm">
+                ৳
+              </div>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={paidAmount}
+                onChange={(e) => setPaidAmount(Math.max(0, Number(e.target.value) || 0))}
+                className="w-full pl-8 pr-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-xl text-sm sm:text-base font-black text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 font-mono h-11"
+              />
+            </div>
+          </div>
+
+          {/* Paid on Date */}
+          <div>
+            <label className="block text-sm font-black text-slate-800 dark:text-slate-200 mb-2">
+              Paid on:*
+            </label>
+            <input
+              type="datetime-local"
+              value={paidOnDate}
+              onChange={(e) => setPaidOnDate(e.target.value)}
+              className="w-full text-sm font-bold bg-slate-50 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 h-11"
+            />
+          </div>
+
+          {/* Payment Method / Account with Tk balance */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm font-black text-slate-800 dark:text-slate-200">
+                Payment Method:*
+              </label>
+              {selectedAccount && (
+                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                  Balance:{" "}
+                  <span
+                    className={`font-mono font-black ${
+                      Number(selectedAccount.balance || 0) < Number(paidAmount || 0)
+                        ? "text-rose-600 dark:text-rose-400"
+                        : "text-emerald-600 dark:text-emerald-400"
+                    }`}
+                  >
+                    ৳{Number(selectedAccount.balance || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </span>
+              )}
+            </div>
+            <select
+              value={selectedAccountId}
+              onChange={(e) => {
+                const accId = e.target.value;
+                setSelectedAccountId(accId);
+                const acc = financialAccounts.find((a) => a.id === accId);
+                if (acc) {
+                  setPaymentMethod(acc.type || acc.name);
+                }
+              }}
+              className="w-full text-sm font-bold bg-slate-50 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 h-11"
+            >
+              {financialAccounts.length > 0 ? (
+                financialAccounts.map((acc) => (
+                  <option key={acc.id} value={acc.id}>
+                    {acc.name} ({acc.type}) — ৳{Number(acc.balance || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </option>
+                ))
+              ) : (
+                <option value="">No accounts found (৳0.00)</option>
+              )}
+            </select>
+          </div>
+        </div>
+
+        {/* Payment Due Summary & Save Action */}
+        <div className="pt-5 border-t-2 border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-5">
+          <div className="text-base sm:text-lg font-black text-slate-800 dark:text-slate-200 flex items-center gap-3">
+            <span>Payment due:</span>
+            <span
+              className={`font-mono text-xl sm:text-2xl font-black ${
+                paymentDue > 0 ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"
+              }`}
+            >
+              ৳{paymentDue.toFixed(2)}
+            </span>
+            {paymentDue > 0 && (
+              <span className="text-xs px-3 py-1 rounded-full bg-amber-100 dark:bg-amber-900/60 text-amber-900 dark:text-amber-200 font-black">
+                Credit to Supplier Ledger
+              </span>
+            )}
+          </div>
+
           <button
-            type="submit"
-            disabled={submitting}
-            className="px-6 py-2.5 bg-brand-primary hover:bg-brand-primary-hover text-white rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-sm disabled:opacity-50"
+            type="button"
+            disabled={submitting || lineItems.length === 0}
+            onClick={handleSubmitStock}
+            className="w-full sm:w-auto px-10 py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-base sm:text-lg font-black shadow-lg hover:shadow-xl transition flex items-center justify-center gap-2.5 disabled:opacity-50 disabled:cursor-not-allowed h-13"
           >
             {submitting ? (
               <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Recording Intake...
+                <Loader2 className="w-5 h-5 animate-spin" />
+                Saving Purchase...
               </>
             ) : (
               <>
-                <Save className="h-4 w-4" />
-                Record Stock Inward
+                <Save className="w-5 h-5" />
+                Save Stock & Invoice
               </>
             )}
           </button>
         </div>
-      </form>
+      </div>
+
+      {/* Quick Add Product Modal */}
+      {showAddProductModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 rounded-2xl p-6 max-w-lg w-full shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b-2 border-slate-100 dark:border-slate-800">
+              <h3 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white flex items-center gap-2">
+                <Plus className="w-6 h-6 text-emerald-600" />
+                Add New Medicine / Product
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowAddProductModal(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateQuickProduct} className="space-y-4 text-sm">
+              <div>
+                <label className="block font-black text-slate-800 dark:text-slate-200 mb-1.5">
+                  Medicine / Product Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newProdName}
+                  onChange={(e) => setNewProdName(e.target.value)}
+                  placeholder="e.g. Napa Extra, Ace Plus 500mg"
+                  className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white font-bold focus:ring-2 focus:ring-emerald-500 h-11"
+                />
+              </div>
+
+              <div>
+                <label className="block font-black text-slate-800 dark:text-slate-200 mb-1.5">
+                  Generic Name
+                </label>
+                <input
+                  type="text"
+                  value={newProdGeneric}
+                  onChange={(e) => setNewProdGeneric(e.target.value)}
+                  placeholder="e.g. Paracetamol + Caffeine"
+                  className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white font-bold focus:ring-2 focus:ring-emerald-500 h-11"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block font-black text-slate-800 dark:text-slate-200 mb-1.5">
+                    Product Type
+                  </label>
+                  <select
+                    value={newProdType}
+                    onChange={(e) => setNewProdType(e.target.value as any)}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white font-bold focus:ring-2 focus:ring-emerald-500 h-11"
+                  >
+                    <option value="MEDICINE">Tablet / Capsule</option>
+                    <option value="SYRUP">Syrup / Suspension</option>
+                    <option value="EQUIPMENT">Medical Equipment</option>
+                    <option value="SALINE">Saline / Injection</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-black text-slate-800 dark:text-slate-200 mb-1.5">
+                    MRP / Selling Price *
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    value={newProdPrice}
+                    onChange={(e) => setNewProdPrice(Number(e.target.value))}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white font-black text-right font-mono focus:ring-2 focus:ring-emerald-500 h-11"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-4 border-t-2 border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowAddProductModal(false)}
+                  className="px-5 py-2.5 rounded-xl border-2 border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 font-bold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingNewProduct || !newProdName.trim()}
+                  className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black flex items-center gap-2 shadow-md disabled:opacity-50"
+                >
+                  {savingNewProduct ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  Create & Add
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

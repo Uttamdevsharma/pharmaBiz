@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { fetchApi } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { OwnerModule } from "./DashboardSidebar";
@@ -88,7 +89,49 @@ export function SalesHistoryView({ selectedBranchId: propBranchId, onNavigate }:
 
   // Selected Sale for View/Print Modal
   const [selectedSale, setSelectedSale] = useState<SaleRecord | null>(null);
+  const [receiptData, setReceiptData] = useState<any>(null);
   const [modalOpen, setModalOpen] = useState(false);
+
+  const openSaleModal = async (sale: SaleRecord) => {
+    setSelectedSale(sale);
+    setReceiptData(null);
+    setModalOpen(true);
+    try {
+      const res = await fetchApi<any>(`/sales/${sale.id}/receipt`);
+      if (res.success && res.data) {
+        setReceiptData(res.data);
+      }
+    } catch (e) {
+      console.warn("Could not load receipt data:", e);
+    }
+  };
+
+  const closeSaleModal = () => {
+    setModalOpen(false);
+    setSelectedSale(null);
+    setReceiptData(null);
+  };
+
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const printReceipt = () => {
+    window.print();
+  };
+
+  useEffect(() => {
+    if (!modalOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "p") {
+        e.preventDefault();
+        printReceipt();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [modalOpen, selectedSale, receiptData]);
 
   const loadSales = async (isManual = false) => {
     try {
@@ -166,10 +209,6 @@ export function SalesHistoryView({ selectedBranchId: propBranchId, onNavigate }:
     e.preventDefault();
     setPage(1);
     loadSales();
-  };
-
-  const printReceipt = () => {
-    window.print();
   };
 
   return (
@@ -447,11 +486,8 @@ export function SalesHistoryView({ selectedBranchId: propBranchId, onNavigate }:
                       {/* Actions */}
                       <td className="py-3.5 px-4 xl:px-6 text-center">
                         <button
-                          onClick={() => {
-                            setSelectedSale(sale);
-                            setModalOpen(true);
-                          }}
-                          className="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold transition flex items-center gap-1 mx-auto"
+                          onClick={() => openSaleModal(sale)}
+                          className="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold transition flex items-center gap-1 mx-auto cursor-pointer"
                         >
                           <Eye className="h-3.5 w-3.5 text-emerald-600" />
                           <span>View Invoice</span>
@@ -476,134 +512,180 @@ export function SalesHistoryView({ selectedBranchId: propBranchId, onNavigate }:
       </div>
 
       {/* Invoice Details & Thermal Print Modal */}
-      {modalOpen && selectedSale && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-lg w-full overflow-hidden flex flex-col max-h-[90vh]">
-            {/* Modal Header */}
-            <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
-              <div>
-                <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
-                  <Receipt className="h-5 w-5 text-emerald-600" />
-                  Sale Receipt #{selectedSale.receiptNo}
-                </h3>
-                <p className="text-xs text-slate-400">
-                  {new Date(selectedSale.createdAt).toLocaleString()}
-                </p>
+      {mounted && modalOpen && selectedSale && createPortal(
+        <div className="print-portal fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 print:static print:inset-auto print:bg-white print:p-0 print:m-0 print:block print:w-full">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-xl w-full overflow-hidden flex flex-col max-h-[90vh] printable-document print-invoice-card print:rounded-none print:shadow-none print:border-none print:max-w-full print:w-full print:text-black print:max-h-none print:overflow-visible print:m-0 print:p-0">
+            {/* Modal Control Bar */}
+            <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between print:hidden">
+              <div className="flex items-center gap-2 text-emerald-600 font-bold text-xs">
+                <CheckCircle2 className="h-5 w-5" /> Sale Receipt
               </div>
-              <button
-                onClick={() => {
-                  setModalOpen(false);
-                  setSelectedSale(null);
-                }}
-                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
-              >
-                <X className="h-5 w-5" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={printReceipt}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold shadow hover:bg-emerald-700 cursor-pointer"
+                >
+                  <Printer className="h-4 w-4" /> Print Receipt
+                </button>
+                <button
+                  onClick={closeSaleModal}
+                  className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
             </div>
 
-            {/* Modal Content / Thermal Paper View */}
-            <div className="p-6 overflow-y-auto space-y-4 font-mono text-xs">
-              <div className="text-center pb-3 border-b border-dashed border-slate-300 dark:border-slate-700 space-y-1">
-                {authUser?.tenant?.logoUrl && (
-                  <div className="flex justify-center mb-1">
+            {/* Receipt Document */}
+            <div className="p-6 sm:p-8 space-y-5 overflow-y-auto print:max-h-none print:overflow-visible print:p-0 print:space-y-6 text-slate-800 dark:text-slate-200 print:text-black">
+              {/* Pharmacy & Branch Header */}
+              <div className="text-center space-y-1 pb-4 border-b-2 border-slate-900 dark:border-slate-100 print:border-black">
+                {(receiptData?.pharmacy?.logoUrl || authUser?.tenant?.logoUrl) && (
+                  <div className="flex justify-center mb-2">
                     <img
-                      src={authUser.tenant.logoUrl}
+                      src={receiptData?.pharmacy?.logoUrl || authUser?.tenant?.logoUrl || ""}
                       alt="Pharmacy logo"
-                      className="h-10 object-contain"
+                      className="h-16 sm:h-20 object-contain print:h-20 max-w-[240px]"
                     />
                   </div>
                 )}
-                <div className="font-black text-sm text-slate-900 dark:text-white uppercase">
-                  {authUser?.tenant?.name || selectedSale.branch?.name || "Pharmacy Store"}
-                </div>
-                {selectedSale.branch?.name && (
-                  <div className="text-[10px] font-semibold text-slate-500">
-                    Branch: {selectedSale.branch.name}
+                <h2 className="font-black text-2xl sm:text-3xl print:text-3xl uppercase tracking-tight text-slate-900 dark:text-white print:text-black">
+                  {receiptData?.pharmacy?.name || authUser?.tenant?.name || "Shapla Pharmacy"}
+                </h2>
+                {(selectedSale.branch?.name || receiptData?.invoice?.branch) && (
+                  <p className="text-sm sm:text-base print:text-base text-emerald-800 dark:text-emerald-400 print:text-black font-bold">
+                    Branch: {selectedSale.branch?.name || receiptData?.invoice?.branch} {selectedSale.branch?.location ? `(${selectedSale.branch.location})` : ""}
+                  </p>
+                )}
+                <p className="text-xs sm:text-sm print:text-sm text-emerald-700 dark:text-emerald-400 print:text-black font-bold italic">
+                  Thank you for shopping with us. Get well soon!
+                </p>
+                <p className="text-xs sm:text-sm print:text-sm text-slate-600 dark:text-slate-300 print:text-black font-medium">
+                  {(receiptData?.pharmacy?.phone || authUser?.tenant?.phone) ? `Tel: ${receiptData?.pharmacy?.phone || authUser?.tenant?.phone}` : ""}
+                  {(receiptData?.pharmacy?.phone || authUser?.tenant?.phone) && (receiptData?.pharmacy?.email || authUser?.tenant?.email) ? " | " : ""}
+                  {(receiptData?.pharmacy?.email || authUser?.tenant?.email) ? `Email: ${receiptData?.pharmacy?.email || authUser?.tenant?.email}` : ""}
+                </p>
+              </div>
+
+              {/* Invoice Meta Grid */}
+              <div className="flex justify-between text-xs sm:text-sm print:text-sm pb-4 border-b-2 border-slate-900 dark:border-slate-100 print:border-black font-medium leading-relaxed">
+                <div className="space-y-1">
+                  <div>
+                    <span className="font-bold text-slate-500 print:text-black">Invoice #: </span>
+                    <span className="font-mono font-bold text-sm sm:text-base print:text-base">{selectedSale.receiptNo}</span>
                   </div>
-                )}
-                {selectedSale.branch?.location && (
-                  <div className="text-[10px] text-slate-500">{selectedSale.branch.location}</div>
-                )}
-                <div className="text-[10px] text-slate-400">Cashier: {selectedSale.user?.name || "Staff"}</div>
-              </div>
-
-              {/* Customer info */}
-              <div className="flex justify-between text-slate-600 dark:text-slate-400 pb-2 border-b border-slate-100 dark:border-slate-800">
-                <span>Customer:</span>
-                <span className="font-bold text-slate-900 dark:text-white">
-                  {selectedSale.customerName || "Walk-in"} {selectedSale.customerPhone ? `(${selectedSale.customerPhone})` : ""}
-                </span>
-              </div>
-
-              {/* Items List */}
-              <div className="space-y-2">
-                <div className="flex justify-between font-bold text-slate-400 text-[10px] uppercase">
-                  <span>Item</span>
-                  <span>Qty x Price = Total</span>
-                </div>
-                {selectedSale.items?.map((item, idx) => (
-                  <div key={idx} className="flex justify-between">
+                  <div>
+                    <span className="font-bold text-slate-500 print:text-black">Customer: </span>
+                    <span className="font-bold text-slate-900 dark:text-white print:text-black">{selectedSale.customerName || "Walk-in Customer"}</span>
+                  </div>
+                  {selectedSale.customerPhone && (
                     <div>
-                      <div className="font-bold text-slate-900 dark:text-white">{item.product?.name || "Product"}</div>
-                      {item.batchNumber && <div className="text-[10px] text-slate-400">Batch: {item.batchNumber}</div>}
+                      <span className="font-bold text-slate-500 print:text-black">Phone: </span>
+                      <span className="font-mono">{selectedSale.customerPhone}</span>
                     </div>
-                    <div className="text-right">
-                      <div>{item.quantity} x ৳{Number(item.unitPrice).toFixed(2)}</div>
-                      <div className="font-bold">৳{Number(item.subTotal).toFixed(2)}</div>
-                    </div>
+                  )}
+                  <div>
+                    <span className="font-bold text-slate-500 print:text-black">Cashier: </span>
+                    {selectedSale.user?.name || "Staff"}
                   </div>
-                ))}
+                </div>
+                <div className="text-right space-y-1">
+                  <div>
+                    <span className="font-bold text-slate-500 print:text-black">Date: </span>
+                    {new Date(selectedSale.createdAt).toLocaleDateString("en-BD", { day: "2-digit", month: "short", year: "numeric" })}
+                  </div>
+                  <div>
+                    <span className="font-bold text-slate-500 print:text-black">Time: </span>
+                    {new Date(selectedSale.createdAt).toLocaleTimeString("en-BD", { hour: "2-digit", minute: "2-digit" })}
+                  </div>
+                  <div>
+                    <span className="font-bold text-slate-500 print:text-black">Payment Method: </span>
+                    <span className="font-bold text-slate-900 dark:text-white print:text-black">{selectedSale.paymentMethod || "CASH"}</span>
+                  </div>
+                </div>
               </div>
 
-              {/* Calculation Breakdown */}
-              <div className="pt-3 border-t border-dashed border-slate-300 dark:border-slate-700 space-y-1">
-                {selectedSale.discount > 0 && (
-                  <div className="flex justify-between text-emerald-600">
+              {/* Items Table */}
+              <div className="table-responsive-container print:overflow-visible">
+                <table className="w-full min-w-[480px] print:min-w-0 text-xs sm:text-sm print:text-sm border-collapse">
+                  <thead>
+                    <tr className="border-b-2 border-slate-900 dark:border-slate-100 print:border-black uppercase text-xs font-bold text-slate-700 dark:text-slate-300 print:text-black">
+                      <th className="pb-2 text-left w-8">#</th>
+                      <th className="pb-2 text-left">Medicine / Product</th>
+                      <th className="pb-2 text-center">Batch</th>
+                      <th className="pb-2 text-center">Unit</th>
+                      <th className="pb-2 text-center">Qty</th>
+                      <th className="pb-2 text-right">Unit Price</th>
+                      <th className="pb-2 text-right">Subtotal</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 dark:divide-slate-800 print:divide-slate-300 font-medium">
+                    {(selectedSale.items || []).map((item: any, idx: number) => (
+                      <tr key={idx} className="border-b border-slate-100 dark:border-slate-800 print:border-slate-200">
+                        <td className="py-2.5 text-slate-400 font-mono text-xs">{idx + 1}</td>
+                        <td className="py-2.5 font-bold text-slate-900 dark:text-white print:text-black">
+                          {item.product?.name || item.name || "Product"}
+                          {item.product?.genericName && (
+                            <div className="text-[11px] print:text-xs text-slate-500 print:text-slate-700 font-medium">
+                              {item.product.genericName}
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-2.5 text-center text-slate-600 print:text-black font-mono text-xs">{item.batchNumber || "—"}</td>
+                        <td className="py-2.5 text-center text-slate-600 print:text-black">{item.unitType || item.product?.unit || "Pc"}</td>
+                        <td className="py-2.5 text-center font-bold">{item.quantity}</td>
+                        <td className="py-2.5 text-right font-mono">৳{Number(item.unitPrice || 0).toFixed(2)}</td>
+                        <td className="py-2.5 text-right font-bold font-mono">৳{Number(item.subTotal || (item.unitPrice * item.quantity) || 0).toFixed(2)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Invoice Totals */}
+              <div className="pt-3 border-t-2 border-slate-900 dark:border-slate-100 print:border-black space-y-1.5 text-xs sm:text-sm print:text-sm font-medium">
+                <div className="flex justify-between text-slate-600 print:text-black">
+                  <span>Subtotal:</span>
+                  <span className="font-mono font-bold">
+                    ৳{Number((selectedSale.items || []).reduce((acc: number, it: any) => acc + Number(it.subTotal || 0), 0) || selectedSale.totalAmount || 0).toFixed(2)}
+                  </span>
+                </div>
+                {Number(selectedSale.discount || 0) > 0 && (
+                  <div className="flex justify-between text-emerald-600 print:text-black font-bold">
                     <span>Discount:</span>
-                    <span>-৳{Number(selectedSale.discount).toFixed(2)}</span>
+                    <span className="font-mono">-৳{Number(selectedSale.discount).toFixed(2)}</span>
                   </div>
                 )}
-                {selectedSale.tax > 0 && (
-                  <div className="flex justify-between text-blue-600">
+                {Number(selectedSale.tax || 0) > 0 && (
+                  <div className="flex justify-between text-slate-600 print:text-black">
                     <span>VAT / Tax:</span>
-                    <span>+৳{Number(selectedSale.tax).toFixed(2)}</span>
+                    <span className="font-mono font-bold">+৳{Number(selectedSale.tax).toFixed(2)}</span>
                   </div>
                 )}
-                <div className="flex justify-between font-black text-sm text-slate-900 dark:text-white pt-1 border-t border-slate-200 dark:border-slate-700">
+                <div className="flex justify-between font-black text-base sm:text-lg print:text-xl text-slate-900 dark:text-white print:text-black pt-2 border-t border-slate-300 print:border-black">
                   <span>Grand Total:</span>
-                  <span>৳{Number(selectedSale.totalAmount).toFixed(2)}</span>
+                  <span className="font-mono">৳{Number(selectedSale.totalAmount || 0).toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between text-emerald-600 font-bold">
-                  <span>Paid ({selectedSale.paymentMethod}):</span>
-                  <span>৳{Number(selectedSale.paidAmount).toFixed(2)}</span>
+                <div className="flex justify-between text-slate-600 dark:text-slate-400 print:text-black">
+                  <span>Paid Amount:</span>
+                  <span className="font-mono font-bold">৳{Number(selectedSale.paidAmount || 0).toFixed(2)}</span>
                 </div>
-                {selectedSale.dueAmount > 0 && (
-                  <div className="flex justify-between text-rose-600 font-bold">
-                    <span>Due Balance:</span>
-                    <span>৳{Number(selectedSale.dueAmount).toFixed(2)}</span>
+                {Number(selectedSale.dueAmount || 0) > 0 && (
+                  <div className="flex justify-between font-bold text-rose-600 print:text-black">
+                    <span>Due Amount:</span>
+                    <span className="font-mono">৳{Number(selectedSale.dueAmount).toFixed(2)}</span>
                   </div>
                 )}
               </div>
-            </div>
 
-            {/* Modal Footer Actions */}
-            <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex items-center justify-end gap-3">
-              <button
-                onClick={() => setModalOpen(false)}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition"
-              >
-                Close
-              </button>
-              <button
-                onClick={printReceipt}
-                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-md shadow-emerald-600/20 transition flex items-center gap-1.5"
-              >
-                <Printer className="h-4 w-4" />
-                <span>Print Receipt</span>
-              </button>
+              {/* Footer Policy */}
+              <div className="pt-3 border-t border-dashed border-slate-300 print:border-black text-center text-xs print:text-sm text-slate-500 print:text-black italic">
+                Items can be returned within 48 hours with original invoice and valid prescription.
+              </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

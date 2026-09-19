@@ -56,9 +56,9 @@ function LoginFormContent() {
     try {
       const res = await login(identifier, password);
       if (res.success && res.redirectUrl) {
-        router.push(res.redirectUrl);
+        router.replace(res.redirectUrl);
       } else if (res.success) {
-        router.push("/dashboard");
+        router.replace("/dashboard");
       } else {
         setError(res.message || "Invalid email/username or password");
       }

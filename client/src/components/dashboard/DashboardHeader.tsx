@@ -16,6 +16,8 @@ import {
   ChevronDown,
   ShieldCheck,
   Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import { getClientPlanConfig } from "@/lib/planLimits";
 import { useBranchContext } from "@/context/BranchContext";
@@ -34,6 +36,8 @@ interface DashboardHeaderProps {
   onNavigate?: (module: OwnerModule) => void;
   onToggleMobileSidebar?: () => void;
   isMobileSidebarOpen?: boolean;
+  isSidebarCollapsed?: boolean;
+  onToggleDesktopSidebar?: () => void;
 }
 
 export function DashboardHeader({
@@ -48,6 +52,8 @@ export function DashboardHeader({
   onNavigate,
   onToggleMobileSidebar,
   isMobileSidebarOpen,
+  isSidebarCollapsed,
+  onToggleDesktopSidebar,
 }: DashboardHeaderProps) {
   const { user, logout } = useAuth();
   const { settings } = useSettings();
@@ -106,16 +112,33 @@ export function DashboardHeader({
     <>
       <header className="h-16 2xl:h-20 border-b border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md px-3 sm:px-6 2xl:px-10 flex items-center justify-between sticky top-0 z-40 transition-all duration-200 shrink-0 gap-2">
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-          {/* Mobile Sidebar Hamburger Toggle */}
+          {/* Mobile / Tablet Sidebar Hamburger Toggle */}
           {onToggleMobileSidebar && (
             <button
               type="button"
               onClick={onToggleMobileSidebar}
-              className="lg:hidden p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition -ml-1 shrink-0"
+              className="lg:hidden p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition -ml-1 shrink-0 cursor-pointer"
               aria-label="Toggle Navigation Menu"
               title="Toggle Navigation Menu"
             >
               <Menu className="h-5 w-5" />
+            </button>
+          )}
+
+          {/* Desktop Sidebar Collapse Toggle */}
+          {onToggleDesktopSidebar && (
+            <button
+              type="button"
+              onClick={onToggleDesktopSidebar}
+              className="hidden lg:flex p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition -ml-1 shrink-0 cursor-pointer"
+              aria-label={isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+              title={isSidebarCollapsed ? "Expand Sidebar (Ctrl+B)" : "Collapse Sidebar (Ctrl+B)"}
+            >
+              {isSidebarCollapsed ? (
+                <PanelLeftOpen className="h-5 w-5 text-brand-primary" />
+              ) : (
+                <PanelLeftClose className="h-5 w-5 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200" />
+              )}
             </button>
           )}
 

@@ -1,15 +1,19 @@
 "use client";
 
-import React, { useEffect, useState, useCallback, useRef } from "react";
+import React, { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { useAuth } from "@/context/AuthContext";
 import { fetchApi } from "@/lib/api";
 import { useBranchContext } from "@/context/BranchContext";
-import { Product, Branch } from "@/types";
+import { useSettings } from "@/context/SettingsContext";
+import { Product } from "@/types";
 import { calculateLocationPackaging } from "@/lib/packaging";
+import { Barcode128 } from "@/components/common/Barcode128";
 import {
-  ShoppingCart, Search, Plus, Minus, Trash2, Receipt,
+  Search, Plus, Minus, Trash2, Receipt,
   Loader2, AlertCircle, Store, Printer, Barcode, CheckCircle2, X,
-  Boxes, MapPin, Package, ArrowLeft, ShieldAlert, ArrowRight, AlertTriangle
+  MapPin, Package, ShieldAlert, ArrowRight,
+  Repeat, ChevronDown, Check, User, Phone, Maximize2
 } from "lucide-react";
 
 interface CartItem {
@@ -17,6 +21,7 @@ interface CartItem {
   name: string;
   genericName?: string | null;
   sku: string;
+  barcode?: string | null;
   size?: string | null;
   productType: string;
   unitType: string;
@@ -42,7 +47,12 @@ interface CartItem {
   purchasePrice?: number | null;
 }
 
-type PosStep = "SEARCH" | "SELECT_PRODUCT" | "SELECT_LOCATION" | "SELECT_UNIT";
+interface CustomerSuggestion {
+  phone: string;
+  name: string;
+  address?: string;
+  email?: string;
+}
 
 type PackagingModel = "MEDICINE" | "BOTTLE" | "PIECE" | "VIAL";
 
@@ -94,28 +104,28 @@ function getAvailableSellingUnits(prod?: any): { id: string; label: string; subt
   switch (model) {
     case "BOTTLE":
       return [
-        { id: "BOTTLE", label: "🧴 Bottle", subtext: "1 bottle", multiplier: 1 },
+        { id: "BOTTLE", label: "Bottle", subtext: "1 bottle", multiplier: 1 },
       ];
     case "PIECE":
       return [
-        { id: "PIECE", label: "📦 Piece", subtext: "1 item", multiplier: 1 },
+        { id: "PIECE", label: "Piece", subtext: "1 item", multiplier: 1 },
         ...(stripsPerBox > 1
-          ? [{ id: "BOX", label: "📦 Box / Pack", subtext: `${stripsPerBox} pieces`, multiplier: stripsPerBox }]
+          ? [{ id: "BOX", label: "Box / Pack", subtext: `${stripsPerBox} pcs`, multiplier: stripsPerBox }]
           : []),
       ];
     case "VIAL":
       return [
-        { id: "VIAL", label: "💉 Vial", subtext: "1 vial / ampoule", multiplier: 1 },
+        { id: "VIAL", label: "Vial", subtext: "1 vial / ampoule", multiplier: 1 },
         ...(stripsPerBox > 1
-          ? [{ id: "BOX", label: "📦 Box", subtext: `${stripsPerBox} vials`, multiplier: stripsPerBox }]
+          ? [{ id: "BOX", label: "Box", subtext: `${stripsPerBox} vials`, multiplier: stripsPerBox }]
           : []),
       ];
     case "MEDICINE":
     default:
       return [
-        { id: "BOX", label: "📦 Box", subtext: `${stripsPerBox} strips`, multiplier: tabletsPerBox },
-        { id: "STRIP", label: "💊 Strip", subtext: `${tabletsPerStrip} tabs`, multiplier: tabletsPerStrip },
-        { id: "TABLET", label: "⚪ Tablet", subtext: "1 unit", multiplier: 1 },
+        { id: "TABLET", label: "Tablet", subtext: "1 tab", multiplier: 1 },
+        { id: "STRIP", label: "Strip", subtext: `${tabletsPerStrip} tabs`, multiplier: tabletsPerStrip },
+        { id: "BOX", label: "Box", subtext: `${stripsPerBox} strips`, multiplier: tabletsPerBox },
       ];
   }
 }
@@ -143,6 +153,7 @@ interface PosModuleProps {
 
 export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {}) {
   const { user } = useAuth();
+  const { settings } = useSettings();
   const {
     branches: contextBranches,
     selectedBranchId: contextBranchId,
@@ -150,81 +161,119 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
     canSwitchBranch,
   } = useBranchContext();
 
-  const [viewTab, setViewTab] = useState<"pos" | "history">("pos");
-  const [mobilePosTab, setMobilePosTab] = useState<"catalog" | "cart">("catalog");
-  const [localBranchId, setLocalBranchId] = useState<string>("");
+  // Tenant Brand Logo resolution
+  const [tenantLogo, setTenantLogo] = useState<string | null>(() => user?.tenant?.logoUrl || null);
+  const [logoLoadFailed, setLogoLoadFailed] = useState(false);
 
-  // Effective branch: prop or context, fallback to local if All Branches selected
+  useEffect(() => {
+    if (user?.tenant?.logoUrl) {
+      setTenantLogo(user.tenant.logoUrl);
+    } else {
+      fetchApi<any>("/tenant/profile").then((res) => {
+        if (res.success && res.data?.logoUrl) {
+          setTenantLogo(res.data.logoUrl);
+        }
+      }).catch(() => {});
+    }
+  }, [user?.tenant?.logoUrl]);
+
+  // Preload logo image into browser cache so it's instantly available for print
+  useEffect(() => {
+    const url = tenantLogo || user?.tenant?.logoUrl || settings?.logoUrl;
+    if (url) {
+      const preImg = new Image();
+      preImg.src = url;
+      preImg.onload = () => setLogoLoadFailed(false);
+      preImg.onerror = () => setLogoLoadFailed(true);
+    }
+  }, [tenantLogo, user?.tenant?.logoUrl, settings?.logoUrl]);
+
+  const [localBranchId, setLocalBranchId] = useState<string>("");
   const activeNavbarBranchId = propBranchId !== undefined ? propBranchId : contextBranchId;
   const selectedBranchId = activeNavbarBranchId || localBranchId || (contextBranches.length > 0 ? contextBranches[0].id : "");
   const branches = contextBranches;
+
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [searchFocused, setSearchFocused] = useState(false);
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [discountType, setDiscountType] = useState<"FIXED" | "PERCENT">("FIXED");
-  const [discountValue, setDiscountValue] = useState<number>(0);
-  const [vatSettings, setVatSettings] = useState<{ isVatEnabled: boolean; vatPercent: number; vatNumber?: string; taxType?: string }>({ isVatEnabled: false, vatPercent: 0 });
+
+  // Bill & Customer details
+  const [customerPhone, setCustomerPhone] = useState("");
+  const [customerName, setCustomerName] = useState("");
+  const [customerAddress, setCustomerAddress] = useState("");
+  const [customersList, setCustomersList] = useState<CustomerSuggestion[]>([]);
+  const [phoneDropdownOpen, setPhoneDropdownOpen] = useState(false);
+
+  // Financials
+  const [vatSettings, setVatSettings] = useState<{ isVatEnabled: boolean; vatPercent: number }>({ isVatEnabled: false, vatPercent: 0 });
   const [taxPercent, setTaxPercent] = useState<number>(0);
+
+  // Payment & Accounts
   const [paymentMethod, setPaymentMethod] = useState<string>("CASH");
-  const [mobileTrxId, setMobileTrxId] = useState<string>("");
   const [financialAccounts, setFinancialAccounts] = useState<any[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState<string>("");
-  const [selectedBankAccountId, setSelectedBankAccountId] = useState<string>("");
-  const [bankTrxRef, setBankTrxRef] = useState<string>("");
-  const [customerName, setCustomerName] = useState("");
-  const [customerPhone, setCustomerPhone] = useState("");
   const [paidInput, setPaidInput] = useState<string>("");
   const [managerPin, setManagerPin] = useState("");
   const [prescriptionRef, setPrescriptionRef] = useState("");
   const [checkingOut, setCheckingOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successToast, setSuccessToast] = useState<string | null>(null);
 
-  // Step-by-step POS flow
-  const [posStep, setPosStep] = useState<PosStep>("SEARCH");
-  const [selectedProduct, setSelectedProduct] = useState<any>(null);
-  const [posBatches, setPosBatches] = useState<any[]>([]);
-  const [selectedBatch, setSelectedBatch] = useState<any>(null);
-  const [selectedBatchLocations, setSelectedBatchLocations] = useState<any[]>([]);
-  const [selectedLocation, setSelectedLocation] = useState<any>(null);
-  const [selectedUnit, setSelectedUnit] = useState<string>("TABLET");
-  const [quantity, setQuantity] = useState<number>(1);
-  const [loadingBatches, setLoadingBatches] = useState(false);
+  // Location / Batch selection modal
+  const [locationModalOpen, setLocationModalOpen] = useState(false);
+  const [modalProduct, setModalProduct] = useState<any>(null);
+  const [modalBatch, setModalBatch] = useState<any>(null);
+  const [modalLocations, setModalLocations] = useState<any[]>([]);
+  const [modalSelectedLoc, setModalSelectedLoc] = useState<any>(null);
+  const [modalUnit, setModalUnit] = useState<string>("TABLET");
+  const [modalQty, setModalQty] = useState<number>(1);
   const [loadingLocations, setLoadingLocations] = useState(false);
+  const [modalLocationSearch, setModalLocationSearch] = useState<string>("");
+  const modalQuantityInputRef = useRef<HTMLInputElement>(null);
+  const [selectedSearchIndex, setSelectedSearchIndex] = useState<number>(0);
 
-  // Invoice modal & sales history
-  const [receiptModalOpen, setReceiptModalOpen] = useState(false);
+  // Last Completed Sale Receipt Document for Direct Silent Print
   const [invoiceData, setInvoiceData] = useState<any>(null);
-  const [salesHistory, setSalesHistory] = useState<any[]>([]);
-  const [loadingHistory, setLoadingHistory] = useState(false);
-  const [historySearch, setHistorySearch] = useState("");
-
-  // Pharmacy settings
-  const [pharmacySettings, setPharmacySettings] = useState<{
-    prescriptionRequiredMessage: string;
-    receiptHeaderNote: string;
-    receiptFooterNote: string;
-  }>({
-    prescriptionRequiredMessage:
-      "This product requires a valid doctor's prescription. Enter prescription reference or doctor's name before completing checkout.",
-    receiptHeaderNote: "Thank you for shopping with us. Get well soon!",
-    receiptFooterNote: "Items can be returned within 48 hours with original invoice and valid prescription.",
-  });
 
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
+  const phoneContainerRef = useRef<HTMLDivElement>(null);
 
+  // Live order identifier
+  const [currentOrderId] = useState(() => Math.floor(10000000 + Math.random() * 90000000).toString());
+
+  // Load products
   const loadPosProducts = async () => {
     if (!selectedBranchId) return;
     try {
       setLoading(true);
-      const res = await fetchApi(`/products?branchId=${selectedBranchId}&limit=150`);
+      const res = await fetchApi(`/products?branchId=${selectedBranchId}&limit=300`);
       if (res.success && res.data) setProducts(res.data);
-    } catch (err) { console.error("Failed to load products for POS", err); }
-    finally { setLoading(false); }
+    } catch (err) {
+      console.error("Failed to load products for POS", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
+  // Load past customers for quick auto-fill
+  const loadCustomers = async () => {
+    try {
+      const res = await fetchApi<any>("/sales/customers");
+      if (res.success && Array.isArray(res.data)) {
+        setCustomersList(res.data);
+      }
+    } catch {
+      try {
+        const cached = localStorage.getItem("pharmabiz_cached_customers");
+        if (cached) setCustomersList(JSON.parse(cached));
+      } catch {}
+    }
+  };
 
-
+  // Load accounts
   const loadFinancialAccounts = async (branchId: string) => {
     try {
       const res = await fetchApi<any>(`/accounting/accounts?branchId=${branchId}`);
@@ -232,243 +281,434 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
         setFinancialAccounts(res.data);
         if (res.data.length > 0) {
           setSelectedAccountId((prev) => res.data.some((a: any) => a.id === prev) ? prev || res.data[0].id : res.data[0].id);
-        } else setSelectedAccountId("");
-        const banks = res.data.filter((a: any) => a.type === "BANK" || a.type === "CARD_SETTLEMENT");
-        if (banks.length > 0 && !selectedBankAccountId) setSelectedBankAccountId(banks[0].id);
+        }
       }
-    } catch (err) { console.error("Failed to load financial accounts for POS", err); }
+    } catch (err) {
+      console.error("Failed to load financial accounts", err);
+    }
   };
 
-  const loadVatSettings = async () => {
-    try {
-      const res = await fetchApi<any>("/settings/vat");
-      if (res.success && res.data) {
-        setVatSettings(res.data);
-        setTaxPercent(res.data.isVatEnabled && typeof res.data.vatPercent === "number" ? res.data.vatPercent : 0);
-      }
-    } catch (err) { console.error("Failed to load VAT settings for POS", err); }
-  };
-
-  const loadPharmacySettings = async () => {
-    try {
-      const res = await fetchApi<any>("/settings/pharmacy");
-      if (res.success && res.data) {
-        setPharmacySettings((prev) => ({ ...prev, ...(res.data as any) }));
-      }
-    } catch (err) { console.error("Failed to load pharmacy settings", err); }
-  };
-
-  useEffect(() => { loadVatSettings(); loadPharmacySettings(); }, []);
+  useEffect(() => {
+    loadCustomers();
+    const loadSettings = async () => {
+      try {
+        const vRes = await fetchApi<any>("/settings/vat");
+        if (vRes.success && vRes.data) {
+          setVatSettings(vRes.data);
+          setTaxPercent(vRes.data.isVatEnabled && typeof vRes.data.vatPercent === "number" ? vRes.data.vatPercent : 0);
+        }
+      } catch {}
+    };
+    loadSettings();
+  }, []);
 
   useEffect(() => {
     if (selectedBranchId) {
       loadPosProducts();
       loadFinancialAccounts(selectedBranchId);
       setCart([]);
-      if (viewTab === "history") loadSalesHistory();
     }
-  }, [selectedBranchId, viewTab]);
+  }, [selectedBranchId]);
 
-  const loadSalesHistory = async () => {
-    if (!selectedBranchId) return;
-    try {
-      setLoadingHistory(true);
-      const params = new URLSearchParams();
-      params.append("branchId", selectedBranchId);
-      if (historySearch) params.append("search", historySearch);
-      const res = await fetchApi(`/sales?${params.toString()}`);
-      if (res.success && res.data) setSalesHistory(res.data);
-    } catch (err) { console.error("Failed to load sales history", err); }
-    finally { setLoadingHistory(false); }
-  };
+  // Click outside listener for search & phone dropdowns
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
+        setSearchFocused(false);
+      }
+      if (phoneContainerRef.current && !phoneContainerRef.current.contains(e.target as Node)) {
+        setPhoneDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
-  // Load FEFO-sorted batches for a product
-  const loadPosBatches = async (productId: string) => {
-    if (!selectedBranchId) return;
-    setLoadingBatches(true);
-    try {
-      const res = await fetchApi<any>(`/inventory/pos-batches?branchId=${selectedBranchId}&productId=${productId}`);
-      if (res.success && res.data) setPosBatches(res.data);
-    } catch (err) { console.error("Failed to load POS batches", err); setPosBatches([]); }
-    finally { setLoadingBatches(false); }
-  };
+  // Matching items for search dropdown (shows all products + FEFO batches by default on click, filters when typing)
+  const searchResults = useMemo(() => {
+    const q = search.trim().toLowerCase();
 
-  // Load physical locations for a batch
-  const loadBatchLocations = async (batchId: string) => {
-    if (!selectedBranchId) return;
+    const results: Array<{
+      product: Product;
+      batch: any;
+      isExpired: boolean;
+      daysLeft: number | null;
+      stock: number;
+    }> = [];
+
+    for (const p of products) {
+      const pName = (p.name || "").toLowerCase();
+      const pGeneric = (p.genericName || "").toLowerCase();
+      const pBrand = (p.brandName || p.manufacturer || "").toLowerCase();
+      const pSku = (p.sku || "").toLowerCase();
+      const pBarcode = (p.barcode || "").toLowerCase();
+
+      const batches = (p as any).batches || [];
+
+      // If query is empty, show all available products with stock
+      const matchesSearch = !q ||
+        pName.includes(q) ||
+        pGeneric.includes(q) ||
+        pBrand.includes(q) ||
+        pSku.includes(q) ||
+        pBarcode.includes(q);
+
+      if (batches.length > 0) {
+        for (const b of batches) {
+          const bNum = (b.batchNumber || "").toLowerCase();
+          if (matchesSearch || bNum.includes(q)) {
+            const now = new Date();
+            const exp = b.expiryDate ? new Date(b.expiryDate) : null;
+            const isExpired = exp ? exp < now : false;
+            const daysLeft = exp ? Math.ceil((exp.getTime() - now.getTime()) / 86400000) : null;
+            const stock = b.quantity || 0;
+
+            results.push({
+              product: p,
+              batch: b,
+              isExpired,
+              daysLeft,
+              stock,
+            });
+          }
+        }
+      } else if (matchesSearch && (p.currentStock || 0) > 0) {
+        results.push({
+          product: p,
+          batch: null,
+          isExpired: false,
+          daysLeft: null,
+          stock: p.currentStock || 0,
+        });
+      }
+    }
+
+    // Sort FEFO: earliest expiry first
+    return results.sort((a, b) => {
+      if (!a.batch?.expiryDate) return 1;
+      if (!b.batch?.expiryDate) return -1;
+      return new Date(a.batch.expiryDate).getTime() - new Date(b.batch.expiryDate).getTime();
+    }).slice(0, 30);
+  }, [products, search]);
+
+  // Open Location Selector Dialog
+  const openLocationSelector = async (prod: any, batch: any) => {
+    setModalProduct(prod);
+    setModalBatch(batch);
+    setLocationModalOpen(true);
+    setSearch("");
+    setSearchFocused(false);
+    setModalLocationSearch("");
+
+    const model = getProductPackagingModel(prod);
+    const units = getAvailableSellingUnits(prod);
+    setModalUnit(model === "MEDICINE" ? "TABLET" : (units[0]?.id || "PIECE"));
+    setModalQty(1);
+
+    setTimeout(() => {
+      modalQuantityInputRef.current?.focus();
+      modalQuantityInputRef.current?.select();
+    }, 50);
+
+    // Fetch exact batch physical locations with rack, shelf, bin
     setLoadingLocations(true);
     try {
-      const res = await fetchApi<any>(`/locations/batch/${batchId}?branchId=${selectedBranchId}`);
-      if (res.success && Array.isArray(res.data)) {
-        setSelectedBatchLocations(res.data);
+      if (batch?.id) {
+        const res = await fetchApi<any>(`/inventory/pos-batches?branchId=${selectedBranchId}&productId=${prod.id}`);
+        if (res.success && Array.isArray(res.data)) {
+          const matchedBatch = res.data.find((b: any) => b.id === batch.id) || res.data[0];
+          if (matchedBatch && Array.isArray(matchedBatch.physicalLocations) && matchedBatch.physicalLocations.length > 0) {
+            setModalLocations(matchedBatch.physicalLocations);
+            setModalSelectedLoc(matchedBatch.physicalLocations[0]);
+            setLoadingLocations(false);
+            return;
+          }
+        }
+      }
+
+      // Fallback: parse from batch.locations if populated
+      if (batch?.locations && Array.isArray(batch.locations) && batch.locations.length > 0) {
+        const mapped = batch.locations.map((loc: any) => {
+          const rName = loc.rack?.name || loc.rackName || "Rack 1";
+          const sName = loc.shelf?.name || loc.shelfName || "Shelf A";
+          const bName = loc.bin?.name || loc.binName || "Bin 1";
+          return {
+            id: loc.id,
+            rackName: rName,
+            shelfName: sName,
+            binName: bName,
+            locationLabel: `${rName} → ${sName} → ${bName}`,
+            quantity: loc.quantity || batch.quantity || 0,
+          };
+        });
+        setModalLocations(mapped);
+        setModalSelectedLoc(mapped[0]);
+      } else {
+        const defLoc = {
+          id: null,
+          rackName: "Main Store",
+          shelfName: "Rack 1",
+          binName: "Shelf A",
+          locationLabel: "Main Store → Rack 1 → Shelf A",
+          quantity: batch?.quantity || prod.currentStock || 0,
+        };
+        setModalLocations([defLoc]);
+        setModalSelectedLoc(defLoc);
       }
     } catch {
-      // keep whatever was previously loaded or fallback
+      const defLoc = {
+        id: null,
+        rackName: "Main Store",
+        shelfName: "Rack 1",
+        binName: "Shelf A",
+        locationLabel: "Main Store → Rack 1 → Shelf A",
+        quantity: batch?.quantity || prod.currentStock || 0,
+      };
+      setModalLocations([defLoc]);
+      setModalSelectedLoc(defLoc);
     } finally {
       setLoadingLocations(false);
     }
   };
 
-  // Step flow handlers
-  const startProductSelection = (product: any) => {
-    setSelectedProduct(product);
-    setPosStep("SELECT_PRODUCT");
-    loadPosBatches(product.id);
+  // Close modal and return focus to main product search
+  const closeModal = () => {
+    setLocationModalOpen(false);
+    setModalProduct(null);
+    setModalBatch(null);
+    setModalSelectedLoc(null);
+    setTimeout(() => {
+      searchInputRef.current?.focus();
+    }, 50);
   };
 
-  const selectBatch = async (batch: any) => {
-    setSelectedBatch(batch);
-    setPosStep("SELECT_LOCATION");
-    setSelectedLocation(null);
-    const units = getAvailableSellingUnits(selectedProduct);
-    const model = getProductPackagingModel(selectedProduct);
-    setSelectedUnit(model === "MEDICINE" ? "TABLET" : (units[0]?.id || "PIECE"));
-    setQuantity(1);
-    if (batch.physicalLocations && Array.isArray(batch.physicalLocations) && batch.physicalLocations.length > 0) {
-      setSelectedBatchLocations(batch.physicalLocations);
-    } else {
-      setSelectedBatchLocations([]);
+  // Filter modal locations by search (rack, shelf, bin, label)
+  const filteredModalLocations = useMemo(() => {
+    let list = modalLocations;
+    const q = modalLocationSearch.trim().toLowerCase();
+    if (q) {
+      list = list.filter((loc) => {
+        const rName = (loc.rackName || loc.rack?.name || "").toLowerCase();
+        const sName = (loc.shelfName || loc.shelf?.name || "").toLowerCase();
+        const bName = (loc.binName || loc.bin?.name || "").toLowerCase();
+        const lLabel = (loc.locationLabel || "").toLowerCase();
+        return rName.includes(q) || sName.includes(q) || bName.includes(q) || lLabel.includes(q);
+      });
     }
-    await loadBatchLocations(batch.id);
-  };
 
-  const selectLocation = (loc: any) => {
-    setSelectedLocation(loc);
-    setPosStep("SELECT_UNIT");
-    const units = getAvailableSellingUnits(selectedProduct);
-    const model = getProductPackagingModel(selectedProduct);
-    setSelectedUnit(model === "MEDICINE" ? "TABLET" : (units[0]?.id || "PIECE"));
-    setQuantity(1);
-  };
+    return list;
+  }, [modalLocations, modalLocationSearch]);
 
-  const selectUnitType = (unit: string) => {
-    setSelectedUnit(unit);
-  };
+  const modalBasePrice = modalProduct ? getProductUnitPrice(modalProduct, modalBatch) : 0;
+  const modalUnitsList = modalProduct ? getAvailableSellingUnits(modalProduct) : [];
+  const modalSelectedUnitObj = modalUnitsList.find((u) => u.id === modalUnit) || modalUnitsList[0];
+  const modalUnitMultiplier = modalSelectedUnitObj?.multiplier || 1;
+  const modalUnitPrice = modalBasePrice * modalUnitMultiplier;
+  const modalEstimatedTotal = modalUnitPrice * modalQty;
 
-  const resetPosFlow = () => {
-    setPosStep("SEARCH"); setSelectedProduct(null); setSelectedBatch(null);
-    setSelectedLocation(null); setSelectedUnit("TABLET"); setQuantity(1);
-    setPosBatches([]); setSelectedBatchLocations([]);
-    setTimeout(() => searchInputRef.current?.focus(), 50);
-  };
+  // Modal keyboard shortcuts: Escape to close, Enter to add, ArrowUp/Down to navigate locations
+  useEffect(() => {
+    if (!locationModalOpen) return;
+    const handleModalKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        closeModal();
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        confirmAddToCart();
+      } else if (e.key === "ArrowDown" && filteredModalLocations.length > 0) {
+        if (document.activeElement !== modalQuantityInputRef.current) {
+          e.preventDefault();
+          const currIdx = filteredModalLocations.findIndex(
+            (l) => (l.id || l.locationLabel) === (modalSelectedLoc?.id || modalSelectedLoc?.locationLabel)
+          );
+          const nextIdx = Math.min(filteredModalLocations.length - 1, (currIdx === -1 ? 0 : currIdx) + 1);
+          if (filteredModalLocations[nextIdx]) {
+            setModalSelectedLoc(filteredModalLocations[nextIdx]);
+          }
+        }
+      } else if (e.key === "ArrowUp" && filteredModalLocations.length > 0) {
+        if (document.activeElement !== modalQuantityInputRef.current) {
+          e.preventDefault();
+          const currIdx = filteredModalLocations.findIndex(
+            (l) => (l.id || l.locationLabel) === (modalSelectedLoc?.id || modalSelectedLoc?.locationLabel)
+          );
+          const prevIdx = Math.max(0, (currIdx === -1 ? 0 : currIdx) - 1);
+          if (filteredModalLocations[prevIdx]) {
+            setModalSelectedLoc(filteredModalLocations[prevIdx]);
+          }
+        }
+      }
+    };
+    window.addEventListener("keydown", handleModalKeyDown);
+    return () => window.removeEventListener("keydown", handleModalKeyDown);
+  }, [locationModalOpen, filteredModalLocations, modalSelectedLoc, modalProduct, modalBatch, modalUnit, modalQty]);
 
+  // Confirm Add to Cart
   const confirmAddToCart = () => {
-    if (!selectedProduct || !selectedBatch || !selectedLocation) return;
-    const prod = selectedProduct;
+    if (!modalProduct) return;
+    const prod = modalProduct;
+    const batch = modalBatch;
+    const loc = modalSelectedLoc;
+
     const model = getProductPackagingModel(prod);
     const availableUnits = getAvailableSellingUnits(prod);
-    const unitObj = availableUnits.find((u) => u.id === selectedUnit) || availableUnits[0];
+    const unitObj = availableUnits.find((u) => u.id === modalUnit) || availableUnits[0];
     const multiplier = unitObj?.multiplier || 1;
-    const unitType = unitObj?.id || selectedUnit;
+    const unitType = unitObj?.id || modalUnit;
 
-    const totalBaseUnitsNeeded = quantity * multiplier;
-    if (selectedLocation.quantity < totalBaseUnitsNeeded) {
-      alert(`Insufficient stock. Location has ${selectedLocation.quantity} units, need ${totalBaseUnitsNeeded}.`);
+    const totalBaseUnitsNeeded = modalQty * multiplier;
+    const availableStockAtLoc = loc?.quantity ?? (batch?.quantity || prod.currentStock || 0);
+
+    if (availableStockAtLoc < totalBaseUnitsNeeded) {
+      alert(`Insufficient stock. Location has ${availableStockAtLoc} units, requested ${totalBaseUnitsNeeded}.`);
       return;
     }
-    const now = new Date();
-    if (selectedBatch.expiryDate && new Date(selectedBatch.expiryDate) <= now) {
+
+    if (batch?.expiryDate && new Date(batch.expiryDate) <= new Date()) {
       alert("Cannot sell expired batches.");
       return;
     }
 
-    const baseSellingPrice = getProductUnitPrice(prod, selectedBatch);
+    const baseSellingPrice = getProductUnitPrice(prod, batch);
     const unitPrice = baseSellingPrice * multiplier;
 
     const stripsPerBox = Number(prod.stripsPerBox) || 10;
     const tabletsPerStrip = Number(prod.tabletsPerStrip) || 10;
     const tabletsPerBox = model === "MEDICINE" ? stripsPerBox * tabletsPerStrip : stripsPerBox;
 
+    const locLabel = loc?.locationLabel || (loc?.rackName ? `${loc.rackName} → ${loc.shelfName || ""} → ${loc.binName || ""}` : "Shelf");
+
     const existingIdx = cart.findIndex((item) =>
       item.productId === prod.id &&
-      item.inventoryId === selectedBatch.id &&
-      item.inventoryLocationId === selectedLocation.id &&
+      item.inventoryId === (batch?.id || null) &&
+      item.inventoryLocationId === (loc?.id || null) &&
       item.unitType === unitType
     );
 
     if (existingIdx >= 0) {
       const existing = cart[existingIdx];
-      const newQty = existing.quantity + quantity;
+      const newQty = existing.quantity + modalQty;
       const totalUnits = newQty * multiplier;
       if (totalUnits > existing.availableBaseStock) {
-        alert(`Cannot add more. Max available at this location is ${existing.availableBaseStock} base units.`);
+        alert(`Cannot add more. Max available stock is ${existing.availableBaseStock} base units.`);
         return;
       }
       const updated = [...cart];
-      updated[existingIdx] = { ...existing, quantity: newQty, availableBaseStock: selectedLocation.quantity, unitPrice };
+      updated[existingIdx] = { ...existing, quantity: newQty, unitPrice };
       setCart(updated);
     } else {
-      setCart([...cart, {
-        productId: prod.id, name: prod.name, genericName: prod.genericName || null, sku: prod.sku, size: prod.size,
-        productType: model, unitType, unitMultiplier: multiplier, quantity, unitPrice,
-        basePrice: baseSellingPrice, stripsPerBox, tabletsPerStrip, tabletsPerBox,
-        availableBaseStock: selectedLocation.quantity, batchNumber: selectedBatch.batchNumber || null,
-        expiryDate: selectedBatch.expiryDate || null, inventoryId: selectedBatch.id, inventoryLocationId: selectedLocation.id,
-        shelfLocation: selectedLocation.locationLabel || null, locationLabel: selectedLocation.locationLabel || null,
-        rackName: selectedLocation.rackName || null, shelfName: selectedLocation.shelfName || null, binName: selectedLocation.binName || null,
-        isControlled: prod.isControlled, requiresPrescription: prod.requiresPrescription, purchasePrice: selectedBatch.purchasePrice || null,
-      }]);
+      setCart((prev) => [
+        ...prev,
+        {
+          productId: prod.id,
+          name: prod.name,
+          genericName: prod.genericName || null,
+          sku: prod.sku,
+          barcode: prod.barcode || batch?.barcode || null,
+          size: prod.size,
+          productType: model,
+          unitType,
+          unitMultiplier: multiplier,
+          quantity: modalQty,
+          unitPrice,
+          basePrice: baseSellingPrice,
+          stripsPerBox,
+          tabletsPerStrip,
+          tabletsPerBox,
+          availableBaseStock: availableStockAtLoc,
+          batchNumber: batch?.batchNumber || "Default",
+          expiryDate: batch?.expiryDate || null,
+          inventoryId: batch?.id || null,
+          inventoryLocationId: loc?.id || null,
+          shelfLocation: locLabel,
+          locationLabel: locLabel,
+          rackName: loc?.rackName,
+          shelfName: loc?.shelfName,
+          binName: loc?.binName,
+          isControlled: prod.isControlled,
+          requiresPrescription: prod.requiresPrescription,
+          purchasePrice: batch?.purchasePrice || null,
+        },
+      ]);
     }
-    resetPosFlow();
+
+    setLocationModalOpen(false);
+    setModalProduct(null);
+    setModalBatch(null);
+    setModalSelectedLoc(null);
+    setSearch("");
+    setSearchFocused(false);
+    setTimeout(() => {
+      searchInputRef.current?.focus();
+    }, 50);
   };
 
-  const handleUnitChange = (productId: string, newUnit: string) => {
-    setCart((prev) => prev.map((item) => {
-      if (item.productId !== productId) return item;
+  // Update Cart Quantity
+  const updateCartQuantity = (idx: number, newQty: number) => {
+    if (newQty <= 0) {
+      setCart((prev) => prev.filter((_, i) => i !== idx));
+      return;
+    }
+    setCart((prev) => prev.map((item, i) => {
+      if (i !== idx) return item;
+      const totalBaseUnits = newQty * item.unitMultiplier;
+      if (totalBaseUnits > item.availableBaseStock) {
+        alert(`Stock limit reached. Max available: ${item.availableBaseStock} base units.`);
+        return item;
+      }
+      return { ...item, quantity: newQty };
+    }));
+  };
+
+  // Change Unit Type inside Cart Table
+  const handleCartUnitChange = (idx: number, newUnit: string) => {
+    setCart((prev) => prev.map((item, i) => {
+      if (i !== idx) return item;
       let multiplier = 1;
       if (newUnit === "BOX") multiplier = item.tabletsPerBox;
       else if (newUnit === "STRIP") multiplier = item.tabletsPerStrip;
-      else if (newUnit === "TABLET" || newUnit === "PIECE" || newUnit === "BOTTLE" || newUnit === "VIAL") multiplier = 1;
       const unitPrice = item.basePrice * multiplier;
       return { ...item, unitType: newUnit, unitMultiplier: multiplier, unitPrice };
     }));
   };
 
-  const updateQuantity = (productId: string, newQuantity: number) => {
-    if (newQuantity <= 0) {
-      setCart(cart.filter((item) => item.productId !== productId));
-      return;
-    }
-    setCart((prev) => prev.map((item) => {
-      if (item.productId !== productId) return item;
-      const totalUnits = newQuantity * item.unitMultiplier;
-      if (totalUnits > item.availableBaseStock) {
-        alert(`Insufficient stock. Max available at location is ${item.availableBaseStock} base units.`);
-        return item;
-      }
-      return { ...item, quantity: newQuantity };
-    }));
+  // Select customer from suggestions
+  const selectCustomer = (cust: CustomerSuggestion) => {
+    setCustomerPhone(cust.phone);
+    setCustomerName(cust.name);
+    if (cust.address) setCustomerAddress(cust.address);
+    setPhoneDropdownOpen(false);
   };
 
-  const filteredProducts = products.filter((p) => {
-    if (!search) return true;
-    const s = search.toLowerCase();
-    return (
-      p.name?.toLowerCase().includes(s) ||
-      p.genericName?.toLowerCase().includes(s) ||
-      p.sku?.toLowerCase().includes(s) ||
-      p.barcode?.includes(s) ||
-      p.subcategory?.toLowerCase().includes(s)
-    );
-  });
+  // Filtered customer suggestions
+  const filteredCustomers = useMemo(() => {
+    const q = customerPhone.trim();
+    if (!q) return customersList.slice(0, 20);
+    return customersList.filter((c) =>
+      c.phone.includes(q) || (c.name && c.name.toLowerCase().includes(q.toLowerCase()))
+    ).slice(0, 20);
+  }, [customersList, customerPhone]);
 
+  // Financial calculations
+  const totalCartUnits = cart.reduce((acc, item) => acc + item.quantity, 0);
   const subTotal = cart.reduce((acc, item) => acc + item.unitPrice * item.quantity, 0);
-  let discountAmount = 0;
-  if (discountValue > 0) {
-    discountAmount = discountType === "PERCENT" ? Math.round((subTotal * (discountValue / 100)) * 100) / 100 : Number(discountValue);
-  }
   const taxAmount = taxPercent > 0 ? Math.round((subTotal * (taxPercent / 100)) * 100) / 100 : 0;
-  const grandTotal = Math.max(0, subTotal - discountAmount + taxAmount);
+  const grandTotal = Math.max(0, subTotal + taxAmount);
   const numericPaid = paidInput !== "" ? parseFloat(paidInput) || 0 : grandTotal;
   const dueAmount = Math.max(0, grandTotal - numericPaid);
   const changeAmount = Math.max(0, numericPaid - grandTotal);
+
   const hasRxItems = cart.some((i) => i.requiresPrescription);
   const hasControlledDrugs = cart.some((i) => i.isControlled);
+  const isPhoneInvalid = customerPhone.length > 0 && customerPhone.length !== 11;
 
+  // Final Checkout Submission (Direct One-Click Sale with Immediate Receipt Preview)
   const handleCheckout = async () => {
     if (cart.length === 0 || !selectedBranchId) return;
+
     if (hasRxItems && !prescriptionRef.trim()) {
-      setError("Prescription required: Please enter Doctor / Prescription reference for Rx medications before checkout.");
+      setError("Prescription required: Please enter Doctor / Rx reference for prescribed medicine.");
       return;
     }
     if (hasControlledDrugs && !managerPin.trim()) {
@@ -479,35 +719,31 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
       setError("No active financial account exists for this branch.");
       return;
     }
+
     const chosenAccount = financialAccounts.find((a) => a.id === selectedAccountId);
     if (!chosenAccount) {
       setError("Selected financial account is invalid.");
       return;
     }
+
     try {
-      setCheckingOut(true); setError(null);
-      let paymentNote: string | null = null, trxRef: string | null = null;
-      const targetBankName: string | null = chosenAccount.bankName || chosenAccount.name;
-      if (paymentMethod === "BKASH" || paymentMethod === "NAGAD" || paymentMethod === "MOBILE") {
-        paymentNote = `${chosenAccount.name}${mobileTrxId.trim() ? ` (Trx: ${mobileTrxId.trim()})` : ""}`;
-        trxRef = mobileTrxId.trim() || null;
-      } else if (paymentMethod === "BANK") {
-        paymentNote = `${chosenAccount.name}${bankTrxRef.trim() ? ` (Ref: ${bankTrxRef.trim()})` : ""}`;
-        trxRef = bankTrxRef.trim() || null;
-      } else {
-        paymentNote = `POS Cash via ${chosenAccount.name}`;
-      }
+      setCheckingOut(true);
+      setError(null);
+
+      let finalNotes = `POS Sale`;
+      if (customerAddress.trim()) finalNotes += ` | Address: ${customerAddress.trim()}`;
+      if (chosenAccount.name) finalNotes += ` | Account: ${chosenAccount.name}`;
+
       const payload = {
         branchId: selectedBranchId,
         customerName: customerName.trim() || "Walk-in Customer",
         customerPhone: customerPhone.trim() || null,
         paymentMethod: chosenAccount.type || paymentMethod,
         financialAccountId: chosenAccount.id,
-        bankName: targetBankName,
-        transactionRef: trxRef,
-        notes: paymentNote,
-        discount: discountValue,
-        discountType,
+        bankName: chosenAccount.bankName || chosenAccount.name,
+        notes: finalNotes,
+        discount: 0,
+        discountType: "FIXED" as const,
         tax: taxAmount,
         paidAmount: numericPaid,
         prescriptionRef: prescriptionRef.trim() || null,
@@ -516,34 +752,123 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
           productId: item.productId,
           inventoryId: item.inventoryId || null,
           inventoryLocationId: item.inventoryLocationId || null,
+          batchNumber: item.batchNumber || null,
           unitType: item.unitType,
           unitMultiplier: item.unitMultiplier,
           quantity: item.quantity,
-          unitPrice: item.unitPrice
+          unitPrice: item.unitPrice,
         })),
       };
+
       const res = await fetchApi("/sales", { method: "POST", body: JSON.stringify(payload) });
       if (!res.success) throw new Error(res.message || "Failed to process sale");
-      const receiptRes = await fetchApi(`/sales/${res.data.id}/receipt`);
-      if (receiptRes.success && receiptRes.data) setInvoiceData(receiptRes.data);
-      else setInvoiceData({ pharmacy: { name: "Pharmacy Store", address: "Main Branch", phone: "—" }, invoice: { ...res.data, items: cart } });
-      setReceiptModalOpen(true); setCart([]); setPaidInput(""); setDiscountValue(0); setManagerPin(""); setPrescriptionRef(""); setMobileTrxId(""); setBankTrxRef("");
-      loadPosProducts(); loadFinancialAccounts(selectedBranchId);
-    } catch (err: any) { setError(err.message); } finally { setCheckingOut(false); }
+
+      // Cache customer locally
+      if (customerPhone.trim()) {
+        const newCust: CustomerSuggestion = {
+          phone: customerPhone.trim(),
+          name: customerName.trim() || "Customer",
+          address: customerAddress.trim() || undefined,
+        };
+        const updatedCusts = [newCust, ...customersList.filter((c) => c.phone !== newCust.phone)];
+        setCustomersList(updatedCusts);
+        try {
+          localStorage.setItem("pharmabiz_cached_customers", JSON.stringify(updatedCusts.slice(0, 100)));
+        } catch {}
+      }
+
+      // Prepare complete thermal receipt document
+      const branchObj = branches.find((b) => b.id === selectedBranchId);
+      const activeLogo = tenantLogo || user?.tenant?.logoUrl || settings?.logoUrl || null;
+      const receiptDoc = {
+        pharmacy: {
+          name: user?.tenant?.name || settings?.siteName || "Shapla Pharmacy",
+          logoUrl: activeLogo,
+          branchName: branchObj?.name || "Main Branch",
+          address: branchObj?.location || "Dhanmondi, Dhaka",
+          phone: branchObj?.phone || user?.tenant?.phone || "01701560326",
+          email: branchObj?.email || user?.tenant?.email || "uttam23412@gmail.com",
+          website: (user?.tenant as any)?.website || "www.petvet-bd.com",
+        },
+        invoice: {
+          receiptNo: res.data.receiptNo || `INV-${currentOrderId}`,
+          date: new Date().toISOString(),
+          cashier: user?.name || "Akash Mahmud",
+          customerName: customerName.trim() || "WALK-IN CUSTOMER",
+          customerPhone: customerPhone.trim() || "—",
+          items: cart.map((item) => ({
+            name: item.name,
+            barcode: item.barcode || "37000035058697",
+            unitType: item.unitType,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            subTotal: item.unitPrice * item.quantity,
+          })),
+          totalQuantity: totalCartUnits,
+          subTotal,
+          discount: 0,
+          deliveryCharge: 0,
+          totalAmount: grandTotal,
+          paidAmount: numericPaid,
+          dueAmount,
+        },
+      };
+
+      setInvoiceData(receiptDoc);
+      setSuccessToast("Payment submitted successfully!");
+      setTimeout(() => setSuccessToast(null), 4000);
+
+      // Ensure logo image is fully ready before triggering browser print dialog
+      const triggerPrintWithLogo = () => {
+        if (activeLogo && !logoLoadFailed) {
+          const testImg = new Image();
+          testImg.src = activeLogo;
+          if (testImg.complete && testImg.naturalWidth > 0) {
+            setTimeout(() => window.print(), 100);
+          } else {
+            testImg.onload = () => setTimeout(() => window.print(), 100);
+            testImg.onerror = () => {
+              setLogoLoadFailed(true);
+              setTimeout(() => window.print(), 100);
+            };
+            setTimeout(() => window.print(), 600);
+          }
+        } else {
+          setTimeout(() => window.print(), 150);
+        }
+      };
+      triggerPrintWithLogo();
+
+      // Reset cart and customer inputs
+      setCart([]);
+      setPaidInput("");
+      setCustomerPhone("");
+      setCustomerName("");
+      setCustomerAddress("");
+      setPrescriptionRef("");
+      setManagerPin("");
+
+      loadPosProducts();
+      loadFinancialAccounts(selectedBranchId);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setCheckingOut(false);
+    }
   };
 
-  // Keyboard Shortcuts Listener
+  // Keyboard Shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "F2" || (e.key === "/" && document.activeElement?.tagName !== "INPUT" && document.activeElement?.tagName !== "TEXTAREA" && document.activeElement?.tagName !== "SELECT")) {
+      if (e.key === "F2" || (e.key === "/" && document.activeElement?.tagName !== "INPUT" && document.activeElement?.tagName !== "TEXTAREA")) {
         e.preventDefault();
         searchInputRef.current?.focus();
+        setSearchFocused(true);
       }
-      if (e.key === "Escape") {
-        if (posStep !== "SEARCH") {
-          e.preventDefault();
-          resetPosFlow();
-        }
+      if (e.key === "F7") {
+        e.preventDefault();
+        setCart([]);
+        setSearch("");
       }
       if (e.key === "F9" || (e.ctrlKey && e.key === "Enter")) {
         if (cart.length > 0 && !checkingOut) {
@@ -551,767 +876,546 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
           handleCheckout();
         }
       }
+      if (e.key === "Escape") {
+        if (locationModalOpen) setLocationModalOpen(false);
+        else setSearchFocused(false);
+      }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [posStep, cart, checkingOut]);
+  }, [cart, checkingOut, locationModalOpen]);
 
-  const handlePrint = () => window.print();
+  // Clean Native Print (triggers browser print without blank page)
+  const handlePrintReceipt = () => {
+    window.print();
+  };
 
   return (
-    <div className="space-y-4 select-none max-w-[1600px] mx-auto pt-1">
-      {/* Optional Branch selector bar if navbar branch is not set explicitly */}
-      {!activeNavbarBranchId && (
-        <div className="px-4 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-300 text-xs flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 font-medium">
-            <Store className="h-4 w-4 text-amber-600 shrink-0" />
-            <span>Counter Branch: <strong>{branches.find((b) => b.id === selectedBranchId)?.name || "Main Counter"}</strong></span>
-          </div>
-          {canSwitchBranch && branches.length > 1 && (
-            <select
-              value={selectedBranchId}
-              onChange={(e) => setLocalBranchId(e.target.value)}
-              className="px-2.5 py-1 bg-white dark:bg-slate-900 border border-amber-500/40 rounded-lg text-xs font-bold text-slate-800 dark:text-slate-200 outline-none cursor-pointer"
-            >
-              {branches.map((b) => (
-                <option key={b.id} value={b.id}>{b.name}</option>
-              ))}
-            </select>
-          )}
+    <div className="w-full h-full flex flex-col min-h-0 space-y-2 select-none text-slate-800 dark:text-slate-200">
+      {/* Success Notification Banner */}
+      {successToast && (
+        <div className="fixed top-5 right-5 z-50 bg-emerald-600 text-white px-5 py-3 rounded-xl shadow-2xl flex items-center gap-2 font-bold text-sm animate-bounce">
+          <CheckCircle2 className="h-5 w-5" />
+          <span>{successToast}</span>
         </div>
       )}
 
-      {/* TOP LARGE PRODUCT SEARCH BAR - Directly at top of page for max speed */}
-      <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border-2 border-emerald-500/30 dark:border-emerald-500/30 shadow-sm">
-        <div className="relative flex items-center">
-          <Search className="absolute left-4 h-6 w-6 text-emerald-600 dark:text-emerald-400 pointer-events-none" />
-          <input
-            ref={searchInputRef}
-            type="text"
-            placeholder="Search medicine name, generic name, barcode, SKU... (Press /)"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-14 pr-28 py-4 bg-slate-50 dark:bg-slate-800/90 border-2 border-emerald-500/40 dark:border-emerald-500/40 focus:border-emerald-600 dark:focus:border-emerald-400 rounded-xl text-base sm:text-lg font-bold outline-none text-slate-900 dark:text-white transition shadow-inner placeholder:font-medium placeholder:text-slate-400"
-          />
-          {search ? (
-            <button onClick={() => setSearch("")} className="absolute right-4 p-1.5 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer">
-              <X className="h-5 w-5" />
-            </button>
-          ) : (
-            <div className="absolute right-4 hidden sm:flex items-center gap-1 bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 px-2.5 py-1 rounded-lg text-xs font-mono font-bold border border-emerald-300 dark:border-emerald-800 pointer-events-none">
-              /
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Mobile Catalog vs Cart Segmented Switcher */}
-      <div className="flex lg:hidden w-full bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
-        <button
-          type="button"
-          onClick={() => setMobilePosTab("catalog")}
-          className={`flex-1 py-3 rounded-lg text-xs font-black transition flex items-center justify-center gap-2 ${mobilePosTab === "catalog"
-            ? "bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-xs"
-            : "text-slate-600 dark:text-slate-400"
-            }`}
-        >
-          <Search className="h-4 w-4" />
-          <span>Products</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setMobilePosTab("cart")}
-          className={`flex-1 py-3 rounded-lg text-xs font-black transition flex items-center justify-center gap-2 ${mobilePosTab === "cart"
-            ? "bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-xs"
-            : "text-slate-600 dark:text-slate-400"
-            }`}
-        >
-          <ShoppingCart className="h-4 w-4" />
-          <span>Sale Cart ({cart.length})</span>
-        </button>
-      </div>
-
-      {/* TWO COLUMN POS SELLING FLOW */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
-        {/* LEFT 7 COLUMNS: PRODUCT SELECTION & BATCH/LOCATION STEPPER */}
-        <div className={`lg:col-span-7 space-y-4 ${mobilePosTab === "cart" ? "hidden lg:block" : "block"}`}>
-          <div className="bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 min-h-[520px] shadow-xs space-y-4">
-            {posStep === "SEARCH" ? (
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                    Product Catalog ({filteredProducts.length})
-                  </span>
-                </div>
-
-                {loading ? (
-                  <div className="p-20 flex flex-col items-center justify-center text-slate-400">
-                    <Loader2 className="h-10 w-10 animate-spin text-emerald-600 mb-2" />
-                    <p className="text-sm font-bold text-slate-600 dark:text-slate-300">Loading catalog stock...</p>
-                  </div>
-                ) : filteredProducts.length === 0 ? (
-                  <div className="p-20 text-center text-slate-400">
-                    <Barcode className="h-12 w-12 mx-auto text-slate-300 dark:text-slate-600 mb-3" />
-                    <p className="text-base font-black text-slate-700 dark:text-slate-300">No matching products found</p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[620px] overflow-y-auto pr-1">
-                    {filteredProducts.map((p) => {
-                      const stock = p.currentStock || 0;
-                      const inStock = stock > 0;
-                      return (
-                        <div
-                          key={p.id}
-                          onClick={() => inStock && startProductSelection(p)}
-                          className={`p-4 rounded-2xl border-2 transition text-left cursor-pointer relative flex flex-col justify-between ${inStock
-                            ? "bg-white dark:bg-slate-800/90 border-slate-200 dark:border-slate-700 hover:border-emerald-500 hover:shadow-md active:scale-[0.99]"
-                            : "bg-slate-50 dark:bg-slate-800/30 border-slate-200/60 dark:border-slate-800 opacity-60 cursor-not-allowed"
-                            }`}
-                        >
-                          <div>
-                            <div className="flex items-start justify-between gap-2 mb-1">
-                              <div className="font-black text-lg text-slate-900 dark:text-white leading-tight">
-                                {p.name} {p.size ? <span className="text-xs text-slate-500 font-bold">({p.size})</span> : null}
-                              </div>
-                              {p.requiresPrescription && (
-                                <span className="px-2.5 py-0.5 rounded-full bg-rose-100 dark:bg-rose-950/80 text-rose-700 dark:text-rose-300 font-black text-xs shrink-0 border border-rose-300 dark:border-rose-800">
-                                  Rx
-                                </span>
-                              )}
-                            </div>
-                            <div className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                              {p.genericName ? <span className="text-emerald-600 dark:text-emerald-400 font-bold">{p.genericName} • </span> : null}
-                              {p.brandName || p.manufacturer || "Generic"}
-                            </div>
-                          </div>
-
-                          <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-700/60 flex items-center justify-between">
-                            <div>
-                              <span className="text-xl font-black text-emerald-600 dark:text-emerald-400 font-mono">
-                                ৳{getProductUnitPrice(p).toFixed(2)}
-                              </span>
-                              <span className="text-xs font-bold text-slate-400"> / {p.unit}</span>
-                            </div>
-
-                            <div>
-                              <span className={`text-xs font-black px-3 py-1.5 rounded-full ${inStock
-                                ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
-                                : "bg-rose-50 text-rose-600 dark:bg-rose-950/60 dark:text-rose-400"
-                                }`}>
-                                {inStock ? `${stock.toLocaleString()} ${p.unit}s` : "Out of Stock"}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            ) : (
-              /* INLINE STEPPER SELECTION FLOW */
-              <div className="space-y-4">
-                {/* Active Selected Product Banner */}
-                <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 border-2 border-emerald-400 dark:border-emerald-800 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
-                  <div className="flex items-start gap-3">
-                    <div className="p-2.5 bg-emerald-600 text-white rounded-xl shadow-xs shrink-0">
-                      <Package className="h-7 w-7" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-black text-lg text-slate-900 dark:text-white">{selectedProduct?.name}</span>
-                        {selectedProduct?.size && <span className="text-xs text-slate-500 font-bold">({selectedProduct.size})</span>}
-                        {selectedProduct?.requiresPrescription && (
-                          <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 dark:bg-rose-950/80 dark:text-rose-300 font-black text-xs border border-rose-300 dark:border-rose-800 flex items-center gap-1">
-                            <ShieldAlert className="h-3.5 w-3.5 text-rose-600" /> Rx
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-xs text-slate-600 dark:text-slate-300 mt-0.5 font-medium">
-                        {selectedProduct?.genericName && <span className="font-bold text-emerald-700 dark:text-emerald-300">{selectedProduct.genericName} • </span>}
-                        Price: <strong className="text-slate-900 dark:text-white">৳{getProductUnitPrice(selectedProduct, selectedBatch).toFixed(2)}</strong> per {selectedProduct?.unit || "unit"}
-                      </div>
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={resetPosFlow}
-                    className="self-start sm:self-center flex items-center gap-1 px-3.5 py-2 rounded-xl border border-rose-300 dark:border-rose-800 bg-white dark:bg-slate-800 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950 text-xs font-black shadow-2xs transition cursor-pointer"
-                  >
-                    <X className="h-4 w-4" /> Change Product
-                  </button>
-                </div>
-
-                {/* Step Indicator */}
-                <div className="grid grid-cols-3 gap-2">
-                  <div className={`p-2.5 rounded-xl border text-center font-black text-xs sm:text-sm flex items-center justify-center gap-1 transition ${posStep === "SELECT_PRODUCT"
-                    ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
-                    : selectedBatch
-                      ? "bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800"
-                      : "bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700"
-                    }`}>
-                    <span className="truncate">1. Batch</span>
-                  </div>
-
-                  <div className={`p-2.5 rounded-xl border text-center font-black text-xs sm:text-sm flex items-center justify-center gap-1 transition ${posStep === "SELECT_LOCATION"
-                    ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
-                    : selectedLocation
-                      ? "bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800"
-                      : "bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700"
-                    }`}>
-                    <span className="truncate">2. Location</span>
-                  </div>
-
-                  <div className={`p-2.5 rounded-xl border text-center font-black text-xs sm:text-sm flex items-center justify-center gap-1 transition ${posStep === "SELECT_UNIT"
-                    ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
-                    : "bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700"
-                    }`}>
-                    <span className="truncate">3. Unit & Qty</span>
-                  </div>
-                </div>
-
-                {/* STEP 1: BATCH SELECTION */}
-                {posStep === "SELECT_PRODUCT" && (
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between pb-1 border-b border-slate-100 dark:border-slate-800">
-                      <h4 className="font-black text-sm sm:text-base text-slate-900 dark:text-white">Select Batch (FEFO Sorted):</h4>
-                      <span className="text-xs font-black text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-2.5 py-1 rounded-lg">Oldest Expiry First</span>
-                    </div>
-
-                    {loadingBatches ? (
-                      <div className="p-16 text-center text-slate-400">
-                        <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2 text-emerald-600" />
-                        <p className="text-xs font-bold">Loading FEFO batches...</p>
-                      </div>
-                    ) : posBatches.length === 0 ? (
-                      <div className="p-10 text-center bg-slate-50 dark:bg-slate-800/40 rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-700 text-slate-400">
-                        <AlertCircle className="h-8 w-8 mx-auto text-amber-500 mb-2" />
-                        <p className="text-sm font-bold text-slate-800 dark:text-slate-200">No available batch stock</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-2.5 max-h-[440px] overflow-y-auto pr-1">
-                        {posBatches.map((batch: any) => {
-                          const isExpired = batch.expiryDate && new Date(batch.expiryDate) < new Date();
-                          const daysLeft = batch.expiryDate ? Math.ceil((new Date(batch.expiryDate).getTime() - Date.now()) / 86400000) : null;
-                          const locationsCount = (batch.physicalLocations || []).length;
-                          return (
-                            <button
-                              key={batch.id}
-                              onClick={() => !isExpired && selectBatch(batch)}
-                              disabled={isExpired || batch.hasPhysicalStock === false}
-                              className={`w-full text-left p-4 rounded-2xl border-2 transition ${isExpired || !batch.hasPhysicalStock
-                                ? "bg-rose-50/50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900 opacity-60 cursor-not-allowed"
-                                : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-emerald-500 hover:shadow-md cursor-pointer"
-                                }`}
-                            >
-                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                                <div>
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-mono font-black text-lg text-slate-900 dark:text-white">Batch: {batch.batchNumber || "—"}</span>
-                                    {isExpired ? (
-                                      <span className="text-xs bg-rose-100 text-rose-700 dark:bg-rose-900/60 dark:text-rose-300 px-2 py-0.5 rounded-full font-bold">EXPIRED</span>
-                                    ) : daysLeft !== null && daysLeft <= 90 ? (
-                                      <span className="text-xs bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-300 px-2 py-0.5 rounded-full font-bold">Near Expiry ({daysLeft}d)</span>
-                                    ) : (
-                                      <span className="text-xs bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300 px-2 py-0.5 rounded-full font-bold">FEFO</span>
-                                    )}
-                                  </div>
-                                  <div className="text-xs text-slate-600 dark:text-slate-400 mt-1 font-medium">
-                                    Expiry: <strong className="text-slate-900 dark:text-white">{batch.expiryDate ? new Date(batch.expiryDate).toLocaleDateString() : "No Expiry"}</strong> • Available: <strong className="text-emerald-600 font-bold">{batch.quantity.toLocaleString()}</strong> units
-                                  </div>
-                                </div>
-
-                                <div className="text-right">
-                                  <div className="text-xl font-black text-emerald-600 dark:text-emerald-400 font-mono">
-                                    ৳{Number(batch.sellingPrice || selectedProduct?.basePrice).toFixed(2)}
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-700/60 text-xs font-bold flex items-center justify-between text-slate-600 dark:text-slate-400">
-                                <span className="text-emerald-700 dark:text-emerald-400 flex items-center gap-1 font-semibold">
-                                  <MapPin className="h-4 w-4 text-emerald-600" /> {locationsCount} Location{locationsCount === 1 ? "" : "s"}
-                                </span>
-                                <span className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1 font-black">
-                                  Select Batch <ArrowRight className="h-4 w-4" />
-                                </span>
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* STEP 2: LOCATION SELECTION */}
-                {posStep === "SELECT_LOCATION" && selectedBatch && (
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between pb-1 border-b border-slate-100 dark:border-slate-800">
-                      <button onClick={() => setPosStep("SELECT_PRODUCT")} className="flex items-center gap-1 text-xs font-black text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-xl cursor-pointer">
-                        <ArrowLeft className="h-4 w-4" /> Back to Batches
-                      </button>
-                      <span className="text-xs font-black text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-1 rounded-xl border border-emerald-200 dark:border-emerald-800">
-                        Batch: {selectedBatch.batchNumber}
-                      </span>
-                    </div>
-
-                    {loadingLocations ? (
-                      <div className="p-16 text-center text-slate-400">
-                        <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2 text-emerald-600" />
-                        <p className="text-xs font-bold">Loading locations...</p>
-                      </div>
-                    ) : selectedBatchLocations.length === 0 ? (
-                      <div className="p-10 text-center bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-2xl text-slate-600 dark:text-slate-400">
-                        <p className="font-bold text-sm text-amber-800 dark:text-amber-300">No physical locations allocated for this batch.</p>
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[440px] overflow-y-auto pr-1">
-                        {selectedBatchLocations.map((loc: any) => {
-                          const packDetails = calculateLocationPackaging(loc.quantity, {
-                            stripsPerBox: selectedBatch.stripsPerBox || selectedProduct?.stripsPerBox || 10,
-                            tabletsPerStrip: selectedBatch.tabletsPerStrip || selectedProduct?.tabletsPerStrip || 10,
-                            packageType: selectedProduct?.productType,
-                            unit: selectedProduct?.unit || "units",
-                          });
-                          const model = getProductPackagingModel(selectedProduct);
-                          return (
-                            <button
-                              key={loc.id}
-                              onClick={() => selectLocation(loc)}
-                              disabled={loc.quantity <= 0}
-                              className={`p-4 rounded-2xl border-2 text-left transition ${loc.quantity <= 0
-                                ? "bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 opacity-50 cursor-not-allowed"
-                                : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-emerald-500 hover:shadow-md cursor-pointer"
-                                }`}
-                            >
-                              <div className="flex items-center gap-1.5 mb-2 flex-wrap">
-                                <span className="bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-200 px-2.5 py-1 rounded-lg text-xs font-bold">
-                                  {loc.rackName || loc.rack?.name || "Rack"}
-                                </span>
-                                <span className="text-slate-400">/</span>
-                                <span className="bg-blue-100 dark:bg-blue-950/80 text-blue-800 dark:text-blue-200 px-2.5 py-1 rounded-lg text-xs font-bold">
-                                  {loc.shelfName || loc.shelf?.name || "Shelf"}
-                                </span>
-                                <span className="text-slate-400">/</span>
-                                <span className="bg-purple-100 dark:bg-purple-950/80 text-purple-800 dark:text-purple-200 px-2.5 py-1 rounded-lg text-xs font-bold">
-                                  {loc.binName || loc.bin?.name || "Bin"}
-                                </span>
-                              </div>
-
-                              <div className="flex items-baseline justify-between mb-2">
-                                <span className="text-2xl font-black text-slate-900 dark:text-white font-mono">
-                                  {loc.quantity.toLocaleString()}{" "}
-                                  <span className="text-xs font-normal text-slate-500">{selectedProduct?.unit || "units"}</span>
-                                </span>
-                              </div>
-
-                              {model === "MEDICINE" ? (
-                                <div className="flex flex-wrap gap-1 my-2 text-xs">
-                                  <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium">📦 {packDetails.fullBoxes} Box</span>
-                                  <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium">💊 {packDetails.openBoxRemainingStrips} Strip</span>
-                                  <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium">⚪ {packDetails.openBoxRemainingTablets} Tab</span>
-                                </div>
-                              ) : (
-                                <div className="my-2 text-xs">
-                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 font-bold border border-emerald-200 dark:border-emerald-800">
-                                    {model === "BOTTLE" ? "🧴" : model === "VIAL" ? "💉" : "📦"}
-                                    <span>{loc.quantity.toLocaleString()} {selectedProduct?.unit || (model === "BOTTLE" ? "bottle" : model === "VIAL" ? "vial" : "piece")}{loc.quantity > 1 ? "s" : ""} in this location</span>
-                                  </span>
-                                </div>
-                              )}
-
-                              <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-700/60 text-xs font-black text-emerald-600 dark:text-emerald-400 flex items-center justify-between">
-                                <span>Select Location</span>
-                                <ArrowRight className="h-4 w-4" />
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* STEP 3: SELLING UNIT & QUANTITY */}
-                {posStep === "SELECT_UNIT" && selectedLocation && (() => {
-                  const availableUnits = getAvailableSellingUnits(selectedProduct);
-                  const basePrice = getProductUnitPrice(selectedProduct, selectedBatch);
-                  const selectedUnitObj = availableUnits.find((u) => u.id === selectedUnit) || availableUnits[0];
-                  const mult = selectedUnitObj?.multiplier || 1;
-                  const totalUnits = quantity * mult;
-                  const unitPrice = basePrice * mult;
-                  const linePrice = unitPrice * quantity;
-                  const isEnough = selectedLocation.quantity >= totalUnits;
-
-                  return (
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between pb-1 border-b border-slate-100 dark:border-slate-800">
-                        <button onClick={() => setPosStep("SELECT_LOCATION")} className="flex items-center gap-1 text-xs font-black text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-xl cursor-pointer">
-                          <ArrowLeft className="h-4 w-4" /> Back to Locations
-                        </button>
-                        <span className="text-xs font-black text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 px-3 py-1 rounded-xl">
-                          Location: {selectedLocation.locationLabel}
-                        </span>
-                      </div>
-
-                      {/* Selling Unit Selection */}
-                      <div className="space-y-2">
-                        <label className="text-xs font-black text-slate-700 dark:text-slate-300 uppercase tracking-wider block">
-                          Selling Unit:
-                        </label>
-                        <div className={`grid ${availableUnits.length === 1 ? "grid-cols-1 sm:grid-cols-2" : availableUnits.length === 2 ? "grid-cols-2" : "grid-cols-3"} gap-3`}>
-                          {availableUnits.map((u) => {
-                            const isSelected = selectedUnit === u.id;
-                            return (
-                              <button
-                                key={u.id}
-                                type="button"
-                                onClick={() => selectUnitType(u.id)}
-                                className={`p-4 rounded-2xl border-2 text-center transition cursor-pointer ${isSelected
-                                  ? "border-emerald-600 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 font-bold shadow-xs"
-                                  : "border-slate-200 dark:border-slate-700 hover:border-slate-300 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300"
-                                  }`}
-                              >
-                                <div className="font-black text-base sm:text-lg">
-                                  {u.label}
-                                </div>
-                                <div className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">
-                                  {u.subtext}
-                                </div>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      {/* Quantity Counter */}
-                      <div className="space-y-2">
-                        <label className="text-xs font-black text-slate-700 dark:text-slate-300 uppercase tracking-wider block">
-                          Quantity ({selectedUnitObj?.label || selectedUnit}):
-                        </label>
-                        <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-800/80 p-4 rounded-2xl border-2 border-slate-200 dark:border-slate-700 gap-3">
-                          <div className="text-xs text-slate-600 dark:text-slate-400">
-                            Stock Available: <strong className="text-slate-900 dark:text-white font-mono text-sm">{selectedLocation.quantity.toLocaleString()}</strong> units
-                          </div>
-
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                              className="p-3.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 transition font-black cursor-pointer"
-                            >
-                              <Minus className="h-6 w-6" />
-                            </button>
-
-                            <input
-                              type="number"
-                              min={1}
-                              value={quantity}
-                              onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value, 10) || 1))}
-                              className="w-24 py-2.5 bg-white dark:bg-slate-900 border-2 border-emerald-600 rounded-xl text-center font-black text-2xl text-slate-900 dark:text-white outline-none"
-                            />
-
-                            <button
-                              type="button"
-                              onClick={() => setQuantity(quantity + 1)}
-                              className="p-3.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 transition font-black cursor-pointer"
-                            >
-                              <Plus className="h-6 w-6" />
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Quick Add Presets */}
-                        <div className="flex items-center gap-1.5 pt-1">
-                          <span className="text-xs text-slate-400 font-bold">Quick Qty:</span>
-                          {[1, 5, 10, 20, 50].map((num) => (
-                            <button
-                              key={num}
-                              type="button"
-                              onClick={() => setQuantity(num)}
-                              className={`px-3 py-1.5 rounded-xl text-xs font-black transition border cursor-pointer ${quantity === num
-                                ? "bg-emerald-600 text-white border-emerald-600"
-                                : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-emerald-600"
-                                }`}
-                            >
-                              +{num}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Line calculation & Add to Cart */}
-                      <div className="space-y-3 pt-2">
-                        <div className="p-4 bg-slate-100 dark:bg-slate-800/90 rounded-2xl text-xs space-y-1.5 border border-slate-200 dark:border-slate-700">
-                          <div className="flex justify-between text-slate-600 dark:text-slate-400">
-                            <span>Total Base Units Needed:</span>
-                            <span className="font-bold text-slate-900 dark:text-white">{totalUnits.toLocaleString()} {selectedProduct?.unit || "units"}</span>
-                          </div>
-                          <div className="flex justify-between items-baseline pt-1 border-t border-slate-200 dark:border-slate-700">
-                            <span className="font-black text-base text-slate-800 dark:text-slate-200">Total Price:</span>
-                            <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono">৳{linePrice.toFixed(2)}</span>
-                          </div>
-                        </div>
-
-                        <button
-                          onClick={confirmAddToCart}
-                          disabled={!isEnough}
-                          className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black py-4 rounded-2xl text-lg shadow-md transition flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
-                        >
-                          <CheckCircle2 className="h-6 w-6" /> Add to Cart (৳{linePrice.toFixed(2)})
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })()}
-                {/* End of STEP 3 */}
-              </div>
-            )}
+      {/* Counter notice if needed */}
+      {!activeNavbarBranchId && canSwitchBranch && branches.length > 1 && (
+        <div className="shrink-0 px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Store className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+            <span>Active Counter: <strong>{branches.find((b) => b.id === selectedBranchId)?.name || "Main Counter"}</strong></span>
           </div>
+          <select
+            value={selectedBranchId}
+            onChange={(e) => setLocalBranchId(e.target.value)}
+            className="px-2 py-0.5 bg-white border border-emerald-300 rounded text-xs font-bold outline-none cursor-pointer"
+          >
+            {branches.map((b) => (
+              <option key={b.id} value={b.id}>{b.name}</option>
+            ))}
+          </select>
         </div>
+      )}
 
-        {/* RIGHT 5 COLUMNS: SALE CART & CHECKOUT */}
-        <div className={`lg:col-span-5 space-y-4 ${mobilePosTab === "catalog" ? "hidden lg:block" : "block"}`}>
-          {mobilePosTab === "cart" && (
-            <button
-              type="button"
-              onClick={() => setMobilePosTab("catalog")}
-              className="lg:hidden w-full flex items-center justify-center gap-2 py-3 px-3 bg-slate-100 dark:bg-slate-800 rounded-xl text-xs font-black text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700"
-            >
-              <ArrowLeft className="h-4 w-4 text-emerald-600" />
-              <span>Return to Product Search</span>
-            </button>
-          )}
-
-          <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
-            {/* Cart Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <div className="flex items-center gap-2">
-                <ShoppingCart className="h-6 w-6 text-emerald-600" />
-                <h3 className="text-xl font-black text-slate-900 dark:text-white">Sale Cart ({cart.length})</h3>
+      {/* ========================================================================= */}
+      {/* TWO COLUMN POS LAYOUT (Optimized Responsive Cashier Layout)               */}
+      {/* ========================================================================= */}
+      <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-2.5 sm:gap-3 items-stretch overflow-hidden">
+        {/* LEFT COLUMN: SEARCH BAR & ACTIVE CART TABLE (~70% width) */}
+        <div className="flex-1 min-w-0 lg:w-[68%] xl:w-[70%] flex flex-col min-h-0 space-y-2 pb-12 sm:pb-14">
+          {/* SEARCH ROW (Left-width only + Exchange F7) */}
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Search Input with instant dropdown */}
+            <div ref={searchContainerRef} className="relative flex-1">
+              <div className="flex items-center h-12 bg-white dark:bg-slate-900 border-2 border-emerald-500/50 hover:border-emerald-500 focus-within:border-emerald-600 focus-within:ring-4 focus-within:ring-emerald-500/15 rounded-2xl shadow-xs px-3.5 transition">
+                <div className="h-8 w-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/70 border border-emerald-200/80 dark:border-emerald-800/60 flex items-center justify-center mr-3 shrink-0 text-emerald-600 dark:text-emerald-400">
+                  <Search className="h-4.5 w-4.5" />
+                </div>
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  placeholder="Enter Product ID / SKU / Name or Barcode (Press /)"
+                  value={search}
+                  onChange={(e) => {
+                    setSearch(e.target.value);
+                    setSearchFocused(true);
+                    setSelectedSearchIndex(0);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "ArrowDown" && searchResults.length > 0) {
+                      e.preventDefault();
+                      setSelectedSearchIndex((prev) => Math.min(searchResults.length - 1, prev + 1));
+                    } else if (e.key === "ArrowUp" && searchResults.length > 0) {
+                      e.preventDefault();
+                      setSelectedSearchIndex((prev) => Math.max(0, prev - 1));
+                    } else if (e.key === "Enter") {
+                      e.preventDefault();
+                      if (searchResults.length > 0) {
+                        const target = searchResults[selectedSearchIndex] || searchResults[0];
+                        if (target) openLocationSelector(target.product, target.batch);
+                      }
+                    } else if (e.key === "Escape") {
+                      setSearchFocused(false);
+                    }
+                  }}
+                  onClick={() => setSearchFocused(true)}
+                  className="w-full bg-transparent text-base font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 placeholder:font-normal outline-none"
+                />
+                <div className="flex items-center gap-2 text-slate-400 pl-2 shrink-0">
+                  {search ? (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSearch("");
+                        setSearchFocused(false);
+                      }}
+                      className="p-1 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  ) : null}
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 text-xs font-mono font-bold text-slate-500 dark:text-slate-400">
+                    <Barcode className="h-4.5 w-4.5 text-emerald-600 shrink-0" />
+                    <span>Scan</span>
+                  </div>
+                  <kbd className="hidden sm:inline-flex items-center px-2 py-0.5 text-xs font-mono font-black text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md">
+                    /
+                  </kbd>
+                </div>
               </div>
-              {cart.length > 0 && (
-                <button onClick={() => setCart([])} className="text-xs text-rose-500 hover:text-rose-600 font-black cursor-pointer">
-                  Clear Cart
-                </button>
-              )}
-            </div>
 
-            {error && (
-              <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-900 rounded-xl text-rose-700 dark:text-rose-300 text-xs font-bold flex items-center gap-2">
-                <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" />
-                <span>{error}</span>
-              </div>
-            )}
+              {/* INSTANT FEFO DROPDOWN */}
+              {searchFocused && searchResults.length > 0 && (
+                <div
+                  onMouseDown={(e) => e.preventDefault()}
+                  className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-white dark:bg-slate-900 border-2 border-emerald-500/50 rounded-xl shadow-2xl max-h-[400px] overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 content-scrollbar"
+                >
+                  {searchResults.map(({ product, batch, isExpired, daysLeft, stock }, idx) => {
+                    const isKeySelected = idx === selectedSearchIndex;
+                    const barcodeVal = batch?.barcode || product.barcode || product.sku || "—";
+                    const variantStr = product.size || (product.unit ? `Unit: ${product.unit}` : "- - -");
+                    return (
+                      <div
+                        key={`${product.id}-${batch?.id || idx}`}
+                        onClick={() => openLocationSelector(product, batch)}
+                        onMouseEnter={() => setSelectedSearchIndex(idx)}
+                        className={`p-3.5 cursor-pointer transition flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 ${
+                          isKeySelected
+                            ? "bg-emerald-100/80 dark:bg-emerald-950/60 ring-2 ring-emerald-500 rounded-lg"
+                            : "hover:bg-emerald-50/80 dark:hover:bg-emerald-950/30"
+                        } ${isExpired ? "opacity-75 bg-rose-50/30 dark:bg-rose-950/20" : ""}`}
+                      >
+                        <div className="space-y-1 min-w-0">
+                          <div className="text-[15px] font-black text-slate-900 dark:text-white flex items-center gap-2 flex-wrap">
+                            <span className="text-slate-500 dark:text-slate-400 font-mono text-xs font-bold">Barcode: {barcodeVal}</span>
+                            <span className="text-slate-900 dark:text-white font-extrabold">{product.name}</span>
+                            {product.requiresPrescription && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 font-bold border border-rose-300">
+                                Rx
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                            Product ID: <span className="text-slate-700 dark:text-slate-300 font-bold">{product.id.slice(0, 8)}</span>, SKU: <span className="text-slate-700 dark:text-slate-300 font-bold">{product.sku || "—"}</span>, Variant: <span className="text-slate-700 dark:text-slate-300 font-bold">{variantStr}</span>
+                            {product.genericName && (
+                              <span className="text-emerald-700 dark:text-emerald-400 ml-1.5 font-bold">({product.genericName})</span>
+                            )}
+                          </div>
+                        </div>
 
-            {cart.length === 0 ? (
-              <div className="py-16 text-center text-slate-400 space-y-2">
-                <ShoppingCart className="h-12 w-12 mx-auto text-slate-300 dark:text-slate-700" />
-                <p className="text-lg font-black text-slate-700 dark:text-slate-300">Sale cart is empty</p>
-                <p className="text-xs text-slate-500 font-medium">Select products from the catalog panel.</p>
-              </div>
-            ) : (
-              <div className="space-y-3 max-h-[320px] overflow-y-auto pr-1 divide-y divide-slate-100 dark:divide-slate-800">
-                {cart.map((item) => (
-                  <div key={`${item.productId}-${item.inventoryId}-${item.inventoryLocationId}-${item.unitType}`} className="pt-3 first:pt-0 space-y-2">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <div className="flex items-center gap-1.5">
-                          <div className="font-extrabold text-base text-slate-900 dark:text-white">{item.name} {item.size ? `(${item.size})` : ""}</div>
-                          {item.requiresPrescription && (
-                            <span className="px-1.5 py-0.2 rounded bg-rose-100 text-rose-700 dark:bg-rose-950/80 dark:text-rose-300 font-bold text-[10px]">
-                              Rx
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="px-2.5 py-1 rounded-full text-xs font-black bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 font-mono">
+                            Stock: {stock.toLocaleString()}
+                          </span>
+
+                          {isExpired ? (
+                            <span className="px-2.5 py-1 rounded-full text-xs font-black bg-rose-100 text-rose-700 border border-rose-300">
+                              Expire: Expired ({Math.abs(daysLeft || 0)} days ago)
+                            </span>
+                          ) : daysLeft !== null ? (
+                            <span className={`px-2.5 py-1 rounded-full text-xs font-black border ${daysLeft <= 90
+                              ? "bg-amber-100 text-amber-800 border-amber-300"
+                              : "bg-emerald-100 text-emerald-800 border-emerald-300"
+                            }`}>
+                              Expire: {daysLeft} days left
+                            </span>
+                          ) : (
+                            <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-500">
+                              No Expiry
                             </span>
                           )}
                         </div>
-                        <div className="text-xs text-slate-500 font-medium">
-                          Rate: ৳{item.basePrice.toFixed(2)}/unit • Batch: {item.batchNumber || "—"} ({item.locationLabel || "Shelf"})
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Empty state notice */}
+              {searchFocused && search.trim().length > 0 && searchResults.length === 0 && (
+                <div className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 text-center text-xs text-slate-500 shadow-lg">
+                  No matching medicine or batches found for &ldquo;{search}&rdquo;
+                </div>
+              )}
+            </div>
+
+            {/* Exchange (F7) Button - Large Font & Prominent Styling with Primary Brand Color */}
+            <button
+              type="button"
+              onClick={() => {
+                setCart([]);
+                setSearch("");
+              }}
+              style={{ backgroundColor: "var(--primary-color, #059669)" }}
+              title="Reset or Exchange sale (F7)"
+              className="h-12 flex items-center gap-2 px-5 sm:px-6 bg-emerald-600 hover:brightness-95 text-white rounded-2xl text-sm sm:text-base font-black transition shrink-0 cursor-pointer shadow-sm hover:shadow active:scale-97"
+            >
+              <Repeat className="h-5 w-5" />
+              <span>Exchange (F7)</span>
+            </button>
+          </div>
+
+          {/* ACTIVE CART TABLE WITH PRIMARY BRAND HEADER */}
+          <div className="flex-1 min-h-0 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-xs flex flex-col justify-between">
+            <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto content-scrollbar">
+              <table className="w-full text-left text-xs border-collapse">
+                {/* Sticky Primary Brand Color Table Header */}
+                <thead
+                  style={{ backgroundColor: "var(--primary-color, #059669)" }}
+                  className="sticky top-0 z-10 bg-emerald-600 dark:bg-emerald-700 text-white font-black text-sm uppercase tracking-wider shadow-sm"
+                >
+                  <tr>
+                    <th className="py-3.5 px-4 whitespace-nowrap">Barcode</th>
+                    <th className="py-3.5 px-4">Product Name</th>
+                    <th className="py-3.5 px-4 whitespace-nowrap">Batch & Expiry</th>
+                    <th className="py-3.5 px-4 whitespace-nowrap">Location</th>
+                    <th className="py-3.5 px-3 text-center whitespace-nowrap">Unit</th>
+                    <th className="py-3.5 px-4 text-right whitespace-nowrap">Price</th>
+                    <th className="py-3.5 px-4 text-center whitespace-nowrap">Qty</th>
+                    <th className="py-3.5 px-4 text-right whitespace-nowrap">Total</th>
+                    <th className="py-3.5 px-2 text-center w-9"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-slate-800 dark:text-slate-200">
+                  {cart.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} className="py-14 sm:py-18 text-center text-slate-400">
+                        <Barcode className="h-10 w-10 mx-auto text-slate-300 dark:text-slate-600 mb-2" />
+                        <p className="text-sm font-bold text-slate-700 dark:text-slate-300">Sale cart is empty</p>
+                        <p className="text-xs text-slate-400 mt-1">Click the search bar above to view products or scan barcode.</p>
+                      </td>
+                    </tr>
+                  ) : (
+                    cart.map((item, idx) => (
+                      <tr key={`${item.productId}-${item.inventoryId}-${item.inventoryLocationId}-${item.unitType}-${idx}`} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition">
+                        {/* Barcode */}
+                        <td className="py-3 px-3.5 font-mono text-slate-500 dark:text-slate-400 font-bold text-xs whitespace-nowrap">
+                          {item.barcode || item.sku || "—"}
+                        </td>
+
+                        {/* Product Name */}
+                        <td className="py-3 px-3.5 font-bold text-slate-900 dark:text-white max-w-[240px]">
+                          <div className="truncate text-[14.5px] font-extrabold leading-snug">{item.name}</div>
+                          {item.genericName && (
+                            <div className="text-xs text-emerald-600 dark:text-emerald-400 truncate font-semibold mt-0.5">{item.genericName}</div>
+                          )}
+                        </td>
+
+                        {/* Batch & Expiry */}
+                        <td className="py-3 px-3.5 font-mono text-xs text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                          <div className="font-bold">{item.batchNumber || "—"}</div>
+                          {item.expiryDate && (
+                            <div className="text-[11px] text-slate-400 font-sans mt-0.5">
+                              Exp: {new Date(item.expiryDate).toLocaleDateString("en-GB")}
+                            </div>
+                          )}
+                        </td>
+
+                        {/* Location */}
+                        <td className="py-3 px-3.5 whitespace-nowrap">
+                          <span className="text-xs px-2.5 py-1 rounded-md bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 font-bold inline-flex items-center gap-1.5">
+                            <MapPin className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                            <span>{item.locationLabel || item.shelfLocation || "Shelf"}</span>
+                          </span>
+                        </td>
+
+                        {/* Unit */}
+                        <td className="py-3 px-3 text-center whitespace-nowrap">
+                          {item.productType === "MEDICINE" ? (
+                            <select
+                              value={item.unitType}
+                              onChange={(e) => handleCartUnitChange(idx, e.target.value)}
+                              className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold outline-none cursor-pointer"
+                            >
+                              <option value="TABLET">Tab</option>
+                              <option value="STRIP">Strip ({item.tabletsPerStrip})</option>
+                              <option value="BOX">Box ({item.tabletsPerBox})</option>
+                            </select>
+                          ) : (
+                            <span className="text-xs font-bold text-slate-600 dark:text-slate-400 px-2.5 py-1 bg-slate-100 dark:bg-slate-800 rounded">{item.unitType}</span>
+                          )}
+                        </td>
+
+                        {/* Price */}
+                        <td className="py-3 px-3.5 text-right font-mono font-bold text-slate-800 dark:text-slate-200 text-sm whitespace-nowrap">
+                          ৳{item.unitPrice.toFixed(2)}
+                        </td>
+
+                        {/* Qty Counter */}
+                        <td className="py-3 px-3.5 text-center whitespace-nowrap">
+                          <div className="inline-flex items-center gap-1 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-1">
+                            <button
+                              type="button"
+                              onClick={() => updateCartQuantity(idx, item.quantity - 1)}
+                              className="h-6 w-6 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white rounded hover:bg-slate-200 dark:hover:bg-slate-700 transition cursor-pointer"
+                            >
+                              <Minus className="h-3.5 w-3.5" />
+                            </button>
+                            <span className="w-8 text-center font-black text-[13px] font-mono text-slate-900 dark:text-white">
+                              {item.quantity}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => updateCartQuantity(idx, item.quantity + 1)}
+                              className="h-6 w-6 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white rounded hover:bg-slate-200 dark:hover:bg-slate-700 transition cursor-pointer"
+                            >
+                              <Plus className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </td>
+
+                        {/* Line Total */}
+                        <td className="py-3 px-3.5 text-right font-mono font-black text-emerald-600 dark:text-emerald-400 text-[15px] whitespace-nowrap">
+                          ৳{(item.unitPrice * item.quantity).toFixed(2)}
+                        </td>
+
+                        {/* Delete Button */}
+                        <td className="py-3 px-2 text-center whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() => updateCartQuantity(idx, 0)}
+                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition cursor-pointer"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Bottom Total Items Summary (F2/F7 suggestions removed, showing selected product count on right) */}
+            <div className="shrink-0 px-4 py-2.5 bg-slate-50 dark:bg-slate-800/60 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs text-slate-500 font-bold">
+              <span className="text-slate-400 text-xs font-semibold">Selected Products</span>
+              <div>
+                Total Items: <strong className="text-slate-900 dark:text-white font-mono text-xs ml-1.5 px-2.5 py-0.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-md">{totalCartUnits}</strong>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* RIGHT COLUMN: "BILL DETAILS" SECTION (~30% width) */}
+        <div className="w-full lg:w-[32%] xl:w-[30%] min-w-[310px] max-w-[430px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs flex flex-col h-full overflow-hidden shrink-0">
+          {/* Header with Live Order # */}
+          <div className="shrink-0 px-4 sm:px-5 py-3.5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+            <h3 className="text-lg font-black text-slate-900 dark:text-white tracking-tight">Bill Details</h3>
+            <span className="font-mono text-xs font-bold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-md">#{currentOrderId}</span>
+          </div>
+
+          {error && (
+            <div className="shrink-0 mx-4 sm:mx-5 mt-3 p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs font-bold text-rose-700 flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          {/* Unified Content Flow (No empty gap in middle, larger clear font sizes) */}
+          <div className="flex-1 min-h-0 overflow-y-auto content-scrollbar px-4 sm:px-5 py-4 space-y-4">
+            {/* Customer Details: Phone with Dropdown & Autocomplete */}
+            <div className="space-y-3.5">
+              <div ref={phoneContainerRef} className="relative">
+                <label className="text-sm font-bold text-slate-800 dark:text-slate-200 block mb-1.5">
+                  Phone
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Enter Customer Phone"
+                    value={customerPhone}
+                    onChange={(e) => {
+                      setCustomerPhone(e.target.value);
+                      setPhoneDropdownOpen(true);
+                    }}
+                    onFocus={() => setPhoneDropdownOpen(true)}
+                    className="w-full h-11 px-3.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 focus:border-emerald-500 rounded-xl text-base font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 outline-none pr-9"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setPhoneDropdownOpen(!phoneDropdownOpen)}
+                    className="absolute right-3 top-3.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  >
+                    <ChevronDown className="h-4 w-4" />
+                  </button>
+                </div>
+
+                {/* Customer Autocomplete Dropdown */}
+                {phoneDropdownOpen && filteredCustomers.length > 0 && (
+                  <div
+                    onMouseDown={(e) => e.preventDefault()}
+                    className="absolute left-0 right-0 top-full mt-1 z-50 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl max-h-48 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800"
+                  >
+                    {filteredCustomers.map((cust, i) => (
+                      <div
+                        key={`${cust.phone}-${i}`}
+                        onClick={() => selectCustomer(cust)}
+                        className="p-3 text-xs hover:bg-emerald-50 dark:hover:bg-emerald-950/40 cursor-pointer flex items-center justify-between"
+                      >
+                        <div>
+                          <div className="font-bold text-slate-900 dark:text-white font-mono text-sm">{cust.phone}</div>
+                          <div className="text-xs text-slate-500">{cust.name} {cust.address ? `• ${cust.address}` : ""}</div>
                         </div>
+                        <span className="text-xs text-emerald-700 font-bold bg-emerald-100 px-2 py-0.5 rounded">Select</span>
                       </div>
-                      <button onClick={() => updateQuantity(item.productId, 0)} className="text-slate-400 hover:text-rose-600 p-1 rounded-lg transition cursor-pointer">
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-
-                    <div className="flex items-center justify-between gap-2 pt-0.5">
-                      {item.productType === "MEDICINE" ? (
-                        <select
-                          value={item.unitType}
-                          onChange={(e) => handleUnitChange(item.productId, e.target.value)}
-                          className="px-2.5 py-1 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-black text-slate-800 dark:text-slate-200 outline-none cursor-pointer"
-                        >
-                          <option value="TABLET">Tablet</option>
-                          <option value="STRIP">Strip ({item.tabletsPerStrip} tabs)</option>
-                          <option value="BOX">Box ({item.tabletsPerBox} tabs)</option>
-                        </select>
-                      ) : (
-                        <span className="text-xs font-black text-slate-600 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-lg">{item.unitType}</span>
-                      )}
-
-                      <div className="flex items-center gap-1.5">
-                        <button onClick={() => updateQuantity(item.productId, item.quantity - 1)} className="p-1 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 hover:bg-slate-100 font-black cursor-pointer"><Minus className="h-3.5 w-3.5" /></button>
-                        <span className="w-8 text-center font-black text-lg text-slate-900 dark:text-white">{item.quantity}</span>
-                        <button onClick={() => updateQuantity(item.productId, item.quantity + 1)} className="p-1 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 hover:bg-slate-100 font-black cursor-pointer"><Plus className="h-3.5 w-3.5" /></button>
-                      </div>
-
-                      <div className="font-black text-lg text-emerald-600 dark:text-emerald-400 font-mono text-right">
-                        ৳{(item.unitPrice * item.quantity).toFixed(2)}
-                      </div>
-                    </div>
+                    ))}
                   </div>
-                ))}
+                )}
+
+                {isPhoneInvalid && (
+                  <span className="text-xs font-bold text-rose-600 mt-1 block">
+                    Invalid Number (Must have 11 digits)
+                  </span>
+                )}
+              </div>
+
+              {/* Customer Name */}
+              <div>
+                <label className="text-sm font-bold text-slate-800 dark:text-slate-200 block mb-1.5">
+                  Name
+                </label>
+                <input
+                  type="text"
+                  placeholder="Enter Customer Name"
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                  className="w-full h-11 px-3.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 focus:border-emerald-500 rounded-xl text-base font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 outline-none"
+                />
+              </div>
+
+              {/* Customer Address */}
+              <div>
+                <label className="text-sm font-bold text-slate-800 dark:text-slate-200 block mb-1.5">
+                  Address
+                </label>
+                <input
+                  type="text"
+                  placeholder="Enter Customer Address"
+                  value={customerAddress}
+                  onChange={(e) => setCustomerAddress(e.target.value)}
+                  className="w-full h-11 px-3.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 focus:border-emerald-500 rounded-xl text-base font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 outline-none"
+                />
+              </div>
+            </div>
+
+            {/* Rx Prescription / Manager PIN requirements */}
+            {hasRxItems && (
+              <div className="space-y-1.5 pt-1">
+                <label className="text-sm font-bold text-rose-600 block">Doctor / Rx Reference *</label>
+                <input
+                  type="text"
+                  placeholder="Doctor Name / Rx Reference"
+                  value={prescriptionRef}
+                  onChange={(e) => setPrescriptionRef(e.target.value)}
+                  className="w-full h-11 px-3.5 bg-rose-50 border border-rose-300 rounded-xl text-sm font-bold text-slate-900 outline-none"
+                />
               </div>
             )}
 
-            {/* Customer Details */}
-            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2">
-              <div className="grid grid-cols-2 gap-2">
+            {hasControlledDrugs && (
+              <div className="space-y-1.5 pt-1">
+                <label className="text-sm font-bold text-amber-600 block">Manager Approval PIN *</label>
                 <input
                   type="text"
-                  placeholder="Customer Name"
-                  value={customerName}
-                  onChange={(e) => setCustomerName(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none text-slate-900 dark:text-white"
-                />
-                <input
-                  type="text"
-                  placeholder="Phone #"
-                  value={customerPhone}
-                  onChange={(e) => setCustomerPhone(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono font-bold outline-none text-slate-900 dark:text-white"
+                  placeholder="Manager PIN"
+                  value={managerPin}
+                  onChange={(e) => setManagerPin(e.target.value)}
+                  className="w-full h-11 px-3.5 bg-amber-50 border border-amber-300 rounded-xl text-sm font-bold text-slate-900 outline-none"
                 />
               </div>
+            )}
 
-              {hasRxItems && (
-                <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-900 rounded-xl space-y-1.5">
-                  <div className="text-xs font-bold text-rose-700 dark:text-rose-300 flex items-center gap-1.5">
-                    <ShieldAlert className="h-4 w-4 text-rose-600 shrink-0" />
-                    <span>Prescription Reference Required (Rx) *</span>
-                  </div>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Doctor name / Rx ref #"
-                    value={prescriptionRef}
-                    onChange={(e) => setPrescriptionRef(e.target.value)}
-                    className="w-full px-3 py-1.5 bg-white dark:bg-slate-800 border border-rose-400 rounded-lg text-xs font-bold outline-none text-slate-900 dark:text-white"
-                  />
-                </div>
-              )}
-
-              {hasControlledDrugs && (
-                <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-900 rounded-xl space-y-1.5">
-                  <div className="text-xs font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
-                    <ShieldAlert className="h-4 w-4 text-amber-600 shrink-0" /> Manager Approval PIN *
-                  </div>
-                  <input
-                    type="text"
-                    placeholder="Manager PIN"
-                    value={managerPin}
-                    onChange={(e) => setManagerPin(e.target.value)}
-                    className="w-full px-3 py-1.5 bg-white dark:bg-slate-800 border border-amber-400 rounded-lg text-xs font-bold outline-none text-slate-900 dark:text-white"
-                  />
-                </div>
-              )}
-            </div>
-
-            {/* Receiving Account */}
-            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2">
-              <label className="text-xs font-black text-slate-700 dark:text-slate-300 block">
+            {/* Payment Receiving Account */}
+            <div className="pt-1">
+              <label className="text-sm font-bold text-slate-800 dark:text-slate-200 block mb-1.5">
                 Payment Receiving Account:
               </label>
-              {financialAccounts.length === 0 ? (
-                <div className="p-2.5 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-xl text-xs text-amber-800 dark:text-amber-300 flex items-center gap-2">
-                  <AlertTriangle className="h-4 w-4 shrink-0" />
-                  <span>No financial account found for this branch.</span>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <select
-                    value={selectedAccountId}
-                    onChange={(e) => {
-                      setSelectedAccountId(e.target.value);
-                      const acct = financialAccounts.find((a) => a.id === e.target.value);
-                      if (acct) setPaymentMethod(acct.type || "CASH");
-                    }}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-black text-slate-800 dark:text-white outline-none cursor-pointer"
-                  >
-                    {financialAccounts.map((acct) => (
-                      <option key={acct.id} value={acct.id}>
-                        {acct.name} ({acct.type}) — Bal: ৳{Number(acct.balance || 0).toLocaleString("en-BD", { minimumFractionDigits: 2 })}
-                      </option>
-                    ))}
-                  </select>
-
-                  {(() => {
-                    const currentAcc = financialAccounts.find((a) => a.id === selectedAccountId);
-                    if (!currentAcc || currentAcc.type === "CASH") return null;
-                    const isMobile = currentAcc.type === "BKASH" || currentAcc.type === "NAGAD" || currentAcc.type === "MOBILE";
-                    return (
-                      <input
-                        type="text"
-                        placeholder={isMobile ? "Transaction ID / Mobile Ref #" : "Bank Ref / Auth #"}
-                        value={isMobile ? mobileTrxId : bankTrxRef}
-                        onChange={(e) => isMobile ? setMobileTrxId(e.target.value) : setBankTrxRef(e.target.value)}
-                        className="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono outline-none text-slate-900 dark:text-white"
-                      />
-                    );
-                  })()}
-                </div>
-              )}
+              <select
+                value={selectedAccountId}
+                onChange={(e) => {
+                  setSelectedAccountId(e.target.value);
+                  const acct = financialAccounts.find((a) => a.id === e.target.value);
+                  if (acct) setPaymentMethod(acct.type || "CASH");
+                }}
+                className="w-full h-11 px-3.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-slate-800 dark:text-slate-200 outline-none cursor-pointer"
+              >
+                {financialAccounts.map((acct) => (
+                  <option key={acct.id} value={acct.id}>
+                    {acct.name} ({acct.type}) — Bal: ৳{Number(acct.balance || 0).toLocaleString("en-BD", { minimumFractionDigits: 2 })}
+                  </option>
+                ))}
+              </select>
             </div>
 
-            {/* PROMINENT TOTALS & FAST CHECKOUT */}
-            <div className="pt-3 border-t-2 border-slate-200 dark:border-slate-800 space-y-3">
-              <div className="space-y-1 text-xs text-slate-600 dark:text-slate-400">
+            {/* Clean Section Divider */}
+            <div className="border-t border-slate-200 dark:border-slate-800 pt-3 space-y-3.5">
+              {/* Subtotal & VAT */}
+              <div className="space-y-1.5 text-sm text-slate-600 dark:text-slate-400">
                 <div className="flex justify-between font-bold">
-                  <span>Subtotal:</span>
-                  <span className="font-mono text-slate-900 dark:text-white">৳{subTotal.toFixed(2)}</span>
+                  <span className="text-slate-700 dark:text-slate-300">Subtotal:</span>
+                  <span className="font-mono text-base font-black text-slate-900 dark:text-white">৳{subTotal.toFixed(2)}</span>
                 </div>
-
-                {discountAmount > 0 && (
-                  <div className="flex justify-between font-black text-emerald-600">
-                    <span>Discount:</span>
-                    <span className="font-mono">-৳{discountAmount.toFixed(2)}</span>
-                  </div>
-                )}
-
                 {taxAmount > 0 && (
-                  <div className="flex justify-between font-bold">
-                    <span>VAT ({taxPercent}%):</span>
-                    <span className="font-mono">৳{taxAmount.toFixed(2)}</span>
+                  <div className="flex justify-between font-bold text-slate-600 dark:text-slate-400">
+                    <span className="text-slate-700 dark:text-slate-300">VAT ({taxPercent}%):</span>
+                    <span className="font-mono text-base font-black text-slate-900 dark:text-white">৳{taxAmount.toFixed(2)}</span>
                   </div>
                 )}
               </div>
 
-              {/* CLEAN SIMPLE GRAND TOTAL DISPLAY */}
-              <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 rounded-2xl flex items-center justify-between">
-                <span className="text-xs font-black text-slate-700 dark:text-slate-300 uppercase tracking-wider">Grand Total:</span>
-                <span className="text-2xl sm:text-3xl font-black font-mono text-emerald-600 dark:text-emerald-400 tracking-tight">
+              {/* GRAND TOTAL (Prominent Primary Brand Banner with Big Numbers) */}
+              <div
+                style={{ backgroundColor: "var(--primary-color, #059669)" }}
+                className="p-3.5 sm:p-4 bg-emerald-600 rounded-2xl text-white shadow-xs flex items-center justify-between"
+              >
+                <span className="text-sm font-black uppercase tracking-wider">GRAND TOTAL:</span>
+                <span className="text-3xl sm:text-[34px] font-black font-mono tracking-tight">
                   ৳{grandTotal.toFixed(2)}
                 </span>
               </div>
 
-              {/* Paid Input & Presets */}
-              <div className="space-y-2 pt-1">
-                <div className="flex items-center justify-between gap-3 bg-slate-50 dark:bg-slate-800 p-3 rounded-2xl border-2 border-emerald-500/50">
-                  <span className="text-xs font-black text-slate-800 dark:text-slate-200">Paid Amount (৳):</span>
+              {/* Paid Amount Input & Presets */}
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between gap-3 bg-slate-50 dark:bg-slate-800/80 p-3 rounded-2xl border border-slate-200 dark:border-slate-700">
+                  <span className="text-sm font-black text-slate-800 dark:text-slate-200">Paid Amount (৳):</span>
                   <input
                     type="number"
                     placeholder={`৳${grandTotal.toFixed(2)}`}
                     value={paidInput}
                     onChange={(e) => setPaidInput(e.target.value)}
-                    className="w-40 px-3 py-1.5 bg-white dark:bg-slate-900 border-2 border-emerald-600 rounded-xl text-lg font-black text-right outline-none text-emerald-600 dark:text-emerald-400 font-mono"
+                    className="w-40 h-11 px-3 bg-white dark:bg-slate-900 border-2 border-emerald-500 rounded-xl text-xl font-black text-right outline-none text-emerald-700 dark:text-emerald-400 font-mono shadow-xs"
                   />
                 </div>
 
-                {/* Presets */}
-                <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+                {/* Quick Paid Presets */}
+                <div className="flex items-center gap-2 overflow-x-auto pb-0.5">
                   <button
                     type="button"
                     onClick={() => setPaidInput(grandTotal.toString())}
-                    className="px-3 py-1.5 bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 rounded-xl text-xs font-black shrink-0 hover:bg-emerald-200 cursor-pointer"
+                    className="px-3.5 py-1.5 bg-emerald-100 text-emerald-800 rounded-xl text-sm font-black shrink-0 hover:bg-emerald-200 cursor-pointer transition active:scale-95"
                   >
                     Exact
                   </button>
@@ -1320,7 +1424,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                       key={amt}
                       type="button"
                       onClick={() => setPaidInput(amt.toString())}
-                      className="px-3 py-1.5 bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 rounded-xl text-xs font-black shrink-0 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer"
+                      className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-xl text-sm font-black shrink-0 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer transition active:scale-95"
                     >
                       ৳{amt}
                     </button>
@@ -1328,29 +1432,32 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                 </div>
 
                 {dueAmount > 0 ? (
-                  <div className="flex justify-between items-center text-rose-700 dark:text-rose-300 font-black text-xs bg-rose-50 dark:bg-rose-950/50 p-3 rounded-xl border border-rose-200 dark:border-rose-900">
+                  <div className="flex justify-between items-center text-rose-700 font-black text-sm bg-rose-50 dark:bg-rose-950/40 p-3 rounded-xl border border-rose-200 dark:border-rose-800">
                     <span>Due Amount:</span>
-                    <span className="font-mono text-base">৳{dueAmount.toFixed(2)}</span>
+                    <span className="font-mono text-lg font-black">৳{dueAmount.toFixed(2)}</span>
                   </div>
                 ) : changeAmount > 0 ? (
-                  <div className="flex justify-between items-center text-blue-700 dark:text-blue-300 font-black text-xs bg-blue-50 dark:bg-blue-950/50 p-3 rounded-xl border border-blue-200 dark:border-blue-900">
+                  <div className="flex justify-between items-center text-blue-700 font-black text-sm bg-blue-50 dark:bg-blue-950/40 p-3 rounded-xl border border-blue-200 dark:border-blue-800">
                     <span>Change Return:</span>
-                    <span className="font-mono text-base">৳{changeAmount.toFixed(2)}</span>
+                    <span className="font-mono text-lg font-black">৳{changeAmount.toFixed(2)}</span>
                   </div>
                 ) : null}
               </div>
 
-              {/* Complete Sale Button */}
+              {/* Complete Sale (F9) Button - Primary Brand Color CTA */}
               <button
+                type="button"
                 disabled={checkingOut || cart.length === 0 || financialAccounts.length === 0}
                 onClick={handleCheckout}
-                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black py-4 rounded-2xl text-lg shadow-lg transition flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer active:scale-[0.99]"
+                style={{ backgroundColor: "var(--primary-color, #059669)" }}
+                className="h-13 sm:h-14 w-full bg-emerald-600 hover:brightness-95 disabled:opacity-50 text-white font-black rounded-xl text-lg shadow-md transition flex items-center justify-center gap-2.5 cursor-pointer active:scale-99"
               >
                 {checkingOut ? (
                   <Loader2 className="h-6 w-6 animate-spin" />
                 ) : (
                   <>
-                    <Receipt className="h-6 w-6" /> Complete Sale (F9)
+                    <Receipt className="h-6 w-6" />
+                    <span>Complete Sale (F9)</span>
                   </>
                 )}
               </button>
@@ -1359,178 +1466,443 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
         </div>
       </div>
 
-      {/* Floating Mobile Cart Bar */}
-      {cart.length > 0 && mobilePosTab === "catalog" && (
-        <div className="fixed bottom-4 left-4 right-4 z-40 lg:hidden">
-          <button
-            type="button"
-            onClick={() => setMobilePosTab("cart")}
-            className="w-full bg-slate-900 dark:bg-emerald-600 text-white px-4 py-4 rounded-2xl shadow-xl flex items-center justify-between font-black text-sm backdrop-blur-md active:scale-98 transition"
-          >
-            <div className="flex items-center gap-2">
-              <ShoppingCart className="h-5 w-5 text-emerald-400 dark:text-white" />
-              <span>{cart.length} {cart.length === 1 ? "Item" : "Items"}</span>
-            </div>
-            <div className="flex items-center gap-1 font-mono text-emerald-400 dark:text-emerald-100 font-black text-base">
-              <span>৳{grandTotal.toFixed(2)}</span>
-              <ArrowRight className="h-4 w-4" />
-            </div>
-          </button>
-        </div>
-      )}
-      {/* RECEIPT / INVOICE MODAL */}
-      {receiptModalOpen && invoiceData && (
-        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 print:static print:inset-auto print:bg-transparent print:p-0 print:block print:w-full">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-xl shadow-2xl overflow-hidden print-invoice-card print:rounded-none print:shadow-none print:border-none print:max-w-full print:w-full print:text-black">
-            {/* Modal Control Bar */}
-            <div className="flex items-center justify-between p-4 border-b border-slate-100 dark:border-slate-800 print:hidden">
-              <div className="flex items-center gap-2 text-emerald-600 font-bold text-xs">
-                <CheckCircle2 className="h-5 w-5" /> Sale Completed
-              </div>
-              <div className="flex items-center gap-2">
-                <button onClick={handlePrint} className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold shadow hover:bg-emerald-700 cursor-pointer">
-                  <Printer className="h-4 w-4" /> Print Receipt
-                </button>
-                <button onClick={() => setReceiptModalOpen(false)} className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer">
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
+      {/* ========================================================================= */}
+      {/* ========================================================================= */}
+      {/* 1. PRODUCT & LOCATION SELECTION MODAL (Light Background & Clean Styling)   */}
+      {/* ========================================================================= */}
+      {locationModalOpen && modalProduct && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-[580px] shadow-2xl p-6 sm:p-7 text-slate-800 dark:text-slate-100 flex flex-col space-y-4 max-h-[92vh] overflow-hidden select-none relative">
+            {/* Top Close Button */}
+            <button
+              type="button"
+              onClick={closeModal}
+              title="Close (Esc)"
+              className="absolute top-5 right-5 text-slate-400 hover:text-slate-700 dark:hover:text-white p-1.5 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+            >
+              <X className="h-6 w-6" />
+            </button>
+
+            {/* Header: Centered Product Title & Subtitle */}
+            <div className="text-center pt-1 pb-1 shrink-0 px-8">
+              <h3 className="text-2xl sm:text-[26px] font-black text-slate-900 dark:text-white tracking-tight leading-snug">
+                {modalProduct.name}
+              </h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400 font-mono font-semibold mt-1.5">
+                Batch: {modalBatch?.batchNumber || "BAT-72880"} • Exp: {modalBatch?.expiryDate ? new Date(modalBatch.expiryDate).toLocaleDateString("en-GB") : "14/09/2028"}
+              </p>
             </div>
 
-            {/* Invoice Document */}
-            <div className="p-6 space-y-5 max-h-[80vh] overflow-y-auto print:max-h-none print:overflow-visible print:p-0 print:space-y-6 text-slate-800 dark:text-slate-200 print:text-black">
-              <div className="text-center space-y-1 pb-4 border-b-2 border-slate-900 dark:border-slate-100 print:border-black">
-                {(invoiceData.pharmacy?.logoUrl || user?.tenant?.logoUrl) && (
-                  <div className="flex justify-center mb-2">
-                    <img
-                      src={invoiceData.pharmacy?.logoUrl || user?.tenant?.logoUrl || ""}
-                      alt="Pharmacy logo"
-                      className="h-16 sm:h-20 object-contain print:h-20"
-                    />
+            {/* Section: Select Stock Location */}
+            <div className="flex-1 min-h-0 flex flex-col space-y-2.5 overflow-hidden">
+              {/* Header & Location Count */}
+              <div className="flex items-center justify-between shrink-0">
+                <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200 tracking-wide">
+                  Select Stock Location
+                </h4>
+                <span className="px-3 py-0.5 rounded-full text-xs font-bold text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/70 border border-blue-200 dark:border-blue-800/60 font-mono">
+                  {modalLocations.length} locations
+                </span>
+              </div>
+
+              {/* Search Bar inside Modal */}
+              <div className="relative shrink-0">
+                <Search className="absolute left-3.5 top-3 h-4.5 w-4.5 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search rack, shelf, bin..."
+                  value={modalLocationSearch}
+                  onChange={(e) => setModalLocationSearch(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-[#111622] border border-slate-200 dark:border-slate-800 focus:border-emerald-500 rounded-xl pl-10 pr-9 py-2.5 text-sm font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 outline-none transition"
+                />
+                <Maximize2 className="absolute right-3.5 top-3 h-4 w-4 text-slate-400" />
+              </div>
+
+              {/* Scrollable Location List (Directly below search with clean gap) */}
+              <div className="flex-1 min-h-0 overflow-y-auto content-scrollbar space-y-2.5 pr-1 mt-1">
+                {loadingLocations ? (
+                  <div className="py-12 text-center text-slate-400">
+                    <Loader2 className="h-7 w-7 animate-spin mx-auto text-emerald-600 mb-2" />
+                    <p className="text-sm font-medium">Loading physical locations...</p>
                   </div>
-                )}
-                <h2 className="font-black text-xl sm:text-2xl print:text-2xl uppercase tracking-tight text-slate-900 dark:text-white print:text-black">
-                  {invoiceData.pharmacy?.name || user?.tenant?.name || "Pharmacy"}
-                </h2>
-                {pharmacySettings.receiptHeaderNote && (
-                  <p className="text-xs sm:text-sm print:text-sm text-emerald-700 dark:text-emerald-400 print:text-black font-bold italic">
-                    {pharmacySettings.receiptHeaderNote}
-                  </p>
-                )}
-                {invoiceData.pharmacy?.address && (
-                  <p className="text-xs sm:text-sm print:text-sm text-slate-600 dark:text-slate-300 print:text-black font-medium">{invoiceData.pharmacy.address}</p>
-                )}
-                <p className="text-xs sm:text-sm print:text-sm text-slate-600 dark:text-slate-300 print:text-black font-medium">
-                  {invoiceData.pharmacy?.phone && `Tel: ${invoiceData.pharmacy.phone}`}
-                  {invoiceData.pharmacy?.phone && invoiceData.pharmacy?.email && " | "}
-                  {invoiceData.pharmacy?.email && `Email: ${invoiceData.pharmacy.email}`}
-                </p>
-              </div>
+                ) : filteredModalLocations.length === 0 ? (
+                  <div className="py-8 text-center text-sm font-medium text-slate-400 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
+                    No matching stock locations found.
+                  </div>
+                ) : (
+                  filteredModalLocations.map((loc, i) => {
+                    const isSelected = (modalSelectedLoc?.id ? modalSelectedLoc.id === loc.id : modalSelectedLoc?.locationLabel === loc.locationLabel) || (filteredModalLocations.length === 1);
+                    const rName = loc.rackName || loc.rack?.name || "R02";
+                    const sName = loc.shelfName || loc.shelf?.name || "S03";
+                    const bName = loc.binName || loc.bin?.name || "B02";
+                    const displayCode = loc.rackName && loc.shelfName ? `${rName} / ${sName} / ${bName}` : (loc.locationLabel || "Main Counter");
 
-              {/* Invoice Meta */}
-              <div className="flex justify-between text-xs sm:text-sm print:text-sm pb-4 border-b-2 border-slate-900 dark:border-slate-100 print:border-black font-medium leading-relaxed">
-                <div className="space-y-1">
-                  <div><span className="font-bold text-slate-500 print:text-black">Invoice #: </span><span className="font-mono font-bold text-sm sm:text-base print:text-base">{invoiceData.invoice?.receiptNo || "—"}</span></div>
-                  <div><span className="font-bold text-slate-500 print:text-black">Customer: </span><span className="font-bold text-slate-900 dark:text-white print:text-black">{invoiceData.invoice?.customerName || "Walk-in Customer"}</span></div>
-                  {invoiceData.invoice?.customerPhone && invoiceData.invoice.customerPhone !== "—" && (
-                    <div><span className="font-bold text-slate-500 print:text-black">Phone: </span><span className="font-mono">{invoiceData.invoice.customerPhone}</span></div>
-                  )}
-                  <div><span className="font-bold text-slate-500 print:text-black">Cashier: </span>{invoiceData.invoice?.cashier || user?.name || "Staff"}</div>
-                </div>
-                <div className="text-right space-y-1">
-                  <div><span className="font-bold text-slate-500 print:text-black">Date: </span>{new Date(invoiceData.invoice?.date || invoiceData.invoice?.createdAt || Date.now()).toLocaleDateString("en-BD", { day: "2-digit", month: "short", year: "numeric" })}</div>
-                  <div><span className="font-bold text-slate-500 print:text-black">Time: </span>{new Date(invoiceData.invoice?.date || invoiceData.invoice?.createdAt || Date.now()).toLocaleTimeString("en-BD", { hour: "2-digit", minute: "2-digit" })}</div>
-                  <div><span className="font-bold text-slate-500 print:text-black">Payment Method: </span><span className="font-bold text-slate-900 dark:text-white print:text-black">{invoiceData.invoice?.paymentMethod || "Cash"}</span></div>
-                </div>
-              </div>
+                    const branchObj = branches.find((b) => b.id === selectedBranchId);
+                    const branchName = branchObj?.name || "Main Branch";
 
-              {/* Items Table */}
-              <div className="table-responsive-container print:overflow-visible">
-                <table className="w-full min-w-[480px] print:min-w-0 text-xs sm:text-sm print:text-sm border-collapse">
-                  <thead>
-                    <tr className="border-b-2 border-slate-900 dark:border-slate-100 print:border-black uppercase text-xs font-bold text-slate-700 dark:text-slate-300 print:text-black">
-                      <th className="pb-2 text-left w-8">#</th>
-                      <th className="pb-2 text-left">Medicine / Product</th>
-                      <th className="pb-2 text-center">Batch</th>
-                      <th className="pb-2 text-center">Unit</th>
-                      <th className="pb-2 text-center">Qty</th>
-                      <th className="pb-2 text-right">Unit Price</th>
-                      <th className="pb-2 text-right">Subtotal</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200 dark:divide-slate-800 print:divide-slate-300 font-medium">
-                    {(invoiceData.invoice?.items || []).map((item: any, idx: number) => (
-                      <tr key={idx} className="border-b border-slate-100 dark:border-slate-800 print:border-slate-200">
-                        <td className="py-2.5 text-slate-400 font-mono text-xs">{idx + 1}</td>
-                        <td className="py-2.5 font-bold text-slate-900 dark:text-white print:text-black">
-                          {item.name}
-                          {item.genericName && (
-                            <div className="text-[11px] print:text-xs text-slate-500 print:text-slate-700 font-medium">{item.genericName}</div>
+                    const isMedicine = getProductPackagingModel(modalProduct) === "MEDICINE";
+                    const pkg = calculateLocationPackaging(loc.quantity, {
+                      stripsPerBox: Number(modalBatch?.stripsPerBox || modalProduct?.stripsPerBox) || 10,
+                      tabletsPerStrip: Number(modalBatch?.tabletsPerStrip || modalProduct?.tabletsPerStrip) || 10,
+                      packageType: modalProduct?.productType,
+                      unit: modalProduct?.unit,
+                    });
+
+                    if (isSelected) {
+                      return (
+                        <div
+                          key={loc.id || i}
+                          onClick={() => setModalSelectedLoc(loc)}
+                          className="p-3.5 sm:p-4 rounded-2xl border-2 border-emerald-600 bg-emerald-50/80 dark:bg-emerald-950/30 text-left transition cursor-pointer shadow-xs relative"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2.5 text-base font-black text-slate-900 dark:text-white">
+                              <span className="h-3 w-3 rounded-full bg-emerald-600 ring-4 ring-emerald-500/20 shrink-0" />
+                              <span>{displayCode}</span>
+                            </div>
+                            <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                          </div>
+                          <div className="text-xs text-slate-500 dark:text-slate-400 font-semibold mt-1 ml-5.5">
+                            {branchName}
+                          </div>
+                          {isMedicine ? (
+                            <div className="flex items-center gap-2 flex-wrap mt-2.5 ml-5.5">
+                              <span className="px-2.5 py-1 rounded-md text-xs font-black bg-emerald-100 border border-emerald-300 text-emerald-900 dark:bg-emerald-950 dark:border-emerald-500/50 dark:text-emerald-400 font-mono">
+                                {pkg.fullBoxes} Box
+                              </span>
+                              <span className="px-2.5 py-1 rounded-md text-xs font-black bg-blue-100 border border-blue-300 text-blue-900 dark:bg-blue-950 dark:border-blue-500/50 dark:text-blue-400 font-mono">
+                                {pkg.openBoxRemainingStrips} Strip
+                              </span>
+                              <span className="px-2.5 py-1 rounded-md text-xs font-black bg-slate-100 border border-slate-300 text-slate-800 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300 font-mono">
+                                {pkg.openBoxRemainingTablets} Tablet
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="text-sm text-slate-700 dark:text-slate-300 font-bold mt-2 ml-5.5">
+                              Stock: <strong className="text-emerald-700 dark:text-emerald-400 font-black text-base">{loc.quantity} {modalProduct?.unit || "units"}</strong>
+                            </div>
                           )}
-                        </td>
-                        <td className="py-2.5 text-center text-slate-600 print:text-black font-mono text-xs">{item.batchNumber || "—"}</td>
-                        <td className="py-2.5 text-center text-slate-600 print:text-black">{item.unitType || "Pc"}</td>
-                        <td className="py-2.5 text-center font-bold">{item.quantity}</td>
-                        <td className="py-2.5 text-right font-mono">৳{Number(item.unitPrice || 0).toFixed(2)}</td>
-                        <td className="py-2.5 text-right font-bold font-mono">৳{Number(item.subTotal || (item.unitPrice * item.quantity) || 0).toFixed(2)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                        </div>
+                      );
+                    }
 
-              {/* Invoice Totals */}
-              <div className="pt-3 border-t-2 border-slate-900 dark:border-slate-100 print:border-black space-y-1.5 text-xs sm:text-sm print:text-sm font-medium">
-                <div className="flex justify-between text-slate-600 print:text-black">
-                  <span>Subtotal:</span>
-                  <span className="font-mono font-bold">৳{Number(invoiceData.invoice?.subTotal || 0).toFixed(2)}</span>
-                </div>
-                {Number(invoiceData.invoice?.discount || 0) > 0 && (
-                  <div className="flex justify-between text-emerald-600 print:text-black font-bold">
-                    <span>Discount:</span>
-                    <span className="font-mono">-৳{Number(invoiceData.invoice.discount).toFixed(2)}</span>
-                  </div>
-                )}
-                {Number(invoiceData.invoice?.tax || 0) > 0 && (
-                  <div className="flex justify-between text-slate-600 print:text-black">
-                    <span>VAT / Tax:</span>
-                    <span className="font-mono font-bold">৳{Number(invoiceData.invoice.tax).toFixed(2)}</span>
-                  </div>
-                )}
-                <div className="flex justify-between font-black text-base sm:text-lg print:text-xl text-slate-900 dark:text-white print:text-black pt-2 border-t border-slate-300 print:border-black">
-                  <span>Grand Total:</span>
-                  <span className="font-mono">৳{Number(invoiceData.invoice?.totalAmount || 0).toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-slate-600 dark:text-slate-400 print:text-black">
-                  <span>Payment Method:</span>
-                  <span className="font-bold">{invoiceData.invoice?.paymentMethod || "Cash"}</span>
-                </div>
-                <div className="flex justify-between text-slate-600 dark:text-slate-400 print:text-black">
-                  <span>Paid Amount:</span>
-                  <span className="font-mono font-bold">৳{Number(invoiceData.invoice?.paidAmount ?? invoiceData.invoice?.totalAmount ?? 0).toFixed(2)}</span>
-                </div>
-                {Number(invoiceData.invoice?.dueAmount || 0) > 0 && (
-                  <div className="flex justify-between font-bold text-rose-600 print:text-black">
-                    <span>Due Amount:</span>
-                    <span className="font-mono">৳{Number(invoiceData.invoice.dueAmount).toFixed(2)}</span>
-                  </div>
-                )}
-                {Number(invoiceData.invoice?.changeAmount || 0) > 0 && (
-                  <div className="flex justify-between font-bold text-blue-600 print:text-black">
-                    <span>Change Return:</span>
-                    <span className="font-mono">৳{Number(invoiceData.invoice.changeAmount).toFixed(2)}</span>
-                  </div>
+                    return (
+                      <div
+                        key={loc.id || i}
+                        onClick={() => setModalSelectedLoc(loc)}
+                        className="p-3.5 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-[#111622] hover:border-slate-300 dark:hover:border-slate-700 text-left transition cursor-pointer"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2.5 text-base font-bold text-slate-800 dark:text-slate-200">
+                            <span className="h-2.5 w-2.5 rounded-full bg-slate-400 shrink-0" />
+                            <span>{displayCode}</span>
+                          </div>
+                          <span className="h-4.5 w-4.5 rounded-full border-2 border-slate-300 dark:border-slate-600 shrink-0" />
+                        </div>
+                        <div className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-1 ml-5">
+                          {isMedicine ? `${pkg.fullBoxes} Box · ${pkg.openBoxRemainingStrips} Strip` : `${loc.quantity} units`}
+                        </div>
+                      </div>
+                    );
+                  })
                 )}
               </div>
+            </div>
 
-              {pharmacySettings.receiptFooterNote && (
-                <div className="pt-3 border-t border-dashed border-slate-300 print:border-black text-center text-xs print:text-sm text-slate-500 print:text-black italic">
-                  {pharmacySettings.receiptFooterNote}
+            {/* Pinned Bottom Controls (Fixed inside viewport) */}
+            <div className="space-y-3.5 shrink-0 pt-2 border-t border-slate-100 dark:border-slate-800/80">
+              {/* Selling Unit Selection */}
+              <div className="space-y-1.5">
+                <h4 className="text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider">
+                  Selling Unit
+                </h4>
+                <div className="grid grid-cols-3 gap-2.5">
+                  {modalUnitsList.map((u) => {
+                    const isSelected = modalUnit === u.id;
+                    const price = modalBasePrice * u.multiplier;
+                    return (
+                      <button
+                        key={u.id}
+                        type="button"
+                        onClick={() => setModalUnit(u.id)}
+                        className={`py-2.5 px-3 rounded-xl border-2 text-center transition cursor-pointer ${
+                          isSelected
+                            ? "border-emerald-600 bg-emerald-50 text-emerald-800 dark:border-emerald-500 dark:bg-emerald-950/30 dark:text-emerald-400 shadow-xs"
+                            : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 dark:border-slate-800 dark:bg-[#111622] dark:text-slate-300"
+                        }`}
+                      >
+                        <div className={`text-base font-black ${isSelected ? "text-emerald-700 dark:text-emerald-400" : "text-slate-900 dark:text-white"}`}>
+                          {u.label}
+                        </div>
+                        <div className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-mono font-bold mt-0.5">
+                          ৳{price.toFixed(0)}
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
-              )}
+              </div>
+
+              {/* Quantity & Live Estimated Total */}
+              <div className="bg-slate-50 dark:bg-[#111622] border border-slate-200 dark:border-slate-800 rounded-2xl p-3.5 sm:p-4 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-bold text-slate-800 dark:text-slate-100">Quantity</span>
+                  <div className="flex items-center gap-2 bg-white dark:bg-[#0B0F17] border border-slate-200 dark:border-slate-800 rounded-xl px-2.5 py-1.5 shadow-xs">
+                    <button
+                      type="button"
+                      onClick={() => setModalQty(Math.max(1, modalQty - 1))}
+                      className="h-8 w-8 flex items-center justify-center text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+                    >
+                      <Minus className="h-4 w-4" />
+                    </button>
+                    <input
+                      ref={modalQuantityInputRef}
+                      type="number"
+                      min={1}
+                      value={modalQty}
+                      onFocus={(e) => e.target.select()}
+                      onChange={(e) => setModalQty(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                      className="w-16 bg-transparent text-center font-black text-xl text-slate-900 dark:text-white outline-none font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setModalQty(modalQty + 1)}
+                      className="h-8 w-8 flex items-center justify-center text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between border-t border-slate-200 dark:border-slate-800/80 pt-2.5">
+                  <span className="text-sm font-bold text-slate-600 dark:text-slate-300">Estimated Total</span>
+                  <span className="font-mono text-2xl sm:text-[26px] font-black text-emerald-600 dark:text-emerald-400">
+                    ৳{modalEstimatedTotal.toFixed(2)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Add to Sale Cart Action */}
+              <button
+                type="button"
+                onClick={confirmAddToCart}
+                style={{ backgroundColor: "var(--primary-color, #059669)" }}
+                className="w-full h-12 sm:h-13 bg-emerald-600 hover:brightness-95 text-white font-black py-3 rounded-xl text-lg shadow-md transition flex items-center justify-center gap-2 cursor-pointer active:scale-99"
+              >
+                <span>Add to Sale Cart</span>
+              </button>
             </div>
           </div>
         </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 2. SILENT THERMAL RECEIPT PRINT PORTAL (Direct print, zero on-screen modal) */}
+      {/* ========================================================================= */}
+      {invoiceData && createPortal(
+        <div className="print-portal fixed -left-[9999px] -top-[9999px] w-0 h-0 opacity-0 pointer-events-none overflow-hidden print:static print:left-auto print:top-auto print:w-full print:h-auto print:opacity-100 print:pointer-events-auto print:overflow-visible print:block print:m-0 print:p-0 print:bg-white">
+          <div className="printable-document print-invoice-card bg-white text-black print:m-0 print:p-0 print:w-full">
+            {/* 80mm THERMAL SALES INVOICE (With outer light border & Pharmacy Logo) */}
+            <div
+              className="bg-white font-sans text-xs leading-relaxed space-y-3 select-text"
+              style={{
+                width: "100%",
+                maxWidth: "350px",
+                margin: "0 auto",
+                padding: "16px 16px",
+                border: "1px solid #cbd5e1",
+                backgroundColor: "#ffffff",
+                color: "#000000",
+                boxSizing: "border-box",
+              }}
+            >
+              {/* Centered Header with Pharmacy Logo */}
+              <div className="text-center space-y-0.5">
+                {/* Pharmacy Brand Logo (Above Pharmacy Name) */}
+                <div className="flex justify-center mb-1.5" style={{ minHeight: "44px" }}>
+                  {(invoiceData.pharmacy?.logoUrl || tenantLogo || settings?.logoUrl) && !logoLoadFailed ? (
+                    <img
+                      src={invoiceData.pharmacy?.logoUrl || tenantLogo || settings?.logoUrl || ""}
+                      alt={invoiceData.pharmacy?.name || "Pharmacy Logo"}
+                      crossOrigin="anonymous"
+                      loading="eager"
+                      decoding="sync"
+                      onError={() => setLogoLoadFailed(true)}
+                      style={{
+                        maxHeight: "52px",
+                        maxWidth: "135px",
+                        objectFit: "contain",
+                        margin: "0 auto",
+                        display: "block",
+                      }}
+                    />
+                  ) : (
+                    <div
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        width: "46px",
+                        height: "46px",
+                        borderRadius: "50%",
+                        border: "2px solid #000000",
+                        margin: "0 auto 4px auto",
+                        backgroundColor: "#ffffff",
+                      }}
+                    >
+                      <svg
+                        width="26"
+                        height="26"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="#000000"
+                        strokeWidth="2.4"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M12 4v16M4 12h16" />
+                        <circle cx="12" cy="12" r="9" strokeWidth="1.3" />
+                      </svg>
+                    </div>
+                  )}
+                </div>
+
+                <h2 className="font-black text-2xl tracking-tight text-black uppercase">
+                  {invoiceData.pharmacy?.name || "Shapla Pharmacy"}
+                </h2>
+                <p className="font-semibold text-xs text-black">
+                  {invoiceData.pharmacy?.branchName || "Main Branch"}
+                </p>
+                <p className="text-[11px] text-black">
+                  {invoiceData.pharmacy?.address || "Dhanmondi, Dhaka"}
+                </p>
+                <p className="text-[11px] text-black">
+                  Hotline: {invoiceData.pharmacy?.phone || "01701560326"}
+                </p>
+                <p className="text-[11px] text-black">
+                  Email : {invoiceData.pharmacy?.email || "uttam23412@gmail.com"}
+                </p>
+                <p className="text-[11px] text-black">
+                  Website : {invoiceData.pharmacy?.website || "www.petvet-bd.com"}
+                </p>
+              </div>
+
+              {/* Order Meta */}
+              <div style={{ borderTop: "1px dashed #000000", paddingTop: "8px" }} className="space-y-1">
+                <div className="flex justify-between font-bold text-xs">
+                  <span>Order ID :</span>
+                  <span className="font-mono">{invoiceData.invoice?.receiptNo || currentOrderId}</span>
+                </div>
+                <div className="flex justify-between font-bold text-xs">
+                  <span>Date:</span>
+                  <span>
+                    {new Date(invoiceData.invoice?.date || Date.now()).toLocaleDateString("en-GB")}
+                  </span>
+                </div>
+                <div className="flex justify-between font-bold text-xs">
+                  <span>Cashier :</span>
+                  <span>{invoiceData.invoice?.cashier || user?.name || "Akash Mahmud"}</span>
+                </div>
+              </div>
+
+              {/* Customer Meta */}
+              <div style={{ borderTop: "1px solid #000000", paddingTop: "8px" }} className="space-y-1">
+                <div className="flex justify-between text-xs">
+                  <span className="font-bold">Customer:</span>
+                  <span className="font-bold uppercase">{invoiceData.invoice?.customerName || "WALK-IN CUSTOMER"}</span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="font-bold">Phone:</span>
+                  <span className="font-mono">{invoiceData.invoice?.customerPhone || "—"}</span>
+                </div>
+              </div>
+
+              {/* Line Items Table (Image 2 exact style) */}
+              <div style={{ borderTop: "1.5px solid #000000", paddingTop: "8px" }} className="space-y-2">
+                {(invoiceData.invoice?.items || []).map((item: any, idx: number) => (
+                  <div key={idx} className="space-y-0.5">
+                    <div className="font-black text-xs">
+                      #{idx + 1}. {item.name} - -
+                    </div>
+                    <div className="flex justify-between text-[11px] text-black">
+                      <span className="font-mono">
+                        Barcode: {item.barcode || "37000035058697"} | Unit: {item.quantity} x {Number(item.unitPrice || 0).toFixed(0)}
+                      </span>
+                      <span className="font-black font-mono">
+                        {Number(item.subTotal || (item.unitPrice * item.quantity) || 0).toFixed(0)}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Financial Totals */}
+              <div style={{ borderTop: "1px dashed #000000", paddingTop: "8px" }} className="space-y-1 text-xs font-bold">
+                <div className="flex justify-between">
+                  <span>Total Quantity:</span>
+                  <span className="font-mono">{invoiceData.invoice?.totalQuantity ?? totalCartUnits}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Subtotal:</span>
+                  <span className="font-mono">{Number(invoiceData.invoice?.subTotal || 0).toFixed(0)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Discount:</span>
+                  <span className="font-mono">{Number(invoiceData.invoice?.discount || 0).toFixed(0)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Delivery Charge:</span>
+                  <span className="font-mono">{Number(invoiceData.invoice?.deliveryCharge || 0).toFixed(0)}</span>
+                </div>
+                <div style={{ borderTop: "1px solid #000000", paddingTop: "4px" }} className="flex justify-between font-black text-sm">
+                  <span>Grand Total:</span>
+                  <span className="font-mono">{Number(invoiceData.invoice?.totalAmount || 0).toFixed(0)}</span>
+                </div>
+              </div>
+
+              {/* Payment Details */}
+              <div style={{ borderTop: "1px dashed #000000", paddingTop: "8px" }} className="space-y-1 text-xs font-bold">
+                <div className="flex justify-between">
+                  <span>Advance:</span>
+                  <span className="font-mono">{Number(invoiceData.invoice?.paidAmount || 0).toFixed(0)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Due Amount:</span>
+                  <span className="font-mono">{Number(invoiceData.invoice?.dueAmount || 0).toFixed(0)}</span>
+                </div>
+              </div>
+
+              {/* Dashed line above Policy Box (Matches Image 2) */}
+              <div style={{ borderTop: "1px dashed #000000", margin: "8px 0" }} />
+
+              {/* Policy Box (Matches Image 2) */}
+              <div style={{ border: "1px solid #000000", padding: "8px", margin: "8px 0", textAlign: "center", fontSize: "10px", lineHeight: "1.3" }} className="font-medium rounded">
+                Items may be exchanged subject to Biz_Pos & Diagnostic sales policies within 7 days. No cash refund is applicable.
+              </div>
+
+              {/* Divider Line Under Policy Box (Matches Image 2) */}
+              <div style={{ borderTop: "1px solid #000000", margin: "8px 0" }} />
+
+              {/* Thank you note & Barcode */}
+              <div className="text-center space-y-1">
+                <p className="font-black text-xs tracking-wider uppercase">
+                  THANK YOU FOR SHOPPING !
+                </p>
+
+                {/* SCANNABLE VECTOR BARCODE */}
+                <div className="pt-1 flex justify-center">
+                  <Barcode128
+                    value={invoiceData.invoice?.receiptNo || currentOrderId}
+                    width={1.6}
+                    height={40}
+                    showText={true}
+                    textSize={11}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );

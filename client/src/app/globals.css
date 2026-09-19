@@ -206,6 +206,24 @@
     width: 100%;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 transparent;
+  }
+  .dark .table-responsive-container {
+    scrollbar-color: #334155 transparent;
+  }
+  .table-responsive-container::-webkit-scrollbar {
+    height: 6px;
+  }
+  .table-responsive-container::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .table-responsive-container::-webkit-scrollbar-thumb {
+    background-color: #cbd5e1;
+    border-radius: 9999px;
+  }
+  .dark .table-responsive-container::-webkit-scrollbar-thumb {
+    background-color: #334155;
   }
 
   /* Modal Safe Scrollbar */
@@ -222,12 +240,11 @@
 }
 
 /* ─── Print Styles ─────────────────────────────────────────────────────────── */
-/* When printing (Ctrl+P or window.print()), isolate ONLY the printable invoice */
-/* document so background POS cards, cart, sidebar, and navbar never appear     */
+/* When printing, isolate the receipt portal completely from the main layout  */
 @media print {
   @page {
-    margin: 1cm 1.5cm;
-    size: A4 portrait;
+    margin: 6mm 10mm;
+    size: auto;
   }
 
   html,
@@ -243,37 +260,65 @@
     overflow: visible !important;
   }
 
-  /* Hide ALL elements in DOM by default during print */
-  body * {
-    visibility: hidden !important;
+  /* Completely eliminate the background page, header, sidebar, and table rows from print layout */
+  body > *:not(.print-portal) {
+    display: none !important;
   }
 
-  /* Make ONLY the printable document and all its contents visible */
-  .printable-document,
-  .printable-document * {
-    visibility: visible !important;
-  }
-
-  /* Position the printable invoice document at top-left filling full page width */
-  .printable-document {
-    position: absolute !important;
-    top: 0 !important;
-    left: 0 !important;
+  /* Position the print portal directly at the top of the page with zero offset */
+  .print-portal {
+    display: block !important;
+    position: static !important;
     width: 100% !important;
-    max-width: 100% !important;
     margin: 0 !important;
     padding: 0 !important;
     background: #ffffff !important;
     color: #000000 !important;
+    overflow: visible !important;
+    height: auto !important;
+    min-height: 0 !important;
+    inset: auto !important;
+  }
+
+  .print-portal .printable-document,
+  .print-portal .print-invoice-card {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    max-width: 350px !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    color: #000000 !important;
     box-shadow: none !important;
-    border: none !important;
-    border-radius: 0 !important;
+    overflow: visible !important;
+    max-height: none !important;
+  }
+
+  .print-portal * {
+    visibility: visible !important;
+  }
+
+  .print-portal img,
+  .print-portal svg {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
+
+  /* Fallback in case document is printed directly */
+  .printable-document,
+  .printable-document *,
+  .print-invoice-card,
+  .print-invoice-card * {
+    visibility: visible !important;
   }
 
   /* Explicitly hide buttons and control bar elements inside printable container */
   .print\:hidden,
   .print\:hidden *,
-  button {
+  button,
+  .no-print {
     display: none !important;
     visibility: hidden !important;
   }
@@ -291,3 +336,4 @@
     page-break-inside: avoid !important;
   }
 }
+

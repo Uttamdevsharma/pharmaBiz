@@ -1,18 +1,16 @@
 "use client";
 
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useRef } from "react";
 import { fetchApi } from "@/lib/api";
-import { Branch, InventoryItem } from "@/types";
-import { useAuth } from "@/context/AuthContext";
+import { InventoryItem } from "@/types";
 import { useBranchContext } from "@/context/BranchContext";
 import {
   calculatePackaging,
+  calculateLocationPackaging,
+  calculateBatchBulkPackaging,
   PackagingConfig,
 } from "@/lib/packaging";
-import { ProductInventoryDetailsView } from "./ProductInventoryDetailsView";
-import { BatchStockDetailsView } from "./BatchStockDetailsView";
 import { OwnerModule } from "./DashboardSidebar";
-import { Pagination } from "@/components/common/Pagination";
 import {
   Boxes,
   Plus,
@@ -21,37 +19,21 @@ import {
   MapPin,
   Loader2,
   AlertTriangle,
-  Package,
   Layers,
-  ChevronRight,
-  Filter,
-  CheckCircle2,
+  ArrowRight,
+  ArrowLeft,
+  X,
+  Barcode,
   Calendar,
-  Sparkles,
+  ChevronRight,
 } from "lucide-react";
 
-interface ProductStockGroup {
-  productId: string;
-  name: string;
-  genericName?: string | null;
-  brandName?: string | null;
-  manufacturer?: string | null;
-  category?: string | null;
-  size?: string | null;
-  unit: string;
-  sku: string;
-  barcode?: string | null;
-  productType?: string;
-  qtyPerLevel2?: number;
-  stripsPerBox?: number;
-  tabletsPerStrip?: number;
-  batches: InventoryItem[];
-  totalStock: number;
-  batchesCount: number;
-  locationsCount: number;
-  expiredBatchesCount: number;
-  nearExpiryBatchesCount: number;
-  earliestExpiry?: string | null;
+export interface BatchStockItem extends InventoryItem {
+  isExpired: boolean;
+  daysLeft: number | null;
+  inRackQty: number;
+  notInRackQty: number;
+  primaryLocation: string;
 }
 
 interface StockListViewProps {
@@ -60,41 +42,36 @@ interface StockListViewProps {
 }
 
 export function StockListView({ onNavigate, selectedBranchId: propBranchId }: StockListViewProps) {
-  const { user } = useAuth();
   const {
-    branches,
     selectedBranchId: contextBranchId,
     currentBranch,
-    isAllBranches,
-    isBranchLocked,
   } = useBranchContext();
 
   const effectiveBranchId = propBranchId !== undefined ? propBranchId : contextBranchId;
   const [rawInventory, setRawInventory] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Search & Filter State
+  // Search state & Auto-suggest dropdown
   const [search, setSearch] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState<string>("ALL");
-  const [stockStatusFilter, setStockStatusFilter] = useState<string>("ALL");
-  const [page, setPage] = useState(1);
-  const pageSize = 10;
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // Navigation Hierarchy: PRODUCT_BROWSER -> PRODUCT_DETAILS -> BATCH_DETAILS
-  const [viewMode, setViewMode] = useState<"PRODUCT_BROWSER" | "PRODUCT_DETAILS" | "BATCH_DETAILS">("PRODUCT_BROWSER");
-  const [selectedProductGroup, setSelectedProductGroup] = useState<ProductStockGroup | null>(null);
-  const [selectedBatchItem, setSelectedBatchItem] = useState<InventoryItem | null>(null);
+  // Selected Batch for POS-style instant detail view
+  const [selectedBatch, setSelectedBatch] = useState<BatchStockItem | null>(null);
 
+
+  // Load branch inventory batches
   const loadBranchStock = async () => {
     try {
       setLoading(true);
       const params = new URLSearchParams();
-      params.append("limit", "250");
-      if (search) params.append("search", search);
+      params.append("limit", "500");
 
-      const targetPath = effectiveBranchId && effectiveBranchId !== "all"
-        ? `/inventory/branch/${effectiveBranchId}?${params.toString()}`
-        : `/inventory/branch/all?${params.toString()}`;
+      const targetPath =
+        effectiveBranchId && effectiveBranchId !== "all"
+          ? `/inventory/branch/${effectiveBranchId}?${params.toString()}`
+          : `/inventory/branch/all?${params.toString()}`;
 
       const res = await fetchApi(targetPath);
       if (res.success && res.data) {
@@ -111,223 +88,207 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
     loadBranchStock();
   }, [effectiveBranchId]);
 
-  // Keep active batch & product in sync when inventory reloads
+  // Click outside to close auto-suggest dropdown
   useEffect(() => {
-    if (selectedProductGroup) {
-      const updatedBatches = rawInventory.filter((i) => i.productId === selectedProductGroup.productId);
-      if (updatedBatches.length > 0) {
-        setSelectedProductGroup((prev) => (prev ? { ...prev, batches: updatedBatches } : null));
-        if (selectedBatchItem) {
-          const updatedB = updatedBatches.find((b) => b.id === selectedBatchItem.id);
-          if (updatedB) setSelectedBatchItem(updatedB);
-        }
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        searchContainerRef.current &&
+        !searchContainerRef.current.contains(event.target as Node)
+      ) {
+        setIsSearchOpen(false);
       }
     }
-  }, [rawInventory]);
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
-  // Group batch inventory into distinct products
-  const productGroups: ProductStockGroup[] = useMemo(() => {
-    const map = new Map<string, ProductStockGroup>();
+  // Autofocus search on mount
+  useEffect(() => {
+    searchInputRef.current?.focus();
+  }, []);
+
+  // Format and sort all batches by FEFO (Earliest Expiry Date First - like POS!)
+  const sortedBatches: BatchStockItem[] = useMemo(() => {
     const now = new Date();
 
-    for (const item of rawInventory) {
-      const pid = item.productId;
-      if (!map.has(pid)) {
-        map.set(pid, {
-          productId: pid,
-          name: item.productName,
-          genericName: item.genericName,
-          brandName: item.brandName,
-          manufacturer: item.brandName,
-          category: item.category,
-          size: item.size,
-          unit: item.unit || "tablet",
-          sku: item.sku,
-          barcode: item.barcode,
-          productType: (item as any).productType,
-          qtyPerLevel2: (item as any).qtyPerLevel2 || item.boxesPerCarton || 10,
-          stripsPerBox: item.stripsPerBox || 10,
-          tabletsPerStrip: item.tabletsPerStrip || 10,
-          batches: [],
-          totalStock: 0,
-          batchesCount: 0,
-          locationsCount: 0,
-          expiredBatchesCount: 0,
-          nearExpiryBatchesCount: 0,
-          earliestExpiry: null,
-        });
-      }
+    const mapped = rawInventory.map((item) => {
+      const exp = item.expiryDate ? new Date(item.expiryDate) : null;
+      const isExpired = exp ? exp < now : false;
+      const daysLeft = exp ? Math.ceil((exp.getTime() - now.getTime()) / 86400000) : null;
 
-      const grp = map.get(pid)!;
-      grp.batches.push(item);
-      grp.totalStock += item.quantity || 0;
-      grp.batchesCount += 1;
-
-      if (item.isExpired) {
-        grp.expiredBatchesCount += 1;
-      } else if (item.daysUntilExpiry != null && item.daysUntilExpiry <= 90) {
-        grp.nearExpiryBatchesCount += 1;
-      }
-
-      if (item.expiryDate && !item.isExpired) {
-        if (!grp.earliestExpiry || new Date(item.expiryDate) < new Date(grp.earliestExpiry)) {
-          grp.earliestExpiry = item.expiryDate;
+      // In-Rack stock
+      let inRackQty = 0;
+      if (item.locations && Array.isArray(item.locations)) {
+        for (const loc of item.locations) {
+          inRackQty += loc.quantity || 0;
         }
       }
-    }
+      const notInRackQty = Math.max(0, (item.quantity || 0) - inRackQty);
 
-    // Compute unique physical locations count for each product
-    for (const grp of Array.from(map.values())) {
-      const uniqueLocs = new Set<string>();
-      for (const b of grp.batches) {
-        if (b.locations && Array.isArray(b.locations)) {
-          for (const l of b.locations) {
-            if (l.quantity > 0) {
-              uniqueLocs.add(l.id || `${l.rack}-${l.shelf}-${l.bin}`);
-            }
-          }
+      // Primary location summary
+      let primaryLocation = "Not in Rack";
+      if (item.locations && item.locations.length > 0) {
+        const first = item.locations[0];
+        const rName = first.rack?.name || first.rackName || "R01";
+        const sName = first.shelf?.name || first.shelfName || "S01";
+        const bName = first.bin?.name || first.binName || "B01";
+        primaryLocation = `${rName}-${sName}-${bName}`;
+        if (item.locations.length > 1) {
+          primaryLocation += ` (+${item.locations.length - 1} more)`;
         }
       }
-      grp.locationsCount = uniqueLocs.size;
-    }
 
-    return Array.from(map.values());
+      return {
+        ...item,
+        isExpired,
+        daysLeft,
+        inRackQty,
+        notInRackQty,
+        primaryLocation,
+      };
+    });
+
+    // Sort: Earliest expiry date first
+    return mapped.sort((a, b) => {
+      if (!a.expiryDate) return 1;
+      if (!b.expiryDate) return -1;
+      return new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime();
+    });
   }, [rawInventory]);
 
-  // Filter products by search, category, and status
-  const filteredProducts = useMemo(() => {
-    return productGroups.filter((p) => {
-      // 1. Text Search across: Name, Generic Name, Brand/Manufacturer, Batch #, Barcode
-      if (search) {
-        const q = search.toLowerCase();
-        const matchName = p.name.toLowerCase().includes(q);
-        const matchGeneric = p.genericName?.toLowerCase().includes(q);
-        const matchBrand = p.brandName?.toLowerCase().includes(q);
-        const matchSku = p.sku?.toLowerCase().includes(q);
-        const matchBarcode = p.barcode?.toLowerCase().includes(q);
-        const matchBatch = p.batches.some(
-          (b) => b.batchNumber?.toLowerCase().includes(q) || b.barcode?.toLowerCase().includes(q)
-        );
-
-        if (!matchName && !matchGeneric && !matchBrand && !matchSku && !matchBarcode && !matchBatch) {
-          return false;
-        }
-      }
-
-      // 2. Category Filter
-      if (categoryFilter !== "ALL") {
-        if (p.category?.toLowerCase() !== categoryFilter.toLowerCase()) {
-          return false;
-        }
-      }
-
-      // 3. Stock Status Filter
-      if (stockStatusFilter === "IN_STOCK") {
-        if (p.totalStock <= 0) return false;
-      } else if (stockStatusFilter === "LOW_STOCK") {
-        if (p.totalStock <= 0 || p.totalStock > 50) return false;
-      } else if (stockStatusFilter === "OUT_OF_STOCK") {
-        if (p.totalStock > 0) return false;
-      } else if (stockStatusFilter === "NEAR_EXPIRY") {
-        if (p.nearExpiryBatchesCount === 0) return false;
-      } else if (stockStatusFilter === "EXPIRED") {
-        if (p.expiredBatchesCount === 0) return false;
-      }
-
-      return true;
-    });
-  }, [productGroups, search, categoryFilter, stockStatusFilter]);
-
-  // Reset page state on filter change
+  // Keep selectedBatch in sync if inventory reloads
   useEffect(() => {
-    setPage(1);
-  }, [search, categoryFilter, stockStatusFilter]);
+    if (selectedBatch) {
+      const updated = sortedBatches.find((b) => b.id === selectedBatch.id);
+      if (updated) setSelectedBatch(updated);
+    }
+  }, [sortedBatches]);
 
-  const totalPages = Math.ceil(filteredProducts.length / pageSize) || 1;
-  const paginatedProducts = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return filteredProducts.slice(start, start + pageSize);
-  }, [filteredProducts, page, pageSize]);
+  // Search Results for Auto-Suggest Dropdown (Matching POS layout)
+  const searchResults = useMemo(() => {
+    if (!search.trim()) return sortedBatches.slice(0, 20);
+    const q = search.toLowerCase().trim();
 
-  // Handler: Click Product Card -> Navigate to Product Details
-  const handleSelectProduct = (product: ProductStockGroup) => {
-    setSelectedProductGroup(product);
-    setSelectedBatchItem(null);
-    setViewMode("PRODUCT_DETAILS");
+    return sortedBatches.filter((item) => {
+      const matchName = (item.productName || "").toLowerCase().includes(q);
+      const matchGen = (item.genericName || "").toLowerCase().includes(q);
+      const matchBarcode = (item.barcode || "").toLowerCase().includes(q);
+      const matchSku = (item.sku || "").toLowerCase().includes(q);
+      const matchBatch = (item.batchNumber || "").toLowerCase().includes(q);
+      return matchName || matchGen || matchBarcode || matchSku || matchBatch;
+    }).slice(0, 30);
+  }, [sortedBatches, search]);
+
+
+  // Handler: Select a batch
+  const handleSelectBatch = (batchItem: any) => {
+    setSelectedBatch(batchItem);
+    setIsSearchOpen(false);
   };
 
-  // Handler: Click Batch Row -> Navigate to Batch Stock Details
-  const handleSelectBatch = (batch: InventoryItem) => {
-    setSelectedBatchItem(batch);
-    setViewMode("BATCH_DETAILS");
-  };
-
-  // Handler: Navigate to Stock Allocation with preselected batch & product
+  // Handler: Navigate to stock allocation
   const handleNavigateToAllocate = (batchId: string, productId?: string) => {
     onNavigate("stock_stock_allocation", {
       batchId,
-      productId: productId || selectedProductGroup?.productId,
+      productId: productId || selectedBatch?.productId,
     });
   };
 
-  // ================= RENDER SUBPAGE 3: BATCH STOCK DETAILS =================
-  if (viewMode === "BATCH_DETAILS" && selectedBatchItem && selectedProductGroup) {
-    return (
-      <BatchStockDetailsView
-        batch={selectedBatchItem}
-        product={selectedProductGroup}
-        selectedBranchId={effectiveBranchId}
-        onBackToProduct={() => setViewMode("PRODUCT_DETAILS")}
-        onBackToStockList={() => setViewMode("PRODUCT_BROWSER")}
-        onNavigateToAllocate={handleNavigateToAllocate}
-        onStockUpdated={loadBranchStock}
-      />
-    );
-  }
+  // Calculated details for Selected Batch
+  const selectedBatchDetails = useMemo(() => {
+    if (!selectedBatch) return null;
 
-  // ================= RENDER SUBPAGE 2: PRODUCT INVENTORY DETAILS =================
-  if (viewMode === "PRODUCT_DETAILS" && selectedProductGroup) {
-    return (
-      <ProductInventoryDetailsView
-        product={selectedProductGroup}
-        batches={selectedProductGroup.batches}
-        selectedBranchId={effectiveBranchId}
-        onSelectBatch={handleSelectBatch}
-        onBackToStockList={() => setViewMode("PRODUCT_BROWSER")}
-        onNavigateToAllocate={handleNavigateToAllocate}
-      />
-    );
-  }
+    const packConfig: PackagingConfig = {
+      packageType: selectedBatch.packageType || "MEDICINE",
+      boxesPerCarton: selectedBatch.boxesPerCarton || 10,
+      stripsPerBox: selectedBatch.stripsPerBox || 10,
+      tabletsPerStrip: selectedBatch.tabletsPerStrip || 10,
+      unit: selectedBatch.unit || "tablet",
+    };
 
-  // ================= RENDER MAIN PAGE: PRODUCT INVENTORY BROWSER =================
+    const overallPackaging = calculatePackaging(selectedBatch.quantity || 0, packConfig);
+
+    // Locations for this batch
+    const locationsList: Array<{
+      id: string;
+      rackName: string;
+      shelfName: string;
+      binName: string;
+      locationLabel: string;
+      quantity: number;
+      fullBoxes: number;
+      openBoxes: number;
+      displayText: string;
+    }> = [];
+
+    let inRack = 0;
+    if (selectedBatch.locations && Array.isArray(selectedBatch.locations)) {
+      for (const loc of selectedBatch.locations) {
+        if (loc.quantity > 0) {
+          inRack += loc.quantity;
+          const locPkg = calculateLocationPackaging(loc.quantity, packConfig);
+          const rName = loc.rack?.name || loc.rackName || "R01";
+          const sName = loc.shelf?.name || loc.shelfName || "S01";
+          const bName = loc.bin?.name || loc.binName || "B01";
+          const locationLabel =
+            loc.locationLabel ||
+            `${rName} ➔ ${sName} ➔ ${bName}`;
+
+          locationsList.push({
+            id: loc.id || `${selectedBatch.id}-${rName}-${sName}-${bName}`,
+            rackName: rName,
+            shelfName: sName,
+            binName: bName,
+            locationLabel,
+            quantity: loc.quantity,
+            fullBoxes: loc.fullBoxes ?? locPkg.fullBoxes,
+            openBoxes: loc.openBoxes ?? locPkg.openBoxes,
+            displayText: loc.displayText || locPkg.displayText,
+          });
+        }
+      }
+    }
+
+    const notInRack = Math.max(0, (selectedBatch.quantity || 0) - inRack);
+    const bulkUnallocatedPkg = calculateBatchBulkPackaging(selectedBatch, notInRack, packConfig);
+
+    // Other batches for the same product
+    const otherBatches = sortedBatches.filter(
+      (b) => b.productId === selectedBatch.productId && b.id !== selectedBatch.id
+    );
+
+    return {
+      packConfig,
+      overallPackaging,
+      locationsList,
+      inRack,
+      notInRack,
+      bulkUnallocatedPkg,
+      otherBatches,
+    };
+  }, [selectedBatch, sortedBatches]);
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b-2 border-slate-200 dark:border-slate-800">
         <div>
-          <div className="flex items-center gap-1.5 text-xs text-slate-400 mb-1">
-            <span>Stock Management</span>
-            <span>/</span>
-            <span className="text-brand-primary font-bold">Stock List</span>
-          </div>
-          <h2 className="text-xl font-black text-slate-900 dark:text-white flex items-center gap-2">
-            <Boxes className="h-6 w-6 text-brand-primary" />
-            Pharmacy Inventory Hub & Stock List
-          </h2>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Product-level stock browser. Drill down into Product → Batches → Bulk Cartons → Physical Rack/Shelf/Bin locations.
-          </p>
+          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white flex items-center gap-2.5">
+            <Boxes className="h-7 w-7 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            Stock List
+          </h1>
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-200 shadow-xs">
-            <Store className="h-4 w-4 text-brand-primary shrink-0" />
-            <span>{currentBranch?.name || (effectiveBranchId ? "Selected Branch" : "All Branches (Consolidated)")}</span>
+          <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 px-3.5 py-1.5 rounded-xl text-sm font-bold text-slate-800 dark:text-slate-200">
+            <Store className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <span>{currentBranch?.name || (effectiveBranchId ? "Current Branch" : "All Branches")}</span>
           </div>
 
           <button
+            type="button"
             onClick={() => onNavigate("stock_add_stock")}
-            className="px-4 py-2.5 bg-brand-primary hover:bg-brand-primary-hover text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm"
+            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-black transition flex items-center gap-1.5 shadow-sm"
           >
             <Plus className="h-4 w-4" />
             Receive Stock
@@ -335,248 +296,506 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
         </div>
       </div>
 
-      {/* Global Stock Status Summary Bar */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl flex items-center gap-3 shadow-sm">
-          <div className="h-10 w-10 rounded-xl bg-brand-primary/10 text-brand-primary flex items-center justify-center font-black">
-            {productGroups.length}
-          </div>
-          <div>
-            <div className="font-bold text-xs text-slate-900 dark:text-white">Active Products</div>
-            <div className="text-[11px] text-slate-500">With stock in this branch</div>
-          </div>
-        </div>
-
-        <div className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl flex items-center gap-3 shadow-sm">
-          <div className="h-10 w-10 rounded-xl bg-purple-50 dark:bg-purple-950/40 text-purple-600 flex items-center justify-center font-black">
-            {rawInventory.length}
-          </div>
-          <div>
-            <div className="font-bold text-xs text-slate-900 dark:text-white">Total Batches</div>
-            <div className="text-[11px] text-slate-500">Tracked via FEFO</div>
-          </div>
-        </div>
-
-        <div
-          onClick={() => setStockStatusFilter("NEAR_EXPIRY")}
-          className="p-4 bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50 rounded-2xl flex items-center gap-3 cursor-pointer hover:border-amber-400 transition"
-        >
-          <div className="h-10 w-10 rounded-xl bg-amber-100 dark:bg-amber-900/50 text-amber-700 flex items-center justify-center font-black">
-            {productGroups.filter((p) => p.nearExpiryBatchesCount > 0).length}
-          </div>
-          <div>
-            <div className="font-bold text-xs text-amber-900 dark:text-amber-200">Near Expiry Alerts</div>
-            <div className="text-[11px] text-amber-600 dark:text-amber-400">Batches expiring in ≤90d</div>
-          </div>
-        </div>
-
-        <div
-          onClick={() => setStockStatusFilter("EXPIRED")}
-          className="p-4 bg-rose-50/60 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/50 rounded-2xl flex items-center gap-3 cursor-pointer hover:border-rose-400 transition"
-        >
-          <div className="h-10 w-10 rounded-xl bg-rose-100 dark:bg-rose-900/50 text-rose-700 flex items-center justify-center font-black">
-            {productGroups.filter((p) => p.expiredBatchesCount > 0).length}
-          </div>
-          <div>
-            <div className="font-bold text-xs text-rose-900 dark:text-rose-200">Expired Batches</div>
-            <div className="text-[11px] text-rose-600 dark:text-rose-400">Restricted from POS sales</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Product Search & Multi-Filter Toolbar */}
-      <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3">
-        {/* Search Products */}
-        <div className="flex-1 w-full sm:max-w-lg relative">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+      {/* Prominent Search Bar (POS Style) */}
+      <div ref={searchContainerRef} className="relative z-30">
+        <div className="relative">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
           <input
+            ref={searchInputRef}
             type="text"
-            placeholder="Search products by name, generic name, brand, batch #, barcode..."
+            placeholder="Search medicine by name, generic, barcode, batch #..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && loadBranchStock()}
-            className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none dark:text-white"
+            onFocus={() => setIsSearchOpen(true)}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setIsSearchOpen(true);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && searchResults.length > 0) {
+                const exactBarcode = searchResults.find(
+                  (item) => item.barcode?.toLowerCase() === search.trim().toLowerCase()
+                );
+                if (exactBarcode) {
+                  handleSelectBatch(exactBarcode);
+                } else {
+                  handleSelectBatch(searchResults[0]);
+                }
+              }
+            }}
+            className="w-full pl-12 pr-12 py-3.5 bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 focus:border-emerald-500 rounded-2xl text-base sm:text-lg font-bold text-slate-900 dark:text-white placeholder:text-slate-400 shadow-sm outline-none transition"
           />
-          {search && (
+
+          {search ? (
             <button
+              type="button"
               onClick={() => {
                 setSearch("");
-                loadBranchStock();
+                searchInputRef.current?.focus();
               }}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-slate-600"
+              className="absolute right-4 top-1/2 -translate-y-1/2 p-1 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
             >
-              Clear
+              <X className="h-5 w-5" />
             </button>
-          )}
+          ) : null}
         </div>
 
-        {/* Filters */}
-        <div className="flex items-center gap-2.5 w-full sm:w-auto">
-          {/* Category Filter */}
-          <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-xl text-xs">
-            <Filter className="h-3.5 w-3.5 text-slate-400" />
-            <select
-              value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value)}
-              className="bg-transparent font-bold text-slate-700 dark:text-slate-300 outline-none text-xs"
-            >
-              <option value="ALL">All Categories</option>
-              <option value="Medicine">Medicine</option>
-              <option value="Syrup">Syrup</option>
-              <option value="Saline">Saline</option>
-              <option value="Equipment">Equipment</option>
-              <option value="Other">Other</option>
-            </select>
-          </div>
+        {/* Auto-Suggest Dropdown (Identical to POS layout) */}
+        {isSearchOpen && (
+          <div className="absolute top-full left-0 right-0 mt-1.5 z-50 bg-white dark:bg-slate-900 border-2 border-emerald-500/60 rounded-xl shadow-2xl max-h-[420px] overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
+            {searchResults.length === 0 ? (
+              <div className="p-6 text-center text-slate-400 font-bold text-sm">
+                No matching medicine batch found
+              </div>
+            ) : (
+              searchResults.map((item, idx) => {
+                const barcodeVal = item.barcode || item.sku || "";
+                const variantStr = item.size || (item.unit ? `Unit: ${item.unit}` : "");
 
-          {/* Stock Status Filter */}
-          <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-xl text-xs">
-            <select
-              value={stockStatusFilter}
-              onChange={(e) => setStockStatusFilter(e.target.value)}
-              className="bg-transparent font-bold text-slate-700 dark:text-slate-300 outline-none text-xs"
-            >
-              <option value="ALL">All Stock Status</option>
-              <option value="IN_STOCK">In Stock</option>
-              <option value="NEAR_EXPIRY">Near Expiry (≤90d)</option>
-              <option value="EXPIRED">Expired</option>
-              <option value="LOW_STOCK">Low Stock</option>
-              <option value="OUT_OF_STOCK">Out of Stock</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      {/* Product-Level Cards Grid / List */}
-      {loading ? (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-16 flex flex-col items-center justify-center text-slate-400">
-          <Loader2 className="h-8 w-8 animate-spin text-brand-primary mb-2" />
-          <p className="text-xs">Loading product inventory catalog...</p>
-        </div>
-      ) : filteredProducts.length === 0 ? (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-16 text-center text-slate-400">
-          <Boxes className="h-10 w-10 mx-auto text-slate-300 dark:text-slate-700 mb-3" />
-          <p className="text-sm font-bold text-slate-600 dark:text-slate-400">
-            No products match your search or filter criteria.
-          </p>
-          <p className="text-xs mt-1">
-            Try resetting filters or click "Receive Stock" to record product intake.
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {paginatedProducts.map((prod) => {
-              const packConfig: PackagingConfig = {
-                packageType: prod.productType || prod.category || "MEDICINE",
-                boxesPerCarton: prod.qtyPerLevel2 || 10,
-                stripsPerBox: prod.stripsPerBox || 10,
-                tabletsPerStrip: prod.tabletsPerStrip || 10,
-                unit: prod.unit,
-              };
-
-              const pkg = calculatePackaging(prod.totalStock, packConfig);
-
-              return (
-                <div
-                  key={prod.productId}
-                  onClick={() => handleSelectProduct(prod)}
-                  className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 p-5 shadow-sm hover:shadow-md hover:border-brand-primary/60 transition cursor-pointer group flex flex-col justify-between relative overflow-hidden"
-                >
-                  {/* Status Badges */}
-                  <div className="flex items-start justify-between gap-2 mb-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <h3 className="text-base font-black text-slate-900 dark:text-white group-hover:text-brand-primary transition truncate">
-                          {prod.name}
-                        </h3>
-                        {prod.size && (
-                          <span className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[10px] px-1.5 py-0.2 rounded font-bold">
-                            {prod.size}
+                return (
+                  <div
+                    key={`${item.id}-${idx}`}
+                    onClick={() => handleSelectBatch(item)}
+                    className="p-3.5 hover:bg-emerald-50/80 dark:hover:bg-emerald-950/30 cursor-pointer transition flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
+                  >
+                    {/* Left: Product Name + Batch + Generic + Variant (No Product ID or SKU) */}
+                    <div className="space-y-1 min-w-0">
+                      <div className="text-[15px] font-black text-slate-900 dark:text-white flex items-center gap-2 flex-wrap">
+                        <span className="text-slate-900 dark:text-white font-extrabold text-base">
+                          {item.productName}
+                        </span>
+                        <span className="text-xs font-black font-mono bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 px-2 py-0.5 rounded-md">
+                          Batch: {item.batchNumber || "Default"}
+                        </span>
+                        {barcodeVal && (
+                          <span className="text-slate-500 dark:text-slate-400 font-mono text-xs">
+                            ({barcodeVal})
                           </span>
                         )}
                       </div>
-                      <div className="text-xs text-brand-primary font-bold mt-0.5 truncate">
-                        {prod.genericName || "—"}
-                      </div>
-                      <div className="text-[11px] text-slate-500 truncate">
-                        {prod.manufacturer || prod.brandName || "Brand Manufacturer"}
+                      <div className="text-xs text-slate-500 dark:text-slate-400 font-medium flex items-center gap-2 flex-wrap">
+                        {item.genericName && (
+                          <span className="text-emerald-700 dark:text-emerald-400 font-bold">
+                            {item.genericName}
+                          </span>
+                        )}
+                        {variantStr && (
+                          <span className="text-slate-600 dark:text-slate-400">
+                            • Variant: <strong className="text-slate-700 dark:text-slate-300">{variantStr}</strong>
+                          </span>
+                        )}
                       </div>
                     </div>
 
-                    <div className="flex flex-col items-end gap-1 shrink-0">
-                      {prod.expiredBatchesCount > 0 && (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-900 flex items-center gap-1">
-                          <AlertTriangle className="h-3 w-3" /> {prod.expiredBatchesCount} Expired
+                    {/* Right: Stock Pill + Expiry Pill + Location */}
+                    <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                      <span className="px-2.5 py-1 rounded-full text-xs font-black bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 font-mono">
+                        Stock: {item.quantity.toLocaleString()}
+                      </span>
+
+                      {item.isExpired ? (
+                        <span className="px-2.5 py-1 rounded-full text-xs font-black bg-rose-100 text-rose-700 border border-rose-300">
+                          Expired
+                        </span>
+                      ) : item.daysLeft !== null ? (
+                        <span
+                          className={`px-2.5 py-1 rounded-full text-xs font-black border ${
+                            item.daysLeft <= 90
+                              ? "bg-amber-100 text-amber-800 border-amber-300"
+                              : "bg-emerald-100 text-emerald-800 border-emerald-300"
+                          }`}
+                        >
+                          Expire: {item.daysLeft} days left
+                        </span>
+                      ) : (
+                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-500">
+                          No Expiry
                         </span>
                       )}
 
-                      {prod.nearExpiryBatchesCount > 0 && (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-900">
-                          {prod.nearExpiryBatchesCount} Near Expiry
+                      <span className="text-xs font-bold text-slate-500 bg-slate-50 dark:bg-slate-800 px-2 py-1 rounded-md border border-slate-200 dark:border-slate-700">
+                        📍 {item.primaryLocation}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ========================================================================= */}
+      {/* 1. SELECTED BATCH SINGLE-SCREEN VIEW (POS-Style Clean Details)            */}
+      {/* ========================================================================= */}
+      {selectedBatch && selectedBatchDetails ? (
+        <div className="space-y-5 animate-in fade-in duration-150">
+          {/* SECTION 1: MEDICINE & BATCH HERO HEADER */}
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border-2 border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-sm space-y-4">
+            {/* Top Row: Back button & Expiry Status */}
+            <div className="flex items-center justify-between gap-3 pb-3.5 border-b border-slate-100 dark:border-slate-800 flex-wrap">
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedBatch(null);
+                  setSearch("");
+                  setTimeout(() => searchInputRef.current?.focus(), 50);
+                }}
+                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl font-bold text-xs sm:text-sm transition inline-flex items-center gap-2 shadow-xs cursor-pointer active:scale-95"
+              >
+                <ArrowLeft className="h-4 w-4 text-slate-500" />
+                <span>← Search Another Medicine</span>
+              </button>
+
+              {/* Expiry Badge */}
+              <div>
+                {selectedBatch.isExpired ? (
+                  <div className="px-3.5 py-1.5 rounded-xl text-xs font-black bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-2 border-rose-300 dark:border-rose-800 flex items-center gap-1.5">
+                    <AlertTriangle className="h-4 w-4 shrink-0 text-rose-600" />
+                    <span>Expired ({selectedBatch.expiryDate ? new Date(selectedBatch.expiryDate).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }) : "N/A"})</span>
+                  </div>
+                ) : selectedBatch.daysLeft !== null ? (
+                  <div
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-black border-2 flex items-center gap-2 ${
+                      selectedBatch.daysLeft <= 90
+                        ? "bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-800"
+                        : "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800"
+                    }`}
+                  >
+                    <Calendar className="h-4 w-4 shrink-0" />
+                    <span>
+                      Expire: <strong className="font-mono">{selectedBatch.daysLeft} days left</strong>
+                      {selectedBatch.expiryDate && (
+                        <span className="opacity-75 font-normal ml-1">
+                          ({new Date(selectedBatch.expiryDate).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })})
                         </span>
                       )}
-
-                      {prod.totalStock <= 0 && (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400">
-                          Out of Stock
-                        </span>
-                      )}
-                    </div>
+                    </span>
                   </div>
+                ) : null}
+              </div>
+            </div>
 
-                  {/* Stock Details & Packaging Breakdown */}
-                  <div className="bg-slate-50/70 dark:bg-slate-800/40 rounded-xl p-3.5 border border-slate-100 dark:border-slate-800 my-2 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                        Available Stock:
-                      </span>
-                      <span className="text-sm font-black text-slate-900 dark:text-white">
-                        {prod.totalStock.toLocaleString()} {prod.unit}s
-                      </span>
-                    </div>
-
-                    {pkg.isMedicine && (
-                      <div className="text-xs text-slate-600 dark:text-slate-400 font-medium flex items-center gap-1">
-                        <Package className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                        <span>{pkg.displayText}</span>
-                      </div>
-                    )}
+            {/* Main Product Details */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="space-y-1.5">
+                {/* Generic Name Tag */}
+                {selectedBatch.genericName && (
+                  <div className="text-xs font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                    <span>Generic: {selectedBatch.genericName}</span>
                   </div>
+                )}
 
-                  {/* Footer Metrics (Batches, Locations, Arrow) */}
-                  <div className="pt-3 border-t border-slate-100 dark:border-slate-800/60 flex items-center justify-between text-xs text-slate-500">
-                    <div className="flex items-center gap-3">
-                      <span className="flex items-center gap-1 font-bold text-slate-700 dark:text-slate-300">
-                        <Boxes className="h-3.5 w-3.5 text-brand-primary" />
-                        {prod.batchesCount} Batche{prod.batchesCount !== 1 ? "s" : ""}
-                      </span>
-
-                      <span className="flex items-center gap-1 font-bold text-slate-700 dark:text-slate-300">
-                        <MapPin className="h-3.5 w-3.5 text-slate-400" />
-                        {prod.locationsCount} Location{prod.locationsCount !== 1 ? "s" : ""}
-                      </span>
-                    </div>
-
-                    <div className="text-brand-primary font-bold text-xs flex items-center gap-1 group-hover:translate-x-1 transition">
-                      <span>View Batches</span>
-                      <ChevronRight className="h-4 w-4" />
-                    </div>
-                  </div>
+                {/* Medicine Title & Variant */}
+                <div className="flex items-center gap-3 flex-wrap">
+                  <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
+                    {selectedBatch.productName}
+                  </h1>
+                  {selectedBatch.size && (
+                    <span className="px-3 py-1 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-xl text-sm font-black border border-slate-300 dark:border-slate-700 shadow-xs">
+                      {selectedBatch.size}
+                    </span>
+                  )}
                 </div>
-              );
-            })}
+              </div>
+
+              {/* Metadata Badges (Batch & Barcode) */}
+              <div className="flex items-center gap-2.5 flex-wrap shrink-0">
+                {/* Batch Badge */}
+                <div className="px-3.5 py-2 bg-emerald-50 dark:bg-emerald-950/50 border-2 border-emerald-200 dark:border-emerald-800 rounded-xl text-xs font-black text-emerald-900 dark:text-emerald-200">
+                  <span className="text-emerald-600 dark:text-emerald-400 font-bold mr-1.5">Batch:</span>
+                  <span className="font-mono text-sm font-extrabold">{selectedBatch.batchNumber || "Default"}</span>
+                </div>
+
+                {/* Barcode Badge */}
+                {(selectedBatch.barcode || selectedBatch.sku) && (
+                  <div className="px-3.5 py-2 bg-slate-50 dark:bg-slate-800/60 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-xs font-black text-slate-700 dark:text-slate-300 flex items-center gap-1.5 font-mono">
+                    <Barcode className="h-4 w-4 text-slate-400 shrink-0" />
+                    <span>{selectedBatch.barcode || selectedBatch.sku}</span>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
 
-          <Pagination
-            currentPage={page}
-            totalPages={totalPages}
-            totalItems={filteredProducts.length}
-            pageSize={pageSize}
-            onPageChange={setPage}
-          />
+          {/* SECTION 2: TOP 2 SUMMARY CARDS (BATCH STOCK & UNALLOCATED) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Card 1: Batch Total Stock */}
+            <div className="bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm flex flex-col justify-between">
+              <div>
+                <div className="text-xs font-black text-slate-500 uppercase tracking-wider flex items-center justify-between">
+                  <span>Batch Total Stock</span>
+                  <span className="text-xs font-bold text-slate-400 font-mono">
+                    {selectedBatch.quantity.toLocaleString()} {selectedBatch.unit}s
+                  </span>
+                </div>
+                <div className="text-3xl sm:text-4xl font-black font-mono text-slate-900 dark:text-white mt-1">
+                  {selectedBatch.quantity.toLocaleString()}{" "}
+                  <span className="text-base font-bold text-slate-500">{selectedBatch.unit}s</span>
+                </div>
+                <div className="text-xs font-bold text-emerald-700 dark:text-emerald-400 mt-1">
+                  📦 {selectedBatchDetails.overallPackaging.displayText || `${selectedBatch.quantity} units`}
+                </div>
+              </div>
+
+              {/* Visual Split Bar */}
+              <div className="pt-3 border-t border-slate-100 dark:border-slate-800 mt-3 space-y-1.5">
+                <div className="flex items-center justify-between text-xs font-bold">
+                  <span className="text-emerald-700 dark:text-emerald-400">
+                    In Shelves: {selectedBatchDetails.inRack.toLocaleString()} ({selectedBatch.quantity > 0 ? Math.round((selectedBatchDetails.inRack / selectedBatch.quantity) * 100) : 0}%)
+                  </span>
+                  <span className="text-amber-700 dark:text-amber-400">
+                    Unallocated: {selectedBatchDetails.notInRack.toLocaleString()} ({selectedBatch.quantity > 0 ? Math.round((selectedBatchDetails.notInRack / selectedBatch.quantity) * 100) : 0}%)
+                  </span>
+                </div>
+                <div className="w-full h-2.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden flex">
+                  <div
+                    className="bg-emerald-500 h-full transition-all"
+                    style={{ width: `${selectedBatch.quantity > 0 ? (selectedBatchDetails.inRack / selectedBatch.quantity) * 100 : 0}%` }}
+                  />
+                  <div
+                    className="bg-amber-500 h-full transition-all"
+                    style={{ width: `${selectedBatch.quantity > 0 ? (selectedBatchDetails.notInRack / selectedBatch.quantity) * 100 : 0}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Card 2: Not in Rack (Unallocated) */}
+            <div className={`border-2 rounded-2xl p-5 shadow-sm flex flex-col justify-between ${
+              selectedBatchDetails.notInRack > 0
+                ? "bg-amber-50/70 dark:bg-amber-950/25 border-amber-300 dark:border-amber-800/70"
+                : "bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/60"
+            }`}>
+              <div>
+                <div className="text-xs font-black uppercase tracking-wider flex items-center justify-between">
+                  <span className={selectedBatchDetails.notInRack > 0 ? "text-amber-800 dark:text-amber-300" : "text-emerald-800 dark:text-emerald-300"}>
+                    Unallocated (Not in Rack)
+                  </span>
+                  {selectedBatchDetails.notInRack === 0 ? (
+                    <span className="text-xs text-emerald-700 dark:text-emerald-400 font-black bg-emerald-100 dark:bg-emerald-900/60 px-2.5 py-0.5 rounded-md">
+                      100% Allocated ✅
+                    </span>
+                  ) : (
+                    <span className="text-xs text-amber-800 dark:text-amber-300 font-black bg-amber-100 dark:bg-amber-900/60 px-2.5 py-0.5 rounded-md">
+                      Placement Needed
+                    </span>
+                  )}
+                </div>
+
+                <div className="text-3xl sm:text-4xl font-black font-mono my-1 text-slate-900 dark:text-white">
+                  <span className={selectedBatchDetails.notInRack > 0 ? "text-amber-700 dark:text-amber-400" : "text-emerald-700 dark:text-emerald-400"}>
+                    {selectedBatchDetails.notInRack.toLocaleString()}
+                  </span>{" "}
+                  <span className="text-base font-bold text-slate-500">{selectedBatch.unit}s</span>
+                </div>
+
+                <div className="text-xs font-bold text-slate-600 dark:text-slate-300">
+                  {selectedBatchDetails.notInRack > 0 ? (
+                    <span>
+                      📦 {selectedBatchDetails.bulkUnallocatedPkg.fullCartons > 0 ? `${selectedBatchDetails.bulkUnallocatedPkg.fullCartons} Cartons ` : ""}
+                      {selectedBatchDetails.bulkUnallocatedPkg.totalEquivalentBoxes > 0 ? `(${selectedBatchDetails.bulkUnallocatedPkg.totalEquivalentBoxes} Boxes)` : ""} in Bulk Reserve
+                    </span>
+                  ) : (
+                    <span>All stock is physically placed in rack shelves for instant dispensing</span>
+                  )}
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-slate-200 dark:border-slate-800 mt-3 flex items-center justify-between gap-3">
+                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                  {selectedBatchDetails.notInRack > 0 ? "Store room / Bulk storage" : "Ready at billing counter"}
+                </span>
+                {selectedBatchDetails.notInRack > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => handleNavigateToAllocate(selectedBatch.id, selectedBatch.productId)}
+                    className="px-4 py-2 bg-amber-600 hover:bg-amber-700 active:scale-95 text-white rounded-xl text-xs font-black transition flex items-center gap-1.5 shrink-0 shadow-sm"
+                  >
+                    <span>Allocate to Shelf Now</span>
+                    <ArrowRight className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* SECTION 3: PHYSICAL RACK & SHELF LOCATIONS */}
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border-2 border-slate-200 dark:border-slate-800 p-5 shadow-sm space-y-4">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b-2 border-slate-100 dark:border-slate-800">
+              <div>
+                <div className="flex items-center gap-2">
+                  <MapPin className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  <h3 className="text-lg font-black text-slate-900 dark:text-white">
+                    Physical Rack & Shelf Locations
+                  </h3>
+                </div>
+                <div className="text-xs font-bold text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-2">
+                  <span>{selectedBatchDetails.locationsList.length} Shelf Location{selectedBatchDetails.locationsList.length !== 1 ? "s" : ""}</span>
+                  <span>•</span>
+                  <span>Total Placed: <strong className="text-slate-900 dark:text-white font-mono">{selectedBatchDetails.inRack.toLocaleString()}</strong> {selectedBatch.unit}s</span>
+                </div>
+              </div>
+
+              {selectedBatchDetails.notInRack > 0 && (
+                <button
+                  type="button"
+                  onClick={() => handleNavigateToAllocate(selectedBatch.id, selectedBatch.productId)}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl text-xs font-black transition flex items-center gap-1.5 shadow-xs shrink-0 self-start sm:self-auto"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>+ Allocate More to Shelf</span>
+                </button>
+              )}
+            </div>
+
+            {/* Scrollable Container */}
+            {selectedBatchDetails.locationsList.length === 0 ? (
+              <div className="p-8 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-700 text-center space-y-3">
+                <div className="h-12 w-12 rounded-2xl bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto">
+                  <MapPin className="h-6 w-6" />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-base font-black text-slate-800 dark:text-slate-200">
+                    No Shelf Location Assigned Yet
+                  </p>
+                  <p className="text-xs font-bold text-slate-500 max-w-md mx-auto">
+                    All {selectedBatch.quantity.toLocaleString()} {selectedBatch.unit}s are in bulk reserve. Assign them to racks and shelves so staff can find them quickly.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleNavigateToAllocate(selectedBatch.id, selectedBatch.productId)}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition inline-flex items-center gap-1.5 shadow-sm"
+                >
+                  <Plus className="h-4 w-4" />
+                  Allocate to Rack Now
+                </button>
+              </div>
+            ) : (
+              <div className="max-h-[360px] overflow-y-auto pr-1 space-y-2.5">
+                {selectedBatchDetails.locationsList.map((loc, idx) => {
+                  const percent = selectedBatch.quantity > 0 ? Math.round((loc.quantity / selectedBatch.quantity) * 100) : 0;
+                  return (
+                    <div
+                      key={loc.id || idx}
+                      className="p-4 bg-slate-50 dark:bg-slate-800/50 hover:bg-emerald-50/40 dark:hover:bg-emerald-950/20 rounded-2xl border-2 border-slate-200 dark:border-slate-700 transition flex flex-col md:flex-row md:items-center justify-between gap-3.5"
+                    >
+                      {/* Visual Location Steps */}
+                      <div className="space-y-1.5 min-w-0">
+                        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                          {/* Rack Badge */}
+                          <span className="bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-600 px-3 py-1 rounded-xl text-xs font-black flex items-center gap-1 shadow-xs">
+                            <span className="text-slate-500 font-bold">Rack:</span>
+                            <span className="text-emerald-700 dark:text-emerald-400 font-mono text-sm">{loc.rackName}</span>
+                          </span>
+
+                          <ChevronRight className="h-4 w-4 text-slate-400 shrink-0" />
+
+                          {/* Shelf Badge */}
+                          <span className="bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-600 px-3 py-1 rounded-xl text-xs font-black flex items-center gap-1 shadow-xs">
+                            <span className="text-slate-500 font-bold">Shelf:</span>
+                            <span className="text-emerald-700 dark:text-emerald-400 font-mono text-sm">{loc.shelfName}</span>
+                          </span>
+
+                          <ChevronRight className="h-4 w-4 text-slate-400 shrink-0" />
+
+                          {/* Bin Badge */}
+                          <span className="bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-600 px-3 py-1 rounded-xl text-xs font-black flex items-center gap-1 shadow-xs">
+                            <span className="text-slate-500 font-bold">Bin:</span>
+                            <span className="text-emerald-700 dark:text-emerald-400 font-mono text-sm">{loc.binName}</span>
+                          </span>
+                        </div>
+
+                        {/* Packaging Breakdown */}
+                        <div className="flex items-center gap-2 text-xs font-bold text-emerald-700 dark:text-emerald-400 flex-wrap">
+                          <span>📦 {loc.displayText}</span>
+                          <span className="text-slate-300 dark:text-slate-700">•</span>
+                          <span className="text-slate-600 dark:text-slate-400 font-medium">
+                            {percent}% of total batch stock
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Quantity + Manage Button */}
+                      <div className="flex items-center gap-4 shrink-0 justify-between md:justify-end border-t md:border-t-0 pt-2.5 md:pt-0 border-slate-200 dark:border-slate-700">
+                        <div className="text-left md:text-right">
+                          <div className="text-2xl font-black font-mono text-slate-900 dark:text-white">
+                            {loc.quantity.toLocaleString()}{" "}
+                            <span className="text-xs font-bold text-slate-500">{selectedBatch.unit}s</span>
+                          </div>
+                          <div className="text-[11px] font-bold text-slate-400">
+                            Stock in this Shelf
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleNavigateToAllocate(selectedBatch.id, selectedBatch.productId)}
+                          className="px-3.5 py-2 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-100 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs"
+                          title="Adjust or relocate stock"
+                        >
+                          <span>Manage</span>
+                          <ArrowRight className="h-3.5 w-3.5 text-slate-500" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* OTHER BATCHES OF SAME PRODUCT (IF ANY) */}
+          {selectedBatchDetails.otherBatches.length > 0 && (
+            <div className="bg-white dark:bg-slate-900 rounded-2xl border-2 border-slate-200 dark:border-slate-800 p-5 shadow-sm space-y-3">
+              <div className="text-sm font-black text-slate-900 dark:text-white flex items-center gap-2">
+                <Calendar className="h-4 w-4 text-emerald-600" />
+                Other Batches for {selectedBatch.productName} ({selectedBatchDetails.otherBatches.length})
+              </div>
+
+              <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                {selectedBatchDetails.otherBatches.map((b) => (
+                  <div
+                    key={b.id}
+                    onClick={() => setSelectedBatch(b)}
+                    className="py-3 px-2 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl cursor-pointer transition flex items-center justify-between gap-3 text-xs font-bold"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-black text-slate-900 dark:text-white">
+                        Batch: {b.batchNumber || "—"}
+                      </span>
+                      {b.daysLeft !== null && (
+                        <span className="text-slate-500">
+                          • Exp: {b.daysLeft} days left
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <span className="font-mono font-black text-slate-900 dark:text-white">
+                        Stock: {b.quantity.toLocaleString()} {b.unit}s
+                      </span>
+                      <span className="text-emerald-600 dark:text-emerald-400">
+                        View ➔
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
-      )}
+      ) : loading ? (
+        /* ========================================================================= */
+        /* 2. LOADING STATE ONLY (No bulky prompt box)                               */
+        /* ========================================================================= */
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border-2 border-slate-200 dark:border-slate-800 p-12 flex flex-col items-center justify-center text-slate-400">
+          <Loader2 className="h-8 w-8 animate-spin text-emerald-600 mb-2" />
+          <p className="text-sm font-bold text-slate-600 dark:text-slate-300">Loading stock inventory...</p>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -47,6 +47,17 @@ class SalesController {
             res.status(500).json({ success: false, message: error.message });
         }
     }
+    static async getCustomers(req, res) {
+        try {
+            const tenantId = req.user.tenantId;
+            const search = req.query.search;
+            const customers = await sales_service_1.SalesService.getCustomers(tenantId, search);
+            res.status(200).json({ success: true, data: customers });
+        }
+        catch (error) {
+            res.status(500).json({ success: false, message: error.message });
+        }
+    }
     static async getSaleById(req, res) {
         try {
             const { id } = req.params;

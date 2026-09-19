@@ -15,6 +15,7 @@ router.use(authenticate_1.authenticate, planLimiter_1.requireActiveSubscription)
 router.post("/", (0, requirePermission_1.requirePermission)("pos.manage"), (0, validate_1.validateRequest)({ body: sales_validation_1.createSaleSchema }), sales_controller_1.SalesController.createSale);
 // Sales Listing & Details
 router.get("/", (0, requirePermission_1.requirePermission)("pos.history"), (0, validate_1.validateRequest)({ query: sales_validation_1.listSalesQuerySchema }), sales_controller_1.SalesController.listSales);
+router.get("/customers", (0, requirePermission_1.requirePermission)("pos.manage"), sales_controller_1.SalesController.getCustomers);
 router.get("/:id", (0, requirePermission_1.requirePermission)("pos.history"), sales_controller_1.SalesController.getSaleById);
 router.get("/:id/receipt", (0, requirePermission_1.requirePermission)("pos.history"), sales_controller_1.SalesController.getReceipt);
 // Refund & Void

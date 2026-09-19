@@ -472,11 +472,13 @@ export class SupplierService {
     const productMap = new Map(products.map((p: any) => [p.id, p]));
 
     // Calculate total purchase amount
-    let totalPurchaseAmount = 0;
+    let subtotalAmount = 0;
     const preparedItems = data.items.map((item) => {
       const prod: any = productMap.get(item.productId);
-      const itemTotal = Number(item.unitPurchasePrice) * item.quantity;
-      totalPurchaseAmount += itemTotal;
+      const itemTotal = item.lineTotal !== undefined && item.lineTotal !== null
+        ? Number(item.lineTotal)
+        : Number(item.unitPurchasePrice) * item.quantity;
+      subtotalAmount += itemTotal;
 
       return {
         productId: item.productId,
@@ -497,9 +499,28 @@ export class SupplierService {
       };
     });
 
+    let invoiceDiscount = 0;
+    if (data.discountType === "PERCENT") {
+      invoiceDiscount = (subtotalAmount * (Number(data.discountAmount) || 0)) / 100;
+    } else if (data.discountType === "FIXED") {
+      invoiceDiscount = Number(data.discountAmount) || 0;
+    }
+    const invoiceTax = Number(data.taxAmount) || 0;
+
+    const computedTotal = Math.max(0, Math.round((subtotalAmount - invoiceDiscount + invoiceTax) * 100) / 100);
+    const totalPurchaseAmount = data.totalAmount !== undefined && data.totalAmount !== null
+      ? Number(data.totalAmount)
+      : computedTotal;
+
     const paidAmount = Number(data.paidAmount || 0);
-    const dueAmount = Math.max(0, totalPurchaseAmount - paidAmount);
+    const dueAmount = Math.max(0, Math.round((totalPurchaseAmount - paidAmount) * 100) / 100);
     const paymentStatus = dueAmount === 0 ? "PAID" : paidAmount > 0 ? "PARTIAL" : "DUE";
+
+    const noteParts: string[] = [];
+    if (data.notes) noteParts.push(data.notes);
+    if (invoiceDiscount > 0) noteParts.push(`Discount: -৳${invoiceDiscount.toFixed(2)} (${data.discountType})`);
+    if (invoiceTax > 0) noteParts.push(`Tax: +৳${invoiceTax.toFixed(2)}`);
+    const finalNotes = noteParts.length > 0 ? noteParts.join(" | ") : null;
 
     const purchaseDate = data.purchaseDate ? new Date(data.purchaseDate) : new Date();
 
@@ -533,7 +554,7 @@ export class SupplierService {
           dueAmount,
           paymentStatus,
           paymentMethod: data.paymentMethod || "CASH",
-          notes: data.notes || null,
+          notes: finalNotes,
           receivedBy: userId,
           items: {
             create: preparedItems,

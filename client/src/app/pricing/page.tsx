@@ -10,7 +10,6 @@ import {
   X,
   Sparkles,
   ArrowRight,
-  Clock,
   HelpCircle,
   PhoneCall,
 } from "lucide-react";
@@ -84,7 +83,6 @@ export default function PricingPage() {
   ];
 
   const rawPlans = settings.plans && settings.plans.length > 0 ? settings.plans : fallbackPlans;
-  const trialPlan = rawPlans.find((p: any) => p.tier === "TRIAL");
   const paidPlans = rawPlans.filter((p: any) => p.tier !== "TRIAL");
 
   // Calculate pricing based on cycle (Yearly gets 20% discount)
@@ -121,8 +119,8 @@ export default function PricingPage() {
       a: "We support instant online checkout via SSLCOMMERZ with bKash, Nagad, Rocket, Visa, Mastercard, and corporate bank transfer.",
     },
     {
-      q: "What happens when my 7-day free trial ends?",
-      a: "Your store data remains completely intact and safe. To resume POS operations and branch synchronization, simply choose any paid tier.",
+      q: "Are there any setup fees or hidden costs?",
+      a: "No, there are zero setup fees or hidden charges. You only pay the subscription fee for your selected plan.",
     },
     {
       q: "Does counter POS billing stop if our internet goes down?",
@@ -184,30 +182,6 @@ export default function PricingPage() {
             </div>
           </div>
 
-          {/* Free Trial Banner */}
-          <div className="mt-10 max-w-4xl 2xl:max-w-5xl mx-auto rounded-2xl bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-emerald-500/10 border border-emerald-500/30 p-5 sm:p-6 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-3 text-left">
-              <div className="h-10 w-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-sm">
-                <Clock className="h-5 w-5" />
-              </div>
-              <div>
-                <div className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">
-                  Want to try PharmaBiz before subscribing?
-                </div>
-                <div className="text-xs sm:text-sm text-slate-600 dark:text-slate-300">
-                  Start with our <strong>7-Day Free Trial</strong>: 1 Branch, 1 Staff, full offline POS testing. No credit card required.
-                </div>
-              </div>
-            </div>
-
-            <Link
-              href={`/register?planId=${trialPlan?.id || ""}&billing=MONTHLY`}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-bold shadow hover:bg-emerald-700 transition shrink-0"
-            >
-              Start Free Trial
-              <ArrowRight className="h-4 w-4" />
-            </Link>
-          </div>
 
           {/* Paid Plans Grid */}
           <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-8 2xl:gap-10 w-full">

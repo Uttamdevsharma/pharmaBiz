@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { useSettings } from "@/context/SettingsContext";
-import { Check, Sparkles, Building, ArrowRight, Clock, Users } from "lucide-react";
+import { Check, Sparkles, Building, ArrowRight, Users } from "lucide-react";
 
 export function PricingSection() {
   const { settings } = useSettings();
@@ -79,25 +79,8 @@ export function PricingSection() {
             Transparent Pricing Designed To Scale With You
           </h2>
           <p className="text-base sm:text-lg 2xl:text-xl text-slate-600 dark:text-slate-400">
-            Start with our 7-Day Free Trial, then choose the plan matching your branch scale.
+            Choose the subscription plan that best matches your pharmacy scale.
           </p>
-
-          {/* Free Trial Highlight Box */}
-          <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-emerald-500/10 border border-emerald-500/30 text-emerald-900 dark:text-emerald-300 text-xs sm:text-sm font-semibold flex flex-col sm:flex-row items-center justify-between gap-4 max-w-2xl 2xl:max-w-3xl mx-auto shadow-sm">
-            <div className="flex items-center gap-2.5">
-              <Clock className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-              <span>
-                <strong>Plan 0 - Free Trial:</strong> 7 days full testing, max 1 branch & 1 staff. No credit card required.
-              </span>
-            </div>
-            <Link
-              href="/register"
-              className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-xs font-bold shadow hover:bg-emerald-700 transition shrink-0 flex items-center gap-1.5"
-            >
-              Start Free Trial
-              <ArrowRight className="h-3.5 w-3.5" />
-            </Link>
-          </div>
 
           {/* Billing Cycle Toggle */}
           <div className="flex items-center justify-center gap-4 pt-4">

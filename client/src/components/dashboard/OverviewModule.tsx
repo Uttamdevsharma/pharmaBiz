@@ -276,69 +276,69 @@ export function OverviewModule({ onNavigate, selectedBranchId: propBranchId }: O
       {/* ========================================================================= */}
       {/* 6 SIMPLIFIED REAL-TIME KPI STAT CARDS */}
       {/* ========================================================================= */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6 gap-3.5 sm:gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6 gap-3.5 sm:gap-4 3xl:gap-5 4xl:gap-6">
         {/* 1. Current Stock Value */}
-        <div className="p-4 sm:p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col justify-between space-y-2 min-w-0">
-          <div className="flex items-start justify-between gap-2 text-[11px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider min-w-0">
+        <div className="p-4 sm:p-5 3xl:p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col justify-between space-y-2 min-w-0">
+          <div className="flex items-start justify-between gap-2 text-[11px] sm:text-xs 3xl:text-sm font-bold text-slate-400 uppercase tracking-wider min-w-0">
             <span className="leading-snug">Current Stock Value</span>
-            <Package className="h-4 w-4 text-brand-primary shrink-0 mt-0.5" />
+            <Package className="h-4 w-4 3xl:h-5 3xl:w-5 text-brand-primary shrink-0 mt-0.5" />
           </div>
-          <div className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white font-mono tracking-tight truncate">
+          <div className="text-xl sm:text-2xl 3xl:text-3xl font-black text-slate-900 dark:text-white font-mono tracking-tight truncate">
             ৳{Number(summary.totalStockCostValue || summary.totalInventoryValue || 0).toLocaleString("en-BD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
         </div>
 
         {/* 2. Sales Revenue */}
-        <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-br from-brand-primary to-indigo-800 text-white shadow-md flex flex-col justify-between space-y-2 min-w-0">
-          <div className="flex items-start justify-between gap-2 text-[11px] sm:text-xs font-bold opacity-90 uppercase tracking-wider min-w-0">
+        <div className="p-4 sm:p-5 3xl:p-6 rounded-3xl bg-gradient-to-br from-brand-primary to-indigo-800 text-white shadow-md flex flex-col justify-between space-y-2 min-w-0">
+          <div className="flex items-start justify-between gap-2 text-[11px] sm:text-xs 3xl:text-sm font-bold opacity-90 uppercase tracking-wider min-w-0">
             <span className="leading-snug">Sales Revenue</span>
-            <TrendingUp className="h-4 w-4 shrink-0 mt-0.5" />
+            <TrendingUp className="h-4 w-4 3xl:h-5 3xl:w-5 shrink-0 mt-0.5" />
           </div>
-          <div className="text-xl sm:text-2xl font-black font-mono tracking-tight truncate">
+          <div className="text-xl sm:text-2xl 3xl:text-3xl font-black font-mono tracking-tight truncate">
             ৳{Number(summary.totalSalesRevenue || summary.totalRevenue || 0).toLocaleString("en-BD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
         </div>
 
         {/* 3. Cost of Sold Products */}
-        <div className="p-4 sm:p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col justify-between space-y-2 min-w-0">
-          <div className="flex items-start justify-between gap-2 text-[11px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider min-w-0">
+        <div className="p-4 sm:p-5 3xl:p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col justify-between space-y-2 min-w-0">
+          <div className="flex items-start justify-between gap-2 text-[11px] sm:text-xs 3xl:text-sm font-bold text-slate-400 uppercase tracking-wider min-w-0">
             <span className="leading-snug">Cost of Sold Products</span>
-            <Layers className="h-4 w-4 text-indigo-500 shrink-0 mt-0.5" />
+            <Layers className="h-4 w-4 3xl:h-5 3xl:w-5 text-indigo-500 shrink-0 mt-0.5" />
           </div>
-          <div className="text-xl sm:text-2xl font-black text-slate-800 dark:text-slate-200 font-mono tracking-tight truncate">
+          <div className="text-xl sm:text-2xl 3xl:text-3xl font-black text-slate-800 dark:text-slate-200 font-mono tracking-tight truncate">
             ৳{Number(summary.totalCostOfSold || 0).toLocaleString("en-BD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
         </div>
 
         {/* 4. Gross Profit */}
-        <div className="p-4 sm:p-5 rounded-3xl bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-900/60 shadow-xs flex flex-col justify-between space-y-2 min-w-0">
-          <div className="flex items-start justify-between gap-2 text-[11px] sm:text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider min-w-0">
+        <div className="p-4 sm:p-5 3xl:p-6 rounded-3xl bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-900/60 shadow-xs flex flex-col justify-between space-y-2 min-w-0">
+          <div className="flex items-start justify-between gap-2 text-[11px] sm:text-xs 3xl:text-sm font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider min-w-0">
             <span className="leading-snug">Gross Profit</span>
-            <DollarSign className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
+            <DollarSign className="h-4 w-4 3xl:h-5 3xl:w-5 text-emerald-500 shrink-0 mt-0.5" />
           </div>
-          <div className="text-xl sm:text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono tracking-tight truncate">
+          <div className="text-xl sm:text-2xl 3xl:text-3xl font-black text-emerald-600 dark:text-emerald-400 font-mono tracking-tight truncate">
             ৳{Number(summary.totalGrossProfit || summary.totalProfit || 0).toLocaleString("en-BD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
         </div>
 
         {/* 5. Damaged / Missing Loss */}
-        <div className="p-4 sm:p-5 rounded-3xl bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-900/60 shadow-xs flex flex-col justify-between space-y-2 min-w-0">
-          <div className="flex items-start justify-between gap-2 text-[11px] sm:text-xs font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider min-w-0">
+        <div className="p-4 sm:p-5 3xl:p-6 rounded-3xl bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-900/60 shadow-xs flex flex-col justify-between space-y-2 min-w-0">
+          <div className="flex items-start justify-between gap-2 text-[11px] sm:text-xs 3xl:text-sm font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider min-w-0">
             <span className="leading-snug">Damaged / Missing Loss</span>
-            <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+            <AlertTriangle className="h-4 w-4 3xl:h-5 3xl:w-5 text-amber-500 shrink-0 mt-0.5" />
           </div>
-          <div className="text-xl sm:text-2xl font-black text-amber-600 dark:text-amber-400 font-mono tracking-tight truncate">
+          <div className="text-xl sm:text-2xl 3xl:text-3xl font-black text-amber-600 dark:text-amber-400 font-mono tracking-tight truncate">
             ৳{Number(summary.totalDamagedMissingLoss || 0).toLocaleString("en-BD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
         </div>
 
         {/* 6. Net Realized Profit */}
-        <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-br from-emerald-600 to-teal-800 text-white shadow-md flex flex-col justify-between space-y-2 min-w-0">
-          <div className="flex items-start justify-between gap-2 text-[11px] sm:text-xs font-bold opacity-90 uppercase tracking-wider min-w-0">
+        <div className="p-4 sm:p-5 3xl:p-6 rounded-3xl bg-gradient-to-br from-emerald-600 to-teal-800 text-white shadow-md flex flex-col justify-between space-y-2 min-w-0">
+          <div className="flex items-start justify-between gap-2 text-[11px] sm:text-xs 3xl:text-sm font-bold opacity-90 uppercase tracking-wider min-w-0">
             <span className="leading-snug">Net Realized Profit</span>
-            <Sparkles className="h-4 w-4 shrink-0 mt-0.5" />
+            <Sparkles className="h-4 w-4 3xl:h-5 3xl:w-5 shrink-0 mt-0.5" />
           </div>
-          <div className="text-xl sm:text-2xl font-black font-mono tracking-tight truncate">
+          <div className="text-xl sm:text-2xl 3xl:text-3xl font-black font-mono tracking-tight truncate">
             ৳{Number(summary.netProfitAfterLoss !== undefined ? summary.netProfitAfterLoss : (summary.totalGrossProfit || 0)).toLocaleString("en-BD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
         </div>

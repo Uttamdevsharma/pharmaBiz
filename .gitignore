@@ -1,0 +1,10 @@
+node_modules
+dist
+.env
+.env.*
+.vercel
+.next
+.next_dev
+out
+build
+*.log

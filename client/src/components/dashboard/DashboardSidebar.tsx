@@ -46,6 +46,8 @@ import {
   MapPin,
   Pill,
   X,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 
 export type OwnerModule =
@@ -132,6 +134,8 @@ interface DashboardSidebarProps {
   onModuleChange: (module: OwnerModule) => void;
   mobileOpen?: boolean;
   onCloseMobile?: () => void;
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
 export function DashboardSidebar({
@@ -140,8 +144,11 @@ export function DashboardSidebar({
   onModuleChange,
   mobileOpen = false,
   onCloseMobile,
+  collapsed = false,
+  onToggleCollapse,
 }: DashboardSidebarProps) {
   const { user, hasPermission } = useAuth();
+  const isCollapsed = collapsed && !mobileOpen;
 
   const handleModuleSelect = (mod: OwnerModule) => {
     onModuleChange(mod);
@@ -740,7 +747,9 @@ export function DashboardSidebar({
         className={`bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col shrink-0 h-full max-h-full min-h-0 overflow-hidden transition-all duration-300 z-50 lg:z-auto ${
           mobileOpen
             ? "fixed inset-y-0 left-0 w-72 sm:w-80 shadow-2xl animate-in slide-in-from-left duration-200"
-            : "hidden lg:flex lg:w-64 xl:w-72 2xl:w-80"
+            : isCollapsed
+            ? "hidden lg:flex lg:w-20 xl:w-20 2xl:w-20 3xl:w-20"
+            : "hidden lg:flex lg:w-64 xl:w-72 2xl:w-80 3xl:w-88 4xl:w-96"
         }`}
       >
         {/* Mobile Drawer Header */}
@@ -759,196 +768,378 @@ export function DashboardSidebar({
           </button>
         </div>
 
-        <div className="p-3.5 xl:p-4 2xl:p-5 space-y-4 xl:space-y-5 2xl:space-y-6 flex-1 sidebar-scrollbar">
-          {/* Core Overview & Dashboard */}
-          {visibleCore.length > 0 && (
-            <div className="space-y-1 xl:space-y-1.5">
-              <div className="px-3 xl:px-3.5 2xl:px-4 text-[10px] xl:text-[11px] 2xl:text-xs font-black uppercase tracking-wider text-slate-400">
-                Overview
-              </div>
-              {visibleCore.map((item) => {
-                const Icon = item.icon;
-                const isActive = activeModule === item.id;
-                return (
+        {/* Collapsed Icon-Only Mode (Desktop/Laptop) */}
+        {isCollapsed ? (
+          <div className="p-2.5 space-y-3 flex-1 sidebar-scrollbar flex flex-col items-center">
+            {/* Core Overview */}
+            {visibleCore.map((item) => {
+              const Icon = item.icon;
+              const isActive = activeModule === item.id;
+              return (
+                <div key={item.id} className="relative group w-full flex justify-center">
                   <button
-                    key={item.id}
+                    type="button"
                     onClick={() => handleModuleSelect(item.id)}
-                    className={`w-full flex items-center gap-2.5 xl:gap-3 px-3 py-2 xl:px-3.5 xl:py-2.5 2xl:px-4 2xl:py-3 rounded-xl xl:rounded-2xl text-xs xl:text-sm 2xl:text-base font-bold transition-all ${
+                    className={`h-11 w-11 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
                       isActive
-                        ? "bg-brand-primary text-white shadow-sm"
-                        : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white"
+                        ? "bg-brand-primary text-white shadow-md shadow-brand-primary/20"
+                        : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
                     }`}
+                    aria-label={item.label}
                   >
-                    <Icon className="h-4 w-4 xl:h-4.5 xl:w-4.5 2xl:h-5 2xl:w-5 shrink-0" />
-                    <span className="truncate">{item.label}</span>
+                    <Icon className="h-5 w-5 shrink-0" />
                   </button>
-                );
-              })}
-            </div>
-          )}
+                  {/* Tooltip */}
+                  <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 px-2.5 py-1.5 rounded-xl bg-slate-900 dark:bg-slate-800 text-white text-xs font-semibold shadow-xl opacity-0 pointer-events-none group-hover:opacity-100 transition whitespace-nowrap z-50 border border-slate-700">
+                    {item.label}
+                  </div>
+                </div>
+              );
+            })}
 
-          {/* Collapsible Domain Sections */}
-          {visibleCollapsible.length > 0 && (
-            <div className="space-y-2 xl:space-y-2.5">
-              <div className="px-3 xl:px-3.5 2xl:px-4 text-[10px] xl:text-[11px] 2xl:text-xs font-black uppercase tracking-wider text-slate-400">
-                Pharmacy Operations
-              </div>
+            <div className="w-8 border-t border-slate-200 dark:border-slate-800 my-1" />
 
-              {visibleCollapsible.map((section) => {
-                const ParentIcon = section.icon;
-                const isParentActive =
-                  section.children.some(
-                    (child) =>
-                      activeModule === child.id ||
-                      Boolean(child.children?.some((gc) => gc.id === activeModule))
-                  ) ||
-                  Boolean(section.moduleId && activeModule === section.moduleId);
-                const isOpen = openParents[section.id] ?? isParentActive;
+            {/* Collapsible Domain Sections */}
+            {visibleCollapsible.map((section) => {
+              const ParentIcon = section.icon;
+              const isParentActive =
+                section.children.some(
+                  (child) =>
+                    activeModule === child.id ||
+                    Boolean(child.children?.some((gc) => gc.id === activeModule))
+                ) ||
+                Boolean(section.moduleId && activeModule === section.moduleId);
 
-                return (
-                  <div key={section.id} className="rounded-xl xl:rounded-2xl overflow-hidden">
-                    <button
-                      onClick={() => {
-                        if (section.moduleId) {
-                          handleModuleSelect(section.moduleId);
-                        }
-                        toggleParent(section.id);
-                      }}
-                      className={`w-full flex items-center justify-between px-3 py-2 xl:px-3.5 xl:py-2.5 2xl:px-4 2xl:py-3 rounded-xl xl:rounded-2xl text-xs xl:text-sm 2xl:text-base font-black transition-all ${
-                        isParentActive && !isOpen
-                          ? "bg-brand-primary/10 text-brand-primary dark:bg-brand-primary/20"
-                          : isParentActive && isOpen
-                          ? "bg-slate-100 dark:bg-slate-800/60 text-slate-900 dark:text-white"
-                          : "text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/50"
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5 xl:gap-3">
-                        <ParentIcon
-                          className={`h-4 w-4 xl:h-4.5 xl:w-4.5 2xl:h-5 2xl:w-5 shrink-0 ${
-                            isParentActive ? "text-brand-primary" : "text-slate-500 dark:text-slate-400"
-                          }`}
-                        />
-                        <span className="truncate">{section.label}</span>
-                      </div>
-                      {isOpen ? (
-                        <ChevronDown className="h-3.5 w-3.5 xl:h-4 xl:w-4 text-slate-400" />
-                      ) : (
-                        <ChevronRight className="h-3.5 w-3.5 xl:h-4 xl:w-4 text-slate-400" />
-                      )}
-                    </button>
+              return (
+                <div key={section.id} className="relative group w-full flex justify-center">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (section.moduleId) {
+                        handleModuleSelect(section.moduleId);
+                      } else if (section.children[0]?.id) {
+                        handleModuleSelect(section.children[0].id as OwnerModule);
+                      }
+                    }}
+                    className={`h-11 w-11 rounded-xl flex items-center justify-center relative transition-all cursor-pointer ${
+                      isParentActive
+                        ? "bg-brand-primary/15 text-brand-primary dark:bg-brand-primary/25 dark:text-brand-primary"
+                        : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
+                    }`}
+                    aria-label={section.label}
+                  >
+                    <ParentIcon className="h-5 w-5 shrink-0" />
+                    {isParentActive && (
+                      <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-brand-primary ring-2 ring-white dark:ring-slate-900" />
+                    )}
+                  </button>
 
-                    {/* Sub-items */}
-                    {isOpen && (
-                      <div className="pl-3 xl:pl-4 pr-1 py-1 space-y-0.5 border-l-2 border-slate-100 dark:border-slate-800 ml-3.5 xl:ml-4 mt-1">
-                        {section.children.map((child) => {
-                          const ChildIcon = child.icon;
-
-                          // Check if item is a subgroup with nested children (e.g. Allocate Product)
-                          if (child.children && child.children.length > 0) {
-                            const isSubgroupOpen = openSubgroups[child.id] ?? false;
-                            const hasActiveGrandchild = child.children.some(
-                              (gc) => gc.id === activeModule
-                            );
-                            return (
-                              <div key={child.id} className="space-y-0.5 pt-0.5">
+                  {/* Flyout Submenu on Hover */}
+                  <div className="absolute left-full ml-3 top-0 min-w-[210px] p-2 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition duration-150 z-50">
+                    <div className="px-2.5 py-1 text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider border-b border-slate-100 dark:border-slate-800 mb-1">
+                      {section.label}
+                    </div>
+                    <div className="space-y-0.5 max-h-72 overflow-y-auto custom-scrollbar">
+                      {section.children.map((child) => {
+                        if (child.children && child.children.length > 0) {
+                          return (
+                            <div key={child.id} className="pt-1">
+                              <div className="px-2 py-0.5 text-[10px] font-bold text-slate-400 uppercase">
+                                {child.label}
+                              </div>
+                              {child.children.map((gc) => (
                                 <button
-                                  onClick={() => toggleSubgroup(child.id)}
-                                  className={`w-full flex items-center justify-between px-2.5 py-1.5 xl:px-3 xl:py-2 2xl:px-3.5 2xl:py-2.5 rounded-lg xl:rounded-xl text-[11px] xl:text-xs 2xl:text-sm font-bold transition-all ${
-                                    hasActiveGrandchild
-                                      ? "text-brand-primary bg-slate-100/70 dark:bg-slate-800/80 font-black"
-                                      : "text-slate-600 dark:text-slate-400 hover:bg-slate-100/50 dark:hover:bg-slate-800/40 hover:text-slate-900 dark:hover:text-white"
+                                  key={gc.id}
+                                  type="button"
+                                  onClick={() => handleModuleSelect(gc.id as OwnerModule)}
+                                  className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer text-left ${
+                                    activeModule === gc.id
+                                      ? "bg-brand-primary text-white font-bold"
+                                      : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
                                   }`}
                                 >
-                                  <div className="flex items-center gap-2 xl:gap-2.5 truncate">
-                                    <ChildIcon className="h-3.5 w-3.5 xl:h-4 xl:w-4 shrink-0" />
-                                    <span className="truncate">{child.label}</span>
-                                  </div>
-                                  {isSubgroupOpen ? (
-                                    <ChevronDown className="h-3.5 w-3.5 xl:h-4 xl:w-4 shrink-0 opacity-70" />
-                                  ) : (
-                                    <ChevronRight className="h-3.5 w-3.5 xl:h-4 xl:w-4 shrink-0 opacity-70" />
-                                  )}
+                                  <gc.icon className="h-3.5 w-3.5 shrink-0" />
+                                  <span className="truncate">{gc.label}</span>
                                 </button>
-
-                                {isSubgroupOpen && (
-                                  <div className="pl-2.5 py-0.5 space-y-0.5 border-l-2 border-slate-200 dark:border-slate-700 ml-3.5 my-0.5">
-                                    {child.children.map((grandchild) => {
-                                      const GrandIcon = grandchild.icon;
-                                      const isGrandActive = activeModule === grandchild.id;
-                                      return (
-                                        <button
-                                          key={grandchild.id}
-                                          onClick={() =>
-                                            handleModuleSelect(grandchild.id as OwnerModule)
-                                          }
-                                          className={`w-full flex items-center gap-2 xl:gap-2.5 px-2.5 py-1.5 xl:px-3 xl:py-2 2xl:px-3.5 2xl:py-2.5 rounded-lg xl:rounded-xl text-[11px] xl:text-xs 2xl:text-sm font-bold transition-all ${
-                                            isGrandActive
-                                              ? "bg-brand-primary text-white shadow-xs"
-                                              : "text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white"
-                                          }`}
-                                        >
-                                          <GrandIcon className="h-3.5 w-3.5 xl:h-4 xl:w-4 shrink-0" />
-                                          <span className="truncate">{grandchild.label}</span>
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          }
-
-                          const isChildActive = activeModule === child.id;
-                          return (
-                            <button
-                              key={child.id}
-                              onClick={() => handleModuleSelect(child.id as OwnerModule)}
-                              className={`w-full flex items-center gap-2 xl:gap-2.5 px-2.5 py-1.5 xl:px-3 xl:py-2 2xl:px-3.5 2xl:py-2.5 rounded-lg xl:rounded-xl text-[11px] xl:text-xs 2xl:text-sm font-bold transition-all ${
-                                isChildActive
-                                  ? "bg-brand-primary text-white shadow-xs"
-                                  : "text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white"
-                              }`}
-                            >
-                              <ChildIcon className="h-3.5 w-3.5 xl:h-4 xl:w-4 shrink-0" />
-                              <span className="truncate">{child.label}</span>
-                            </button>
+                              ))}
+                            </div>
                           );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
+                        }
 
-          {/* Pharmacy Owner Settings & Analytics */}
-          {visibleEnterprise.length > 0 && (
-            <div className="space-y-1 xl:space-y-1.5">
-              <div className="px-3 xl:px-3.5 2xl:px-4 text-[10px] xl:text-[11px] 2xl:text-xs font-black uppercase tracking-wider text-slate-400">
-                System Settings
-              </div>
-              {visibleEnterprise.map((item) => {
-                const Icon = item.icon;
-                const isActive = activeModule === item.id;
-                return (
+                        const isChildActive = activeModule === child.id;
+                        return (
+                          <button
+                            key={child.id}
+                            type="button"
+                            onClick={() => handleModuleSelect(child.id as OwnerModule)}
+                            className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer text-left ${
+                              isChildActive
+                                ? "bg-brand-primary text-white font-bold"
+                                : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
+                            }`}
+                          >
+                            <child.icon className="h-3.5 w-3.5 shrink-0" />
+                            <span className="truncate">{child.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+
+            <div className="w-8 border-t border-slate-200 dark:border-slate-800 my-1" />
+
+            {/* Enterprise / System Settings */}
+            {visibleEnterprise.map((item) => {
+              const Icon = item.icon;
+              const isActive = activeModule === item.id;
+              return (
+                <div key={item.id} className="relative group w-full flex justify-center">
                   <button
-                    key={item.id}
+                    type="button"
                     onClick={() => handleModuleSelect(item.id)}
-                    className={`w-full flex items-center gap-2.5 xl:gap-3 px-3 py-2 xl:px-3.5 xl:py-2.5 2xl:px-4 2xl:py-3 rounded-xl xl:rounded-2xl text-xs xl:text-sm 2xl:text-base font-bold transition-all ${
+                    className={`h-11 w-11 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
                       isActive
-                        ? "bg-brand-primary text-white shadow-sm"
-                        : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white"
+                        ? "bg-brand-primary text-white shadow-md shadow-brand-primary/20"
+                        : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
                     }`}
+                    aria-label={item.label}
                   >
-                    <Icon className="h-4 w-4 xl:h-4.5 xl:w-4.5 2xl:h-5 2xl:w-5 shrink-0" />
-                    <span className="truncate">{item.label}</span>
+                    <Icon className="h-5 w-5 shrink-0" />
                   </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
+                  <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 px-2.5 py-1.5 rounded-xl bg-slate-900 dark:bg-slate-800 text-white text-xs font-semibold shadow-xl opacity-0 pointer-events-none group-hover:opacity-100 transition whitespace-nowrap z-50 border border-slate-700">
+                    {item.label}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          /* Full Expanded Sidebar Content */
+          <div className="p-3.5 xl:p-4 2xl:p-5 space-y-4 xl:space-y-5 2xl:space-y-6 flex-1 sidebar-scrollbar">
+            {/* Core Overview & Dashboard */}
+            {visibleCore.length > 0 && (
+              <div className="space-y-1 xl:space-y-1.5">
+                <div className="px-3 xl:px-3.5 2xl:px-4 text-[10px] xl:text-[11px] 2xl:text-xs font-black uppercase tracking-wider text-slate-400">
+                  Overview
+                </div>
+                {visibleCore.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = activeModule === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => handleModuleSelect(item.id)}
+                      className={`w-full flex items-center gap-2.5 xl:gap-3 px-3 py-2 xl:px-3.5 xl:py-2.5 2xl:px-4 2xl:py-3 rounded-xl xl:rounded-2xl text-xs xl:text-sm 2xl:text-base font-bold transition-all cursor-pointer ${
+                        isActive
+                          ? "bg-brand-primary text-white shadow-sm"
+                          : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white"
+                      }`}
+                    >
+                      <Icon className="h-4 w-4 xl:h-4.5 xl:w-4.5 2xl:h-5 2xl:w-5 shrink-0" />
+                      <span className="truncate">{item.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Collapsible Domain Sections */}
+            {visibleCollapsible.length > 0 && (
+              <div className="space-y-2 xl:space-y-2.5">
+                <div className="px-3 xl:px-3.5 2xl:px-4 text-[10px] xl:text-[11px] 2xl:text-xs font-black uppercase tracking-wider text-slate-400">
+                  Pharmacy Operations
+                </div>
+
+                {visibleCollapsible.map((section) => {
+                  const ParentIcon = section.icon;
+                  const isParentActive =
+                    section.children.some(
+                      (child) =>
+                        activeModule === child.id ||
+                        Boolean(child.children?.some((gc) => gc.id === activeModule))
+                    ) ||
+                    Boolean(section.moduleId && activeModule === section.moduleId);
+                  const isOpen = openParents[section.id] ?? isParentActive;
+
+                  return (
+                    <div key={section.id} className="rounded-xl xl:rounded-2xl overflow-hidden">
+                      <button
+                        onClick={() => {
+                          if (section.moduleId) {
+                            handleModuleSelect(section.moduleId);
+                          }
+                          toggleParent(section.id);
+                        }}
+                        className={`w-full flex items-center justify-between px-3 py-2 xl:px-3.5 xl:py-2.5 2xl:px-4 2xl:py-3 rounded-xl xl:rounded-2xl text-xs xl:text-sm 2xl:text-base font-black transition-all cursor-pointer ${
+                          isParentActive && !isOpen
+                            ? "bg-brand-primary/10 text-brand-primary dark:bg-brand-primary/20"
+                            : isParentActive && isOpen
+                            ? "bg-slate-100 dark:bg-slate-800/60 text-slate-900 dark:text-white"
+                            : "text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/50"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5 xl:gap-3">
+                          <ParentIcon
+                            className={`h-4 w-4 xl:h-4.5 xl:w-4.5 2xl:h-5 2xl:w-5 shrink-0 ${
+                              isParentActive ? "text-brand-primary" : "text-slate-500 dark:text-slate-400"
+                            }`}
+                          />
+                          <span className="truncate">{section.label}</span>
+                        </div>
+                        {isOpen ? (
+                          <ChevronDown className="h-3.5 w-3.5 xl:h-4 xl:w-4 text-slate-400" />
+                        ) : (
+                          <ChevronRight className="h-3.5 w-3.5 xl:h-4 xl:w-4 text-slate-400" />
+                        )}
+                      </button>
+
+                      {/* Sub-items */}
+                      {isOpen && (
+                        <div className="pl-3 xl:pl-4 pr-1 py-1 space-y-0.5 border-l-2 border-slate-100 dark:border-slate-800 ml-3.5 xl:ml-4 mt-1">
+                          {section.children.map((child) => {
+                            const ChildIcon = child.icon;
+
+                            // Check if item is a subgroup with nested children (e.g. Allocate Product)
+                            if (child.children && child.children.length > 0) {
+                              const isSubgroupOpen = openSubgroups[child.id] ?? false;
+                              const hasActiveGrandchild = child.children.some(
+                                (gc) => gc.id === activeModule
+                              );
+                              return (
+                                <div key={child.id} className="space-y-0.5 pt-0.5">
+                                  <button
+                                    onClick={() => toggleSubgroup(child.id)}
+                                    className={`w-full flex items-center justify-between px-2.5 py-1.5 xl:px-3 xl:py-2 2xl:px-3.5 2xl:py-2.5 rounded-lg xl:rounded-xl text-[11px] xl:text-xs 2xl:text-sm font-bold transition-all cursor-pointer ${
+                                      hasActiveGrandchild
+                                        ? "text-brand-primary bg-slate-100/70 dark:bg-slate-800/80 font-black"
+                                        : "text-slate-600 dark:text-slate-400 hover:bg-slate-100/50 dark:hover:bg-slate-800/40 hover:text-slate-900 dark:hover:text-white"
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-2 xl:gap-2.5 truncate">
+                                      <ChildIcon className="h-3.5 w-3.5 xl:h-4 xl:w-4 shrink-0" />
+                                      <span className="truncate">{child.label}</span>
+                                    </div>
+                                    {isSubgroupOpen ? (
+                                      <ChevronDown className="h-3.5 w-3.5 xl:h-4 xl:w-4 shrink-0 opacity-70" />
+                                    ) : (
+                                      <ChevronRight className="h-3.5 w-3.5 xl:h-4 xl:w-4 shrink-0 opacity-70" />
+                                    )}
+                                  </button>
+
+                                  {isSubgroupOpen && (
+                                    <div className="pl-2.5 py-0.5 space-y-0.5 border-l-2 border-slate-200 dark:border-slate-700 ml-3.5 my-0.5">
+                                      {child.children.map((grandchild) => {
+                                        const GrandIcon = grandchild.icon;
+                                        const isGrandActive = activeModule === grandchild.id;
+                                        return (
+                                          <button
+                                            key={grandchild.id}
+                                            onClick={() =>
+                                              handleModuleSelect(grandchild.id as OwnerModule)
+                                            }
+                                            className={`w-full flex items-center gap-2 xl:gap-2.5 px-2.5 py-1.5 xl:px-3 xl:py-2 2xl:px-3.5 2xl:py-2.5 rounded-lg xl:rounded-xl text-[11px] xl:text-xs 2xl:text-sm font-bold transition-all cursor-pointer ${
+                                              isGrandActive
+                                                ? "bg-brand-primary text-white shadow-xs"
+                                                : "text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white"
+                                            }`}
+                                          >
+                                            <GrandIcon className="h-3.5 w-3.5 xl:h-4 xl:w-4 shrink-0" />
+                                            <span className="truncate">{grandchild.label}</span>
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            }
+
+                            const isChildActive = activeModule === child.id;
+                            return (
+                              <button
+                                key={child.id}
+                                onClick={() => handleModuleSelect(child.id as OwnerModule)}
+                                className={`w-full flex items-center gap-2 xl:gap-2.5 px-2.5 py-1.5 xl:px-3 xl:py-2 2xl:px-3.5 2xl:py-2.5 rounded-lg xl:rounded-xl text-[11px] xl:text-xs 2xl:text-sm font-bold transition-all cursor-pointer ${
+                                  isChildActive
+                                    ? "bg-brand-primary text-white shadow-xs"
+                                    : "text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white"
+                                }`}
+                              >
+                                <ChildIcon className="h-3.5 w-3.5 xl:h-4 xl:w-4 shrink-0" />
+                                <span className="truncate">{child.label}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Pharmacy Owner Settings & Analytics */}
+            {visibleEnterprise.length > 0 && (
+              <div className="space-y-1 xl:space-y-1.5">
+                <div className="px-3 xl:px-3.5 2xl:px-4 text-[10px] xl:text-[11px] 2xl:text-xs font-black uppercase tracking-wider text-slate-400">
+                  System Settings
+                </div>
+                {visibleEnterprise.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = activeModule === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => handleModuleSelect(item.id)}
+                      className={`w-full flex items-center gap-2.5 xl:gap-3 px-3 py-2 xl:px-3.5 xl:py-2.5 2xl:px-4 2xl:py-3 rounded-xl xl:rounded-2xl text-xs xl:text-sm 2xl:text-base font-bold transition-all cursor-pointer ${
+                        isActive
+                          ? "bg-brand-primary text-white shadow-sm"
+                          : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white"
+                      }`}
+                    >
+                      <Icon className="h-4 w-4 xl:h-4.5 xl:w-4.5 2xl:h-5 2xl:w-5 shrink-0" />
+                      <span className="truncate">{item.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Desktop Collapse / Expand Toggle Footer */}
+        {onToggleCollapse && (
+          <div className="hidden lg:flex p-2.5 2xl:p-3 border-t border-slate-200 dark:border-slate-800 shrink-0 bg-slate-50/50 dark:bg-slate-900/50">
+            <button
+              type="button"
+              onClick={onToggleCollapse}
+              className={`w-full flex items-center ${isCollapsed ? "justify-center" : "justify-between px-2.5"} py-2 rounded-xl hover:bg-slate-200/60 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white transition duration-150 group relative cursor-pointer`}
+              title={isCollapsed ? "Expand Sidebar (Ctrl+B)" : "Collapse Sidebar (Ctrl+B)"}
+            >
+              {isCollapsed ? (
+                <>
+                  <PanelLeftOpen className="h-5 w-5 text-brand-primary" />
+                  <span className="absolute left-full ml-3 px-2.5 py-1 rounded-xl bg-slate-900 dark:bg-slate-800 text-white text-xs font-semibold shadow-xl opacity-0 pointer-events-none group-hover:opacity-100 transition whitespace-nowrap z-50 border border-slate-700">
+                    Expand Sidebar (Ctrl+B)
+                  </span>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center gap-2 text-xs 2xl:text-sm font-bold text-slate-600 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white">
+                    <PanelLeftClose className="h-4 w-4 2xl:h-5 2xl:w-5 text-slate-400 group-hover:text-brand-primary transition" />
+                    <span>Collapse Sidebar</span>
+                  </div>
+                  <kbd className="hidden xl:inline-block px-1.5 py-0.5 text-[10px] font-mono text-slate-400 bg-slate-100 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
+                    Ctrl+B
+                  </kbd>
+                </>
+              )}
+            </button>
+          </div>
+        )}
       </aside>
     </>
   );

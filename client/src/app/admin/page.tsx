@@ -26,6 +26,33 @@ export default function AdminDashboardPage() {
   const { user, loading, isAuthenticated, isSuperAdmin, isPlatformStaff, hasPermission } = useAuth();
   const [activeTab, setActiveTab] = useState<AdminTab>("overview");
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("admin_sidebar_collapsed") === "true";
+    }
+    return false;
+  });
+
+  const toggleSidebarCollapse = () => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      if (typeof window !== "undefined") {
+        localStorage.setItem("admin_sidebar_collapsed", String(next));
+      }
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "b") {
+        e.preventDefault();
+        toggleSidebarCollapse();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   useEffect(() => {
     if (!loading) {
@@ -157,6 +184,8 @@ export default function AdminDashboardPage() {
       <AdminHeader
         activeTab={activeTab}
         onToggleMobileSidebar={() => setMobileSidebarOpen(!mobileSidebarOpen)}
+        isSidebarCollapsed={sidebarCollapsed}
+        onToggleDesktopSidebar={toggleSidebarCollapse}
       />
 
       {/* Main Admin Console Layout */}
@@ -167,11 +196,15 @@ export default function AdminDashboardPage() {
           onTabChange={setActiveTab}
           mobileOpen={mobileSidebarOpen}
           onCloseMobile={() => setMobileSidebarOpen(false)}
+          collapsed={sidebarCollapsed}
+          onToggleCollapse={toggleSidebarCollapse}
         />
 
         {/* Dynamic Tab Content Area */}
-        <main className="flex-1 h-full min-h-0 p-3.5 sm:p-6 md:p-8 content-scrollbar max-w-full w-full min-w-0">
-          {renderTabContent()}
+        <main className="flex-1 h-full min-h-0 p-3.5 sm:p-4 md:p-6 lg:p-7 xl:p-8 2xl:p-10 3xl:p-12 4xl:p-16 content-scrollbar max-w-full w-full min-w-0">
+          <div className="w-full max-w-[1920px] 3xl:max-w-[2400px] 4xl:max-w-[3000px] mx-auto min-w-0">
+            {renderTabContent()}
+          </div>
         </main>
       </div>
     </div>

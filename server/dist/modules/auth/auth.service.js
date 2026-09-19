@@ -211,6 +211,17 @@ class AuthService {
             rejectionReason: user.tenant?.rejectionReason || null,
             requiresOtp,
             paymentRequired,
+            tenant: user.tenant
+                ? {
+                    id: user.tenant.id,
+                    name: user.tenant.name,
+                    logoUrl: user.tenant.logoUrl || null,
+                    logoPublicId: user.tenant.logoPublicId || null,
+                    email: user.tenant.email || null,
+                    phone: user.tenant.phone || null,
+                    address: user.tenant.address || null,
+                }
+                : null,
         };
     }
     /**

@@ -16,14 +16,23 @@ import {
   KeyRound,
   ChevronDown,
   User as UserIcon,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 
 interface AdminHeaderProps {
   activeTab: string;
   onToggleMobileSidebar?: () => void;
+  isSidebarCollapsed?: boolean;
+  onToggleDesktopSidebar?: () => void;
 }
 
-export function AdminHeader({ activeTab, onToggleMobileSidebar }: AdminHeaderProps) {
+export function AdminHeader({
+  activeTab,
+  onToggleMobileSidebar,
+  isSidebarCollapsed,
+  onToggleDesktopSidebar,
+}: AdminHeaderProps) {
   const { user, logout } = useAuth();
   const { settings } = useSettings();
 
@@ -59,17 +68,34 @@ export function AdminHeader({ activeTab, onToggleMobileSidebar }: AdminHeaderPro
 
   return (
     <>
-      <header className="h-16 shrink-0 border-b border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md px-4 sm:px-6 flex items-center justify-between sticky top-0 z-40 gap-2">
+      <header className="h-16 2xl:h-20 shrink-0 border-b border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md px-3 sm:px-6 2xl:px-10 flex items-center justify-between sticky top-0 z-40 gap-2">
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           {onToggleMobileSidebar && (
             <button
               type="button"
               onClick={onToggleMobileSidebar}
-              className="md:hidden p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition -ml-1 shrink-0 cursor-pointer"
+              className="lg:hidden p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition -ml-1 shrink-0 cursor-pointer"
               aria-label="Toggle Navigation Menu"
               title="Toggle Navigation Menu"
             >
               <Menu className="h-5 w-5" />
+            </button>
+          )}
+
+          {/* Desktop Sidebar Collapse Toggle */}
+          {onToggleDesktopSidebar && (
+            <button
+              type="button"
+              onClick={onToggleDesktopSidebar}
+              className="hidden lg:flex p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition -ml-1 shrink-0 cursor-pointer"
+              aria-label={isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+              title={isSidebarCollapsed ? "Expand Sidebar (Ctrl+B)" : "Collapse Sidebar (Ctrl+B)"}
+            >
+              {isSidebarCollapsed ? (
+                <PanelLeftOpen className="h-5 w-5 text-brand-primary" />
+              ) : (
+                <PanelLeftClose className="h-5 w-5 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200" />
+              )}
             </button>
           )}
 

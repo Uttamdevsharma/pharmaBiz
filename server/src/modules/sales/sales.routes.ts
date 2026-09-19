@@ -30,6 +30,7 @@ router.get(
   validateRequest({ query: listSalesQuerySchema }),
   SalesController.listSales
 );
+router.get("/customers", requirePermission("pos.manage"), SalesController.getCustomers);
 router.get("/:id", requirePermission("pos.history"), SalesController.getSaleById);
 router.get("/:id/receipt", requirePermission("pos.history"), SalesController.getReceipt);
 

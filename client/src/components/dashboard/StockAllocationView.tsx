@@ -672,29 +672,19 @@ export function StockAllocationView({
   return (
     <div className="space-y-6 pb-16">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b-2 border-slate-200 dark:border-slate-800">
         <div>
-          <div className="flex items-center gap-1.5 text-xs text-slate-400 mb-1">
-            <span>Stock Management</span>
-            <span>/</span>
-            <span>Allocate Product</span>
-            <span>/</span>
-            <span className="text-brand-primary font-bold">Stock Allocation</span>
-          </div>
-          <h1 className="text-xl font-black text-slate-900 dark:text-white flex items-center gap-2">
-            <MapPin className="h-6 w-6 text-brand-primary" />
-            Place Stock in Rack (Stock Allocation)
+          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white flex items-center gap-2.5">
+            <MapPin className="h-7 w-7 text-emerald-600 dark:text-emerald-400" />
+            Stock Allocation
           </h1>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Product → Batch → Available Stock → Allocation. Packaging-aware placement with zero double-counting.
-          </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           {onNavigate && (
             <button
               onClick={() => onNavigate("stock_allocation_history")}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition shadow-xs"
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition shadow-xs cursor-pointer"
             >
               <History className="h-4 w-4 text-slate-400" />
               <span>Allocation History</span>
@@ -704,24 +694,24 @@ export function StockAllocationView({
           <button
             onClick={() => loadInventory()}
             title="Refresh"
-            className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-500 transition"
+            className="p-2.5 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition cursor-pointer"
           >
-            <RefreshCw className="h-4 w-4" />
+            <RefreshCw className="h-5 w-5" />
           </button>
         </div>
       </div>
 
       {/* Workflow Tabs */}
-      <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800/80 p-1.5 rounded-2xl w-fit">
+      <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 p-1.5 rounded-2xl w-fit border border-slate-200 dark:border-slate-700">
         <button
           onClick={() => {
             setActiveWorkflowTab("PLACE_IN_RACK");
             setErrorMsg(null);
             setSuccessMsg(null);
           }}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition ${
+          className={`flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-black transition cursor-pointer ${
             activeWorkflowTab === "PLACE_IN_RACK"
-              ? "bg-white dark:bg-slate-900 text-brand-primary shadow-xs"
+              ? "bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-sm"
               : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
           }`}
         >
@@ -735,9 +725,9 @@ export function StockAllocationView({
             setErrorMsg(null);
             setSuccessMsg(null);
           }}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition ${
+          className={`flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-black transition cursor-pointer ${
             activeWorkflowTab === "SHELF_TO_SHELF"
-              ? "bg-white dark:bg-slate-900 text-brand-primary shadow-xs"
+              ? "bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-sm"
               : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
           }`}
         >
@@ -748,14 +738,14 @@ export function StockAllocationView({
 
       {/* Global Alerts */}
       {errorMsg && (
-        <div className="p-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-2xl text-rose-700 dark:text-rose-300 text-xs flex items-center gap-2.5 font-bold">
+        <div className="p-4 bg-rose-50 dark:bg-rose-950/40 border-2 border-rose-300 dark:border-rose-900 rounded-2xl text-rose-700 dark:text-rose-300 text-sm flex items-center gap-2.5 font-bold">
           <AlertCircle className="h-5 w-5 shrink-0 text-rose-600" />
           <span>{errorMsg}</span>
         </div>
       )}
 
       {successMsg && (
-        <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 rounded-2xl text-emerald-700 dark:text-emerald-300 text-xs flex items-center gap-2.5 font-bold">
+        <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 border-2 border-emerald-300 dark:border-emerald-900 rounded-2xl text-emerald-700 dark:text-emerald-300 text-sm flex items-center gap-2.5 font-bold">
           <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" />
           <span>{successMsg}</span>
         </div>
@@ -766,16 +756,16 @@ export function StockAllocationView({
       ══════════════════════════════════════════════════════════ */}
       {activeWorkflowTab === "PLACE_IN_RACK" && (
         <div className="space-y-6">
-          {/* Active Selection Breadcrumb Header (if product or batch is selected) */}
-          {(selectedProductId || selectedBatchId) && (
-            <div className="flex flex-wrap items-center justify-between gap-3 p-4 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-2xl">
-              <div className="flex flex-wrap items-center gap-2 text-xs">
-                <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Active Flow:</span>
+          {/* Active Selection Header */}
+          {(selectedProductId && !selectedBatchId) && (
+            <div className="flex flex-wrap items-center justify-between gap-3 p-4 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs">
+              <div className="flex flex-wrap items-center gap-2.5 text-sm">
+                <span className="text-slate-500 dark:text-slate-400 font-bold">Selected:</span>
                 
                 {/* Product Badge */}
                 {selectedProductItem && (
-                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-bold text-slate-900 dark:text-white shadow-xs">
-                    <span className="text-slate-400 font-normal">Product:</span>
+                  <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-black text-slate-900 dark:text-white">
+                    <span className="text-slate-500 font-normal">Product:</span>
                     <span>{selectedProductItem.product.name}</span>
                     <button
                       type="button"
@@ -786,9 +776,9 @@ export function StockAllocationView({
                         setSuccessMsg(null);
                       }}
                       title="Change Product"
-                      className="ml-1 p-0.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                      className="ml-1 p-0.5 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
                     >
-                      <X className="h-3.5 w-3.5" />
+                      <X className="h-4 w-4" />
                     </button>
                   </div>
                 )}
@@ -796,9 +786,9 @@ export function StockAllocationView({
                 {/* Batch Badge */}
                 {selectedBatch && (
                   <>
-                    <ChevronRight className="h-3.5 w-3.5 text-slate-400" />
-                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-bold text-brand-primary shadow-xs font-mono">
-                      <span className="text-slate-400 font-normal font-sans">Batch:</span>
+                    <ChevronRight className="h-4 w-4 text-slate-400" />
+                    <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-800 font-black text-emerald-800 dark:text-emerald-300 font-mono">
+                      <span className="text-slate-500 font-sans font-normal">Batch:</span>
                       <span>{selectedBatch.batchNumber || "—"}</span>
                       <button
                         type="button"
@@ -808,16 +798,16 @@ export function StockAllocationView({
                           setSuccessMsg(null);
                         }}
                         title="Change Batch"
-                        className="ml-1 p-0.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                        className="ml-1 p-0.5 rounded-md hover:bg-emerald-100 dark:hover:bg-emerald-900 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
                       >
-                        <X className="h-3.5 w-3.5" />
+                        <X className="h-4 w-4" />
                       </button>
                     </div>
                   </>
                 )}
               </div>
 
-              <div className="flex items-center gap-2">
+              <div>
                 <button
                   type="button"
                   onClick={() => {
@@ -826,7 +816,7 @@ export function StockAllocationView({
                     setErrorMsg(null);
                     setSuccessMsg(null);
                   }}
-                  className="text-xs font-bold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 underline"
+                  className="text-sm font-bold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 underline cursor-pointer"
                 >
                   Start Over (All Products)
                 </button>
@@ -838,54 +828,48 @@ export function StockAllocationView({
               VIEW STATE 1: NO PRODUCT SELECTED -> SHOW ALL PRODUCTS
           ───────────────────────────────────────────────────────────── */}
           {!selectedProductId && (
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-xs space-y-6">
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm space-y-6">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
                 <div>
-                  <h2 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
-                    <span className="h-6 w-6 rounded-lg bg-brand-primary/10 text-brand-primary flex items-center justify-center text-xs font-black">
+                  <h2 className="text-xl font-black text-slate-900 dark:text-white flex items-center gap-2.5">
+                    <span className="h-7 w-7 rounded-xl bg-brand-primary/10 text-brand-primary flex items-center justify-center text-sm font-black">
                       1
                     </span>
                     Products with Stock Not in Rack
                   </h2>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Click a product to view its unallocated batches and place them into physical racks.
-                  </p>
                 </div>
 
                 {/* Search Bar */}
-                <div className="relative w-full sm:w-72">
-                  <Search className="h-4 w-4 text-slate-400 absolute left-3 top-2.5" />
+                <div className="relative w-full sm:w-80">
+                  <Search className="h-5 w-5 text-slate-400 absolute left-3.5 top-3" />
                   <input
                     type="text"
-                    placeholder="Search product or generic..."
+                    placeholder="Search product name or generic..."
                     value={productSearch}
                     onChange={(e) => setProductSearch(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:ring-2 focus:ring-brand-primary"
+                    className="w-full pl-11 pr-4 py-2.5 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:ring-2 focus:ring-brand-primary"
                   />
                 </div>
               </div>
 
               {loadingInventory ? (
-                <div className="p-12 text-center text-xs text-slate-400 flex items-center justify-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin text-brand-primary" />
-                  <span>Loading products with unallocated stock...</span>
+                <div className="p-16 text-center text-sm font-medium text-slate-400 flex items-center justify-center gap-3">
+                  <Loader2 className="h-5 w-5 animate-spin text-brand-primary" />
+                  <span>Loading products...</span>
                 </div>
               ) : productsWithUnallocatedStock.length === 0 ? (
-                <div className="p-12 text-center space-y-3 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-900/40 rounded-2xl">
-                  <CheckCircle2 className="h-10 w-10 text-emerald-600 mx-auto" />
-                  <h3 className="text-sm font-black text-emerald-900 dark:text-emerald-200">
-                    All Products Are Fully Placed in Racks!
+                <div className="p-12 text-center space-y-3 bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/40 rounded-2xl">
+                  <CheckCircle2 className="h-12 w-12 text-emerald-600 mx-auto" />
+                  <h3 className="text-lg font-black text-emerald-900 dark:text-emerald-200">
+                    All Products Are Placed in Racks
                   </h3>
-                  <p className="text-xs text-emerald-700 dark:text-emerald-400 max-w-md mx-auto">
-                    There is currently zero unallocated bulk stock in this branch. All received medicine stock has been assigned to physical Rack → Shelf → Bin locations.
-                  </p>
                 </div>
               ) : filteredProducts.length === 0 ? (
-                <div className="p-8 text-center text-xs text-slate-400">
-                  No products matching &quot;{productSearch}&quot; with unallocated stock found.
+                <div className="p-12 text-center text-sm font-semibold text-slate-400">
+                  No products matching &quot;{productSearch}&quot; found.
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                   {filteredProducts.map((item) => (
                     <button
                       key={item.product.id}
@@ -896,36 +880,36 @@ export function StockAllocationView({
                         setErrorMsg(null);
                         setSuccessMsg(null);
                       }}
-                      className="p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 hover:border-brand-primary dark:hover:border-brand-primary/60 bg-white dark:bg-slate-900 hover:bg-brand-primary/[0.02] dark:hover:bg-brand-primary/5 transition text-left group shadow-xs hover:shadow-md flex flex-col justify-between"
+                      className="p-6 rounded-2xl border-2 border-slate-200/90 dark:border-slate-800 hover:border-brand-primary dark:hover:border-brand-primary bg-white dark:bg-slate-900 hover:bg-brand-primary/[0.02] dark:hover:bg-brand-primary/5 transition text-left group shadow-sm hover:shadow-md flex flex-col justify-between"
                     >
                       <div className="space-y-2">
-                        <div className="flex items-start justify-between gap-2">
-                          <h3 className="text-sm font-black text-slate-900 dark:text-white group-hover:text-brand-primary transition leading-snug">
+                        <div className="flex items-start justify-between gap-3">
+                          <h3 className="text-base font-black text-slate-900 dark:text-white group-hover:text-brand-primary transition leading-snug">
                             {item.product.name}
                           </h3>
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 shrink-0">
+                          <span className="px-3 py-1 rounded-full text-xs font-black bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 shrink-0">
                             {item.batches.length} Batch{item.batches.length !== 1 ? "es" : ""}
                           </span>
                         </div>
 
                         {item.product.genericName && (
-                          <p className="text-xs text-slate-500 italic line-clamp-1">
+                          <p className="text-sm text-slate-500 font-medium">
                             {item.product.genericName}
                           </p>
                         )}
                       </div>
 
-                      <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                      <div className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
                         <div>
-                          <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
+                          <span className="text-xs font-bold uppercase tracking-wider text-slate-400 block">
                             Not in Rack
                           </span>
-                          <span className="text-base font-black text-brand-primary">
+                          <span className="text-lg font-black text-brand-primary">
                             {item.totalUnallocatedUnits.toLocaleString()} {item.product.unit || "tablets"}
                           </span>
                         </div>
 
-                        <div className="flex items-center gap-1 text-xs font-bold text-slate-400 group-hover:text-brand-primary transition">
+                        <div className="flex items-center gap-1.5 text-sm font-bold text-slate-500 group-hover:text-brand-primary transition">
                           <span>Select</span>
                           <ArrowRight className="h-4 w-4 transform group-hover:translate-x-1 transition" />
                         </div>
@@ -941,18 +925,15 @@ export function StockAllocationView({
               VIEW STATE 2: PRODUCT SELECTED, NO BATCH SELECTED -> SHOW BATCHES
           ───────────────────────────────────────────────────────────── */}
           {selectedProductId && !selectedBatchId && (
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-xs space-y-6">
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm space-y-6">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
                 <div>
-                  <h2 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
-                    <span className="h-6 w-6 rounded-lg bg-amber-500/10 text-amber-600 flex items-center justify-center text-xs font-black">
+                  <h2 className="text-xl font-black text-slate-900 dark:text-white flex items-center gap-2.5">
+                    <span className="h-7 w-7 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center text-sm font-black">
                       2
                     </span>
-                    Batches with Stock Not in Rack for: {selectedProductItem?.product.name}
+                    Batches with Stock Not in Rack: {selectedProductItem?.product.name}
                   </h2>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Select a batch below to view its complete packaging breakdown and allocate it to racks.
-                  </p>
                 </div>
 
                 <button
@@ -961,18 +942,18 @@ export function StockAllocationView({
                     setSelectedProductId("");
                     setSelectedBatchId("");
                   }}
-                  className="text-xs font-bold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 border border-slate-200 dark:border-slate-700 px-3 py-1.5 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition"
+                  className="text-sm font-bold text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white border border-slate-200 dark:border-slate-700 px-4 py-2 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition"
                 >
                   ← Back to Product List
                 </button>
               </div>
 
               {batchesWithUnallocatedStock.length === 0 ? (
-                <div className="p-8 text-center text-xs text-slate-400">
-                  All batches for this product are currently 100% placed in racks.
+                <div className="p-12 text-center text-sm font-semibold text-slate-400">
+                  All batches for this product are currently placed in racks.
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                   {batchesWithUnallocatedStock.map((b) => {
                     const totalAlloc = (b.locations || []).reduce(
                       (sum: number, loc: any) => sum + (Number(loc.quantity) || 0),
@@ -992,35 +973,35 @@ export function StockAllocationView({
                           setErrorMsg(null);
                           setSuccessMsg(null);
                         }}
-                        className="p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 hover:border-amber-500 dark:hover:border-amber-400 bg-white dark:bg-slate-900 hover:bg-amber-500/[0.02] dark:hover:bg-amber-500/5 transition text-left group shadow-xs hover:shadow-md flex flex-col justify-between"
+                        className="p-6 rounded-2xl border-2 border-slate-200/90 dark:border-slate-800 hover:border-amber-500 dark:hover:border-amber-400 bg-white dark:bg-slate-900 hover:bg-amber-500/[0.02] dark:hover:bg-amber-500/5 transition text-left group shadow-sm hover:shadow-md flex flex-col justify-between"
                       >
                         <div className="space-y-2">
                           <div className="flex items-start justify-between gap-2">
                             <div>
-                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">
                                 Batch Number
                               </span>
-                              <h4 className="text-base font-black text-slate-900 dark:text-white font-mono group-hover:text-amber-600 transition">
+                              <h4 className="text-lg font-black text-slate-900 dark:text-white font-mono group-hover:text-amber-600 transition">
                                 {b.batchNumber || "—"}
                               </h4>
                             </div>
-                            <span className="px-2.5 py-1 rounded-lg text-[11px] font-mono bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold">
+                            <span className="px-3 py-1 rounded-lg text-xs font-mono bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold">
                               Exp: {expText}
                             </span>
                           </div>
                         </div>
 
-                        <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                        <div className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
                           <div>
-                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
+                            <span className="text-xs font-bold uppercase tracking-wider text-slate-400 block">
                               Stock Not in Rack
                             </span>
-                            <span className="text-base font-black text-amber-600 dark:text-amber-400">
+                            <span className="text-lg font-black text-amber-600 dark:text-amber-400">
                               {notInRack.toLocaleString()} {b.unit || "tablets"}
                             </span>
                           </div>
 
-                          <div className="flex items-center gap-1 text-xs font-bold text-slate-400 group-hover:text-amber-600 transition">
+                          <div className="flex items-center gap-1.5 text-sm font-bold text-slate-500 group-hover:text-amber-600 transition">
                             <span>Allocate</span>
                             <ArrowRight className="h-4 w-4 transform group-hover:translate-x-1 transition" />
                           </div>
@@ -1034,290 +1015,153 @@ export function StockAllocationView({
           )}
 
           {/* ─────────────────────────────────────────────────────────────
-              VIEW STATE 3: PRODUCT & BATCH SELECTED -> BREAKDOWN & FORM
+              VIEW STATE 3: PRODUCT & BATCH SELECTED -> SIMPLE SECTION-WISE ALLOCATION
           ───────────────────────────────────────────────────────────── */}
           {selectedProductId && selectedBatchId && batchMetrics && (
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-              {/* Left 5 Columns: Step 3 Available Stock Breakdown Card */}
-              <div className="lg:col-span-5 space-y-4">
-                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-xs space-y-5 sticky top-4">
-                  <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-                    <span className="text-xs font-black uppercase text-slate-500 tracking-wider flex items-center gap-2">
-                      <Archive className="h-4 w-4 text-amber-500" />
-                      3. Available Stock Breakdown
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedBatchId("")}
-                      className="text-[11px] font-bold text-brand-primary hover:underline"
-                    >
-                      Change Batch
-                    </button>
-                  </div>
-
-                  {/* Batch Header */}
-                  <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase">Product & Batch</p>
-                    <p className="text-base font-black text-slate-900 dark:text-white mt-0.5">
-                      {batchMetrics.productName}
-                    </p>
+            <div className="max-w-4xl mx-auto space-y-6">
+              {/* SECTION 1: MEDICINE & BATCH SUMMARY BANNER */}
+              <div className="bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div>
                     {batchMetrics.genericName && (
-                      <p className="text-xs text-slate-500 italic mt-0.5">
+                      <span className="text-xs font-black uppercase tracking-wider text-brand-primary block mb-1">
                         {batchMetrics.genericName}
-                      </p>
+                      </span>
                     )}
-                    <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-300 mt-2.5 pt-2 border-t border-slate-200/60 dark:border-slate-700 font-mono">
-                      <span>Batch: <strong className="text-slate-900 dark:text-white">{batchMetrics.batchNumber}</strong></span>
-                      <span>
+                    <h2 className="text-2xl font-black text-slate-900 dark:text-white">
+                      {batchMetrics.productName}
+                    </h2>
+                    <div className="flex flex-wrap items-center gap-2.5 mt-2.5 text-sm text-slate-600 dark:text-slate-300 font-mono">
+                      <span className="px-3 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-bold">
+                        Batch: <strong className="text-slate-900 dark:text-white">{batchMetrics.batchNumber}</strong>
+                      </span>
+                      <span className="px-3 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-bold">
                         Exp: {batchMetrics.expiryDate ? new Date(batchMetrics.expiryDate).toLocaleDateString("en-GB", { month: "short", year: "numeric" }) : "—"}
                       </span>
                     </div>
                   </div>
 
-                  {/* Exact 6 Requested Breakdown Metrics */}
-                  <div className="space-y-2.5">
-                    {/* 1. Full Cartons Not in Rack */}
-                    <div className="p-3 rounded-xl bg-amber-50/80 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 flex items-center justify-between">
-                      <div>
-                        <span className="text-xs font-bold text-amber-900 dark:text-amber-300 block">
-                          Full Cartons Not in Rack
-                        </span>
-                        <span className="text-[10px] text-amber-700 dark:text-amber-400">
-                          Sealed cartons ({boxesPerCarton} boxes each)
-                        </span>
-                      </div>
+                  <div className="flex items-center gap-3">
+                    <div className="px-4 py-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border-2 border-amber-200 dark:border-amber-900/60 text-right">
+                      <span className="text-xs font-bold uppercase text-amber-700 dark:text-amber-400 block">Not in Rack</span>
                       <span className="text-xl font-black text-amber-900 dark:text-amber-200 font-mono">
-                        {batchMetrics.fullCartons}
-                      </span>
-                    </div>
-
-                    {/* 2. Boxes Inside Cartons */}
-                    <div className="p-3 rounded-xl bg-amber-50/50 dark:bg-amber-950/10 border border-amber-200/60 dark:border-amber-900/20 flex items-center justify-between">
-                      <div>
-                        <span className="text-xs font-bold text-amber-900 dark:text-amber-300 block">
-                          Boxes Inside Cartons
-                        </span>
-                        <span className="text-[10px] text-amber-700 dark:text-amber-400">
-                          {batchMetrics.boxesInsideCartons} in full cartons
-                          {batchMetrics.boxesInOpenCarton > 0 && ` + ${batchMetrics.boxesInOpenCarton} in open carton`}
-                        </span>
-                      </div>
-                      <span className="text-base font-black text-amber-900 dark:text-amber-200 font-mono">
-                        {batchMetrics.totalCartonBoxesAvailable} Boxes
-                      </span>
-                    </div>
-
-                    {/* 3. Loose / Standalone Boxes Not in Rack */}
-                    <div className="p-3 rounded-xl bg-sky-50/80 dark:bg-sky-950/20 border border-sky-200 dark:border-sky-900/40 flex items-center justify-between">
-                      <div>
-                        <span className="text-xs font-bold text-sky-900 dark:text-sky-300 block">
-                          Loose/Standalone Boxes Not in Rack
-                        </span>
-                        <span className="text-[10px] text-sky-700 dark:text-sky-400">
-                          Received separately from supplier
-                        </span>
-                      </div>
-                      <span className="text-xl font-black text-sky-900 dark:text-sky-200 font-mono">
-                        {batchMetrics.remainingLooseBoxes} Boxes
-                      </span>
-                    </div>
-
-                    {/* 4. Loose Strips & 5. Loose Tablets */}
-                    <div className="grid grid-cols-2 gap-2.5">
-                      <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700">
-                        <span className="text-[10px] text-slate-400 block font-bold uppercase">Loose Strips</span>
-                        <span className="text-base font-black text-slate-800 dark:text-slate-200 font-mono">
-                          {batchMetrics.looseStrips}
-                        </span>
-                      </div>
-                      <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700">
-                        <span className="text-[10px] text-slate-400 block font-bold uppercase">Loose Tablets</span>
-                        <span className="text-base font-black text-slate-800 dark:text-slate-200 font-mono">
-                          {batchMetrics.looseTablets}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* 6. Total Stock Not in Rack */}
-                    <div className="p-4 rounded-xl bg-brand-primary/10 dark:bg-brand-primary/20 border border-brand-primary/30 flex items-center justify-between">
-                      <div>
-                        <span className="text-xs font-black text-brand-primary block">
-                          Total Stock Not in Rack
-                        </span>
-                        <span className="text-[10px] text-slate-500 dark:text-slate-400">
-                          Available for placement in rack
-                        </span>
-                      </div>
-                      <span className="text-xl font-black text-brand-primary font-mono">
                         {batchMetrics.unallocatedBulk.toLocaleString()} {packConfig.unit}s
                       </span>
                     </div>
-                  </div>
-
-                  {/* Physical Rack Stock Status */}
-                  <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200/60 dark:border-emerald-900/30 text-xs flex items-center justify-between">
-                    <span className="font-bold text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
-                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                      Physical Rack Stock
-                    </span>
-                    <span className="font-mono font-black text-emerald-700 dark:text-emerald-200">
-                      {batchMetrics.totalAllocated.toLocaleString()} {packConfig.unit}s
-                    </span>
+                    <div className="px-4 py-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border-2 border-emerald-200 dark:border-emerald-900/60 text-right">
+                      <span className="text-xs font-bold uppercase text-emerald-700 dark:text-emerald-400 block">In Rack</span>
+                      <span className="text-xl font-black text-emerald-900 dark:text-emerald-200 font-mono">
+                        {batchMetrics.totalAllocated.toLocaleString()} {packConfig.unit}s
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedBatchId("")}
+                      className="text-xs font-bold text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white border border-slate-200 dark:border-slate-700 px-3.5 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+                    >
+                      Change Batch
+                    </button>
                   </div>
                 </div>
               </div>
 
-              {/* Right 7 Columns: Step 4 Allocation Form */}
-              <div className="lg:col-span-7 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-xs space-y-6">
-                <div>
-                  <h2 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
-                    <span className="h-6 w-6 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center text-xs font-black">
-                      4
-                    </span>
-                    Allocation Details
-                  </h2>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Specify stock source, quantity, packaging unit, and destination Rack → Shelf → Bin.
-                  </p>
-                </div>
-
+              {/* SECTION 2: ALLOCATION FORM */}
+              <div className="bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 rounded-2xl p-6 sm:p-8 shadow-sm space-y-6">
                 <form onSubmit={handlePlaceStockInRack} className="space-y-6">
-                  {/* Stock Source Selection */}
-                  <div className="space-y-2.5">
-                    <label className="block text-xs font-black uppercase text-slate-700 dark:text-slate-300 tracking-wider">
-                      Stock Source
-                    </label>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {/* Source A: From Carton */}
-                      <button
-                        type="button"
-                        onClick={() => setStockSource("FROM_CARTON")}
-                        disabled={batchMetrics.totalCartonBoxesAvailable <= 0}
-                        className={`p-4 rounded-xl border text-left transition relative ${
-                          stockSource === "FROM_CARTON"
-                            ? "border-amber-500 bg-amber-50/50 dark:bg-amber-950/20 ring-2 ring-amber-500/30"
-                            : batchMetrics.totalCartonBoxesAvailable <= 0
-                            ? "opacity-50 cursor-not-allowed bg-slate-50 dark:bg-slate-800/30 border-slate-200 dark:border-slate-700"
-                            : "border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 bg-white dark:bg-slate-900"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-xs font-black text-slate-900 dark:text-white flex items-center gap-1.5">
-                            <Archive className="h-4 w-4 text-amber-500" />
-                            From Carton
-                          </span>
-                          {stockSource === "FROM_CARTON" && (
-                            <CheckCircle2 className="h-4 w-4 text-amber-600 shrink-0" />
-                          )}
-                        </div>
-                        <p className="text-2xl font-black text-amber-700 dark:text-amber-400">
-                          {batchMetrics.totalCartonBoxesAvailable}{" "}
-                          <span className="text-xs font-bold text-amber-600 dark:text-amber-500">Boxes</span>
-                        </p>
-                        <p className="text-[10px] text-slate-500 mt-1 leading-tight">
-                          Allocates Boxes from a Carton (not entire carton). Opens carton as needed.
-                        </p>
-                      </button>
-
-                      {/* Source B: Loose Box */}
-                      <button
-                        type="button"
-                        onClick={() => setStockSource("LOOSE_BOX")}
-                        disabled={batchMetrics.remainingLooseBoxes <= 0}
-                        className={`p-4 rounded-xl border text-left transition relative ${
-                          stockSource === "LOOSE_BOX"
-                            ? "border-sky-500 bg-sky-50/50 dark:bg-sky-950/20 ring-2 ring-sky-500/30"
-                            : batchMetrics.remainingLooseBoxes <= 0
-                            ? "opacity-50 cursor-not-allowed bg-slate-50 dark:bg-slate-800/30 border-slate-200 dark:border-slate-700"
-                            : "border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 bg-white dark:bg-slate-900"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-xs font-black text-slate-900 dark:text-white flex items-center gap-1.5">
-                            <Boxes className="h-4 w-4 text-sky-500" />
-                            Loose Box
-                          </span>
-                          {stockSource === "LOOSE_BOX" && (
-                            <CheckCircle2 className="h-4 w-4 text-sky-600 shrink-0" />
-                          )}
-                        </div>
-                        <p className="text-2xl font-black text-sky-700 dark:text-sky-400">
-                          {batchMetrics.remainingLooseBoxes}{" "}
-                          <span className="text-xs font-bold text-sky-600 dark:text-sky-500">Boxes</span>
-                        </p>
-                        <p className="text-[10px] text-slate-500 mt-1 leading-tight">
-                          Allocates separately received standalone boxes from supplier.
-                        </p>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Quantity & Packaging Unit */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Stock Source (Only if multiple sources exist) */}
+                  {(batchMetrics.totalCartonBoxesAvailable > 0 || batchMetrics.remainingLooseBoxes > 0) && (
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                        Quantity to Allocate
+                      <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">
+                        Stock Source
                       </label>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="number"
-                          min="1"
-                          max={allocationCalc.maxAvailable}
-                          value={quantityInput}
-                          onChange={(e) => setQuantityInput(parseInt(e.target.value, 10) || 1)}
-                          className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-black focus:ring-2 focus:ring-brand-primary"
-                        />
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <button
                           type="button"
-                          onClick={() => setQuantityInput(allocationCalc.maxAvailable)}
-                          className="px-2.5 py-2 text-[11px] font-bold rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 whitespace-nowrap"
+                          onClick={() => setStockSource("FROM_CARTON")}
+                          disabled={batchMetrics.totalCartonBoxesAvailable <= 0}
+                          className={`p-4 rounded-xl border-2 flex items-center justify-between transition cursor-pointer ${
+                            stockSource === "FROM_CARTON"
+                              ? "border-amber-500 bg-amber-50/60 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200 shadow-sm"
+                              : batchMetrics.totalCartonBoxesAvailable <= 0
+                              ? "opacity-40 cursor-not-allowed bg-slate-50 dark:bg-slate-800/30 border-slate-200 dark:border-slate-700 text-slate-400"
+                              : "border-slate-200 dark:border-slate-700 hover:border-slate-300 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300"
+                          }`}
                         >
-                          Max ({allocationCalc.maxAvailable})
+                          <div className="flex items-center gap-2.5">
+                            <Archive className="h-5 w-5 text-amber-500" />
+                            <span className="text-sm font-black">From Carton</span>
+                          </div>
+                          <span className="text-base font-black font-mono">
+                            {batchMetrics.totalCartonBoxesAvailable} Boxes
+                          </span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setStockSource("LOOSE_BOX")}
+                          disabled={batchMetrics.remainingLooseBoxes <= 0}
+                          className={`p-4 rounded-xl border-2 flex items-center justify-between transition cursor-pointer ${
+                            stockSource === "LOOSE_BOX"
+                              ? "border-sky-500 bg-sky-50/60 dark:bg-sky-950/30 text-sky-900 dark:text-sky-200 shadow-sm"
+                              : batchMetrics.remainingLooseBoxes <= 0
+                              ? "opacity-40 cursor-not-allowed bg-slate-50 dark:bg-slate-800/30 border-slate-200 dark:border-slate-700 text-slate-400"
+                              : "border-slate-200 dark:border-slate-700 hover:border-slate-300 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <Boxes className="h-5 w-5 text-sky-500" />
+                            <span className="text-sm font-black">Loose Box</span>
+                          </div>
+                          <span className="text-base font-black font-mono">
+                            {batchMetrics.remainingLooseBoxes} Boxes
+                          </span>
                         </button>
                       </div>
-                      <p className="text-[10px] text-slate-400 mt-1">
-                        = {allocationCalc.baseUnits.toLocaleString()} {packConfig.unit}s total
-                      </p>
                     </div>
+                  )}
 
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                        Packaging Unit
-                      </label>
-                      <div className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 text-slate-700 dark:text-slate-300 font-bold flex items-center justify-between">
-                        <span>{allocationCalc.packagingUnitLabel}</span>
-                        <span className="text-[10px] text-slate-400">({tabletsPerBox} {packConfig.unit}s/box)</span>
-                      </div>
-                      <p className="text-[10px] text-slate-400 mt-1">
-                        Source: {stockSource === "FROM_CARTON" ? "Taken from Carton" : "Supplier Loose Box"}
-                      </p>
+                  {/* Quantity to Allocate */}
+                  <div>
+                    <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">
+                      Quantity to Allocate ({allocationCalc.packagingUnitLabel})
+                    </label>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="number"
+                        min="1"
+                        max={allocationCalc.maxAvailable}
+                        value={quantityInput}
+                        onChange={(e) => setQuantityInput(parseInt(e.target.value, 10) || 1)}
+                        className="w-full h-12 text-lg font-black px-4 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setQuantityInput(allocationCalc.maxAvailable)}
+                        className="h-12 px-5 text-sm font-black rounded-xl border-2 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 whitespace-nowrap transition cursor-pointer"
+                      >
+                        Max ({allocationCalc.maxAvailable})
+                      </button>
                     </div>
                   </div>
 
-                  {/* Cascading Physical Location: Rack → Shelf → Bin */}
-                  <div className="space-y-3 p-4 bg-slate-50 dark:bg-slate-800/30 rounded-2xl border border-slate-200/80 dark:border-slate-700">
-                    <div className="flex items-center justify-between">
-                      <label className="text-xs font-black uppercase text-slate-700 dark:text-slate-300 tracking-wider flex items-center gap-1.5">
-                        <MapPin className="h-4 w-4 text-brand-primary" />
-                        Destination Physical Location
-                      </label>
-                      <span className="text-[10px] text-slate-400">Rack → Shelf → Bin</span>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      {/* Rack */}
+                  {/* Destination Location: Rack → Shelf → Bin */}
+                  <div>
+                    <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 flex items-center gap-2">
+                      <MapPin className="h-4 w-4 text-brand-primary" />
+                      Destination Location
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
                       <div>
-                        <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">
                           Rack <span className="text-rose-500">*</span>
                         </label>
                         <select
                           value={rackId}
                           onChange={(e) => setRackId(e.target.value)}
                           required
-                          className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-semibold"
+                          className="w-full h-12 text-sm px-3.5 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-semibold"
                         >
-                          <option value="">-- Choose Rack --</option>
+                          <option value="">-- Select Rack --</option>
                           {racks.map((r) => (
                             <option key={r.id} value={r.id}>
                               {r.name}
@@ -1326,18 +1170,17 @@ export function StockAllocationView({
                         </select>
                       </div>
 
-                      {/* Shelf */}
                       <div>
-                        <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">
                           Shelf
                         </label>
                         <select
                           value={shelfId}
                           onChange={(e) => setShelfId(e.target.value)}
                           disabled={!rackId}
-                          className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-semibold disabled:opacity-50"
+                          className="w-full h-12 text-sm px-3.5 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-semibold disabled:opacity-50"
                         >
-                          <option value="">-- Choose Shelf --</option>
+                          <option value="">-- Select Shelf --</option>
                           {availableShelves.map((s: any) => (
                             <option key={s.id} value={s.id}>
                               {s.name}
@@ -1346,18 +1189,17 @@ export function StockAllocationView({
                         </select>
                       </div>
 
-                      {/* Bin */}
                       <div>
-                        <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
-                          Bin
+                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">
+                          Bin (Optional)
                         </label>
                         <select
                           value={binId}
                           onChange={(e) => setBinId(e.target.value)}
                           disabled={!shelfId}
-                          className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-semibold disabled:opacity-50"
+                          className="w-full h-12 text-sm px-3.5 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-semibold disabled:opacity-50"
                         >
-                          <option value="">-- Choose Bin (Optional) --</option>
+                          <option value="">-- Select Bin --</option>
                           {availableBins.map((b: any) => (
                             <option key={b.id} value={b.id}>
                               {b.name}
@@ -1368,65 +1210,22 @@ export function StockAllocationView({
                     </div>
                   </div>
 
-                  {/* Note */}
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                      Allocation Note (Optional)
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Placed for front counter dispensing..."
-                      value={notes}
-                      onChange={(e) => setNotes(e.target.value)}
-                      className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100"
-                    />
-                  </div>
-
-                  {/* Live Impact Preview */}
-                  <div className="p-4 bg-brand-primary/5 dark:bg-brand-primary/10 border border-brand-primary/20 rounded-2xl space-y-2">
-                    <p className="text-[11px] font-black uppercase text-brand-primary tracking-wider flex items-center gap-1.5">
-                      <Info className="h-3.5 w-3.5" />
-                      Immediate Balance Preview After Allocation:
-                    </p>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-                      <div className="bg-white/80 dark:bg-slate-900/80 p-2 rounded-xl border border-slate-200 dark:border-slate-800">
-                        <span className="text-[10px] text-slate-400 block">Full Cartons</span>
-                        <span className="font-bold text-amber-600">{allocationCalc.projectedFullCartons}</span>
-                      </div>
-                      <div className="bg-white/80 dark:bg-slate-900/80 p-2 rounded-xl border border-slate-200 dark:border-slate-800">
-                        <span className="text-[10px] text-slate-400 block">Boxes in Cartons</span>
-                        <span className="font-bold text-amber-600">{allocationCalc.projectedBoxesInCarton}</span>
-                      </div>
-                      <div className="bg-white/80 dark:bg-slate-900/80 p-2 rounded-xl border border-slate-200 dark:border-slate-800">
-                        <span className="text-[10px] text-slate-400 block">Loose Boxes</span>
-                        <span className="font-bold text-sky-600">{allocationCalc.projectedLooseBoxes}</span>
-                      </div>
-                      <div className="bg-white/80 dark:bg-slate-900/80 p-2 rounded-xl border border-slate-200 dark:border-slate-800">
-                        <span className="text-[10px] text-slate-400 block">Physical Rack</span>
-                        <span className="font-bold text-emerald-600">+{allocationCalc.baseUnits.toLocaleString()} units</span>
-                      </div>
-                    </div>
-                    <p className="text-[10px] text-slate-500 dark:text-slate-400 italic">
-                      Total batch stock remains 100% constant ({batchMetrics.totalStock.toLocaleString()} {packConfig.unit}s).
-                    </p>
-                  </div>
-
                   {/* Submit Button */}
                   <button
                     type="submit"
                     disabled={submitting || allocationCalc.hasError || !rackId}
-                    className="w-full inline-flex items-center justify-center gap-2 bg-brand-primary hover:bg-brand-primary/90 text-white py-3.5 px-6 rounded-xl font-black text-xs shadow-sm transition disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full inline-flex items-center justify-center gap-2.5 bg-brand-primary hover:bg-brand-primary/90 text-white py-4 px-6 rounded-xl font-black text-base shadow-sm hover:shadow transition disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                   >
                     {submitting ? (
                       <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <Loader2 className="h-5 w-5 animate-spin" />
                         <span>Allocating Stock...</span>
                       </>
                     ) : (
                       <>
-                        <MapPin className="h-4 w-4" />
+                        <MapPin className="h-5 w-5" />
                         <span>Place Stock in Rack</span>
-                        <ArrowRight className="h-4 w-4" />
+                        <ArrowRight className="h-5 w-5" />
                       </>
                     )}
                   </button>
@@ -1441,10 +1240,10 @@ export function StockAllocationView({
           WORKFLOW 2: SHELF-TO-SHELF RELOCATION
       ══════════════════════════════════════════════════════════ */}
       {activeWorkflowTab === "SHELF_TO_SHELF" && (
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-xs max-w-3xl space-y-6">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 sm:p-8 shadow-sm max-w-3xl space-y-6">
           <form onSubmit={handleRelocateShelfStock} className="space-y-6">
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+              <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">
                 Select Batch to Relocate
               </label>
               <select
@@ -1453,7 +1252,7 @@ export function StockAllocationView({
                   setRelocateBatchId(e.target.value);
                   setSourceLocId("");
                 }}
-                className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-semibold"
+                className="w-full h-12 text-sm px-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-semibold"
               >
                 <option value="">-- Choose Batch --</option>
                 {inventory
@@ -1468,13 +1267,13 @@ export function StockAllocationView({
 
             {relocateBatchId && (
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">
                   Source Physical Location
                 </label>
                 <select
                   value={sourceLocId}
                   onChange={(e) => setSourceLocId(e.target.value)}
-                  className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-semibold"
+                  className="w-full h-12 text-sm px-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-semibold"
                 >
                   <option value="">-- Choose Source Shelf --</option>
                   {(inventory.find((i) => i.id === relocateBatchId)?.locations || [])
@@ -1490,7 +1289,7 @@ export function StockAllocationView({
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">
                   Relocation Quantity
                 </label>
                 <input
@@ -1498,18 +1297,18 @@ export function StockAllocationView({
                   min="1"
                   value={relocateQty}
                   onChange={(e) => setRelocateQty(parseInt(e.target.value, 10) || 1)}
-                  className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-bold"
+                  className="w-full h-12 text-base font-black px-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">
                   Packaging Unit
                 </label>
                 <select
                   value={relocateUnit}
                   onChange={(e) => setRelocateUnit(e.target.value as any)}
-                  className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-semibold"
+                  className="w-full h-12 text-sm px-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-semibold"
                 >
                   <option value="BOX">Box</option>
                   <option value="STRIP">Strip</option>
@@ -1518,15 +1317,15 @@ export function StockAllocationView({
               </div>
             </div>
 
-            <div className="p-4 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-3">
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+            <div className="p-5 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-3.5">
+              <label className="block text-sm font-bold text-slate-700 dark:text-slate-300">
                 Destination Location
               </label>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
                 <select
                   value={destRackId}
                   onChange={(e) => setDestRackId(e.target.value)}
-                  className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100"
+                  className="w-full h-12 text-sm px-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-semibold"
                 >
                   <option value="">-- Choose Rack --</option>
                   {racks.map((r) => (
@@ -1540,7 +1339,7 @@ export function StockAllocationView({
                   value={destShelfId}
                   onChange={(e) => setDestShelfId(e.target.value)}
                   disabled={!destRackId}
-                  className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 disabled:opacity-50"
+                  className="w-full h-12 text-sm px-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-semibold disabled:opacity-50"
                 >
                   <option value="">-- Choose Shelf --</option>
                   {availableDestShelves.map((s: any) => (
@@ -1554,7 +1353,7 @@ export function StockAllocationView({
                   value={destBinId}
                   onChange={(e) => setDestBinId(e.target.value)}
                   disabled={!destShelfId}
-                  className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 disabled:opacity-50"
+                  className="w-full h-12 text-sm px-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-semibold disabled:opacity-50"
                 >
                   <option value="">-- Bin (Optional) --</option>
                   {availableDestBins.map((b: any) => (
@@ -1569,16 +1368,16 @@ export function StockAllocationView({
             <button
               type="submit"
               disabled={submitting || !relocateBatchId || !sourceLocId || !destRackId}
-              className="w-full inline-flex items-center justify-center gap-2 bg-brand-primary hover:bg-brand-primary/90 text-white py-3 px-6 rounded-xl font-bold text-xs shadow-sm transition disabled:opacity-50"
+              className="w-full inline-flex items-center justify-center gap-2.5 bg-brand-primary hover:bg-brand-primary/90 text-white py-4 px-6 rounded-xl font-black text-base shadow-sm hover:shadow transition disabled:opacity-50"
             >
               {submitting ? (
                 <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Loader2 className="h-5 w-5 animate-spin" />
                   <span>Relocating Stock...</span>
                 </>
               ) : (
                 <>
-                  <ArrowLeftRight className="h-4 w-4" />
+                  <ArrowLeftRight className="h-5 w-5" />
                   <span>Relocate Stock to New Shelf</span>
                 </>
               )}

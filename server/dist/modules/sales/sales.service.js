@@ -467,6 +467,57 @@ class SalesService {
         };
     }
     /**
+     * Get Distinct Recent Customers with Phone, Name, Address
+     */
+    static async getCustomers(tenantId, search) {
+        const where = {
+            tenantId,
+            customerPhone: { not: null },
+        };
+        if (search && search.trim()) {
+            const q = search.trim();
+            where.OR = [
+                { customerPhone: { contains: q, mode: "insensitive" } },
+                { customerName: { contains: q, mode: "insensitive" } },
+            ];
+        }
+        const sales = await prisma_1.prisma.sale.findMany({
+            where,
+            select: {
+                customerPhone: true,
+                customerName: true,
+                customerEmail: true,
+                notes: true,
+                createdAt: true,
+            },
+            orderBy: { createdAt: "desc" },
+            take: 200,
+        });
+        const customerMap = new Map();
+        for (const s of sales) {
+            const phone = s.customerPhone?.trim();
+            if (!phone || customerMap.has(phone))
+                continue;
+            let address = "";
+            if (s.notes) {
+                const match = s.notes.match(/address:\s*([^\n\r|]+)/i);
+                if (match && match[1]) {
+                    address = match[1].trim();
+                }
+                else if (!s.notes.includes(":") && s.notes.length < 120 && !s.notes.toLowerCase().includes("via")) {
+                    address = s.notes.trim();
+                }
+            }
+            customerMap.set(phone, {
+                phone,
+                name: s.customerName?.trim() || "Customer",
+                email: s.customerEmail?.trim() || undefined,
+                address: address || undefined,
+            });
+        }
+        return Array.from(customerMap.values());
+    }
+    /**
      * Get Single Sale with Itemized Batches
      */
     static async getSaleById(saleId, tenantId) {
