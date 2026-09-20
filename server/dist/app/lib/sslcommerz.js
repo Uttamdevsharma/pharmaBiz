@@ -27,10 +27,12 @@ class SSLCommerzService {
         formData.append("total_amount", data.totalAmount.toFixed(2));
         formData.append("currency", data.currency || "BDT");
         formData.append("tran_id", data.tranId);
-        formData.append("success_url", data.successUrl || process.env.SSLCOMMERZ_SUCCESS_URL || "http://localhost:3000/api/payments/sslcommerz/success");
-        formData.append("fail_url", data.failUrl || process.env.SSLCOMMERZ_FAIL_URL || "http://localhost:3000/api/payments/sslcommerz/fail");
-        formData.append("cancel_url", data.cancelUrl || process.env.SSLCOMMERZ_CANCEL_URL || "http://localhost:3000/api/payments/sslcommerz/cancel");
-        formData.append("ipn_url", data.ipnUrl || process.env.SSLCOMMERZ_IPN_URL || "http://localhost:3000/api/payments/sslcommerz/ipn");
+        const defaultServerUrl = process.env.SERVER_URL
+            || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
+        formData.append("success_url", data.successUrl || process.env.SSLCOMMERZ_SUCCESS_URL || `${defaultServerUrl}/api/payments/sslcommerz/success`);
+        formData.append("fail_url", data.failUrl || process.env.SSLCOMMERZ_FAIL_URL || `${defaultServerUrl}/api/payments/sslcommerz/fail`);
+        formData.append("cancel_url", data.cancelUrl || process.env.SSLCOMMERZ_CANCEL_URL || `${defaultServerUrl}/api/payments/sslcommerz/cancel`);
+        formData.append("ipn_url", data.ipnUrl || process.env.SSLCOMMERZ_IPN_URL || `${defaultServerUrl}/api/payments/sslcommerz/ipn`);
         // Customer Info
         formData.append("cus_name", data.customerName || "Customer");
         formData.append("cus_email", data.customerEmail || "customer@example.com");

@@ -100,28 +100,22 @@ export function VatSettingsView({ onNavigate }: VatSettingsViewProps = {}) {
   }
 
   return (
-    <div className="space-y-6 2xl:space-y-8 w-full max-w-[1200px] mx-auto">
+    <div className="space-y-6 w-full">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
-        <div>
-          <div className="flex items-center gap-2 text-xs xl:text-sm text-slate-400 mb-1">
-            <span>Sales & POS</span>
-            <span>/</span>
-            <span className="text-slate-700 dark:text-slate-300 font-bold">VAT Settings</span>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-1">
+        <div className="flex items-center gap-3">
+          <div className="p-3 bg-brand-primary/10 rounded-2xl text-brand-primary">
+            <Percent className="h-6 w-6" />
           </div>
-          <h1 className="text-2xl xl:text-3xl font-black tracking-tight text-slate-900 dark:text-slate-100 flex items-center gap-2.5">
-            <Percent className="h-7 w-7 xl:h-8 xl:w-8 text-emerald-600 dark:text-emerald-400" />
+          <h1 className="text-2xl font-black text-slate-900 dark:text-white">
             VAT Settings
           </h1>
-          <p className="text-xs sm:text-sm xl:text-base text-slate-500 dark:text-slate-400 mt-1">
-            Set and update the default VAT percentage automatically applied to Sales / POS transactions.
-          </p>
         </div>
 
         {onNavigate && (
           <button
             onClick={() => onNavigate("pos")}
-            className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs xl:text-sm font-bold transition flex items-center gap-2"
+            className="h-11 px-5 rounded-xl bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/60 text-slate-700 dark:text-slate-300 text-sm font-bold shadow-xs transition flex items-center gap-2 cursor-pointer"
           >
             <span>Go to POS &rarr;</span>
           </button>
@@ -130,64 +124,58 @@ export function VatSettingsView({ onNavigate }: VatSettingsViewProps = {}) {
 
       {/* Alerts */}
       {successMsg && (
-        <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 flex items-center gap-3 text-emerald-800 dark:text-emerald-300 text-xs xl:text-sm font-bold">
+        <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 flex items-center gap-3 text-emerald-800 dark:text-emerald-300 text-sm font-bold">
           <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" />
           <span>{successMsg}</span>
         </div>
       )}
 
       {errorMsg && (
-        <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 flex items-center gap-3 text-rose-800 dark:text-rose-300 text-xs xl:text-sm font-bold">
+        <div className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 flex items-center gap-3 text-rose-800 dark:text-rose-300 text-sm font-bold">
           <AlertCircle className="h-5 w-5 shrink-0 text-rose-600" />
           <span>{errorMsg}</span>
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 2xl:gap-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Active VAT Rate Status Card */}
-        <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 2xl:p-8 shadow-sm flex flex-col justify-between space-y-4">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border-2 border-slate-200 dark:border-slate-800 p-6 lg:p-8 shadow-xs flex flex-col justify-between space-y-6">
           <div className="space-y-1">
-            <span className="text-[10px] xl:text-xs font-black uppercase tracking-wider text-slate-400">
-              Current System Configuration
-            </span>
-            <h2 className="text-base xl:text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
-              <Tag className="h-4 w-4 text-emerald-600" />
+            <h2 className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
+              <Tag className="h-5 w-5 text-brand-primary" />
               Active VAT Status
             </h2>
           </div>
 
-          <div className="p-5 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/50 flex items-center justify-between">
+          <div className="p-6 rounded-2xl bg-brand-primary/5 dark:bg-brand-primary/10 border-2 border-brand-primary/20 flex items-center justify-between">
             <div>
               <div className="text-xs font-bold text-slate-500 dark:text-slate-400">Active VAT Rate</div>
-              <div className="text-3xl xl:text-4xl font-black font-mono text-emerald-600 dark:text-emerald-400 mt-1">
+              <div className="text-4xl lg:text-5xl font-black font-mono text-brand-primary mt-1">
                 {activeVat}%
               </div>
             </div>
-            <div className="px-3 py-1.5 rounded-xl bg-emerald-600 text-white font-black text-xs">
+            <div className="px-4 py-2 rounded-xl bg-brand-primary text-white font-black text-xs">
               Live on POS
             </div>
           </div>
 
-          <p className="text-xs text-slate-400">
-            This VAT rate is automatically calculated on all new counter sales and itemized in receipts.
-          </p>
+          <div className="text-xs font-bold text-slate-400">
+            VAT is automatically calculated on all counter sales and printed in invoices.
+          </div>
         </div>
 
         {/* Change VAT Rate Form Card */}
-        <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 2xl:p-8 shadow-sm space-y-6">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border-2 border-slate-200 dark:border-slate-800 p-6 lg:p-8 shadow-xs space-y-6">
           <div className="space-y-1 pb-3 border-b border-slate-100 dark:border-slate-800">
-            <h2 className="text-base xl:text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
-              <Percent className="h-5 w-5 text-emerald-600" />
+            <h2 className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
+              <Percent className="h-5 w-5 text-brand-primary" />
               Update VAT Percentage
             </h2>
-            <p className="text-xs text-slate-400">
-              Enter a new rate to apply to upcoming Sales/POS transactions.
-            </p>
           </div>
 
           <form onSubmit={handleSave} className="space-y-5">
             <div className="space-y-2">
-              <label className="block text-xs xl:text-sm font-black text-slate-700 dark:text-slate-300">
+              <label className="block text-sm font-bold text-slate-700 dark:text-slate-300">
                 New VAT Percentage (%)
               </label>
               <div className="relative">
@@ -199,7 +187,7 @@ export function VatSettingsView({ onNavigate }: VatSettingsViewProps = {}) {
                   value={vatInput}
                   onChange={(e) => setVatInput(e.target.value)}
                   placeholder="Enter percentage (e.g. 5)"
-                  className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-mono font-bold text-base text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500 transition"
+                  className="w-full h-12 px-4 rounded-xl bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 font-mono font-bold text-base text-slate-900 dark:text-white outline-none focus:border-brand-primary transition"
                   required
                 />
                 <div className="absolute right-4 top-1/2 -translate-y-1/2 font-black text-slate-400 font-mono text-base">
@@ -211,7 +199,7 @@ export function VatSettingsView({ onNavigate }: VatSettingsViewProps = {}) {
             <button
               type="submit"
               disabled={saving || !vatInput.trim()}
-              className="w-full py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs xl:text-sm font-black shadow-md shadow-emerald-600/20 transition flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="w-full h-12 rounded-xl bg-brand-primary hover:bg-brand-primary/90 text-white text-sm font-black shadow-md transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {saving ? (
                 <>

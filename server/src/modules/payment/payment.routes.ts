@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { PaymentController } from "./payment.controller";
-import { authenticate } from "../../middleware/authenticate";
+import { authenticate, optionalAuthenticate } from "../../middleware/authenticate";
 import { authorize } from "../../middleware/authorize";
 import { validateRequest } from "../../middleware/validate";
 import { initiatePaymentSchema } from "./payment.validation";
@@ -28,11 +28,10 @@ router.get("/fail", PaymentController.handleFail);
 router.post("/cancel", PaymentController.handleCancel);
 router.get("/cancel", PaymentController.handleCancel);
 
-// Tenant-Scoped Payment Actions
+// Payment Initiation (Supports Super Admin, Company Owner, and Pending Registration Subscription Payments)
 router.post(
   "/initiate",
-  authenticate,
-  authorize(["COMPANY_OWNER", "SUPER_ADMIN"]),
+  optionalAuthenticate,
   validateRequest({ body: initiatePaymentSchema }),
   PaymentController.initiate
 );

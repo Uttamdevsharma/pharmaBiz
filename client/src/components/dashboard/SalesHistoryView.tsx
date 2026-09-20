@@ -212,29 +212,23 @@ export function SalesHistoryView({ selectedBranchId: propBranchId, onNavigate }:
   };
 
   return (
-    <div className="space-y-6 2xl:space-y-8 w-full max-w-[1920px] 2xl:max-w-[2560px] mx-auto">
+    <div className="space-y-6 w-full">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
-        <div>
-          <div className="flex items-center gap-2 text-xs xl:text-sm text-slate-400 mb-1">
-            <span>Sales & POS</span>
-            <span>/</span>
-            <span className="text-slate-700 dark:text-slate-300 font-bold">Sales History</span>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-1">
+        <div className="flex items-center gap-3">
+          <div className="p-3 bg-brand-primary/10 rounded-2xl text-brand-primary">
+            <History className="h-6 w-6" />
           </div>
-          <h1 className="text-2xl xl:text-3xl font-black tracking-tight text-slate-900 dark:text-slate-100 flex items-center gap-2.5">
-            <History className="h-7 w-7 xl:h-8 xl:w-8 text-emerald-600 dark:text-emerald-400" />
-            Sales History & Receipts
+          <h1 className="text-2xl font-black text-slate-900 dark:text-white">
+            Sales History
           </h1>
-          <p className="text-xs sm:text-sm xl:text-base text-slate-500 dark:text-slate-400 mt-1">
-            Complete transaction ledger of counter sales, payments, customer invoices, and thermal receipt reprints.
-          </p>
         </div>
 
         <div className="flex items-center gap-3">
           {onNavigate && (
             <button
               onClick={() => onNavigate("pos")}
-              className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs xl:text-sm font-black shadow-md shadow-emerald-600/20 transition flex items-center gap-2"
+              className="h-11 px-5 rounded-xl bg-brand-primary hover:bg-brand-primary/90 text-white text-sm font-black shadow-md transition flex items-center gap-2 cursor-pointer"
             >
               <span>+ New POS Sale</span>
             </button>
@@ -243,16 +237,16 @@ export function SalesHistoryView({ selectedBranchId: propBranchId, onNavigate }:
           <button
             onClick={() => loadSales(true)}
             disabled={refreshing}
-            className="px-3.5 py-2 xl:px-4 xl:py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs xl:text-sm font-bold transition flex items-center gap-1.5"
+            className="h-11 px-5 rounded-xl bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/60 text-slate-700 dark:text-slate-300 text-sm font-bold shadow-xs transition flex items-center gap-2 cursor-pointer"
           >
-            <RefreshCw className={`h-3.5 w-3.5 xl:h-4 xl:w-4 ${refreshing ? "animate-spin text-emerald-600" : ""}`} />
+            <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin text-brand-primary" : ""}`} />
             <span>Refresh</span>
           </button>
         </div>
       </div>
 
       {/* Filter & Search Bar */}
-      <div className="p-4 sm:p-5 2xl:p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+      <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
         {/* Date Presets Row */}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
@@ -268,10 +262,10 @@ export function SalesHistoryView({ selectedBranchId: propBranchId, onNavigate }:
               <button
                 key={p.id}
                 onClick={() => handlePeriodPreset(p.id as any)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
+                className={`h-10 px-4 rounded-xl text-sm font-bold transition cursor-pointer ${
                   periodPreset === p.id
                     ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-xs"
-                    : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
+                    : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
                 }`}
               >
                 {p.label}
@@ -280,7 +274,7 @@ export function SalesHistoryView({ selectedBranchId: propBranchId, onNavigate }:
           </div>
 
           {/* Date range pickers */}
-          <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700">
+          <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800 px-3.5 h-10 rounded-xl border-2 border-slate-200 dark:border-slate-700">
             <Calendar className="h-4 w-4 text-slate-400" />
             <input
               type="date"
@@ -289,9 +283,9 @@ export function SalesHistoryView({ selectedBranchId: propBranchId, onNavigate }:
                 setStartDate(e.target.value);
                 setPeriodPreset("custom");
               }}
-              className="bg-transparent text-xs font-bold text-slate-800 dark:text-slate-200 outline-none"
+              className="bg-transparent text-sm font-bold text-slate-800 dark:text-slate-200 outline-none cursor-pointer"
             />
-            <span className="text-xs text-slate-400">to</span>
+            <span className="text-xs font-bold text-slate-400">to</span>
             <input
               type="date"
               value={endDate}
@@ -299,7 +293,7 @@ export function SalesHistoryView({ selectedBranchId: propBranchId, onNavigate }:
                 setEndDate(e.target.value);
                 setPeriodPreset("custom");
               }}
-              className="bg-transparent text-xs font-bold text-slate-800 dark:text-slate-200 outline-none"
+              className="bg-transparent text-sm font-bold text-slate-800 dark:text-slate-200 outline-none cursor-pointer"
             />
           </div>
         </div>
@@ -307,17 +301,17 @@ export function SalesHistoryView({ selectedBranchId: propBranchId, onNavigate }:
         {/* Search & Channel Filters Row */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
           <form onSubmit={handleSearchSubmit} className="relative flex-1 w-full">
-            <Search className="h-4 w-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+            <Search className="h-4 w-4 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search by receipt # (e.g. REC-12345), customer name, or phone..."
-              className="w-full pl-10 pr-4 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs xl:text-sm font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500"
+              className="w-full h-12 pl-11 pr-4 rounded-xl bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-900 dark:text-white outline-none focus:border-brand-primary transition"
             />
           </form>
 
-          <div className="flex items-center gap-2.5 w-full sm:w-auto">
+          <div className="flex items-center gap-3 w-full sm:w-auto">
             {/* Payment Method Filter */}
             <select
               value={paymentMethod}
@@ -325,7 +319,7 @@ export function SalesHistoryView({ selectedBranchId: propBranchId, onNavigate }:
                 setPaymentMethod(e.target.value);
                 setPage(1);
               }}
-              className="px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-slate-200 outline-none"
+              className="h-12 px-4 rounded-xl bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-slate-200 outline-none cursor-pointer focus:border-brand-primary transition"
             >
               <option value="">All Payment Methods</option>
               <option value="CASH">Cash</option>
@@ -335,10 +329,10 @@ export function SalesHistoryView({ selectedBranchId: propBranchId, onNavigate }:
             </select>
 
             {/* Active Branch Scope Badge */}
-            <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-600 dark:text-slate-300">
-              <Store className="h-3.5 w-3.5 text-emerald-500" />
+            <div className="flex items-center gap-2 h-12 px-4 rounded-xl bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-700 dark:text-slate-300 shrink-0">
+              <Store className="h-4 w-4 text-brand-primary" />
               <span>Scope:</span>
-              <span className="font-bold text-slate-900 dark:text-white">
+              <span className="font-black text-slate-900 dark:text-white">
                 {isAllBranches ? "All Branches" : (currentBranch?.name || "Selected Branch")}
               </span>
             </div>
@@ -347,32 +341,32 @@ export function SalesHistoryView({ selectedBranchId: propBranchId, onNavigate }:
       </div>
 
       {/* Table Section */}
-      <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border-2 border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
         {loading ? (
           <div className="flex flex-col items-center justify-center py-24 text-slate-500 gap-3">
-            <Loader2 className="h-8 w-8 animate-spin text-emerald-600" />
-            <span className="text-xs xl:text-sm font-bold">Querying sales history records...</span>
+            <Loader2 className="h-8 w-8 animate-spin text-brand-primary" />
+            <span className="text-sm font-bold">Querying sales history records...</span>
           </div>
         ) : sales.length === 0 ? (
           <div className="py-20 text-center space-y-3">
-            <Receipt className="h-10 w-10 mx-auto text-slate-300 dark:text-slate-700" />
-            <p className="text-sm font-bold text-slate-600 dark:text-slate-400">No sales transactions found.</p>
+            <Receipt className="h-12 w-12 mx-auto text-slate-300 dark:text-slate-700" />
+            <p className="text-base font-bold text-slate-700 dark:text-slate-300">No sales transactions found.</p>
             <p className="text-xs text-slate-400">Try adjusting your date range or search filters.</p>
           </div>
         ) : (
           <div className="table-responsive-container">
-            <table className="w-full min-w-[850px] text-left text-xs xl:text-sm">
-              <thead className="bg-slate-50 dark:bg-slate-800/80 text-slate-400 text-[10px] xl:text-xs font-black uppercase tracking-wider border-b border-slate-200 dark:border-slate-800">
+            <table className="w-full min-w-[850px] text-left text-sm">
+              <thead className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-black uppercase tracking-wider border-b-2 border-slate-200 dark:border-slate-700">
                 <tr>
-                  <th className="py-3.5 px-4 xl:px-6">Receipt #</th>
-                  <th className="py-3.5 px-4">Date & Time</th>
-                  <th className="py-3.5 px-4">Customer</th>
-                  <th className="py-3.5 px-4">Items</th>
-                  <th className="py-3.5 px-4">Payment Method</th>
-                  <th className="py-3.5 px-4 text-right">Total Amount</th>
-                  <th className="py-3.5 px-4 text-right">Paid</th>
-                  <th className="py-3.5 px-4 text-right">Due</th>
-                  <th className="py-3.5 px-4 xl:px-6 text-center">Actions</th>
+                  <th className="py-4 px-5">Receipt #</th>
+                  <th className="py-4 px-4">Date & Time</th>
+                  <th className="py-4 px-4">Customer</th>
+                  <th className="py-4 px-4">Items</th>
+                  <th className="py-4 px-4">Payment Method</th>
+                  <th className="py-4 px-4 text-right">Total Amount</th>
+                  <th className="py-4 px-4 text-right">Paid</th>
+                  <th className="py-4 px-4 text-right">Due</th>
+                  <th className="py-4 px-5 text-center">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -386,15 +380,15 @@ export function SalesHistoryView({ selectedBranchId: propBranchId, onNavigate }:
                   return (
                     <tr
                       key={sale.id}
-                      className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition font-medium"
+                      className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition"
                     >
                       {/* Receipt No */}
-                      <td className="py-3.5 px-4 xl:px-6">
-                        <div className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                      <td className="py-4 px-5">
+                        <div className="font-mono font-bold text-base text-brand-primary">
                           {sale.receiptNo}
                         </div>
                         {sale.branch?.name && (
-                          <div className="text-[10px] text-slate-400 flex items-center gap-1">
+                          <div className="text-xs text-slate-400 flex items-center gap-1 font-semibold mt-0.5">
                             <Store className="h-3 w-3" />
                             <span>{sale.branch.name}</span>
                           </div>
@@ -402,16 +396,16 @@ export function SalesHistoryView({ selectedBranchId: propBranchId, onNavigate }:
                       </td>
 
                       {/* Date & Time */}
-                      <td className="py-3.5 px-4 whitespace-nowrap">
-                        <div className="text-slate-900 dark:text-white font-bold">
+                      <td className="py-4 px-4 whitespace-nowrap">
+                        <div className="text-slate-900 dark:text-white text-sm font-bold">
                           {new Date(sale.createdAt).toLocaleDateString("en-US", {
                             month: "short",
                             day: "numeric",
                             year: "numeric",
                           })}
                         </div>
-                        <div className="text-[10px] text-slate-400 font-mono flex items-center gap-1">
-                          <Clock className="h-2.5 w-2.5" />
+                        <div className="text-xs text-slate-400 font-mono font-medium flex items-center gap-1 mt-0.5">
+                          <Clock className="h-3 w-3" />
                           <span>
                             {new Date(sale.createdAt).toLocaleTimeString("en-US", {
                               hour: "2-digit",
@@ -422,26 +416,26 @@ export function SalesHistoryView({ selectedBranchId: propBranchId, onNavigate }:
                       </td>
 
                       {/* Customer */}
-                      <td className="py-3.5 px-4">
-                        <div className="text-slate-900 dark:text-white font-bold truncate max-w-[140px]">
+                      <td className="py-4 px-4">
+                        <div className="text-slate-900 dark:text-white text-sm font-bold truncate max-w-[160px]">
                           {sale.customerName || "Walk-in Customer"}
                         </div>
                         {sale.customerPhone && (
-                          <div className="text-[10px] text-slate-400 font-mono">{sale.customerPhone}</div>
+                          <div className="text-xs text-slate-400 font-mono font-medium mt-0.5">{sale.customerPhone}</div>
                         )}
                       </td>
 
                       {/* Items Count */}
-                      <td className="py-3.5 px-4">
-                        <span className="font-mono text-xs font-bold text-slate-700 dark:text-slate-300">
+                      <td className="py-4 px-4">
+                        <span className="font-mono text-sm font-bold text-slate-700 dark:text-slate-300">
                           {sale.items?.length || 1} {(sale.items?.length || 1) === 1 ? "item" : "items"}
                         </span>
                       </td>
 
                       {/* Payment Method */}
-                      <td className="py-3.5 px-4 whitespace-nowrap">
+                      <td className="py-4 px-4 whitespace-nowrap">
                         <span
-                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-black ${
+                          className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black ${
                             isCash
                               ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
                               : isBkash
@@ -452,28 +446,28 @@ export function SalesHistoryView({ selectedBranchId: propBranchId, onNavigate }:
                           }`}
                         >
                           {isCash ? (
-                            <Banknote className="h-3 w-3" />
+                            <Banknote className="h-3.5 w-3.5" />
                           ) : isBkash || isNagad ? (
-                            <Smartphone className="h-3 w-3" />
+                            <Smartphone className="h-3.5 w-3.5" />
                           ) : (
-                            <CreditCard className="h-3 w-3" />
+                            <CreditCard className="h-3.5 w-3.5" />
                           )}
                           <span>{sale.paymentMethod}</span>
                         </span>
                       </td>
 
                       {/* Total Amount */}
-                      <td className="py-3.5 px-4 text-right font-mono font-black text-slate-900 dark:text-white">
+                      <td className="py-4 px-4 text-right font-mono font-black text-base text-slate-900 dark:text-white">
                         ৳{Number(sale.totalAmount || 0).toLocaleString("en-BD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
 
                       {/* Paid Amount */}
-                      <td className="py-3.5 px-4 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                      <td className="py-4 px-4 text-right font-mono font-bold text-base text-emerald-600 dark:text-emerald-400">
                         ৳{Number(sale.paidAmount || 0).toLocaleString("en-BD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
 
                       {/* Due Amount */}
-                      <td className="py-3.5 px-4 text-right font-mono font-bold">
+                      <td className="py-4 px-4 text-right font-mono font-bold text-base">
                         {isDue ? (
                           <span className="text-rose-600 dark:text-rose-400">
                             ৳{Number(sale.dueAmount).toLocaleString("en-BD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -484,12 +478,12 @@ export function SalesHistoryView({ selectedBranchId: propBranchId, onNavigate }:
                       </td>
 
                       {/* Actions */}
-                      <td className="py-3.5 px-4 xl:px-6 text-center">
+                      <td className="py-4 px-5 text-center">
                         <button
                           onClick={() => openSaleModal(sale)}
-                          className="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold transition flex items-center gap-1 mx-auto cursor-pointer"
+                          className="h-9 px-3.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold transition flex items-center gap-1.5 mx-auto cursor-pointer"
                         >
-                          <Eye className="h-3.5 w-3.5 text-emerald-600" />
+                          <Eye className="h-4 w-4 text-brand-primary" />
                           <span>View Invoice</span>
                         </button>
                       </td>

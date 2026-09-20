@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { fetchApi } from "@/lib/api";
 import { OwnerModule } from "./DashboardSidebar";
+import { showAlert } from "@/lib/swal";
 import {
   PackageCheck,
   ArrowLeft,
@@ -329,10 +330,18 @@ export function StockInspectionView({ transferId, onNavigate }: StockInspectionV
         throw new Error(res.message || "Failed to finalize stock intake");
       }
 
+      await showAlert.success(
+        "Stock Received Successfully!",
+        "Shipment items have been physically verified and added to your branch inventory.",
+        { timer: 2500 }
+      );
+
       // Navigate back to receive queue
       onNavigate("stock_stock_receive");
     } catch (err: any) {
-      setError(err.message || "Error occurred during receiving");
+      const msg = err.message || "Error occurred during receiving";
+      setError(msg);
+      showAlert.error("Intake Failed", msg);
     } finally {
       setSubmitting(false);
     }

@@ -5,10 +5,8 @@ import { fetchApi } from "@/lib/api";
 import {
   ShieldCheck,
   Search,
-  Filter,
   CheckCircle2,
   XCircle,
-  AlertTriangle,
   Clock,
   FileText,
   ExternalLink,
@@ -17,7 +15,6 @@ import {
   Check,
   X,
   CreditCard,
-  Building2,
   User,
   Phone,
   Mail,
@@ -28,12 +25,16 @@ import {
   FileCheck,
   Pill,
   RefreshCw,
-  ChevronRight,
   Maximize2,
-  Download,
   AlertCircle,
-  HelpCircle,
-  Info,
+  Copy,
+  ZoomIn,
+  ZoomOut,
+  LayoutGrid,
+  List,
+  AlertTriangle,
+  Building2,
+  ShieldAlert,
 } from "lucide-react";
 
 interface VerificationApplication {
@@ -101,6 +102,9 @@ export function PharmacyVerificationTab() {
   const [selectedStatus, setSelectedStatus] = useState<string>("PENDING_APPROVAL");
   const [searchQuery, setSearchQuery] = useState("");
   const [plans, setPlans] = useState<any[]>([]);
+  const [viewMode, setViewMode] = useState<"grid" | "table">("table");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(15);
 
   // Date Filters
   const [dateFilter, setDateFilter] = useState<"ALL" | "TODAY" | "YESTERDAY" | "THIS_MONTH" | "LAST_MONTH" | "THIS_YEAR" | "CUSTOM">("ALL");
@@ -129,6 +133,11 @@ export function PharmacyVerificationTab() {
 
   // Active document preview tab inside the Detail Modal
   const [activeDetailDocTab, setActiveDetailDocTab] = useState<"nid_front" | "nid_back" | "trade" | "drug">("nid_front");
+  const [inspectorZoom, setInspectorZoom] = useState(1);
+  const [inspectorRotate, setInspectorRotate] = useState(0);
+
+  // Copied feedback helper
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   // Feedback Banner
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
@@ -163,7 +172,7 @@ export function PharmacyVerificationTab() {
     } finally {
       setLoading(false);
     }
-  }, [selectedStatus, dateFilter, customStartDate, customEndDate]);
+  }, [selectedStatus, dateFilter, customStartDate, customEndDate, searchQuery]);
 
   useEffect(() => {
     loadApplications();
@@ -172,6 +181,13 @@ export function PharmacyVerificationTab() {
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     loadApplications();
+  };
+
+  const copyToClipboard = (text: string, key: string) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey(null), 2000);
   };
 
   const openApproveModal = (app: VerificationApplication) => {
@@ -200,7 +216,7 @@ export function PharmacyVerificationTab() {
       if (res.success) {
         setFeedback({
           type: "success",
-          message: res.message || `Application for "${targetAppToApprove.name}" approved successfully! Approval email dispatched.`,
+          message: res.message || `Application for "${targetAppToApprove.name}" approved successfully! Approval email with checkout link dispatched.`,
         });
         setIsApproveOpen(false);
         setDetailApp(null);
@@ -257,12 +273,58 @@ export function PharmacyVerificationTab() {
     }
   };
 
+  const isPdf = (url?: string) => {
+    if (!url) return false;
+    const lower = url.toLowerCase();
+    return lower.includes(".pdf") || lower.includes("/raw/") || lower.startsWith("data:application/pdf");
+  };
+
+  const formatTimeAgo = (dateStr: string) => {
+    try {
+      const date = new Date(dateStr);
+      const now = new Date();
+      const diffMs = now.getTime() - date.getTime();
+      const diffMins = Math.floor(diffMs / (1000 * 60));
+      const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+      const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+      if (diffMins < 1) return "Just now";
+      if (diffMins < 60) return `${diffMins}m ago`;
+      if (diffHours < 24) return `${diffHours}h ago`;
+      if (diffDays === 1) return "Yesterday";
+      if (diffDays < 7) return `${diffDays}d ago`;
+      return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    } catch {
+      return dateStr;
+    }
+  };
+
+  // Document Readiness Score (e.g. 3 of 3 uploaded)
+  const getDocumentReadiness = (app: VerificationApplication) => {
+    const hasNid = Boolean(app.nidFrontUrl || app.nidDocUrl);
+    const hasTrade = Boolean(app.tradeLicenseDocUrl || app.tradeLicenseFrontUrl);
+    const hasDrug = Boolean(app.drugLicenseDocUrl || app.drugLicenseFrontUrl);
+
+    const count = (hasNid ? 1 : 0) + (hasTrade ? 1 : 0) + (hasDrug ? 1 : 0);
+    return {
+      count,
+      total: 3,
+      isComplete: count === 3,
+      hasNid,
+      hasTrade,
+      hasDrug,
+    };
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "PENDING_APPROVAL":
         return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30">
-            <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30 shadow-xs">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+            </span>
             Pending Review
           </span>
         );
@@ -303,44 +365,144 @@ export function PharmacyVerificationTab() {
     }
   };
 
-  const isPdf = (url?: string) => {
-    if (!url) return false;
-    return url.toLowerCase().includes(".pdf") || url.toLowerCase().startsWith("data:application/pdf");
-  };
-
   return (
-    <div className="space-y-6">
-      {/* Top Banner & Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-brand-primary/10 via-brand-primary/5 to-transparent p-6 rounded-3xl border border-brand-primary/15 shadow-sm">
+    <div className="space-y-5 max-w-full pb-12">
+      {/* Clean, Minimal Top Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-brand-primary/15 text-brand-primary mb-2">
-            <ShieldCheck className="h-4 w-4" />
-            Compliance Inspection & Approvals
-          </div>
-          <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-            Pharmacy Verification Portal
+          <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-2.5">
+            <ShieldCheck className="h-6 w-6 text-brand-primary shrink-0" />
+            <span>Pharmacy Verification</span>
+            {metrics.pendingReview > 0 && (
+              <span className="px-3 py-1 rounded-full text-xs font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                {metrics.pendingReview} Pending
+              </span>
+            )}
           </h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-2xl">
-            Review pharmacy registration compliance, inspect National ID (Front & Back), Trade License, and DGDA Drug License documents, and approve or reject onboarding applications.
-          </p>
         </div>
 
         <button
           type="button"
           onClick={loadApplications}
           disabled={loading}
-          className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition flex items-center gap-2 shadow-xs cursor-pointer self-start md:self-auto"
+          className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition flex items-center gap-2 cursor-pointer shadow-xs self-start sm:self-auto active:scale-95"
         >
           <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin text-brand-primary" : ""}`} />
-          <span>Refresh List</span>
+          <span>Refresh</span>
         </button>
       </div>
 
-      {/* Date Filter & Search Panel (Above Status Cards) */}
-      <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-3">
-        <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+      {/* Clickable Status KPI Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        {/* Card 1: Pending Review */}
+        <div
+          onClick={() => setSelectedStatus("PENDING_APPROVAL")}
+          className={`p-3.5 rounded-2xl border transition cursor-pointer flex flex-col justify-between ${
+            selectedStatus === "PENDING_APPROVAL"
+              ? "bg-amber-500/10 border-amber-500 ring-2 ring-amber-500/30 shadow-md shadow-amber-500/10"
+              : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-amber-300"
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+              Pending Review
+              {selectedStatus === "PENDING_APPROVAL" && (
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-ping" />
+              )}
+            </span>
+            <Clock className="h-4 w-4 text-amber-500" />
+          </div>
+          <div className="text-2xl font-black text-slate-900 dark:text-white mt-2 font-mono">
+            {metrics.pendingReview}
+          </div>
+        </div>
+
+        {/* Card 2: Awaiting Payment */}
+        <div
+          onClick={() => setSelectedStatus("APPROVED_PENDING_PAYMENT")}
+          className={`p-3.5 rounded-2xl border transition cursor-pointer flex flex-col justify-between ${
+            selectedStatus === "APPROVED_PENDING_PAYMENT"
+              ? "bg-sky-500/10 border-sky-500 ring-2 ring-sky-500/30 shadow-md shadow-sky-500/10"
+              : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-sky-300"
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-sky-600 dark:text-sky-400 uppercase tracking-wider">
+              Awaiting Payment
+            </span>
+            <CreditCard className="h-4 w-4 text-sky-500" />
+          </div>
+          <div className="text-2xl font-black text-slate-900 dark:text-white mt-2 font-mono">
+            {metrics.approved}
+          </div>
+        </div>
+
+        {/* Card 3: Active & Paid */}
+        <div
+          onClick={() => setSelectedStatus("ACTIVE")}
+          className={`p-3.5 rounded-2xl border transition cursor-pointer flex flex-col justify-between ${
+            selectedStatus === "ACTIVE"
+              ? "bg-emerald-500/10 border-emerald-500 ring-2 ring-emerald-500/30 shadow-md shadow-emerald-500/10"
+              : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-emerald-300"
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
+              Active & Paid
+            </span>
+            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+          </div>
+          <div className="text-2xl font-black text-slate-900 dark:text-white mt-2 font-mono">
+            {metrics.active}
+          </div>
+        </div>
+
+        {/* Card 4: Rejected */}
+        <div
+          onClick={() => setSelectedStatus("REJECTED")}
+          className={`p-3.5 rounded-2xl border transition cursor-pointer flex flex-col justify-between ${
+            selectedStatus === "REJECTED"
+              ? "bg-rose-500/10 border-rose-500 ring-2 ring-rose-500/30 shadow-md shadow-rose-500/10"
+              : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-rose-300"
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-rose-600 dark:text-rose-400 uppercase tracking-wider">
+              Rejected
+            </span>
+            <XCircle className="h-4 w-4 text-rose-500" />
+          </div>
+          <div className="text-2xl font-black text-slate-900 dark:text-white mt-2 font-mono">
+            {metrics.rejected}
+          </div>
+        </div>
+
+        {/* Card 5: Total Applications */}
+        <div
+          onClick={() => setSelectedStatus("ALL")}
+          className={`p-3.5 rounded-2xl border transition cursor-pointer flex flex-col justify-between ${
+            selectedStatus === "ALL"
+              ? "bg-brand-primary/10 border-brand-primary ring-2 ring-brand-primary/30 shadow-md shadow-brand-primary/10"
+              : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300"
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">
+              Total
+            </span>
+            <Layers className="h-4 w-4 text-brand-primary" />
+          </div>
+          <div className="text-2xl font-black text-slate-900 dark:text-white mt-2 font-mono">
+            {metrics.total}
+          </div>
+        </div>
+      </div>
+
+      {/* Date Filter & Search Panel */}
+      <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-3">
+        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
           {/* Date Presets */}
-          <div className="flex flex-wrap items-center gap-1.5 text-xs font-bold w-full md:w-auto">
+          <div className="flex flex-wrap items-center gap-1.5 text-xs font-bold">
             {[
               { id: "ALL", label: "All Time" },
               { id: "TODAY", label: "Today" },
@@ -348,7 +510,7 @@ export function PharmacyVerificationTab() {
               { id: "THIS_MONTH", label: "This Month" },
               { id: "LAST_MONTH", label: "Last Month" },
               { id: "THIS_YEAR", label: "This Year" },
-              { id: "CUSTOM", label: "Custom Date" },
+              { id: "CUSTOM", label: "Custom" },
             ].map((df) => (
               <button
                 key={df.id}
@@ -373,8 +535,17 @@ export function PharmacyVerificationTab() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search pharmacy, owner, email..."
-              className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-brand-primary"
+              className="w-full pl-9 pr-8 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-primary"
             />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
           </form>
         </div>
 
@@ -403,115 +574,9 @@ export function PharmacyVerificationTab() {
         )}
       </div>
 
-      {/* Clickable Status Summary Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
-        {/* Card 1: Pending Review */}
-        <div
-          onClick={() => setSelectedStatus("PENDING_APPROVAL")}
-          className={`p-4 rounded-2xl border transition cursor-pointer flex flex-col justify-between ${
-            selectedStatus === "PENDING_APPROVAL"
-              ? "bg-amber-500/10 border-amber-500 ring-2 ring-amber-500/30 shadow-md"
-              : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-amber-300 dark:hover:border-amber-700"
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
-              Pending Review
-              {selectedStatus === "PENDING_APPROVAL" && (
-                <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-ping" />
-              )}
-            </span>
-            <Clock className="h-4 w-4 text-amber-500" />
-          </div>
-          <div className="text-2xl font-black text-slate-900 dark:text-white mt-2 font-mono">
-            {metrics.pendingReview}
-          </div>
-        </div>
-
-        {/* Card 2: Awaiting Payment */}
-        <div
-          onClick={() => setSelectedStatus("APPROVED_PENDING_PAYMENT")}
-          className={`p-4 rounded-2xl border transition cursor-pointer flex flex-col justify-between ${
-            selectedStatus === "APPROVED_PENDING_PAYMENT"
-              ? "bg-sky-500/10 border-sky-500 ring-2 ring-sky-500/30 shadow-md"
-              : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-sky-300 dark:hover:border-sky-700"
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-sky-600 dark:text-sky-400 uppercase tracking-wider">
-              Awaiting Payment
-            </span>
-            <CreditCard className="h-4 w-4 text-sky-500" />
-          </div>
-          <div className="text-2xl font-black text-slate-900 dark:text-white mt-2 font-mono">
-            {metrics.approved}
-          </div>
-        </div>
-
-        {/* Card 3: Active & Paid */}
-        <div
-          onClick={() => setSelectedStatus("ACTIVE")}
-          className={`p-4 rounded-2xl border transition cursor-pointer flex flex-col justify-between ${
-            selectedStatus === "ACTIVE"
-              ? "bg-emerald-500/10 border-emerald-500 ring-2 ring-emerald-500/30 shadow-md"
-              : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-emerald-300 dark:hover:border-emerald-700"
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
-              Active & Paid
-            </span>
-            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-          </div>
-          <div className="text-2xl font-black text-slate-900 dark:text-white mt-2 font-mono">
-            {metrics.active}
-          </div>
-        </div>
-
-        {/* Card 4: Rejected */}
-        <div
-          onClick={() => setSelectedStatus("REJECTED")}
-          className={`p-4 rounded-2xl border transition cursor-pointer flex flex-col justify-between ${
-            selectedStatus === "REJECTED"
-              ? "bg-rose-500/10 border-rose-500 ring-2 ring-rose-500/30 shadow-md"
-              : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-rose-300 dark:hover:border-rose-700"
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-rose-600 dark:text-rose-400 uppercase tracking-wider">
-              Rejected
-            </span>
-            <XCircle className="h-4 w-4 text-rose-500" />
-          </div>
-          <div className="text-2xl font-black text-slate-900 dark:text-white mt-2 font-mono">
-            {metrics.rejected}
-          </div>
-        </div>
-
-        {/* Card 5: Total Applications */}
-        <div
-          onClick={() => setSelectedStatus("ALL")}
-          className={`p-4 rounded-2xl border transition cursor-pointer flex flex-col justify-between ${
-            selectedStatus === "ALL"
-              ? "bg-brand-primary/10 border-brand-primary ring-2 ring-brand-primary/30 shadow-md"
-              : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300"
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">
-              Total Applications
-            </span>
-            <Layers className="h-4 w-4 text-brand-primary" />
-          </div>
-          <div className="text-2xl font-black text-slate-900 dark:text-white mt-2 font-mono">
-            {metrics.total}
-          </div>
-        </div>
-      </div>
-
       {feedback && (
         <div
-          className={`p-4 rounded-2xl text-xs font-semibold flex items-center justify-between shadow-sm animate-in fade-in duration-200 ${
+          className={`p-3.5 rounded-2xl text-xs font-semibold flex items-center justify-between shadow-xs animate-in fade-in duration-200 ${
             feedback.type === "success"
               ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-300"
               : "bg-rose-500/10 border border-rose-500/20 text-rose-700 dark:text-rose-300"
@@ -521,393 +586,405 @@ export function PharmacyVerificationTab() {
             {feedback.type === "success" ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : <AlertCircle className="h-4 w-4 shrink-0" />}
             <span>{feedback.message}</span>
           </div>
-          <button type="button" onClick={() => setFeedback(null)} className="p-1 hover:opacity-70">
+          <button type="button" onClick={() => setFeedback(null)} className="p-1 hover:opacity-70 cursor-pointer">
             <X className="h-3.5 w-3.5" />
           </button>
         </div>
       )}
 
-      {/* Main Content: Card Grid */}
+      {/* Main Table Content */}
       {loading ? (
         <div className="py-20 text-center space-y-3 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800">
           <Loader2 className="h-8 w-8 animate-spin text-brand-primary mx-auto" />
-          <p className="text-xs font-bold text-slate-500">Loading pharmacy verification applications...</p>
+          <p className="text-xs font-bold text-slate-500">Loading pharmacy applications...</p>
         </div>
       ) : applications.length === 0 ? (
-        <div className="py-20 text-center space-y-3 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 text-slate-500">
+        <div className="py-20 text-center space-y-3 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 text-slate-500 p-6">
           <ShieldCheck className="h-12 w-12 mx-auto text-slate-300 dark:text-slate-700" />
           <h3 className="font-bold text-sm text-slate-700 dark:text-slate-300">
-            No applications found for this filter
+            {selectedStatus === "PENDING_APPROVAL" ? "No Pending Verifications" : "No Applications Found"}
           </h3>
           <p className="text-xs max-w-sm mx-auto text-slate-400">
-            New pharmacy registrations or compliance submissions will appear here for regulatory review.
+            {selectedStatus === "PENDING_APPROVAL"
+              ? "All pharmacy compliance submissions have been reviewed."
+              : "No records found matching this filter."}
           </p>
+          {selectedStatus !== "ALL" && (
+            <button
+              type="button"
+              onClick={() => setSelectedStatus("ALL")}
+              className="px-3.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 font-bold text-xs transition cursor-pointer"
+            >
+              View All Applications
+            </button>
+          )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
-          {applications.map((app) => {
-            const plan = app.subscription?.plan;
-            const price = plan?.price || 0;
-            const billing = app.pendingBillingCycle || "MONTHLY";
-            const payableAmount = billing === "YEARLY" ? Math.round(Number(price) * 12 * 0.85) : Number(price);
+        /* ========================================================= */
+        /* CLEAN, MINIMAL & PROFESSIONAL DATA TABLE                  */
+        /* ========================================================= */
+        <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-xs flex flex-col">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead className="bg-slate-50 dark:bg-slate-850/80 border-b border-slate-200 dark:border-slate-800 text-xs font-black uppercase tracking-wider text-slate-500 select-none">
+                <tr>
+                  <th className="py-4 px-6">Pharmacy</th>
+                  <th className="py-4 px-6">Owner</th>
+                  <th className="py-4 px-6">Plan</th>
+                  <th className="py-4 px-6">Applied Date</th>
+                  <th className="py-4 px-6">Status</th>
+                  <th className="py-4 px-6 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
+                {applications
+                  .slice((currentPage - 1) * pageSize, currentPage * pageSize)
+                  .map((app) => {
+                    const plan = app.subscription?.plan;
+                    const price = plan?.price || 0;
+                    const billing = app.pendingBillingCycle || "MONTHLY";
+                    const payableAmount = billing === "YEARLY" ? Math.round(Number(price) * 12 * 0.85) : Number(price);
 
-            return (
-              <div
-                key={app.id}
-                className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm hover:shadow-md transition-all overflow-hidden flex flex-col justify-between"
-              >
-                {/* Card Header */}
-                <div className="p-5 border-b border-slate-100 dark:border-slate-800/80 space-y-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-start gap-3.5">
-                      <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-brand-primary to-sky-600 text-white font-black text-lg flex items-center justify-center shrink-0 shadow-sm">
-                        {app.name.charAt(0).toUpperCase()}
-                      </div>
-                      <div>
-                        <h2 className="text-base font-extrabold text-slate-900 dark:text-white leading-tight">
-                          {app.name}
-                        </h2>
-                        <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5">
-                          <span className="flex items-center gap-1 font-semibold text-slate-700 dark:text-slate-300">
-                            <User className="h-3.5 w-3.5 text-slate-400" />
-                            {app.owner?.name || "Dr. Owner"}
-                          </span>
-                          <span>&bull;</span>
-                          <span className="flex items-center gap-1 text-[11px]">
-                            <Calendar className="h-3 w-3 text-slate-400" />
-                            {new Date(app.createdAt).toLocaleDateString()}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
+                    return (
+                      <tr
+                        key={app.id}
+                        onClick={() => {
+                          setDetailApp(app);
+                          setActiveDetailDocTab(app.nidFrontUrl ? "nid_front" : app.tradeLicenseDocUrl ? "trade" : "drug");
+                          setInspectorZoom(1);
+                          setInspectorRotate(0);
+                        }}
+                        className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition cursor-pointer group"
+                      >
+                        {/* 1. Pharmacy Name & Location */}
+                        <td className="py-4 px-6">
+                          <div>
+                            <div className="font-extrabold text-slate-900 dark:text-white text-base">
+                              {app.name}
+                            </div>
+                            <div className="text-xs text-slate-400 font-medium truncate max-w-[260px] mt-0.5">
+                              {app.address || "Address not specified"}
+                            </div>
+                          </div>
+                        </td>
 
-                    <div>{getStatusBadge(app.verificationStatus)}</div>
-                  </div>
+                        {/* 2. Owner & Contact */}
+                        <td className="py-4 px-6" onClick={(e) => e.stopPropagation()}>
+                          <div>
+                            <div className="font-bold text-slate-800 dark:text-slate-200 text-sm">
+                              {app.owner?.name || "Dr. Owner"}
+                            </div>
+                            <div className="font-mono text-slate-500 text-xs flex items-center gap-1.5 mt-0.5">
+                              <span>{app.phone}</span>
+                              <button
+                                type="button"
+                                onClick={() => copyToClipboard(app.phone, `tbl-phone-${app.id}`)}
+                                className="text-slate-400 hover:text-slate-600 cursor-pointer"
+                                title="Copy Phone"
+                              >
+                                {copiedKey === `tbl-phone-${app.id}` ? (
+                                  <Check className="h-3.5 w-3.5 text-emerald-600" />
+                                ) : (
+                                  <Copy className="h-3.5 w-3.5" />
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                        </td>
 
-                  {/* Contact Strip */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/40 text-[11px] font-medium text-slate-600 dark:text-slate-400">
-                    <div className="flex items-center gap-1.5 truncate">
-                      <Mail className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                      <span className="truncate">{app.email}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 truncate">
-                      <Phone className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                      <span className="font-mono">{app.phone}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 truncate sm:col-span-1">
-                      <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                      <span className="truncate">{app.address || "HQ Location"}</span>
-                    </div>
-                  </div>
-                </div>
+                        {/* 3. Selected Plan & Price */}
+                        <td className="py-4 px-6">
+                          <div>
+                            <div className="font-bold text-slate-800 dark:text-slate-200 text-sm">
+                              {plan?.name || app.tier} Plan
+                            </div>
+                            <div className="text-xs text-brand-primary font-mono font-bold mt-0.5">
+                              ৳{payableAmount.toLocaleString()}/{billing === "YEARLY" ? "yr" : "mo"}
+                            </div>
+                          </div>
+                        </td>
 
-                {/* Document Preview Cards Section */}
-                <div className="p-5 space-y-3">
-                  <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
-                    <span>Regulatory Compliance Documents</span>
-                    <span className="text-[10px] text-brand-primary">Click to inspect</span>
-                  </div>
+                        {/* 4. Applied Date */}
+                        <td className="py-4 px-6 whitespace-nowrap">
+                          <div className="text-slate-800 dark:text-slate-200 font-semibold text-sm">
+                            {new Date(app.createdAt).toLocaleDateString("en-US", {
+                              day: "numeric",
+                              month: "short",
+                              year: "numeric",
+                            })}
+                          </div>
+                          <div className="text-xs text-slate-400 mt-0.5">
+                            {formatTimeAgo(app.createdAt)}
+                          </div>
+                        </td>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
-                    {/* 1. NID Card */}
-                    <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/80 flex flex-col justify-between space-y-2">
-                      <div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-brand-primary">National ID</span>
-                          <FileText className="h-3.5 w-3.5 text-brand-primary" />
-                        </div>
-                        <div className="font-mono font-bold text-slate-800 dark:text-slate-200 text-xs mt-1 truncate">
-                          {app.nidNumber || "—"}
-                        </div>
-                      </div>
+                        {/* 5. Status Badge */}
+                        <td className="py-4 px-6 whitespace-nowrap">
+                          {getStatusBadge(app.verificationStatus)}
+                        </td>
 
-                      <div className="grid grid-cols-2 gap-1.5 pt-1">
-                        {(app.nidFrontUrl || app.nidDocUrl) ? (
+                        {/* 6. Action Button */}
+                        <td className="py-4 px-6 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                           <button
                             type="button"
-                            onClick={() =>
-                              setViewingDoc({
-                                title: `NID Front Side - ${app.name}`,
-                                url: (app.nidFrontUrl || app.nidDocUrl)!,
-                                number: app.nidNumber,
-                                docType: "National ID (Front)",
-                              })
-                            }
-                            className="py-1.5 px-2 rounded-xl bg-brand-primary/10 hover:bg-brand-primary/20 text-brand-primary font-bold text-[10px] transition flex items-center justify-center gap-1 cursor-pointer"
+                            onClick={() => {
+                              setDetailApp(app);
+                              setActiveDetailDocTab(app.nidFrontUrl ? "nid_front" : app.tradeLicenseDocUrl ? "trade" : "drug");
+                              setInspectorZoom(1);
+                              setInspectorRotate(0);
+                            }}
+                            className="group/btn px-4 py-2 rounded-xl bg-brand-primary/10 hover:bg-brand-primary border border-brand-primary/25 font-bold text-xs sm:text-sm transition-colors inline-flex items-center gap-2 cursor-pointer shadow-xs active:scale-95"
+                            title="Inspect Documents, Verify & Take Action"
                           >
-                            <Eye className="h-3 w-3" />
-                            <span>Front</span>
+                            <Eye className="h-4 w-4 text-brand-primary group-hover/btn:!text-white transition-colors" />
+                            <span className="text-brand-primary group-hover/btn:!text-white transition-colors">Review Details</span>
                           </button>
-                        ) : (
-                          <span className="py-1.5 text-center text-[10px] text-slate-400 bg-slate-200/50 rounded-xl">No Front</span>
-                        )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+              </tbody>
+            </table>
+          </div>
 
-                        {app.nidBackUrl ? (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setViewingDoc({
-                                title: `NID Back Side - ${app.name}`,
-                                url: app.nidBackUrl!,
-                                number: app.nidNumber,
-                                docType: "National ID (Back)",
-                              })
-                            }
-                            className="py-1.5 px-2 rounded-xl bg-brand-primary/10 hover:bg-brand-primary/20 text-brand-primary font-bold text-[10px] transition flex items-center justify-center gap-1 cursor-pointer"
-                          >
-                            <Eye className="h-3 w-3" />
-                            <span>Back</span>
-                          </button>
-                        ) : (
-                          <span className="py-1.5 text-center text-[10px] text-slate-400 bg-slate-200/50 rounded-xl">No Back</span>
-                        )}
-                      </div>
-                    </div>
+          {/* Table Pagination Footer */}
+          <div className="p-3.5 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-850/50 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+            <div className="text-slate-500 font-medium">
+              Showing{" "}
+              <strong className="text-slate-800 dark:text-slate-200">
+                {applications.length === 0 ? 0 : (currentPage - 1) * pageSize + 1}
+              </strong>{" "}
+              to{" "}
+              <strong className="text-slate-800 dark:text-slate-200">
+                {Math.min(currentPage * pageSize, applications.length)}
+              </strong>{" "}
+              of{" "}
+              <strong className="text-slate-800 dark:text-slate-200">
+                {applications.length}
+              </strong>{" "}
+              pharmacies
+            </div>
 
-                    {/* 2. Trade License Card */}
-                    <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/80 flex flex-col justify-between space-y-2">
-                      <div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600">Trade License</span>
-                          <FileCheck className="h-3.5 w-3.5 text-emerald-600" />
-                        </div>
-                        <div className="font-mono font-bold text-slate-800 dark:text-slate-200 text-xs mt-1 truncate">
-                          {app.tradeLicenseNumber || "—"}
-                        </div>
-                      </div>
-
-                      <div className="pt-1">
-                        {(app.tradeLicenseDocUrl || app.tradeLicenseFrontUrl) ? (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setViewingDoc({
-                                title: `Trade License Document - ${app.name}`,
-                                url: (app.tradeLicenseDocUrl || app.tradeLicenseFrontUrl)!,
-                                number: app.tradeLicenseNumber,
-                                docType: "Trade License Document",
-                              })
-                            }
-                            className="w-full py-1.5 px-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 font-bold text-[10px] transition flex items-center justify-center gap-1 cursor-pointer"
-                          >
-                            <Eye className="h-3 w-3" />
-                            <span>View Trade License</span>
-                          </button>
-                        ) : (
-                          <span className="block py-1.5 text-center text-[10px] text-slate-400 bg-slate-200/50 rounded-xl">No Document</span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* 3. Drug License Card */}
-                    <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/80 flex flex-col justify-between space-y-2">
-                      <div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-purple-600">DGDA License</span>
-                          <Pill className="h-3.5 w-3.5 text-purple-600" />
-                        </div>
-                        <div className="font-mono font-bold text-slate-800 dark:text-slate-200 text-xs mt-1 truncate">
-                          {app.drugLicenseNumber || "—"}
-                        </div>
-                      </div>
-
-                      <div className="pt-1">
-                        {(app.drugLicenseDocUrl || app.drugLicenseFrontUrl) ? (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setViewingDoc({
-                                title: `DGDA Drug License Document - ${app.name}`,
-                                url: (app.drugLicenseDocUrl || app.drugLicenseFrontUrl)!,
-                                number: app.drugLicenseNumber,
-                                docType: "DGDA Drug License Document",
-                              })
-                            }
-                            className="w-full py-1.5 px-2 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 text-purple-600 font-bold text-[10px] transition flex items-center justify-center gap-1 cursor-pointer"
-                          >
-                            <Eye className="h-3 w-3" />
-                            <span>View DGDA License</span>
-                          </button>
-                        ) : (
-                          <span className="block py-1.5 text-center text-[10px] text-slate-400 bg-slate-200/50 rounded-xl">No Document</span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Rejection / Approval History Note if present */}
-                  {app.verificationStatus === "REJECTED" && app.rejectionReason && (
-                    <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-700 dark:text-rose-300">
-                      <strong>Rejection Reason:</strong> "{app.rejectionReason}"
-                    </div>
-                  )}
-
-                  {app.verificationStatus === "APPROVED_PENDING_PAYMENT" && app.approvalNotes && (
-                    <div className="p-3 rounded-2xl bg-sky-500/10 border border-sky-500/20 text-xs text-sky-700 dark:text-sky-300">
-                      <strong>Approval Notes:</strong> "{app.approvalNotes}"
-                    </div>
-                  )}
-                </div>
-
-                {/* Card Footer: Plan & Primary Actions */}
-                <div className="p-5 bg-slate-50/80 dark:bg-slate-800/30 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="flex items-center gap-2">
-                    <div className="p-2 rounded-xl bg-brand-primary/10 text-brand-primary">
-                      <CreditCard className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <div className="text-xs font-bold text-slate-900 dark:text-white">
-                        {plan?.name || app.tier} Plan
-                      </div>
-                      <div className="text-[11px] text-slate-500">
-                        {billing} &bull; <strong className="font-mono text-brand-primary">৳{payableAmount.toLocaleString()}</strong>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 self-end sm:self-auto">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setDetailApp(app);
-                        setActiveDetailDocTab(app.nidFrontUrl ? "nid_front" : app.tradeLicenseDocUrl ? "trade" : "drug");
-                      }}
-                      className="px-4 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-brand-primary text-slate-700 dark:text-slate-200 font-bold text-xs shadow-xs transition flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <Eye className="h-3.5 w-3.5 text-brand-primary" />
-                      <span>Review Details</span>
-                    </button>
-
-                    {app.verificationStatus === "PENDING_APPROVAL" && (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => openRejectModal(app)}
-                          className="px-3.5 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 font-bold text-xs transition flex items-center gap-1 cursor-pointer"
-                        >
-                          <X className="h-3.5 w-3.5" />
-                          <span>Reject</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => openApproveModal(app)}
-                          className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md transition flex items-center gap-1.5 cursor-pointer"
-                        >
-                          <Check className="h-3.5 w-3.5" />
-                          <span>Approve</span>
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 mr-2 text-slate-400">
+                <span>Rows:</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300"
+                >
+                  <option value={10}>10</option>
+                  <option value={15}>15</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                </select>
               </div>
-            );
-          })}
+
+              <button
+                type="button"
+                onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
+                disabled={currentPage <= 1}
+                className="px-3 py-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
+              >
+                Previous
+              </button>
+
+              <span className="px-2 font-mono font-bold text-slate-600 dark:text-slate-400">
+                {currentPage} / {Math.max(1, Math.ceil(applications.length / pageSize))}
+              </span>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setCurrentPage((p) =>
+                    Math.min(p + 1, Math.ceil(applications.length / pageSize))
+                  )
+                }
+                disabled={currentPage >= Math.ceil(applications.length / pageSize)}
+                className="px-3 py-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
+              >
+                Next
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
       {/* ========================================================= */}
-      {/* COMPREHENSIVE DETAIL INSPECTION MODAL                      */}
+      {/* COMPREHENSIVE KYC & COMPLIANCE INSPECTION MODAL           */}
       {/* ========================================================= */}
       {detailApp && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-5xl w-full max-h-[92vh] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/75 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-6xl w-full max-h-[94vh] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
             {/* Modal Header */}
-            <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/50">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-2xl bg-brand-primary text-white font-black flex items-center justify-center">
+            <div className="p-5 sm:p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/70 dark:bg-slate-850/70">
+              <div className="flex items-center gap-3.5">
+                <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-brand-primary to-sky-600 text-white font-black text-lg flex items-center justify-center shadow-md">
                   {detailApp.name.charAt(0).toUpperCase()}
                 </div>
                 <div>
-                  <h3 className="text-lg font-extrabold text-slate-900 dark:text-white">
-                    {detailApp.name}
-                  </h3>
-                  <p className="text-xs text-slate-500">
-                    Compliance Verification & Review &bull; Owner: <strong>{detailApp.owner?.name}</strong>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-black text-slate-900 dark:text-white">
+                      {detailApp.name}
+                    </h3>
+                    {getStatusBadge(detailApp.verificationStatus)}
+                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Regulatory Compliance Inspection &bull; Owner: <strong>{detailApp.owner?.name}</strong> &bull; Submitted: {new Date(detailApp.createdAt).toLocaleDateString()}
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-3">
-                {getStatusBadge(detailApp.verificationStatus)}
-                <button
-                  type="button"
-                  onClick={() => setDetailApp(null)}
-                  className="p-2 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 transition"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => setDetailApp(null)}
+                className="p-2 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 transition cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
             </div>
 
             {/* Modal Body */}
-            <div className="flex-1 overflow-y-auto p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
-              {/* Left Column: Business & Application Info */}
+            <div className="flex-1 overflow-y-auto p-5 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+              {/* Left Column: Business & Application Dossier */}
               <div className="lg:col-span-5 space-y-4 text-xs">
                 {/* Profile Card */}
-                <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 space-y-3">
-                  <div className="font-bold text-slate-900 dark:text-white uppercase tracking-wider text-[10px] text-brand-primary">
-                    Business Profile & Contacts
+                <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 space-y-3">
+                  <div className="font-extrabold text-slate-900 dark:text-white uppercase tracking-wider text-[10px] text-brand-primary flex items-center gap-1.5">
+                    <Building2 className="h-3.5 w-3.5" />
+                    Business Profile & Credentials
                   </div>
                   <div className="space-y-2 text-slate-600 dark:text-slate-300">
-                    <div><strong>Owner Name:</strong> {detailApp.owner?.name || "Dr. Owner"}</div>
-                    <div><strong>Login Email:</strong> <span className="font-mono">{detailApp.email}</span></div>
-                    <div><strong>Contact Phone:</strong> <span className="font-mono">{detailApp.phone}</span></div>
-                    <div><strong>HQ Location:</strong> {detailApp.address || "—"}</div>
-                    <div><strong>Submitted Date:</strong> {new Date(detailApp.createdAt).toLocaleString()}</div>
-                    {detailApp.otpVerifiedAt && (
-                      <div><strong>OTP Confirmed:</strong> {new Date(detailApp.otpVerifiedAt).toLocaleString()}</div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Plan Card */}
-                <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 space-y-3">
-                  <div className="font-bold text-slate-900 dark:text-white uppercase tracking-wider text-[10px] text-brand-primary">
-                    Selected Subscription
-                  </div>
-                  <div className="space-y-1 text-slate-600 dark:text-slate-300">
-                    <div><strong>Plan Tier:</strong> {detailApp.subscription?.plan?.name || detailApp.tier}</div>
-                    <div><strong>Billing Cycle:</strong> {detailApp.pendingBillingCycle || "MONTHLY"}</div>
-                    <div className="text-sm font-black font-mono text-brand-primary pt-1">
-                      Payable: ৳{(detailApp.pendingBillingCycle === "YEARLY"
-                        ? Math.round(Number(detailApp.subscription?.plan?.price || 1500) * 12 * 0.85)
-                        : Number(detailApp.subscription?.plan?.price || 1500)).toLocaleString()}
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Owner Name:</span>
+                      <strong className="text-slate-900 dark:text-white">{detailApp.owner?.name || "Dr. Owner"}</strong>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Login Email:</span>
+                      <span className="font-mono text-slate-900 dark:text-white">{detailApp.email}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Phone:</span>
+                      <span className="font-mono text-slate-900 dark:text-white">{detailApp.phone}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Address:</span>
+                      <span className="text-right truncate max-w-[200px] text-slate-900 dark:text-white">{detailApp.address || "—"}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Email OTP:</span>
+                      <span className="text-emerald-600 font-bold flex items-center gap-1">
+                        <Check className="h-3 w-3" />
+                        {detailApp.otpVerifiedAt ? "Verified" : "Pending"}
+                      </span>
                     </div>
                   </div>
                 </div>
 
                 {/* Regulatory Document Numbers */}
-                <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 space-y-2">
-                  <div className="font-bold text-slate-900 dark:text-white uppercase tracking-wider text-[10px] text-brand-primary">
-                    License Numbers
+                <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 space-y-3">
+                  <div className="font-extrabold text-slate-900 dark:text-white uppercase tracking-wider text-[10px] text-brand-primary flex items-center gap-1.5">
+                    <ShieldCheck className="h-3.5 w-3.5" />
+                    Government License Numbers
                   </div>
-                  <div className="space-y-1.5 text-slate-600 dark:text-slate-300">
-                    <div>
-                      <strong>National ID:</strong>{" "}
-                      <span className="font-mono font-bold text-slate-900 dark:text-white">{detailApp.nidNumber || "—"}</span>
+                  <div className="space-y-2 text-slate-600 dark:text-slate-300">
+                    <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                      <div>
+                        <div className="text-[10px] font-bold text-slate-400 uppercase">National ID</div>
+                        <div className="font-mono font-bold text-slate-900 dark:text-white">
+                          {detailApp.nidNumber || "Not Provided"}
+                        </div>
+                      </div>
+                      {detailApp.nidNumber && (
+                        <button
+                          type="button"
+                          onClick={() => copyToClipboard(detailApp.nidNumber!, "modal-nid")}
+                          className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
+                        >
+                          {copiedKey === "modal-nid" ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
+                        </button>
+                      )}
                     </div>
-                    <div>
-                      <strong>Trade License:</strong>{" "}
-                      <span className="font-mono font-bold text-slate-900 dark:text-white">{detailApp.tradeLicenseNumber || "—"}</span>
+
+                    <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                      <div>
+                        <div className="text-[10px] font-bold text-slate-400 uppercase">Trade License</div>
+                        <div className="font-mono font-bold text-slate-900 dark:text-white">
+                          {detailApp.tradeLicenseNumber || "Not Provided"}
+                        </div>
+                      </div>
+                      {detailApp.tradeLicenseNumber && (
+                        <button
+                          type="button"
+                          onClick={() => copyToClipboard(detailApp.tradeLicenseNumber!, "modal-trade")}
+                          className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
+                        >
+                          {copiedKey === "modal-trade" ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
+                        </button>
+                      )}
                     </div>
+
+                    <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                      <div>
+                        <div className="text-[10px] font-bold text-slate-400 uppercase">DGDA Drug License</div>
+                        <div className="font-mono font-bold text-slate-900 dark:text-white">
+                          {detailApp.drugLicenseNumber || "Not Provided"}
+                        </div>
+                      </div>
+                      {detailApp.drugLicenseNumber && (
+                        <button
+                          type="button"
+                          onClick={() => copyToClipboard(detailApp.drugLicenseNumber!, "modal-drug")}
+                          className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
+                        >
+                          {copiedKey === "modal-drug" ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Plan Card */}
+                <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 space-y-2">
+                  <div className="font-extrabold text-slate-900 dark:text-white uppercase tracking-wider text-[10px] text-brand-primary flex items-center gap-1.5">
+                    <CreditCard className="h-3.5 w-3.5" />
+                    Target Subscription
+                  </div>
+                  <div className="flex items-center justify-between">
                     <div>
-                      <strong>DGDA Drug License:</strong>{" "}
-                      <span className="font-mono font-bold text-slate-900 dark:text-white">{detailApp.drugLicenseNumber || "—"}</span>
+                      <div className="font-bold text-sm text-slate-900 dark:text-white">
+                        {detailApp.subscription?.plan?.name || detailApp.tier} Plan
+                      </div>
+                      <div className="text-slate-400 text-[11px]">
+                        Billing Cycle: {detailApp.pendingBillingCycle || "MONTHLY"}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-base font-black font-mono text-brand-primary">
+                        ৳{(detailApp.pendingBillingCycle === "YEARLY"
+                          ? Math.round(Number(detailApp.subscription?.plan?.price || 1500) * 12 * 0.85)
+                          : Number(detailApp.subscription?.plan?.price || 1500)).toLocaleString()}
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Right Column: High-Res Document Preview Tabs & Viewer */}
+              {/* Right Column: High-Res Document Inspector Workbench */}
               <div className="lg:col-span-7 flex flex-col space-y-3">
                 {/* Document Selector Tabs */}
                 <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-800 rounded-2xl text-xs font-bold">
                   <button
                     type="button"
-                    onClick={() => setActiveDetailDocTab("nid_front")}
-                    className={`flex-1 py-2 px-3 rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5 ${
+                    onClick={() => {
+                      setActiveDetailDocTab("nid_front");
+                      setInspectorZoom(1);
+                      setInspectorRotate(0);
+                    }}
+                    className={`flex-1 py-2 px-2.5 rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5 text-[11px] ${
                       activeDetailDocTab === "nid_front"
                         ? "bg-white dark:bg-slate-900 text-brand-primary shadow-xs"
                         : "text-slate-500 hover:text-slate-800"
@@ -919,8 +996,12 @@ export function PharmacyVerificationTab() {
 
                   <button
                     type="button"
-                    onClick={() => setActiveDetailDocTab("nid_back")}
-                    className={`flex-1 py-2 px-3 rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5 ${
+                    onClick={() => {
+                      setActiveDetailDocTab("nid_back");
+                      setInspectorZoom(1);
+                      setInspectorRotate(0);
+                    }}
+                    className={`flex-1 py-2 px-2.5 rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5 text-[11px] ${
                       activeDetailDocTab === "nid_back"
                         ? "bg-white dark:bg-slate-900 text-brand-primary shadow-xs"
                         : "text-slate-500 hover:text-slate-800"
@@ -932,8 +1013,12 @@ export function PharmacyVerificationTab() {
 
                   <button
                     type="button"
-                    onClick={() => setActiveDetailDocTab("trade")}
-                    className={`flex-1 py-2 px-3 rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5 ${
+                    onClick={() => {
+                      setActiveDetailDocTab("trade");
+                      setInspectorZoom(1);
+                      setInspectorRotate(0);
+                    }}
+                    className={`flex-1 py-2 px-2.5 rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5 text-[11px] ${
                       activeDetailDocTab === "trade"
                         ? "bg-white dark:bg-slate-900 text-emerald-600 shadow-xs"
                         : "text-slate-500 hover:text-slate-800"
@@ -945,8 +1030,12 @@ export function PharmacyVerificationTab() {
 
                   <button
                     type="button"
-                    onClick={() => setActiveDetailDocTab("drug")}
-                    className={`flex-1 py-2 px-3 rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5 ${
+                    onClick={() => {
+                      setActiveDetailDocTab("drug");
+                      setInspectorZoom(1);
+                      setInspectorRotate(0);
+                    }}
+                    className={`flex-1 py-2 px-2.5 rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5 text-[11px] ${
                       activeDetailDocTab === "drug"
                         ? "bg-white dark:bg-slate-900 text-purple-600 shadow-xs"
                         : "text-slate-500 hover:text-slate-800"
@@ -957,7 +1046,7 @@ export function PharmacyVerificationTab() {
                   </button>
                 </div>
 
-                {/* Active Document View Area */}
+                {/* Active Document Viewer Area */}
                 {(() => {
                   let docUrl = "";
                   let docTitle = "";
@@ -983,9 +1072,12 @@ export function PharmacyVerificationTab() {
 
                   if (!docUrl) {
                     return (
-                      <div className="flex-1 min-h-[380px] rounded-3xl border-2 border-dashed border-slate-200 dark:border-slate-800 flex flex-col items-center justify-center p-8 text-center text-slate-400">
-                        <FileText className="h-10 w-10 text-slate-300 dark:text-slate-700 mb-2" />
-                        <p className="font-bold text-xs">No document attached for this tab.</p>
+                      <div className="flex-1 min-h-[420px] rounded-3xl border-2 border-dashed border-slate-200 dark:border-slate-800 flex flex-col items-center justify-center p-8 text-center text-slate-400 bg-slate-50/50 dark:bg-slate-850/50">
+                        <FileText className="h-12 w-12 text-slate-300 dark:text-slate-700 mb-3" />
+                        <h4 className="font-bold text-sm text-slate-700 dark:text-slate-300">Document Not Uploaded</h4>
+                        <p className="text-xs text-slate-400 mt-1 max-w-xs">
+                          The applicant has not attached a file for this document category.
+                        </p>
                       </div>
                     );
                   }
@@ -993,47 +1085,85 @@ export function PharmacyVerificationTab() {
                   const pdf = isPdf(docUrl);
 
                   return (
-                    <div className="flex-1 min-h-[420px] rounded-3xl border border-slate-200 dark:border-slate-800 bg-slate-950/5 dark:bg-slate-950 flex flex-col overflow-hidden relative">
-                      {/* Top Action Bar for current doc */}
-                      <div className="p-3 bg-white dark:bg-slate-850 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs">
-                        <div className="font-semibold text-slate-800 dark:text-slate-200 truncate">
-                          {docTitle} {docNumber && <span className="font-mono text-slate-400">({docNumber})</span>}
+                    <div className="flex-1 min-h-[420px] rounded-3xl border border-slate-200 dark:border-slate-800 bg-slate-950/5 dark:bg-slate-950 flex flex-col overflow-hidden relative shadow-inner">
+                      {/* Top Inspector Bar */}
+                      <div className="p-3 bg-white dark:bg-slate-850 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs gap-2">
+                        <div className="font-bold text-slate-800 dark:text-slate-200 truncate">
+                          {docTitle} {docNumber && <span className="font-mono text-slate-400 font-normal">({docNumber})</span>}
                         </div>
-                        <div className="flex items-center gap-2">
+
+                        {/* Inspection Controls: Zoom, Rotate, New Tab */}
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {!pdf && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => setInspectorZoom((prev) => Math.min(prev + 0.25, 3))}
+                                className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 cursor-pointer"
+                                title="Zoom In"
+                              >
+                                <ZoomIn className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setInspectorZoom((prev) => Math.max(prev - 0.25, 0.5))}
+                                className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 cursor-pointer"
+                                title="Zoom Out"
+                              >
+                                <ZoomOut className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setInspectorRotate((prev) => (prev + 90) % 360)}
+                                className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 cursor-pointer"
+                                title="Rotate 90°"
+                              >
+                                <RefreshCw className="h-3.5 w-3.5" />
+                              </button>
+                            </>
+                          )}
+
                           <a
                             href={docUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 font-bold text-[11px] transition flex items-center gap-1"
+                            className="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 font-bold text-[11px] transition flex items-center gap-1"
                           >
                             <ExternalLink className="h-3 w-3" />
                             <span>New Tab</span>
                           </a>
+
                           <button
                             type="button"
                             onClick={() => setViewingDoc({ title: docTitle, url: docUrl, number: docNumber })}
-                            className="px-2.5 py-1 rounded-lg bg-brand-primary text-white font-bold text-[11px] hover:opacity-90 transition flex items-center gap-1 cursor-pointer"
+                            className="px-2.5 py-1.5 rounded-lg bg-brand-primary text-white font-bold text-[11px] hover:opacity-90 transition flex items-center gap-1 cursor-pointer"
                           >
                             <Maximize2 className="h-3 w-3" />
-                            <span>Full Preview</span>
+                            <span>Full View</span>
                           </button>
                         </div>
                       </div>
 
                       {/* Display Area */}
-                      <div className="flex-1 flex items-center justify-center p-4 overflow-auto">
+                      <div className="flex-1 flex items-center justify-center p-4 overflow-auto min-h-[380px]">
                         {pdf ? (
                           <iframe
                             src={docUrl}
-                            className="w-full h-[400px] rounded-2xl border border-slate-200 dark:border-slate-800 bg-white"
+                            className="w-full h-[400px] rounded-2xl border border-slate-200 dark:border-slate-800 bg-white shadow-sm"
                             title={docTitle}
                           />
                         ) : (
-                          <img
-                            src={docUrl}
-                            alt={docTitle}
-                            className="max-h-[380px] max-w-full object-contain rounded-2xl shadow-md"
-                          />
+                          <div className="overflow-auto max-h-[420px] max-w-full flex items-center justify-center">
+                            <img
+                              src={docUrl}
+                              alt={docTitle}
+                              style={{
+                                transform: `scale(${inspectorZoom}) rotate(${inspectorRotate}deg)`,
+                                transition: "transform 0.2s ease",
+                              }}
+                              className="max-h-[380px] max-w-full object-contain rounded-2xl shadow-md"
+                            />
+                          </div>
                         )}
                       </div>
                     </div>
@@ -1043,23 +1173,21 @@ export function PharmacyVerificationTab() {
             </div>
 
             {/* Modal Footer Actions */}
-            <div className="p-6 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="p-5 sm:p-6 border-t border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-850/70 flex flex-col sm:flex-row items-center justify-between gap-3">
               <button
                 type="button"
                 onClick={() => setDetailApp(null)}
-                className="px-5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 font-bold text-xs text-slate-600 dark:text-slate-400 hover:bg-slate-100 transition"
+                className="px-5 py-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 font-bold text-xs text-slate-600 dark:text-slate-400 hover:bg-slate-100 transition cursor-pointer w-full sm:w-auto"
               >
-                Close Inspection
+                Close Dossier
               </button>
 
               {detailApp.verificationStatus === "PENDING_APPROVAL" && (
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
                   <button
                     type="button"
-                    onClick={() => {
-                      openRejectModal(detailApp);
-                    }}
-                    className="px-5 py-2.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-600 dark:text-rose-400 font-bold text-xs transition flex items-center gap-1.5 cursor-pointer"
+                    onClick={() => openRejectModal(detailApp)}
+                    className="px-5 py-2.5 rounded-2xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-600 dark:text-rose-400 font-bold text-xs transition flex items-center gap-1.5 cursor-pointer flex-1 sm:flex-none justify-center"
                   >
                     <X className="h-4 w-4" />
                     <span>Reject Application</span>
@@ -1067,10 +1195,8 @@ export function PharmacyVerificationTab() {
 
                   <button
                     type="button"
-                    onClick={() => {
-                      openApproveModal(detailApp);
-                    }}
-                    className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-lg transition flex items-center gap-2 cursor-pointer"
+                    onClick={() => openApproveModal(detailApp)}
+                    className="px-6 py-2.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-700 hover:to-emerald-600 text-white font-bold text-xs shadow-lg shadow-emerald-500/25 transition flex items-center gap-2 cursor-pointer flex-1 sm:flex-none justify-center"
                   >
                     <Check className="h-4 w-4" />
                     <span>Approve Pharmacy</span>
@@ -1086,15 +1212,15 @@ export function PharmacyVerificationTab() {
       {/* STANDALONE DOCUMENT PREVIEW MODAL                         */}
       {/* ========================================================= */}
       {viewingDoc && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-4xl w-full max-h-[90vh] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-4xl w-full max-h-[92vh] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-850/50">
               <div>
-                <h3 className="font-extrabold text-sm text-slate-900 dark:text-white">
+                <h3 className="font-black text-sm text-slate-900 dark:text-white">
                   {viewingDoc.title}
                 </h3>
                 {viewingDoc.number && (
-                  <p className="text-xs font-mono text-brand-primary">License/Doc No: {viewingDoc.number}</p>
+                  <p className="text-xs font-mono text-brand-primary">Document/License No: {viewingDoc.number}</p>
                 )}
               </div>
               <div className="flex items-center gap-2">
@@ -1110,7 +1236,7 @@ export function PharmacyVerificationTab() {
                 <button
                   type="button"
                   onClick={() => setViewingDoc(null)}
-                  className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 transition"
+                  className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 transition cursor-pointer"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -1121,14 +1247,14 @@ export function PharmacyVerificationTab() {
               {isPdf(viewingDoc.url) ? (
                 <iframe
                   src={viewingDoc.url}
-                  className="w-full h-[580px] rounded-2xl border border-slate-200 dark:border-slate-800 bg-white"
+                  className="w-full h-[600px] rounded-2xl border border-slate-200 dark:border-slate-800 bg-white"
                   title={viewingDoc.title}
                 />
               ) : (
                 <img
                   src={viewingDoc.url}
                   alt={viewingDoc.title}
-                  className="max-h-[580px] max-w-full object-contain rounded-2xl shadow-lg"
+                  className="max-h-[600px] max-w-full object-contain rounded-2xl shadow-xl"
                 />
               )}
             </div>
@@ -1143,57 +1269,57 @@ export function PharmacyVerificationTab() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-200">
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-lg w-full shadow-2xl p-6 space-y-5 animate-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="h-10 w-10 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
-                  <CheckCircle2 className="h-5 w-5" />
+              <div className="flex items-center gap-3">
+                <div className="h-11 w-11 rounded-2xl bg-emerald-500/15 text-emerald-600 flex items-center justify-center shadow-sm">
+                  <CheckCircle2 className="h-6 w-6" />
                 </div>
                 <div>
                   <h3 className="font-extrabold text-base text-slate-900 dark:text-white">
-                    Approve Pharmacy Application
+                    Approve Pharmacy Onboarding
                   </h3>
                   <p className="text-xs text-slate-500">
-                    Confirm approval for <strong>{targetAppToApprove.name}</strong>
+                    Applicant: <strong>{targetAppToApprove.name}</strong>
                   </p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setIsApproveOpen(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-600"
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 cursor-pointer"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
 
-            <div className="space-y-3.5 text-xs">
+            <div className="space-y-4 text-xs">
               <div>
-                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Assign Subscription Plan
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                  Confirm Subscription Plan
                 </label>
                 <select
                   value={approvePlanId}
                   onChange={(e) => setApprovePlanId(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-brand-primary"
                 >
                   {plans.map((p) => (
                     <option key={p.id} value={p.id}>
-                      {p.name} ({p.tier}) &bull; ৳{Number(p.price).toLocaleString()}/mo
+                      {p.name} ({p.tier}) &bull; ৳{Number(p.price).toLocaleString()}/month
                     </option>
                   ))}
                 </select>
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1.5">
                   Billing Cycle
                 </label>
                 <div className="grid grid-cols-2 gap-2 font-bold text-xs">
                   <button
                     type="button"
                     onClick={() => setApproveBillingCycle("MONTHLY")}
-                    className={`py-2 rounded-xl border transition ${
+                    className={`py-2.5 rounded-xl border transition cursor-pointer ${
                       approveBillingCycle === "MONTHLY"
-                        ? "bg-brand-primary text-white border-brand-primary"
+                        ? "bg-brand-primary text-white border-brand-primary shadow-xs"
                         : "bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600"
                     }`}
                   >
@@ -1202,32 +1328,32 @@ export function PharmacyVerificationTab() {
                   <button
                     type="button"
                     onClick={() => setApproveBillingCycle("YEARLY")}
-                    className={`py-2 rounded-xl border transition ${
+                    className={`py-2.5 rounded-xl border transition cursor-pointer ${
                       approveBillingCycle === "YEARLY"
-                        ? "bg-brand-primary text-white border-brand-primary"
+                        ? "bg-brand-primary text-white border-brand-primary shadow-xs"
                         : "bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600"
                     }`}
                   >
-                    Yearly (-15%)
+                    Yearly (-15% Discount)
                   </button>
                 </div>
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Approval Notes / Compliance Reference (Optional)
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                  Compliance Reference / Approval Notes (Optional)
                 </label>
                 <textarea
                   rows={2}
                   value={approveNotes}
                   onChange={(e) => setApproveNotes(e.target.value)}
-                  placeholder="e.g. All regulatory documents (NID, Trade License, DGDA) verified & approved."
-                  className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                  placeholder="e.g. NID, Trade License, and DGDA Drug License verified & approved."
+                  className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs focus:outline-none focus:ring-2 focus:ring-brand-primary"
                 />
               </div>
 
               <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-800 dark:text-emerald-300 text-[11px] leading-relaxed">
-                <strong>What happens next:</strong> An approval email with plan pricing and a secure SSLCOMMERZ checkout link will automatically be sent to <strong>{targetAppToApprove.email}</strong>. Once payment is completed, their dashboard will activate.
+                <strong>Automated Flow:</strong> Upon approval, an official congratulatory email containing the secure SSLCOMMERZ checkout link will immediately be sent to <strong>{targetAppToApprove.email}</strong>. Once payment clears, their pharmacy dashboard unlocks automatically.
               </div>
             </div>
 
@@ -1235,7 +1361,7 @@ export function PharmacyVerificationTab() {
               <button
                 type="button"
                 onClick={() => setIsApproveOpen(false)}
-                className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 hover:bg-slate-100 transition"
+                className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 hover:bg-slate-100 transition cursor-pointer"
               >
                 Cancel
               </button>
@@ -1243,12 +1369,12 @@ export function PharmacyVerificationTab() {
                 type="button"
                 onClick={handleConfirmApprove}
                 disabled={approving}
-                className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-lg transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-700 hover:to-emerald-600 text-white font-bold text-xs shadow-lg shadow-emerald-500/25 transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
               >
                 {approving ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>Processing & Sending Email...</span>
+                    <span>Dispatching Approval Email...</span>
                   </>
                 ) : (
                   <>
@@ -1269,9 +1395,9 @@ export function PharmacyVerificationTab() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-200">
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-lg w-full shadow-2xl p-6 space-y-5 animate-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="h-10 w-10 rounded-xl bg-rose-500/10 text-rose-600 flex items-center justify-center">
-                  <XCircle className="h-5 w-5" />
+              <div className="flex items-center gap-3">
+                <div className="h-11 w-11 rounded-2xl bg-rose-500/15 text-rose-600 flex items-center justify-center shadow-sm">
+                  <XCircle className="h-6 w-6" />
                 </div>
                 <div>
                   <h3 className="font-extrabold text-base text-slate-900 dark:text-white">
@@ -1285,15 +1411,15 @@ export function PharmacyVerificationTab() {
               <button
                 type="button"
                 onClick={() => setIsRejectOpen(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-600"
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 cursor-pointer"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
 
-            <div className="space-y-3.5 text-xs">
+            <div className="space-y-4 text-xs">
               <div>
-                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1.5">
                   Reason for Rejection (Required) *
                 </label>
                 <textarea
@@ -1301,7 +1427,7 @@ export function PharmacyVerificationTab() {
                   required
                   value={rejectReason}
                   onChange={(e) => setRejectReason(e.target.value)}
-                  placeholder="Explain clearly what document was invalid or missing so the applicant can resubmit..."
+                  placeholder="Clearly explain what document was invalid, expired, or missing so the applicant can correct it..."
                   className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs focus:outline-none focus:ring-2 focus:ring-rose-500"
                 />
               </div>
@@ -1315,9 +1441,10 @@ export function PharmacyVerificationTab() {
                   {[
                     "Illegible/blurry document photos",
                     "DGDA Drug License has expired",
-                    "NID Number does not match owner details",
-                    "Incomplete Trade License pages",
-                    "Invalid pharmacy address documentation",
+                    "NID Number does not match applicant details",
+                    "Missing back side of National ID",
+                    "Incomplete Trade License document",
+                    "Invalid pharmacy physical address",
                   ].map((preset) => (
                     <button
                       key={preset}
@@ -1332,7 +1459,7 @@ export function PharmacyVerificationTab() {
               </div>
 
               <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-800 dark:text-rose-300 text-[11px] leading-relaxed">
-                An email notice including this rejection reason will be dispatched to <strong>{targetAppToReject.email}</strong>.
+                A formal notice including your rejection reason will be dispatched to <strong>{targetAppToReject.email}</strong>. The applicant can re-submit after correcting the issue.
               </div>
             </div>
 
@@ -1340,7 +1467,7 @@ export function PharmacyVerificationTab() {
               <button
                 type="button"
                 onClick={() => setIsRejectOpen(false)}
-                className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 hover:bg-slate-100 transition"
+                className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 hover:bg-slate-100 transition cursor-pointer"
               >
                 Cancel
               </button>
@@ -1348,12 +1475,12 @@ export function PharmacyVerificationTab() {
                 type="button"
                 onClick={handleConfirmReject}
                 disabled={rejecting || !rejectReason.trim()}
-                className="px-6 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-lg transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                className="px-6 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-lg shadow-rose-500/25 transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
               >
                 {rejecting ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>Processing & Sending Email...</span>
+                    <span>Sending Rejection Notice...</span>
                   </>
                 ) : (
                   <>

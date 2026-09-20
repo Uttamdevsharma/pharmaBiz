@@ -13,9 +13,20 @@ export class SubscriptionService {
    * List all available plans
    */
   static async listAvailablePlans() {
-    return await (prisma as any).subscriptionPlan.findMany({
+    const plans = await (prisma as any).subscriptionPlan.findMany({
       where: { isActive: true },
       orderBy: { price: "asc" },
+    });
+
+    return plans.map((p: any) => {
+      const feat = (typeof p.features === "object" && p.features !== null) ? p.features : {};
+      const fallback: any = CENTRAL_PLAN_DEFINITIONS[p.tier as PricingTierType] || CENTRAL_PLAN_DEFINITIONS.TRIAL;
+      return {
+        ...p,
+        maxStaffPerBranch: feat.maxStaffPerBranch ?? fallback.maxStaffPerBranch ?? 1,
+        maxTotalStaff: feat.maxTotalStaff ?? fallback.maxTotalStaff ?? (p.maxBranches * (feat.maxStaffPerBranch ?? 1)),
+        trialDays: feat.trialDays ?? fallback.trialDays ?? 7,
+      };
     });
   }
 
@@ -28,7 +39,14 @@ export class SubscriptionService {
       throw new Error("Subscription plan not found");
     }
 
-    return plan;
+    const feat = (typeof plan.features === "object" && plan.features !== null) ? plan.features : {};
+    const fallback: any = CENTRAL_PLAN_DEFINITIONS[plan.tier as PricingTierType] || CENTRAL_PLAN_DEFINITIONS.TRIAL;
+    return {
+      ...plan,
+      maxStaffPerBranch: feat.maxStaffPerBranch ?? fallback.maxStaffPerBranch ?? 1,
+      maxTotalStaff: feat.maxTotalStaff ?? fallback.maxTotalStaff ?? (plan.maxBranches * (feat.maxStaffPerBranch ?? 1)),
+      trialDays: feat.trialDays ?? fallback.trialDays ?? 7,
+    };
   }
 
   /**
@@ -61,12 +79,22 @@ export class SubscriptionService {
     const trialDaysRemaining = isTrial && currentSub?.endDate ? getTrialRemainingDays(currentSub.endDate) : 0;
     const isTrialExpired = isTrial && isExpired;
 
+    const planFeatures = (typeof currentSub?.plan?.features === "object" && currentSub?.plan?.features !== null)
+      ? currentSub.plan.features
+      : {};
+
     const branchCount = tenant.branches ? tenant.branches.length : 0;
-    const maxBranches = currentSub?.plan?.maxBranches || planConfig.maxBranches;
+    const maxBranches = currentSub?.plan?.maxBranches ?? planConfig.maxBranches;
 
     const nonOwnerStaff = (tenant.users || []).filter((u: any) => u.role !== "COMPANY_OWNER");
     const staffCount = nonOwnerStaff.length;
-    const maxStaff = isTrial ? 1 : planConfig.maxTotalStaff || 999;
+
+    const maxStaffPerBranch = Number(
+      planFeatures.maxStaffPerBranch ?? (currentSub?.plan as any)?.maxStaffPerBranch ?? planConfig.maxStaffPerBranch ?? 1
+    );
+    const maxStaff = Number(
+      planFeatures.maxTotalStaff ?? (currentSub?.plan as any)?.maxTotalStaff ?? planConfig.maxTotalStaff ?? (isTrial ? 1 : 999)
+    );
 
     return {
       tenantId: tenant.id,
@@ -77,7 +105,15 @@ export class SubscriptionService {
       isTrialExpired,
       trialDaysRemaining,
       isExpired,
-      planConfig,
+      planConfig: {
+        ...planConfig,
+        name: currentSub?.plan?.name || planConfig.name,
+        price: currentSub?.plan ? Number(currentSub.plan.price) : planConfig.price,
+        billingCycle: currentSub?.plan?.billingCycle || planConfig.billingCycle,
+        maxBranches,
+        maxStaffPerBranch,
+        maxTotalStaff: maxStaff,
+      },
       usage: {
         currentBranches: branchCount,
         maxBranches,
@@ -85,13 +121,14 @@ export class SubscriptionService {
         currentStaff: staffCount,
         maxStaff,
         remainingStaff: Math.max(0, maxStaff - staffCount),
+        maxStaffPerBranch,
       },
       features: {
-        interBranchTransfer: tier !== "STARTER" && tier !== "TRIAL",
-        regionalAdmin: tier !== "STARTER" && tier !== "TRIAL",
-        customAudit: tier === "ENTERPRISE",
-        apiAccess: tier === "ENTERPRISE",
-        branchPriceOverride: tier !== "STARTER" && tier !== "TRIAL",
+        interBranchTransfer: planFeatures.inventoryTransfers ?? (tier !== "STARTER" && tier !== "TRIAL"),
+        regionalAdmin: planFeatures.regionalAdmin ?? (tier !== "STARTER" && tier !== "TRIAL"),
+        customAudit: planFeatures.customAudit ?? (tier === "ENTERPRISE"),
+        apiAccess: planFeatures.apiAccess ?? (tier === "ENTERPRISE"),
+        branchPriceOverride: planFeatures.branchPriceOverride ?? (tier !== "STARTER" && tier !== "TRIAL"),
       },
     };
   }

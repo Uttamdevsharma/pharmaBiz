@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { fetchApi } from "@/lib/api";
 import { Product, Supplier, Branch, InventoryItem } from "@/types";
+import { showAlert } from "@/lib/swal";
 import {
   Boxes,
   Plus,
@@ -285,14 +286,18 @@ export function InventoryModule({ subAction }: InventoryModuleProps = {}) {
 
       if (!res.success) throw new Error(res.message || "Failed to record stock inward");
 
+      const prodName = products.find((p) => p.id === inwardForm.productId)?.name || "product";
       setInwardSuccess(true);
+      showAlert.success("Stock Added Successfully!", `Inward stock batch recorded for "${prodName}".`);
       setTimeout(() => {
         setInwardSuccess(false);
         setActiveTab("stock");
         loadBranchStock();
       }, 1200);
     } catch (err: any) {
-      setInwardError(err.message);
+      const msg = err.message || "Failed to record stock inward";
+      setInwardError(msg);
+      showAlert.error("Stock Inward Failed", msg);
     } finally {
       setInwardSubmitting(false);
     }
@@ -318,10 +323,11 @@ export function InventoryModule({ subAction }: InventoryModuleProps = {}) {
 
       if (!res.success) throw new Error(res.message || "Failed to adjust stock");
 
+      showAlert.success("Stock Adjusted", `Quantity successfully adjusted (${adjustQty > 0 ? `+${adjustQty}` : adjustQty}).`);
       setAdjustModalOpen(false);
       loadBranchStock();
     } catch (err: any) {
-      alert(err.message);
+      showAlert.error("Adjustment Failed", err.message || "Failed to adjust stock");
     } finally {
       setAdjusting(false);
     }
@@ -348,10 +354,11 @@ export function InventoryModule({ subAction }: InventoryModuleProps = {}) {
 
       if (!res.success) throw new Error(res.message || "Failed to update batch");
 
+      showAlert.success("Batch Updated", "Batch metadata has been updated successfully.");
       setEditBatchModalOpen(false);
       loadBranchStock();
     } catch (err: any) {
-      alert(err.message);
+      showAlert.error("Update Failed", err.message || "Failed to update batch");
     } finally {
       setEditingBatch(false);
     }

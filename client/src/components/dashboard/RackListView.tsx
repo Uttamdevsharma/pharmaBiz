@@ -242,20 +242,17 @@ export function RackListView({ selectedBranchId, onNavigate }: RackListViewProps
             <span>/</span>
             <span className="text-brand-primary font-bold">Rack List</span>
           </div>
-          <h1 className="text-xl font-black text-slate-900 dark:text-white flex items-center gap-2">
-            <Archive className="h-6 w-6 text-brand-primary" />
+          <h1 className="text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2">
+            <Archive className="h-7 w-7 text-brand-primary" />
             Physical Rack List
           </h1>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Manage your physical storage racks, shelves, and bins. View used and empty locations.
-          </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           {onNavigate && (
             <button
               onClick={() => onNavigate("loc_create_rack")}
-              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-brand-primary text-white text-xs font-bold hover:bg-brand-primary/90 transition shadow-xs"
+              className="inline-flex items-center gap-2 h-11 px-5 rounded-xl bg-brand-primary text-white text-sm font-bold hover:bg-brand-primary/90 transition shadow-xs"
             >
               <PlusCircle className="h-4 w-4" />
               <span>Create Rack Structure</span>
@@ -265,7 +262,7 @@ export function RackListView({ selectedBranchId, onNavigate }: RackListViewProps
           <button
             onClick={loadRacks}
             title="Refresh racks"
-            className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-500 transition"
+            className="h-11 w-11 flex items-center justify-center rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-500 transition"
           >
             <RefreshCw className="h-4 w-4" />
           </button>
@@ -274,14 +271,14 @@ export function RackListView({ selectedBranchId, onNavigate }: RackListViewProps
 
       {/* Global Alerts */}
       {errorMsg && (
-        <div className="p-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-2xl text-rose-700 dark:text-rose-300 text-xs flex items-center gap-2.5 font-bold">
+        <div className="p-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-2xl text-rose-700 dark:text-rose-300 text-sm flex items-center gap-2.5 font-bold">
           <AlertCircle className="h-5 w-5 shrink-0 text-rose-600" />
           <span>{errorMsg}</span>
         </div>
       )}
 
       {successMsg && (
-        <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 rounded-2xl text-emerald-700 dark:text-emerald-300 text-xs flex items-center gap-2.5 font-bold">
+        <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 rounded-2xl text-emerald-700 dark:text-emerald-300 text-sm flex items-center gap-2.5 font-bold">
           <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" />
           <span>{successMsg}</span>
         </div>
@@ -289,53 +286,51 @@ export function RackListView({ selectedBranchId, onNavigate }: RackListViewProps
 
       {/* Summary Metrics Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3.5">
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-xs">
-          <p className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Total Racks</p>
-          <p className="text-2xl font-black text-slate-900 dark:text-white mt-1">{metrics.totalRacks}</p>
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-xs">
+          <p className="text-xs font-black uppercase text-slate-400 tracking-wider">Total Racks</p>
+          <p className="text-3xl font-black font-mono text-slate-900 dark:text-white mt-1">{metrics.totalRacks}</p>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-xs">
-          <p className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Total Shelves</p>
-          <p className="text-2xl font-black text-slate-900 dark:text-white mt-1">{metrics.totalShelves}</p>
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-xs">
+          <p className="text-xs font-black uppercase text-slate-400 tracking-wider">Total Shelves</p>
+          <p className="text-3xl font-black font-mono text-slate-900 dark:text-white mt-1">{metrics.totalShelves}</p>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-xs">
-          <p className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Total Bins</p>
-          <p className="text-2xl font-black text-slate-900 dark:text-white mt-1">{metrics.totalBins}</p>
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-xs">
+          <p className="text-xs font-black uppercase text-slate-400 tracking-wider">Total Bins</p>
+          <p className="text-3xl font-black font-mono text-slate-900 dark:text-white mt-1">{metrics.totalBins}</p>
         </div>
 
-        <div className="bg-emerald-50/70 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-900/40 rounded-2xl p-4 shadow-xs">
-          <p className="text-[10px] font-black uppercase text-emerald-700 dark:text-emerald-400 tracking-wider">Used Locations</p>
-          <p className="text-2xl font-black text-emerald-900 dark:text-emerald-200 mt-1">{metrics.totalUsed}</p>
-          <p className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-0.5">have active medicine stock</p>
+        <div className="bg-emerald-50/70 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-900/40 rounded-2xl p-5 shadow-xs">
+          <p className="text-xs font-black uppercase text-emerald-700 dark:text-emerald-400 tracking-wider">Used Locations</p>
+          <p className="text-3xl font-black font-mono text-emerald-900 dark:text-emerald-200 mt-1">{metrics.totalUsed}</p>
         </div>
 
-        <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 shadow-xs">
-          <p className="text-[10px] font-black uppercase text-slate-500 dark:text-slate-400 tracking-wider">Empty Locations</p>
-          <p className="text-2xl font-black text-slate-800 dark:text-slate-200 mt-1">{metrics.totalEmpty}</p>
-          <p className="text-[10px] text-slate-400 mt-0.5">ready to receive stock</p>
+        <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs">
+          <p className="text-xs font-black uppercase text-slate-500 dark:text-slate-400 tracking-wider">Empty Locations</p>
+          <p className="text-3xl font-black font-mono text-slate-800 dark:text-slate-200 mt-1">{metrics.totalEmpty}</p>
         </div>
       </div>
 
       {/* Search Bar */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-xs flex items-center justify-between gap-4">
         <div className="relative flex-1 max-w-md">
-          <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <Search className="h-5 w-5 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
             placeholder="Search Rack by name or code..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full text-xs pl-9 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-transparent text-slate-800 dark:text-slate-100"
+            className="w-full h-12 text-sm font-semibold pl-11 pr-4 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-transparent text-slate-800 dark:text-slate-100"
           />
         </div>
 
-        <label className="flex items-center gap-2 text-xs font-semibold text-slate-600 dark:text-slate-300 cursor-pointer">
+        <label className="flex items-center gap-2 text-sm font-bold text-slate-600 dark:text-slate-300 cursor-pointer">
           <input
             type="checkbox"
             checked={includeInactive}
             onChange={(e) => setIncludeInactive(e.target.checked)}
-            className="rounded border-slate-300 text-brand-primary focus:ring-brand-primary"
+            className="h-4 w-4 rounded border-slate-300 text-brand-primary focus:ring-brand-primary"
           />
           <span>Show Inactive Racks</span>
         </label>
@@ -344,15 +339,15 @@ export function RackListView({ selectedBranchId, onNavigate }: RackListViewProps
       {/* Racks Table */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-xs">
         {loading ? (
-          <div className="p-12 text-center text-slate-400 text-xs">Loading racks...</div>
+          <div className="p-12 text-center text-slate-400 text-sm font-bold">Loading racks...</div>
         ) : filteredRacks.length === 0 ? (
           <div className="p-12 text-center text-slate-400 text-xs space-y-2">
             <Archive className="h-8 w-8 mx-auto text-slate-300 dark:text-slate-700" />
-            <p className="font-bold text-slate-700 dark:text-slate-300 text-sm">No Racks found.</p>
+            <p className="font-bold text-slate-700 dark:text-slate-300 text-base">No Racks found</p>
             {onNavigate && (
               <button
                 onClick={() => onNavigate("loc_create_rack")}
-                className="mt-2 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-brand-primary text-white text-xs font-bold hover:bg-brand-primary/90 transition"
+                className="mt-2 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-brand-primary text-white text-sm font-bold hover:bg-brand-primary/90 transition"
               >
                 <PlusCircle className="h-4 w-4" />
                 <span>Create Your First Rack</span>
@@ -361,19 +356,19 @@ export function RackListView({ selectedBranchId, onNavigate }: RackListViewProps
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 dark:bg-slate-800/60 text-[10px] font-black uppercase tracking-wider text-slate-400 border-b border-slate-200 dark:border-slate-800">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-slate-50 dark:bg-slate-800/60 text-xs font-black uppercase tracking-wider text-slate-500 border-b border-slate-200 dark:border-slate-800">
                 <tr>
-                  <th className="py-3 px-4">Rack Name / Code</th>
-                  <th className="py-3 px-4 text-center">Shelves</th>
-                  <th className="py-3 px-4 text-center">Bins</th>
-                  <th className="py-3 px-4 text-center">Used Locations</th>
-                  <th className="py-3 px-4 text-center">Empty Locations</th>
-                  <th className="py-3 px-4 text-center">Status</th>
-                  <th className="py-3 px-4 text-right">Actions</th>
+                  <th className="py-4 px-4">Rack Name / Code</th>
+                  <th className="py-4 px-4 text-center">Shelves</th>
+                  <th className="py-4 px-4 text-center">Bins</th>
+                  <th className="py-4 px-4 text-center">Used Locations</th>
+                  <th className="py-4 px-4 text-center">Empty Locations</th>
+                  <th className="py-4 px-4 text-center">Status</th>
+                  <th className="py-4 px-4 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-semibold">
                 {filteredRacks.map((rack) => (
                   <tr key={rack.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition">
                     <td className="py-3.5 px-4 font-black text-slate-900 dark:text-white flex items-center gap-2">
@@ -563,28 +558,33 @@ export function RackListView({ selectedBranchId, onNavigate }: RackListViewProps
       ────────────────────────────────────────── */}
       {editingRack && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-sm w-full p-5 space-y-4 shadow-xl">
-            <h3 className="text-sm font-black text-slate-900 dark:text-white">Edit Rack Name</h3>
-            <form onSubmit={handleSaveEdit} className="space-y-3">
-              <input
-                type="text"
-                value={editName}
-                onChange={(e) => setEditName(e.target.value)}
-                required
-                className="w-full text-xs font-bold px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
-              />
-              <div className="flex items-center justify-end gap-2 pt-2">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-sm w-full p-6 space-y-4 shadow-xl">
+            <h3 className="text-xl font-black text-slate-900 dark:text-white">Edit Rack Name</h3>
+            <form onSubmit={handleSaveEdit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                  Rack Name *
+                </label>
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  required
+                  className="w-full h-12 text-base font-bold px-4 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+                />
+              </div>
+              <div className="flex items-center justify-end gap-3 pt-2">
                 <button
                   type="button"
                   onClick={() => setEditingRack(null)}
-                  className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300"
+                  className="h-11 px-5 rounded-xl border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-600 dark:text-slate-300"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={actionLoading}
-                  className="px-4 py-1.5 rounded-lg bg-brand-primary text-white text-xs font-bold"
+                  className="h-11 px-6 rounded-xl bg-brand-primary text-white text-sm font-black shadow-sm"
                 >
                   {actionLoading ? "Saving..." : "Save"}
                 </button>
@@ -599,31 +599,36 @@ export function RackListView({ selectedBranchId, onNavigate }: RackListViewProps
       ────────────────────────────────────────── */}
       {addShelfRack && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-sm w-full p-5 space-y-4 shadow-xl">
-            <h3 className="text-sm font-black text-slate-900 dark:text-white">
-              Add Shelf to {addShelfRack.name}
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-sm w-full p-6 space-y-4 shadow-xl">
+            <h3 className="text-xl font-black text-slate-900 dark:text-white">
+              Add Shelf ({addShelfRack.name})
             </h3>
-            <form onSubmit={handleAddShelf} className="space-y-3">
-              <input
-                type="text"
-                placeholder="e.g. S07"
-                value={newShelfName}
-                onChange={(e) => setNewShelfName(e.target.value)}
-                required
-                className="w-full text-xs font-bold px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
-              />
-              <div className="flex items-center justify-end gap-2 pt-2">
+            <form onSubmit={handleAddShelf} className="space-y-4">
+              <div>
+                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                  Shelf Code *
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. S07"
+                  value={newShelfName}
+                  onChange={(e) => setNewShelfName(e.target.value)}
+                  required
+                  className="w-full h-12 text-base font-bold px-4 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+                />
+              </div>
+              <div className="flex items-center justify-end gap-3 pt-2">
                 <button
                   type="button"
                   onClick={() => setAddShelfRack(null)}
-                  className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300"
+                  className="h-11 px-5 rounded-xl border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-600 dark:text-slate-300"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={actionLoading}
-                  className="px-4 py-1.5 rounded-lg bg-brand-primary text-white text-xs font-bold"
+                  className="h-11 px-6 rounded-xl bg-brand-primary text-white text-sm font-black shadow-sm"
                 >
                   {actionLoading ? "Adding..." : "Add Shelf"}
                 </button>
@@ -638,31 +643,36 @@ export function RackListView({ selectedBranchId, onNavigate }: RackListViewProps
       ────────────────────────────────────────── */}
       {addBinShelf && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-sm w-full p-5 space-y-4 shadow-xl">
-            <h3 className="text-sm font-black text-slate-900 dark:text-white">
-              Add Bin to Shelf {addBinShelf.name}
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-sm w-full p-6 space-y-4 shadow-xl">
+            <h3 className="text-xl font-black text-slate-900 dark:text-white">
+              Add Bin ({addBinShelf.name})
             </h3>
-            <form onSubmit={handleAddBin} className="space-y-3">
-              <input
-                type="text"
-                placeholder="e.g. B04"
-                value={newBinName}
-                onChange={(e) => setNewBinName(e.target.value)}
-                required
-                className="w-full text-xs font-bold px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
-              />
-              <div className="flex items-center justify-end gap-2 pt-2">
+            <form onSubmit={handleAddBin} className="space-y-4">
+              <div>
+                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                  Bin Code *
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. B04"
+                  value={newBinName}
+                  onChange={(e) => setNewBinName(e.target.value)}
+                  required
+                  className="w-full h-12 text-base font-bold px-4 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+                />
+              </div>
+              <div className="flex items-center justify-end gap-3 pt-2">
                 <button
                   type="button"
                   onClick={() => setAddBinShelf(null)}
-                  className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300"
+                  className="h-11 px-5 rounded-xl border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-600 dark:text-slate-300"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={actionLoading}
-                  className="px-4 py-1.5 rounded-lg bg-brand-primary text-white text-xs font-bold"
+                  className="h-11 px-6 rounded-xl bg-brand-primary text-white text-sm font-black shadow-sm"
                 >
                   {actionLoading ? "Adding..." : "Add Bin"}
                 </button>

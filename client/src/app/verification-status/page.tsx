@@ -403,6 +403,12 @@ function VerificationStatusContent() {
                   <p className="text-[11px] text-center text-slate-400">
                     Supports bKash, Nagad, Rocket, Visa, Mastercard, and all Bangladeshi Bank Portals.
                   </p>
+                  <div className="text-center pt-1">
+                    <span className="text-xs text-slate-500">Already have your account credentials? </span>
+                    <Link href={`/login?email=${encodeURIComponent(data?.email || "")}&approved=true`} className="text-xs font-bold text-brand-primary hover:underline">
+                      Log In &rarr;
+                    </Link>
+                  </div>
                 </div>
               </div>
             )}

@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useMemo, useCallback } from "react";
 import { fetchApi } from "@/lib/api";
 import { PackagingConfig } from "@/lib/packaging";
+import { showAlert } from "@/lib/swal";
 import {
   MapPin,
   Archive,
@@ -339,12 +340,16 @@ export function StockAllocationView({
     const boxesInOpenCarton = cartonsOpened > 0 ? Math.max(0, (cartonsOpened * boxesPerCarton) - boxesAllocatedFromCarton) : 0;
     const totalCartonBoxesAvailable = boxesInsideCartons + boxesInOpenCarton;
 
+    const maxBoxesInBulk = Math.floor(unallocatedBulk / tabletsPerBox);
+
     // Standalone loose boxes received separately from supplier
     let remainingLooseBoxes = Math.max(0, looseBoxesReceived - allocatedLooseBoxes);
-    remainingLooseBoxes = Math.min(remainingLooseBoxes, Math.floor(unallocatedBulk / tabletsPerBox));
+    remainingLooseBoxes = Math.min(remainingLooseBoxes, maxBoxesInBulk);
 
-    if (cartonsReceived === 0 && looseBoxesReceived === 0) {
-      remainingLooseBoxes = Math.floor(unallocatedBulk / tabletsPerBox);
+    // Guarantee: If the unallocated bulk stock contains boxes that are not accounted for in cartons,
+    // they are available as loose / unboxed stock
+    if (totalCartonBoxesAvailable + remainingLooseBoxes < maxBoxesInBulk) {
+      remainingLooseBoxes = Math.max(remainingLooseBoxes, maxBoxesInBulk - totalCartonBoxesAvailable);
     }
 
     const totalEquivalentBoxes = totalCartonBoxesAvailable + remainingLooseBoxes;
@@ -387,7 +392,7 @@ export function StockAllocationView({
     if (batchMetrics) {
       if (batchMetrics.totalCartonBoxesAvailable <= 0 && batchMetrics.remainingLooseBoxes > 0) {
         setStockSource("LOOSE_BOX");
-      } else if (batchMetrics.totalCartonBoxesAvailable > 0) {
+      } else if (batchMetrics.totalCartonBoxesAvailable > 0 && stockSource === "LOOSE_BOX" && batchMetrics.remainingLooseBoxes <= 0) {
         setStockSource("FROM_CARTON");
       }
     }
@@ -457,6 +462,7 @@ export function StockAllocationView({
     let packagingDisplay = "";
     let maxAvailable = 0;
 
+    const maxBulkBoxes = Math.floor((batchMetrics?.unallocatedBulk || 0) / tabletsPerBox);
     const cartonBoxesAvail = batchMetrics?.totalCartonBoxesAvailable || 0;
     const looseBoxesAvail = batchMetrics?.remainingLooseBoxes || 0;
     const looseStripsAvail = batchMetrics?.looseStrips || 0;
@@ -466,22 +472,22 @@ export function StockAllocationView({
       baseUnits = qty * tabletsPerBox;
       packagingUnitLabel = "Box";
       packagingDisplay = `${qty} Box${qty > 1 ? "es" : ""} from Carton`;
-      maxAvailable = cartonBoxesAvail;
+      maxAvailable = cartonBoxesAvail > 0 ? cartonBoxesAvail : (looseBoxesAvail > 0 ? looseBoxesAvail : maxBulkBoxes);
     } else if (stockSource === "LOOSE_BOX") {
       baseUnits = qty * tabletsPerBox;
       packagingUnitLabel = "Box";
       packagingDisplay = `${qty} Loose Box${qty > 1 ? "es" : ""}`;
-      maxAvailable = looseBoxesAvail;
+      maxAvailable = looseBoxesAvail > 0 ? looseBoxesAvail : maxBulkBoxes;
     } else if (stockSource === "LOOSE_STRIP") {
       baseUnits = qty * tabsPerStrip;
       packagingUnitLabel = "Strip";
       packagingDisplay = `${qty} Loose Strip${qty > 1 ? "s" : ""}`;
-      maxAvailable = looseStripsAvail;
+      maxAvailable = looseStripsAvail > 0 ? looseStripsAvail : Math.floor((batchMetrics?.unallocatedBulk || 0) / tabsPerStrip);
     } else if (stockSource === "LOOSE_TABLET") {
       baseUnits = qty;
       packagingUnitLabel = "Tablet";
       packagingDisplay = `${qty} Loose Tablet${qty > 1 ? "s" : ""}`;
-      maxAvailable = looseTabletsAvail;
+      maxAvailable = batchMetrics?.unallocatedBulk || 0;
     }
 
     let hasError = false;
@@ -592,9 +598,8 @@ export function StockAllocationView({
         throw new Error(res.message || "Failed to place stock in rack");
       }
 
-      setSuccessMsg(
-        `Successfully placed ${allocationCalc.packagingDisplay} (${allocationCalc.baseUnits.toLocaleString()} ${packConfig.unit}s) into ${destLabel}. Total batch stock remains 100% constant!`
-      );
+      const alertMsg = `Successfully placed ${allocationCalc.packagingDisplay} (${allocationCalc.baseUnits.toLocaleString()} ${packConfig.unit}s) into ${destLabel}. Total batch stock remains 100% constant!`;
+      showAlert.success("Stock Allocated Successfully!", alertMsg);
 
       // Reset form inputs
       setQuantityInput(1);
@@ -606,7 +611,9 @@ export function StockAllocationView({
       // Immediately refresh live inventory
       await loadInventory();
     } catch (err: any) {
-      setErrorMsg(err.message || "Failed to allocate stock");
+      const msg = err.message || "Failed to allocate stock";
+      setErrorMsg(msg);
+      showAlert.error("Allocation Failed", msg);
     } finally {
       setSubmitting(false);
     }
@@ -654,7 +661,8 @@ export function StockAllocationView({
         throw new Error(res.message || "Failed to relocate stock");
       }
 
-      setSuccessMsg(`Successfully relocated stock to destination shelf.`);
+      const alertMsg = `Successfully relocated ${relocateQty} ${relocateUnit} to destination shelf.`;
+      showAlert.success("Stock Relocated Successfully!", alertMsg);
       setRelocateQty(1);
       setDestRackId("");
       setDestShelfId("");
@@ -663,7 +671,9 @@ export function StockAllocationView({
 
       await loadInventory();
     } catch (err: any) {
-      setErrorMsg(err.message || "Failed to relocate stock");
+      const msg = err.message || "Failed to relocate stock";
+      setErrorMsg(msg);
+      showAlert.error("Relocation Failed", msg);
     } finally {
       setSubmitting(false);
     }
@@ -672,12 +682,17 @@ export function StockAllocationView({
   return (
     <div className="space-y-6 pb-16">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b-2 border-slate-200 dark:border-slate-800">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white flex items-center gap-2.5">
-            <MapPin className="h-7 w-7 text-emerald-600 dark:text-emerald-400" />
+          <div className="flex items-center gap-2 text-xs text-slate-400 mb-1">
+            <span>Stock Management</span>
+            <span>/</span>
+            <span className="text-brand-primary font-bold">Stock Allocation</span>
+          </div>
+          <h2 className="text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2.5">
+            <MapPin className="h-7 w-7 text-brand-primary" />
             Stock Allocation
-          </h1>
+          </h2>
         </div>
 
         <div className="flex items-center gap-3">
@@ -744,12 +759,7 @@ export function StockAllocationView({
         </div>
       )}
 
-      {successMsg && (
-        <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 border-2 border-emerald-300 dark:border-emerald-900 rounded-2xl text-emerald-700 dark:text-emerald-300 text-sm flex items-center gap-2.5 font-bold">
-          <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" />
-          <span>{successMsg}</span>
-        </div>
-      )}
+
 
       {/* ══════════════════════════════════════════════════════════
           WORKFLOW 1: PLACE STOCK IN RACK
@@ -835,7 +845,7 @@ export function StockAllocationView({
                     <span className="h-7 w-7 rounded-xl bg-brand-primary/10 text-brand-primary flex items-center justify-center text-sm font-black">
                       1
                     </span>
-                    Products with Stock Not in Rack
+                    Unallocated Products
                   </h2>
                 </div>
 
@@ -932,7 +942,7 @@ export function StockAllocationView({
                     <span className="h-7 w-7 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center text-sm font-black">
                       2
                     </span>
-                    Batches with Stock Not in Rack: {selectedProductItem?.product.name}
+                    Available Batches: {selectedProductItem?.product.name}
                   </h2>
                 </div>
 
@@ -1122,26 +1132,44 @@ export function StockAllocationView({
 
                   {/* Quantity to Allocate */}
                   <div>
-                    <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">
-                      Quantity to Allocate ({allocationCalc.packagingUnitLabel})
-                    </label>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                        Quantity to Allocate ({allocationCalc.packagingUnitLabel})
+                      </label>
+                      {allocationCalc.maxAvailable > 0 && (
+                        <span className="text-xs text-slate-500 dark:text-slate-400 font-bold">
+                          Available: {allocationCalc.maxAvailable.toLocaleString()} {allocationCalc.packagingUnitLabel}s
+                        </span>
+                      )}
+                    </div>
                     <div className="flex items-center gap-3">
                       <input
                         type="number"
                         min="1"
-                        max={allocationCalc.maxAvailable}
+                        max={Math.max(1, allocationCalc.maxAvailable)}
                         value={quantityInput}
                         onChange={(e) => setQuantityInput(parseInt(e.target.value, 10) || 1)}
-                        className="w-full h-12 text-lg font-black px-4 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary"
+                        className={`w-full h-12 text-lg font-black px-4 rounded-xl border-2 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary ${
+                          allocationCalc.hasError && quantityInput > 0
+                            ? "border-rose-400 dark:border-rose-700 ring-2 ring-rose-500/20"
+                            : "border-slate-200 dark:border-slate-700"
+                        }`}
                       />
                       <button
                         type="button"
-                        onClick={() => setQuantityInput(allocationCalc.maxAvailable)}
-                        className="h-12 px-5 text-sm font-black rounded-xl border-2 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 whitespace-nowrap transition cursor-pointer"
+                        onClick={() => setQuantityInput(Math.max(1, allocationCalc.maxAvailable))}
+                        disabled={allocationCalc.maxAvailable <= 0}
+                        className="h-12 px-5 text-sm font-black rounded-xl border-2 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 whitespace-nowrap transition cursor-pointer disabled:opacity-50"
                       >
                         Max ({allocationCalc.maxAvailable})
                       </button>
                     </div>
+                    {allocationCalc.hasError && allocationCalc.validationMsg && (
+                      <p className="text-xs font-bold text-rose-600 dark:text-rose-400 mt-2 flex items-center gap-1.5 animate-in fade-in">
+                        <AlertCircle className="h-4 w-4 shrink-0" />
+                        <span>{allocationCalc.validationMsg}</span>
+                      </p>
+                    )}
                   </div>
 
                   {/* Destination Location: Rack → Shelf → Bin */}

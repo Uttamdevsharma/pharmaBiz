@@ -163,27 +163,22 @@ export function StockAllocationHistoryView({
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
         <div>
-          <div className="flex items-center gap-1.5 text-xs text-slate-400 mb-1">
+          <div className="flex items-center gap-2 text-xs text-slate-400 mb-1">
             <span>Stock Management</span>
-            <span>/</span>
-            <span>Allocate Product</span>
             <span>/</span>
             <span className="text-brand-primary font-bold">Allocation History</span>
           </div>
-          <h1 className="text-xl font-black text-slate-900 dark:text-white flex items-center gap-2">
-            <History className="h-6 w-6 text-brand-primary" />
-            Stock Allocation History
-          </h1>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Audit ledger of stock placed into physical Rack → Shelf → Bin locations.
-          </p>
+          <h2 className="text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2.5">
+            <History className="h-7 w-7 text-brand-primary" />
+            Allocation History
+          </h2>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
           {onNavigate && (
             <button
               onClick={() => onNavigate("stock_stock_allocation")}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-brand-primary text-white text-xs font-bold hover:bg-brand-primary/90 transition shadow-xs"
+              className="h-11 px-4 rounded-xl bg-brand-primary text-white text-xs sm:text-sm font-bold hover:bg-brand-primary/90 transition shadow-sm flex items-center gap-2 cursor-pointer active:scale-95"
             >
               <MapPin className="h-4 w-4" />
               <span>Place Stock in Rack</span>
@@ -193,7 +188,7 @@ export function StockAllocationHistoryView({
           <button
             onClick={loadAllocationHistory}
             title="Refresh history"
-            className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-500 transition"
+            className="h-11 w-11 flex items-center justify-center rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition cursor-pointer"
           >
             <RefreshCw className="h-4 w-4" />
           </button>
@@ -201,9 +196,9 @@ export function StockAllocationHistoryView({
       </div>
 
       {/* Filter Bar */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-xs space-y-3">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xs space-y-4">
         {/* Date Presets */}
-        <div className="flex flex-wrap items-center gap-1.5 pb-2 border-b border-slate-100 dark:border-slate-800">
+        <div className="flex flex-wrap items-center gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
           {[
             { id: "ALL", label: "All Time" },
             { id: "TODAY", label: "Today" },
@@ -216,9 +211,9 @@ export function StockAllocationHistoryView({
             <button
               key={df.id}
               onClick={() => setDateFilter(df.id as DatePreset)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+              className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer ${
                 dateFilter === df.id
-                  ? "bg-brand-primary text-white shadow-xs"
+                  ? "bg-brand-primary text-white shadow-sm"
                   : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
               }`}
             >
@@ -229,23 +224,23 @@ export function StockAllocationHistoryView({
 
         {/* Custom Date Inputs */}
         {dateFilter === "CUSTOM" && (
-          <div className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-800/40 rounded-xl">
-            <div className="flex items-center gap-2 text-xs">
-              <span className="text-slate-400 font-medium">From:</span>
+          <div className="flex flex-wrap items-center gap-3 p-3 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-200 dark:border-slate-700">
+            <div className="flex items-center gap-2 text-xs sm:text-sm">
+              <span className="text-slate-500 font-bold">From:</span>
               <input
                 type="date"
                 value={customStartDate}
                 onChange={(e) => setCustomStartDate(e.target.value)}
-                className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-800 dark:text-slate-200"
+                className="h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-200 outline-none focus:border-brand-primary"
               />
             </div>
-            <div className="flex items-center gap-2 text-xs">
-              <span className="text-slate-400 font-medium">To:</span>
+            <div className="flex items-center gap-2 text-xs sm:text-sm">
+              <span className="text-slate-500 font-bold">To:</span>
               <input
                 type="date"
                 value={customEndDate}
                 onChange={(e) => setCustomEndDate(e.target.value)}
-                className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-800 dark:text-slate-200"
+                className="h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-200 outline-none focus:border-brand-primary"
               />
             </div>
           </div>
@@ -255,13 +250,13 @@ export function StockAllocationHistoryView({
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {/* Keyword Search */}
           <div className="relative">
-            <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <Search className="h-4 w-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
               placeholder="Search product, batch, location..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full text-xs pl-9 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-transparent text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary transition"
+              className="w-full h-11 text-xs sm:text-sm pl-10 pr-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-slate-800 dark:text-slate-100 font-medium focus:outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary transition"
             />
           </div>
 
@@ -270,7 +265,7 @@ export function StockAllocationHistoryView({
             <select
               value={productFilter}
               onChange={(e) => setProductFilter(e.target.value)}
-              className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-transparent text-slate-800 dark:text-slate-100 font-medium focus:outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary transition"
+              className="w-full h-11 text-xs sm:text-sm px-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-slate-800 dark:text-slate-100 font-medium focus:outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary transition"
             >
               <option value="ALL">All Products</option>
               {productOptions.map((p) => (
@@ -288,7 +283,7 @@ export function StockAllocationHistoryView({
               placeholder="Filter by Batch #..."
               value={batchFilter}
               onChange={(e) => setBatchFilter(e.target.value)}
-              className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-transparent text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary transition"
+              className="w-full h-11 text-xs sm:text-sm px-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-slate-800 dark:text-slate-100 font-medium focus:outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary transition"
             />
           </div>
 
@@ -299,33 +294,33 @@ export function StockAllocationHistoryView({
               placeholder="Filter destination location..."
               value={toLocFilter}
               onChange={(e) => setToLocFilter(e.target.value)}
-              className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-transparent text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary transition"
+              className="w-full h-11 text-xs sm:text-sm px-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-slate-800 dark:text-slate-100 font-medium focus:outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary transition"
             />
           </div>
         </div>
       </div>
 
       {/* Allocation History Table */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-xs">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl overflow-hidden shadow-xs">
         {loading ? (
-          <div className="p-12 text-center text-slate-400 text-xs">
+          <div className="p-16 text-center text-slate-400 text-xs sm:text-sm font-semibold">
             Loading allocation history records...
           </div>
         ) : filteredMovements.length === 0 ? (
-          <div className="p-12 text-center text-slate-400 text-xs">
+          <div className="p-16 text-center text-slate-400 text-xs sm:text-sm font-semibold">
             No allocation history records found matching your filters.
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 dark:bg-slate-800/60 text-[10px] font-black uppercase tracking-wider text-slate-400 border-b border-slate-200 dark:border-slate-800">
+            <table className="w-full text-left">
+              <thead className="bg-slate-50 dark:bg-slate-800/60 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800">
                 <tr>
-                  <th className="py-3.5 px-4">Date & Time</th>
-                  <th className="py-3.5 px-4">Product</th>
-                  <th className="py-3.5 px-4">Batch</th>
-                  <th className="py-3.5 px-4">Source Type</th>
-                  <th className="py-3.5 px-4">Quantity Placed</th>
-                  <th className="py-3.5 px-4">To (Rack → Shelf → Bin)</th>
+                  <th className="py-4 px-4 font-bold">Date & Time</th>
+                  <th className="py-4 px-4 font-bold">Product</th>
+                  <th className="py-4 px-4 font-bold">Batch</th>
+                  <th className="py-4 px-4 font-bold">Source Type</th>
+                  <th className="py-4 px-4 font-bold">Quantity Placed</th>
+                  <th className="py-4 px-4 font-bold">Location (Rack → Shelf → Bin)</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -334,18 +329,18 @@ export function StockAllocationHistoryView({
                     key={m.id}
                     className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition"
                   >
-                    <td className="py-3.5 px-4 whitespace-nowrap text-slate-500 font-mono text-[11px]">
+                    <td className="py-4 px-4 whitespace-nowrap text-slate-500 dark:text-slate-400 font-mono text-xs sm:text-sm">
                       {formatDateTime(m.createdAt)}
                     </td>
-                    <td className="py-3.5 px-4 font-bold text-slate-900 dark:text-slate-100">
+                    <td className="py-4 px-4 font-bold text-xs sm:text-sm text-slate-900 dark:text-slate-100">
                       {m.product?.name || "Medicine"}
                     </td>
-                    <td className="py-3.5 px-4 font-mono font-bold text-slate-700 dark:text-slate-300">
+                    <td className="py-4 px-4 font-mono font-bold text-xs sm:text-sm text-slate-700 dark:text-slate-300">
                       {m.batchNumber || "—"}
                     </td>
-                    <td className="py-3.5 px-4 whitespace-nowrap">
+                    <td className="py-4 px-4 whitespace-nowrap">
                       <span
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                        className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold ${
                           m.sourceType === "From Carton" || m.sourceType === "FROM_CARTON"
                             ? "bg-amber-100 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 border border-amber-300/50"
                             : m.sourceType === "Loose Box" || m.sourceType === "LOOSE_BOX"
@@ -360,12 +355,12 @@ export function StockAllocationHistoryView({
                         {m.sourceType || "Allocation"}
                       </span>
                     </td>
-                    <td className="py-3.5 px-4 font-black text-brand-primary whitespace-nowrap">
+                    <td className="py-4 px-4 font-black text-xs sm:text-sm text-brand-primary whitespace-nowrap">
                       {m.packagingDisplay || `${m.quantity} units`}
                     </td>
-                    <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-200 whitespace-nowrap">
+                    <td className="py-4 px-4 font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-200 whitespace-nowrap">
                       <div className="flex items-center gap-1.5">
-                        <MapPin className="h-3.5 w-3.5 text-brand-primary shrink-0" />
+                        <MapPin className="h-4 w-4 text-brand-primary shrink-0" />
                         <span>{m.toLocationLabel || "Shelf"}</span>
                       </div>
                     </td>

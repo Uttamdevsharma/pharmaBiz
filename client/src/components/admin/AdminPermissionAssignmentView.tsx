@@ -18,6 +18,7 @@ import {
   Search,
   Save,
   X,
+  Sliders,
 } from "lucide-react";
 import { AdminRole } from "./CreateAdminRoleView";
 
@@ -98,7 +99,7 @@ export function AdminPermissionAssignmentView() {
     const allPermIds = ALL_PLATFORM_PERMISSIONS.map((p) => p.id);
     setRolePermissionsMap((prev) => ({
       ...prev,
-      [roleId]: Array.from(new Set(allPermIds)),
+      [roleId]: allPermIds,
     }));
   };
 
@@ -116,32 +117,28 @@ export function AdminPermissionAssignmentView() {
     setRolePermissionsMap(JSON.parse(JSON.stringify(initialRolePermissionsMap)));
   };
 
-  // Save changes to backend
+  // Save matrix changes
   const handleSaveMatrix = async () => {
     if (!canManage) return;
     try {
       setSaving(true);
       setActionMsg(null);
 
-      const matrix = Object.keys(rolePermissionsMap).map((roleId) => ({
-        roleId,
-        permissions: rolePermissionsMap[roleId] || [],
-      }));
+      // Save permissions for each role
+      const savePromises = Object.keys(rolePermissionsMap).map((roleId) =>
+        fetchApi(`/super-admin/roles/${roleId}/permissions`, {
+          method: "PUT",
+          body: JSON.stringify({ permissions: rolePermissionsMap[roleId] || [] }),
+        })
+      );
 
-      const res = await fetchApi("/super-admin/roles/matrix", {
-        method: "POST",
-        body: JSON.stringify({ matrix }),
+      await Promise.all(savePromises);
+
+      setActionMsg({
+        type: "success",
+        text: "Permissions matrix saved successfully.",
       });
-
-      if (res.success) {
-        setActionMsg({
-          type: "success",
-          text: "Platform role permissions saved successfully.",
-        });
-        setInitialRolePermissionsMap(JSON.parse(JSON.stringify(rolePermissionsMap)));
-      } else {
-        setActionMsg({ type: "error", text: res.message || "Failed to save permissions" });
-      }
+      setInitialRolePermissionsMap(JSON.parse(JSON.stringify(rolePermissionsMap)));
     } catch (err: any) {
       setActionMsg({ type: "error", text: err.message || "Error saving permissions" });
     } finally {
@@ -175,25 +172,25 @@ export function AdminPermissionAssignmentView() {
   }, [filteredPermissions]);
 
   return (
-    <div className="space-y-5 max-w-7xl mx-auto">
-      {/* Simple Clean Header Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-1">
-        <div>
+    <div className="space-y-6 w-full">
+      {/* Header Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 bg-brand-primary/10 rounded-2xl text-brand-primary">
+            <Sliders className="h-6 w-6" />
+          </div>
           <h1 className="text-2xl font-black text-slate-900 dark:text-white">
             Permission Assignment
           </h1>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Select platform permissions for each custom Super Admin role.
-          </p>
         </div>
 
         <div className="flex items-center gap-3">
           <button
             onClick={loadData}
             disabled={loading || saving}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 transition"
+            className="flex items-center gap-2 h-11 px-5 rounded-xl text-sm font-bold bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition shadow-xs cursor-pointer"
           >
-            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             <span>Refresh</span>
           </button>
         </div>
@@ -202,7 +199,7 @@ export function AdminPermissionAssignmentView() {
       {/* Action Notification */}
       {actionMsg && (
         <div
-          className={`flex items-center justify-between p-4 rounded-xl text-xs font-medium transition-all ${
+          className={`flex items-center justify-between p-4 rounded-xl text-xs font-semibold transition-all ${
             actionMsg.type === "success"
               ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
               : "bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800"
@@ -216,31 +213,30 @@ export function AdminPermissionAssignmentView() {
             )}
             <span>{actionMsg.text}</span>
           </div>
-          <button onClick={() => setActionMsg(null)} className="text-slate-400 hover:text-slate-600">
+          <button onClick={() => setActionMsg(null)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
             <X className="h-4 w-4" />
           </button>
         </div>
       )}
 
-      {/* Controls Bar: Search & Category Filter */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 p-3 rounded-2xl border border-slate-200 dark:border-slate-800">
+      {/* Controls Bar: Search & Category Filter (Matches Image 4) */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
         <div className="relative flex-1 max-w-md">
-          <Search className="h-4 w-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+          <Search className="h-4 w-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder="Search platform permissions..."
+            placeholder="Search permissions..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:outline-none"
+            className="w-full h-11 pl-11 pr-4 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-primary transition"
           />
         </div>
 
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-medium text-slate-400">Category:</span>
+        <div className="flex items-center gap-3">
           <select
             value={selectedCategory}
             onChange={(e) => setSelectedCategory(e.target.value)}
-            className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold focus:outline-none cursor-pointer"
+            className="h-11 px-4 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-brand-primary cursor-pointer transition text-slate-800 dark:text-slate-200"
           >
             <option value="ALL">All Categories</option>
             {PLATFORM_CATEGORIES.map((cat) => (
@@ -252,7 +248,7 @@ export function AdminPermissionAssignmentView() {
         </div>
       </div>
 
-      {/* Clean Permission Matrix Table */}
+      {/* Clean Permission Matrix Table (Matches Image 4) */}
       {loading ? (
         <div className="py-20 flex flex-col items-center justify-center text-slate-400 gap-2">
           <Loader2 className="h-6 w-6 animate-spin text-brand-primary" />
@@ -260,41 +256,41 @@ export function AdminPermissionAssignmentView() {
         </div>
       ) : (
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-xs">
-          <div className="overflow-x-auto max-h-[70vh]">
-            <table className="w-full text-left text-xs border-collapse">
+          <div className="overflow-x-auto max-h-[72vh]">
+            <table className="w-full text-left text-sm border-collapse">
               {/* Sticky Table Header */}
               <thead className="sticky top-0 z-20 bg-slate-100 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">
                 <tr>
-                  <th className="p-4 font-bold text-slate-700 dark:text-slate-200 min-w-[260px] w-[300px]">
+                  <th className="p-4 px-6 font-black text-xs uppercase tracking-wider text-slate-700 dark:text-slate-200 min-w-[280px] w-[320px]">
                     Permissions
                   </th>
 
-                  {/* Role Column Headers (Large, Clear Font, NO Staff counts, NO Permission counts) */}
+                  {/* Role Column Headers */}
                   {roles.map((role) => (
                     <th
                       key={role.id}
-                      className="p-4 text-center min-w-[160px] border-l border-slate-200 dark:border-slate-700"
+                      className="p-4 text-center min-w-[170px] border-l border-slate-200 dark:border-slate-700"
                     >
-                      <div className="flex flex-col items-center space-y-2">
-                        <div className="text-lg font-bold text-slate-900 dark:text-white tracking-tight">
+                      <div className="flex flex-col items-center space-y-1.5">
+                        <div className="text-base font-black text-slate-900 dark:text-white tracking-tight">
                           {role.name}
                         </div>
 
                         {/* Select All / Clear All buttons per role */}
                         {canManage && (
-                          <div className="flex items-center gap-2 pt-1">
+                          <div className="flex items-center gap-2 pt-0.5">
                             <button
                               type="button"
                               onClick={() => handleSelectAllForRole(role.id)}
-                              className="text-[11px] font-bold text-brand-primary hover:underline"
+                              className="text-xs font-bold text-brand-primary hover:underline cursor-pointer"
                             >
                               Select All
                             </button>
-                            <span className="text-slate-300">|</span>
+                            <span className="text-slate-300 dark:text-slate-600">|</span>
                             <button
                               type="button"
                               onClick={() => handleClearAllForRole(role.id)}
-                              className="text-[11px] font-bold text-slate-400 hover:text-red-500"
+                              className="text-xs font-bold text-slate-400 hover:text-red-500 cursor-pointer"
                             >
                               Clear All
                             </button>
@@ -313,23 +309,23 @@ export function AdminPermissionAssignmentView() {
                   return (
                     <React.Fragment key={category}>
                       {/* Category Header Row */}
-                      <tr className="bg-slate-50 dark:bg-slate-800/50">
+                      <tr className="bg-slate-50/80 dark:bg-slate-800/60">
                         <td
                           colSpan={roles.length + 1}
-                          className="px-4 py-2 font-bold uppercase text-[11px] tracking-wider text-slate-500"
+                          className="px-6 py-2.5 font-black uppercase text-xs tracking-wider text-slate-500"
                         >
                           {category}
                         </td>
                       </tr>
 
-                      {/* Permissions Rows (Only Permission Names) */}
+                      {/* Permissions Rows */}
                       {categoryPerms.map((perm) => (
                         <tr
                           key={perm.id}
                           className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors"
                         >
                           {/* Permission Name Only */}
-                          <td className="px-4 py-3 font-semibold text-slate-800 dark:text-slate-200 text-xs">
+                          <td className="px-6 py-3.5 font-semibold text-slate-800 dark:text-slate-200 text-sm">
                             {perm.name}
                           </td>
 
@@ -379,7 +375,7 @@ export function AdminPermissionAssignmentView() {
           <div className="flex items-center gap-3">
             <button
               onClick={handleReset}
-              className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
+              className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 transition cursor-pointer"
             >
               Reset
             </button>
@@ -387,7 +383,7 @@ export function AdminPermissionAssignmentView() {
             <button
               onClick={handleSaveMatrix}
               disabled={saving}
-              className="flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-bold bg-brand-primary hover:bg-brand-primary/90 text-white shadow-md transition"
+              className="flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-bold bg-brand-primary hover:bg-brand-primary-hover text-white shadow-md transition cursor-pointer"
             >
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               <span>{saving ? "Saving..." : "Save Changes"}</span>

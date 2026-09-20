@@ -1,3 +1,4 @@
+@import "sweetalert2/dist/sweetalert2.min.css";
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -33,19 +34,19 @@
 @layer utilities {
   /* Dynamic Primary Color Utilities */
   .text-brand-primary {
-    color: var(--primary-color) !important;
+    color: var(--primary-color);
   }
 
   .bg-brand-primary {
-    background-color: var(--primary-color) !important;
+    background-color: var(--primary-color);
   }
 
   .border-brand-primary {
-    border-color: var(--primary-color) !important;
+    border-color: var(--primary-color);
   }
 
   .hover-bg-brand-primary:hover {
-    background-color: rgba(var(--primary-rgb), 0.9) !important;
+    background-color: rgba(var(--primary-rgb), 0.9);
   }
 
   .brand-glow {
@@ -240,10 +241,9 @@
 }
 
 /* ─── Print Styles ─────────────────────────────────────────────────────────── */
-/* When printing, isolate the receipt portal completely from the main layout  */
 @media print {
   @page {
-    margin: 6mm 10mm;
+    margin: 8mm 10mm;
     size: auto;
   }
 
@@ -255,17 +255,19 @@
     line-height: 1.4 !important;
     width: 100% !important;
     height: auto !important;
+    min-height: 0 !important;
     margin: 0 !important;
     padding: 0 !important;
     overflow: visible !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
-  /* Completely eliminate the background page, header, sidebar, and table rows from print layout */
-  body > *:not(.print-portal) {
+  /* CASE 1: When printing a modal portal (e.g. thermal receipt in PosModule or SalesHistoryView) */
+  body:has(.print-portal) > *:not(.print-portal) {
     display: none !important;
   }
 
-  /* Position the print portal directly at the top of the page with zero offset */
   .print-portal {
     display: block !important;
     position: static !important;
@@ -306,21 +308,59 @@
     opacity: 1 !important;
   }
 
-  /* Fallback in case document is printed directly */
-  .printable-document,
-  .printable-document *,
-  .print-invoice-card,
-  .print-invoice-card * {
-    visibility: visible !important;
-  }
-
-  /* Explicitly hide buttons and control bar elements inside printable container */
+  /* CASE 2: When printing in-page reports (ReportsModule, TransactionHistoryView, etc.) */
+  header,
+  aside,
+  nav,
   .print\:hidden,
   .print\:hidden *,
   button,
   .no-print {
     display: none !important;
     visibility: hidden !important;
+  }
+
+  /* Ensure all layout wrappers expand and do not clip */
+  main,
+  div {
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
+  }
+
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    display: block !important;
+  }
+
+  /* Printable document styling */
+  .printable-document {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+    border: none !important;
+    overflow: visible !important;
+    visibility: visible !important;
+  }
+
+  .printable-document * {
+    visibility: visible !important;
+  }
+
+  .printable-document img,
+  .printable-document svg {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
   }
 
   table {

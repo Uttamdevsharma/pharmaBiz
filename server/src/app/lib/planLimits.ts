@@ -164,7 +164,8 @@ export async function checkCanAddBranch(tenantId: string): Promise<{
   const activeSub = tenant.subscriptions && tenant.subscriptions[0];
   const tier = (activeSub?.plan?.tier || tenant.tier || "TRIAL") as PricingTierType;
   const planConfig = getPlanConfig(tier);
-  const maxBranches = activeSub?.plan?.maxBranches || planConfig.maxBranches;
+  const planName = activeSub?.plan?.name || planConfig.name;
+  const maxBranches = activeSub?.plan?.maxBranches ?? planConfig.maxBranches;
   const currentBranches = tenant.branches ? tenant.branches.length : 0;
 
   if (currentBranches >= maxBranches) {
@@ -172,7 +173,7 @@ export async function checkCanAddBranch(tenantId: string): Promise<{
       allowed: false,
       currentBranches,
       maxBranches,
-      message: `Branch limit reached (${currentBranches}/${maxBranches}). Your ${planConfig.name} allows at most ${maxBranches >= 999 ? "Unlimited" : maxBranches} branch(es). Please upgrade your subscription to add more branches.`,
+      message: `Branch limit reached (${currentBranches}/${maxBranches}). Your ${planName} allows at most ${maxBranches >= 999 ? "Unlimited" : maxBranches} branch(es). Please upgrade your subscription to add more branches.`,
     };
   }
 
@@ -211,33 +212,43 @@ export async function checkCanAddStaff(
   const activeSub = tenant.subscriptions && tenant.subscriptions[0];
   const tier = (activeSub?.plan?.tier || tenant.tier || "TRIAL") as PricingTierType;
   const planConfig = getPlanConfig(tier);
+  const planName = activeSub?.plan?.name || planConfig.name;
+  const planFeatures = (typeof activeSub?.plan?.features === "object" && activeSub?.plan?.features !== null)
+    ? activeSub.plan.features
+    : {};
 
-  // Exclude owner from staff count limit check (or check non-owner staff)
+  // Dynamic limits from database plan features or defaults
+  const maxStaffPerBranch = Number(
+    planFeatures.maxStaffPerBranch ?? (activeSub?.plan as any)?.maxStaffPerBranch ?? planConfig.maxStaffPerBranch ?? 1
+  );
+
+  const maxTotalStaff = Number(
+    planFeatures.maxTotalStaff ?? (activeSub?.plan as any)?.maxTotalStaff ?? planConfig.maxTotalStaff ?? (tier === "TRIAL" ? 1 : 999)
+  );
+
+  // Exclude owner from staff count limit check
   const nonOwnerUsers = (tenant.users || []).filter((u: any) => u.role !== "COMPANY_OWNER");
   const totalStaffCount = nonOwnerUsers.length;
 
-  // 1. For TRIAL: Total 1 staff allowed
-  if (tier === "TRIAL") {
-    if (totalStaffCount >= 1) {
-      return {
-        allowed: false,
-        currentStaff: totalStaffCount,
-        maxStaff: 1,
-        message: `Staff limit reached (1/1 staff on ${planConfig.name}). Plan 0 - Free Trial allows a maximum of 1 staff member. Please upgrade to a paid plan to add more staff.`,
-      };
-    }
-    return { allowed: true, currentStaff: totalStaffCount, maxStaff: 1 };
+  // 1. Overall tenant staff limit check
+  if (maxTotalStaff < 999 && totalStaffCount >= maxTotalStaff) {
+    return {
+      allowed: false,
+      currentStaff: totalStaffCount,
+      maxStaff: maxTotalStaff,
+      message: `Staff limit reached (${totalStaffCount}/${maxTotalStaff} on ${planName}). Please upgrade your plan or adjust limits to add more staff members.`,
+    };
   }
 
-  // 2. For paid plans: Check per-branch limit if branchId is provided
-  if (branchId && planConfig.maxStaffPerBranch < 999) {
+  // 2. Per-branch staff limit check (if branchId is provided)
+  if (branchId && maxStaffPerBranch < 999) {
     const branchStaff = nonOwnerUsers.filter((u: any) => u.branchId === branchId);
-    if (branchStaff.length >= planConfig.maxStaffPerBranch) {
+    if (branchStaff.length >= maxStaffPerBranch) {
       return {
         allowed: false,
         currentStaff: branchStaff.length,
-        maxStaff: planConfig.maxStaffPerBranch,
-        message: `Branch staff limit reached (${branchStaff.length}/${planConfig.maxStaffPerBranch} for this branch on ${planConfig.name}). Please upgrade your plan to assign more staff to this branch.`,
+        maxStaff: maxStaffPerBranch,
+        message: `Branch staff limit reached (${branchStaff.length}/${maxStaffPerBranch} staff for this branch on ${planName}). Please upgrade your plan or adjust branch staff limits.`,
       };
     }
   }
@@ -245,6 +256,6 @@ export async function checkCanAddStaff(
   return {
     allowed: true,
     currentStaff: totalStaffCount,
-    maxStaff: planConfig.maxTotalStaff || 999,
+    maxStaff: maxTotalStaff,
   };
 }

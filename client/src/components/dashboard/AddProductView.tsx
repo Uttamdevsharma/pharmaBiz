@@ -3,10 +3,10 @@
 import React, { useState, useEffect } from "react";
 import { fetchApi } from "@/lib/api";
 import { Product, Category } from "@/types";
+import { showAlert } from "@/lib/swal";
 import {
   Package,
   ArrowLeft,
-  Barcode,
   Save,
   CheckCircle2,
   AlertCircle,
@@ -345,14 +345,18 @@ export function AddProductView({
       }
 
       setSuccess(true);
-      if (onClearEditing) onClearEditing();
+      await showAlert.success(
+        isEditing ? "Product Updated!" : "Product Created Successfully!",
+        `Product "${formData.name}" has been saved to your inventory.`,
+        { timer: 2000 }
+      );
 
-      // Auto redirect to Product List after 1.2s
-      setTimeout(() => {
-        onNavigate("inv_product_list");
-      }, 1200);
+      if (onClearEditing) onClearEditing();
+      onNavigate("inv_product_list");
     } catch (err: any) {
-      setError(err.message || "An error occurred while saving");
+      const msg = err.message || "An error occurred while saving";
+      setError(msg);
+      showAlert.error("Save Failed", msg);
     } finally {
       setSaving(false);
     }
@@ -386,31 +390,28 @@ export function AddProductView({
   };
 
   return (
-    <div className="space-y-6 max-w-5xl">
+    <div className="space-y-6 w-full">
       {/* Top Header & Breadcrumb */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
         <div>
-          <div className="flex items-center gap-2 text-xs text-slate-400 mb-1">
+          <div className="flex items-center gap-2 text-xs font-bold text-slate-400 mb-1">
             <span>Inventory</span>
             <span>/</span>
-            <span className="text-brand-primary font-bold">
+            <span className="text-brand-primary">
               {isEditing ? "Edit Product" : "Add Product"}
             </span>
           </div>
-          <h2 className="text-xl font-black text-slate-900 dark:text-white flex items-center gap-2">
-            <Package className="h-6 w-6 text-brand-primary" />
+          <h2 className="text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2.5">
+            <Package className="h-7 w-7 text-brand-primary" />
             {isEditing ? `Edit Product: ${editingProduct?.name}` : "Create New Catalog Product"}
           </h2>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Configure pharmaceutical specifications, Main Category classification, optional subcategory, and pricing.
-          </p>
         </div>
 
         <div className="flex items-center gap-3">
           <button
             type="button"
             onClick={() => onNavigate("inv_product_list")}
-            className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition flex items-center gap-1.5"
+            className="h-11 px-5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-xl text-sm font-bold transition flex items-center gap-2"
           >
             <ArrowLeft className="h-4 w-4" />
             Back to Product List
@@ -452,17 +453,17 @@ export function AddProductView({
       )}
 
       {/* Main Full-Page Form */}
-      <form onSubmit={handleSave} className="space-y-6">
+      <form onSubmit={handleSave} className="space-y-6 w-full">
         {/* Section 1: Basic Formulation */}
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-          <div className="font-black text-sm text-slate-900 dark:text-white flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
-            <Package className="h-4 w-4 text-brand-primary" />
+        <div className="bg-white dark:bg-slate-900 p-6 lg:p-7 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-5">
+          <div className="font-black text-base text-slate-900 dark:text-white flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
+            <Package className="h-5 w-5 text-brand-primary" />
             1. Product Formulation & Brand Identity
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+              <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-2">
                 Product Brand Name *
               </label>
               <input
@@ -471,12 +472,12 @@ export function AddProductView({
                 placeholder="e.g. Napa Extra, Seclo 20, Ciprocin, ORS"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-brand-primary/20 font-bold"
+                className="w-full h-12 px-4 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-base font-bold text-slate-900 dark:text-white outline-none focus:border-brand-primary"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+              <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-2">
                 Generic Name (Active Ingredient)
               </label>
               <input
@@ -484,14 +485,12 @@ export function AddProductView({
                 placeholder="e.g. Paracetamol + Caffeine, Omeprazole Magnesium"
                 value={formData.genericName}
                 onChange={(e) => setFormData({ ...formData, genericName: e.target.value })}
-                className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-brand-primary/20"
+                className="w-full h-12 px-4 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-base font-bold text-slate-900 dark:text-white outline-none focus:border-brand-primary"
               />
             </div>
-          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+              <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-2">
                 Strength / Size (e.g. 500mg, 20mg, 100ml, 500ml)
               </label>
               <input
@@ -499,57 +498,29 @@ export function AddProductView({
                 placeholder="e.g. 500mg + 65mg, 100ml, Standard"
                 value={formData.size}
                 onChange={(e) => setFormData({ ...formData, size: e.target.value })}
-                className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-brand-primary/20"
+                className="w-full h-12 px-4 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-base font-bold text-slate-900 dark:text-white outline-none focus:border-brand-primary"
               />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
-                <span>Barcode (EAN-13 / UPC / Custom)</span>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setFormData({
-                      ...formData,
-                      barcode: `${Math.floor(100000000000 + Math.random() * 900000000000)}`,
-                    })
-                  }
-                  className="text-[11px] text-brand-primary hover:underline font-bold"
-                >
-                  Generate Barcode
-                </button>
-              </label>
-              <div className="relative">
-                <Barcode className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Scan or enter barcode number"
-                  value={formData.barcode}
-                  onChange={(e) => setFormData({ ...formData, barcode: e.target.value })}
-                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-brand-primary/20 font-bold"
-                />
-              </div>
             </div>
           </div>
         </div>
 
         {/* Section 2: Main Category & Subcategory */}
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-          <div className="font-black text-sm text-slate-900 dark:text-white flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
-            <Layers className="h-4 w-4 text-brand-primary" />
+        <div className="bg-white dark:bg-slate-900 p-6 lg:p-7 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-5">
+          <div className="font-black text-base text-slate-900 dark:text-white flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
+            <Layers className="h-5 w-5 text-brand-primary" />
             2. Main Category & Subcategory
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+              <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-2">
                 Main Category *
               </label>
               <select
                 required
                 value={formData.categoryId}
                 onChange={(e) => handleCategoryChange(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-brand-primary/20 font-bold"
+                className="w-full h-12 px-4 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-base font-bold text-slate-900 dark:text-white outline-none focus:border-brand-primary"
               >
                 <option value="">-- Choose Main Category --</option>
                 {categories.map((c) => (
@@ -561,23 +532,23 @@ export function AddProductView({
             </div>
 
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-sm font-bold text-slate-800 dark:text-slate-200">
                   Subcategory (Optional)
                 </label>
                 <button
                   type="button"
                   onClick={() => setQuickSubModalOpen(true)}
-                  className="text-[11px] text-brand-primary hover:underline font-bold flex items-center gap-0.5"
+                  className="text-xs text-brand-primary hover:underline font-bold flex items-center gap-1"
                 >
-                  <Plus className="h-3 w-3" />
+                  <Plus className="h-3.5 w-3.5" />
                   New
                 </button>
               </div>
               <select
                 value={formData.subcategoryId}
                 onChange={(e) => setFormData({ ...formData, subcategoryId: e.target.value })}
-                className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-brand-primary/20 font-bold"
+                className="w-full h-12 px-4 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-base font-bold text-slate-900 dark:text-white outline-none focus:border-brand-primary"
               >
                 <option value="">-- None / General --</option>
                 {availableSubcategories.map((sub) => (
@@ -591,15 +562,15 @@ export function AddProductView({
         </div>
 
         {/* Section 3: Packaging & Dispensing Units */}
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-5">
-          <div className="font-black text-sm text-slate-900 dark:text-white flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+        <div className="bg-white dark:bg-slate-900 p-6 lg:p-7 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-5">
+          <div className="font-black text-base text-slate-900 dark:text-white flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
             <span className="flex items-center gap-2">
-              <Package className="h-4 w-4 text-brand-primary" />
+              <Package className="h-5 w-5 text-brand-primary" />
               3. Packaging & Dispensing Units
             </span>
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-bold px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1.5">
-                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+              <span className="text-xs font-bold px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1.5">
+                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
                 {packagingType === "TABLET"
                   ? `Full Box • ${formData.stripsPerBox || 10} Strips per Box • ${formData.tabletsPerStrip || 10} Tablets per Strip`
                   : packagingType === "BOTTLE"
@@ -611,7 +582,7 @@ export function AddProductView({
               <button
                 type="button"
                 onClick={() => setIsPackagingEditing(!isPackagingEditing)}
-                className={`text-xs font-bold px-3.5 py-1.5 rounded-xl transition flex items-center gap-1.5 border shadow-xs ${
+                className={`text-xs font-bold px-4 py-2 rounded-xl transition flex items-center gap-1.5 border shadow-xs ${
                   isPackagingEditing
                     ? "bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800"
                     : "bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 dark:border-slate-700"
@@ -635,37 +606,31 @@ export function AddProductView({
           {/* Packaging Form Type Selector */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                <span>Select Packaging Model / Form *</span>
-                <span className="text-[10px] text-slate-400 font-normal">
-                  (Auto-selected from Category, or click to switch)
-                </span>
+              <label className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                Select Packaging Model / Form *
               </label>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {/* Option 1: Strip & Tablet */}
               <button
                 type="button"
                 disabled={!isPackagingEditing}
                 onClick={() => handleSelectPackagingType("TABLET")}
-                className={`p-3 rounded-xl border text-left transition flex flex-col gap-1.5 disabled:opacity-80 ${
+                className={`p-3.5 rounded-xl border-2 text-left transition flex flex-col gap-1 disabled:opacity-80 ${
                   packagingType === "TABLET"
-                    ? "bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-500 text-emerald-950 dark:text-emerald-200 shadow-xs ring-1 ring-emerald-500"
+                    ? "bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-500 text-emerald-950 dark:text-emerald-200 shadow-xs"
                     : "bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600"
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 font-black text-xs">
+                  <div className="flex items-center gap-2 font-black text-sm">
                     <Pill className="h-4 w-4 text-emerald-600" />
                     <span>Strip & Tablet</span>
                   </div>
                   {packagingType === "TABLET" && (
-                    <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                    <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
                   )}
                 </div>
-                <p className="text-[10px] text-slate-500 dark:text-slate-400">
-                  Box → Strip → Tablet / Capsule
-                </p>
               </button>
 
               {/* Option 2: Bottle / Liquid */}
@@ -673,24 +638,21 @@ export function AddProductView({
                 type="button"
                 disabled={!isPackagingEditing}
                 onClick={() => handleSelectPackagingType("BOTTLE")}
-                className={`p-3 rounded-xl border text-left transition flex flex-col gap-1.5 disabled:opacity-80 ${
+                className={`p-3.5 rounded-xl border-2 text-left transition flex flex-col gap-1 disabled:opacity-80 ${
                   packagingType === "BOTTLE"
-                    ? "bg-blue-50/70 dark:bg-blue-950/30 border-blue-500 text-blue-950 dark:text-blue-200 shadow-xs ring-1 ring-blue-500"
+                    ? "bg-blue-50/70 dark:bg-blue-950/30 border-blue-500 text-blue-950 dark:text-blue-200 shadow-xs"
                     : "bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600"
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 font-black text-xs">
+                  <div className="flex items-center gap-2 font-black text-sm">
                     <Droplets className="h-4 w-4 text-blue-600" />
                     <span>Bottle / Liquid</span>
                   </div>
                   {packagingType === "BOTTLE" && (
-                    <span className="h-2 w-2 rounded-full bg-blue-500" />
+                    <span className="h-2.5 w-2.5 rounded-full bg-blue-500" />
                   )}
                 </div>
-                <p className="text-[10px] text-slate-500 dark:text-slate-400">
-                  Syrup, Suspension, Drops, Tonic
-                </p>
               </button>
 
               {/* Option 3: Piece / Equipment */}
@@ -698,24 +660,21 @@ export function AddProductView({
                 type="button"
                 disabled={!isPackagingEditing}
                 onClick={() => handleSelectPackagingType("PIECE")}
-                className={`p-3 rounded-xl border text-left transition flex flex-col gap-1.5 disabled:opacity-80 ${
+                className={`p-3.5 rounded-xl border-2 text-left transition flex flex-col gap-1 disabled:opacity-80 ${
                   packagingType === "PIECE"
-                    ? "bg-purple-50/70 dark:bg-purple-950/30 border-purple-500 text-purple-950 dark:text-purple-200 shadow-xs ring-1 ring-purple-500"
+                    ? "bg-purple-50/70 dark:bg-purple-950/30 border-purple-500 text-purple-950 dark:text-purple-200 shadow-xs"
                     : "bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600"
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 font-black text-xs">
+                  <div className="flex items-center gap-2 font-black text-sm">
                     <Package className="h-4 w-4 text-purple-600" />
                     <span>Piece / Unit</span>
                   </div>
                   {packagingType === "PIECE" && (
-                    <span className="h-2 w-2 rounded-full bg-purple-500" />
+                    <span className="h-2.5 w-2.5 rounded-full bg-purple-500" />
                   )}
                 </div>
-                <p className="text-[10px] text-slate-500 dark:text-slate-400">
-                  Syringe, Diaper, Bandage, Device
-                </p>
               </button>
 
               {/* Option 4: Vial / Injection */}
@@ -723,46 +682,42 @@ export function AddProductView({
                 type="button"
                 disabled={!isPackagingEditing}
                 onClick={() => handleSelectPackagingType("VIAL")}
-                className={`p-3 rounded-xl border text-left transition flex flex-col gap-1.5 disabled:opacity-80 ${
+                className={`p-3.5 rounded-xl border-2 text-left transition flex flex-col gap-1 disabled:opacity-80 ${
                   packagingType === "VIAL"
-                    ? "bg-amber-50/70 dark:bg-amber-950/30 border-amber-500 text-amber-950 dark:text-amber-200 shadow-xs ring-1 ring-amber-500"
+                    ? "bg-amber-50/70 dark:bg-amber-950/30 border-amber-500 text-amber-950 dark:text-amber-200 shadow-xs"
                     : "bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600"
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 font-black text-xs">
+                  <div className="flex items-center gap-2 font-black text-sm">
                     <Syringe className="h-4 w-4 text-amber-600" />
                     <span>Injection / Vial</span>
                   </div>
                   {packagingType === "VIAL" && (
-                    <span className="h-2 w-2 rounded-full bg-amber-500" />
+                    <span className="h-2.5 w-2.5 rounded-full bg-amber-500" />
                   )}
                 </div>
-                <p className="text-[10px] text-slate-500 dark:text-slate-400">
-                  Ampoule, Vial, IV Fluid, Saline
-                </p>
               </button>
             </div>
           </div>
 
           {/* Dynamic Unit Inputs by Packaging Type */}
           {packagingType === "TABLET" && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2 border-t border-slate-100 dark:border-slate-800">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-3 border-t border-slate-100 dark:border-slate-800">
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
                   Default Sales Unit
                 </label>
-                <div className="w-full px-3.5 py-2.5 bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-200 font-bold flex items-center justify-between">
+                <div className="w-full h-12 px-4 bg-slate-100 dark:bg-slate-800/50 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-base text-slate-800 dark:text-slate-200 font-bold flex items-center justify-between">
                   <span>Full Box</span>
-                  <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-bold px-2 py-0.5 bg-emerald-100 dark:bg-emerald-950/50 rounded-full">
+                  <span className="text-xs text-emerald-700 dark:text-emerald-400 font-bold px-2.5 py-0.5 bg-emerald-100 dark:bg-emerald-950/50 rounded-full">
                     Box / Strip / Tablet
                   </span>
                 </div>
-                <p className="text-[10px] text-slate-400 mt-1">POS can dispense by Full Box, Strip, or single Tablet</p>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
                   Strips per Box *
                 </label>
                 <input
@@ -774,13 +729,12 @@ export function AddProductView({
                   onChange={(e) =>
                     setFormData({ ...formData, stripsPerBox: parseInt(e.target.value) || 1 })
                   }
-                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-brand-primary/20 disabled:opacity-75 disabled:bg-slate-100 dark:disabled:bg-slate-800/40"
+                  className="w-full h-12 px-4 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-base font-bold text-slate-900 dark:text-white outline-none focus:border-brand-primary disabled:opacity-75 disabled:bg-slate-100 dark:disabled:bg-slate-800/40"
                 />
-                <p className="text-[10px] text-slate-400 mt-1">Number of strips in 1 box</p>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
                   Tablets / Capsules per Strip *
                 </label>
                 <input
@@ -792,30 +746,28 @@ export function AddProductView({
                   onChange={(e) =>
                     setFormData({ ...formData, tabletsPerStrip: parseInt(e.target.value) || 1 })
                   }
-                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-brand-primary/20 disabled:opacity-75 disabled:bg-slate-100 dark:disabled:bg-slate-800/40"
+                  className="w-full h-12 px-4 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-base font-bold text-slate-900 dark:text-white outline-none focus:border-brand-primary disabled:opacity-75 disabled:bg-slate-100 dark:disabled:bg-slate-800/40"
                 />
-                <p className="text-[10px] text-slate-400 mt-1">Number of tablets/capsules in 1 strip</p>
               </div>
             </div>
           )}
 
           {packagingType === "BOTTLE" && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2 border-t border-slate-100 dark:border-slate-800">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-3 border-t border-slate-100 dark:border-slate-800">
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
                   Default Sales Unit
                 </label>
-                <div className="w-full px-3.5 py-2.5 bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-200 font-bold flex items-center justify-between">
+                <div className="w-full h-12 px-4 bg-slate-100 dark:bg-slate-800/50 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-base text-slate-800 dark:text-slate-200 font-bold flex items-center justify-between">
                   <span>Single Bottle</span>
-                  <span className="text-[10px] text-blue-700 dark:text-blue-400 font-bold px-2 py-0.5 bg-blue-100 dark:bg-blue-950/50 rounded-full">
+                  <span className="text-xs text-blue-700 dark:text-blue-400 font-bold px-2.5 py-0.5 bg-blue-100 dark:bg-blue-950/50 rounded-full">
                     Bottle
                   </span>
                 </div>
-                <p className="text-[10px] text-slate-400 mt-1">Counter POS dispenses per individual bottle</p>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
                   Bottles per Carton
                 </label>
                 <input
@@ -825,13 +777,12 @@ export function AddProductView({
                   disabled={!isPackagingEditing}
                   value={itemsPerBox}
                   onChange={(e) => setItemsPerBox(parseInt(e.target.value) || 1)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-brand-primary/20 disabled:opacity-75 disabled:bg-slate-100 dark:disabled:bg-slate-800/40"
+                  className="w-full h-12 px-4 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-base font-bold text-slate-900 dark:text-white outline-none focus:border-brand-primary disabled:opacity-75 disabled:bg-slate-100 dark:disabled:bg-slate-800/40"
                 />
-                <p className="text-[10px] text-slate-400 mt-1">Number of bottles packed per master carton/box</p>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
                   Volume / Net Content
                 </label>
                 <input
@@ -840,30 +791,28 @@ export function AddProductView({
                   placeholder="e.g. 100ml, 200ml, 60ml"
                   value={formData.size || ""}
                   onChange={(e) => setFormData({ ...formData, size: e.target.value })}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-brand-primary/20 disabled:opacity-75 disabled:bg-slate-100 dark:disabled:bg-slate-800/40"
+                  className="w-full h-12 px-4 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-base font-bold text-slate-900 dark:text-white outline-none focus:border-brand-primary disabled:opacity-75 disabled:bg-slate-100 dark:disabled:bg-slate-800/40"
                 />
-                <p className="text-[10px] text-slate-400 mt-1">Bottle liquid capacity specification</p>
               </div>
             </div>
           )}
 
           {packagingType === "PIECE" && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2 border-t border-slate-100 dark:border-slate-800">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-3 border-t border-slate-100 dark:border-slate-800">
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
                   Default Sales Unit
                 </label>
-                <div className="w-full px-3.5 py-2.5 bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-200 font-bold flex items-center justify-between">
+                <div className="w-full h-12 px-4 bg-slate-100 dark:bg-slate-800/50 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-base text-slate-800 dark:text-slate-200 font-bold flex items-center justify-between">
                   <span>Single Piece / Item</span>
-                  <span className="text-[10px] text-purple-700 dark:text-purple-400 font-bold px-2 py-0.5 bg-purple-100 dark:bg-purple-950/50 rounded-full">
+                  <span className="text-xs text-purple-700 dark:text-purple-400 font-bold px-2.5 py-0.5 bg-purple-100 dark:bg-purple-950/50 rounded-full">
                     Piece (Pcs)
                   </span>
                 </div>
-                <p className="text-[10px] text-slate-400 mt-1">Counter POS dispenses individual item or pack</p>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
                   Pieces per Box / Pack
                 </label>
                 <input
@@ -873,13 +822,12 @@ export function AddProductView({
                   disabled={!isPackagingEditing}
                   value={itemsPerBox}
                   onChange={(e) => setItemsPerBox(parseInt(e.target.value) || 1)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-brand-primary/20 disabled:opacity-75 disabled:bg-slate-100 dark:disabled:bg-slate-800/40"
+                  className="w-full h-12 px-4 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-base font-bold text-slate-900 dark:text-white outline-none focus:border-brand-primary disabled:opacity-75 disabled:bg-slate-100 dark:disabled:bg-slate-800/40"
                 />
-                <p className="text-[10px] text-slate-400 mt-1">e.g. 100 per box for syringes, 1 for single item</p>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
                   Item Specification / Size
                 </label>
                 <input
@@ -888,30 +836,28 @@ export function AddProductView({
                   placeholder="e.g. 5ml, Large, Standard, 10cm"
                   value={formData.size || ""}
                   onChange={(e) => setFormData({ ...formData, size: e.target.value })}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-brand-primary/20 disabled:opacity-75 disabled:bg-slate-100 dark:disabled:bg-slate-800/40"
+                  className="w-full h-12 px-4 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-base font-bold text-slate-900 dark:text-white outline-none focus:border-brand-primary disabled:opacity-75 disabled:bg-slate-100 dark:disabled:bg-slate-800/40"
                 />
-                <p className="text-[10px] text-slate-400 mt-1">Size or dimension spec</p>
               </div>
             </div>
           )}
 
           {packagingType === "VIAL" && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2 border-t border-slate-100 dark:border-slate-800">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-3 border-t border-slate-100 dark:border-slate-800">
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
                   Default Sales Unit
                 </label>
-                <div className="w-full px-3.5 py-2.5 bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-200 font-bold flex items-center justify-between">
+                <div className="w-full h-12 px-4 bg-slate-100 dark:bg-slate-800/50 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-base text-slate-800 dark:text-slate-200 font-bold flex items-center justify-between">
                   <span>Single Vial / Ampoule</span>
-                  <span className="text-[10px] text-amber-700 dark:text-amber-400 font-bold px-2 py-0.5 bg-amber-100 dark:bg-amber-950/50 rounded-full">
+                  <span className="text-xs text-amber-700 dark:text-amber-400 font-bold px-2.5 py-0.5 bg-amber-100 dark:bg-amber-950/50 rounded-full">
                     Vial / Ampoule
                   </span>
                 </div>
-                <p className="text-[10px] text-slate-400 mt-1">POS can dispense single vial/ampoule or full box</p>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
                   Vials / Ampoules per Box *
                 </label>
                 <input
@@ -921,13 +867,12 @@ export function AddProductView({
                   disabled={!isPackagingEditing}
                   value={itemsPerBox}
                   onChange={(e) => setItemsPerBox(parseInt(e.target.value) || 1)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-brand-primary/20 disabled:opacity-75 disabled:bg-slate-100 dark:disabled:bg-slate-800/40"
+                  className="w-full h-12 px-4 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-base font-bold text-slate-900 dark:text-white outline-none focus:border-brand-primary disabled:opacity-75 disabled:bg-slate-100 dark:disabled:bg-slate-800/40"
                 />
-                <p className="text-[10px] text-slate-400 mt-1">Number of injectables in 1 commercial box</p>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
                   Strength / Dosage
                 </label>
                 <input
@@ -936,15 +881,14 @@ export function AddProductView({
                   placeholder="e.g. 1g, 500mg/2ml, 40IU"
                   value={formData.size || ""}
                   onChange={(e) => setFormData({ ...formData, size: e.target.value })}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-brand-primary/20 disabled:opacity-75 disabled:bg-slate-100 dark:disabled:bg-slate-800/40"
+                  className="w-full h-12 px-4 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-base font-bold text-slate-900 dark:text-white outline-none focus:border-brand-primary disabled:opacity-75 disabled:bg-slate-100 dark:disabled:bg-slate-800/40"
                 />
-                <p className="text-[10px] text-slate-400 mt-1">Dose or active strength</p>
               </div>
             </div>
           )}
 
           {/* Multiplier Info Banner */}
-          <div className="p-3.5 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-600 dark:text-slate-400">
+          <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-slate-700 dark:text-slate-300">
             💡 <strong>Automatic Multiplier:</strong>{" "}
             {packagingType === "TABLET" && (
               <>
@@ -980,18 +924,13 @@ export function AddProductView({
         </div>
 
         {/* Section 4: Doctor Prescription (Rx) */}
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+        <div className="bg-white dark:bg-slate-900 p-6 lg:p-7 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
           <label className="p-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl flex items-center justify-between cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition">
-            <div>
-              <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <span className="px-2 py-0.5 bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 rounded font-black text-[10px]">
-                  Rx
-                </span>
-                Requires Doctor Prescription (Rx)
-              </div>
-              <div className="text-[11px] text-slate-400 mt-0.5">
-                When enabled, Counter POS will strictly require prescription confirmation/reference before completing any sale containing this item.
-              </div>
+            <div className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2.5">
+              <span className="px-2 py-0.5 bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 rounded font-black text-xs">
+                Rx
+              </span>
+              Requires Doctor Prescription (Rx)
             </div>
             <input
               type="checkbox"
@@ -1007,23 +946,23 @@ export function AddProductView({
           <button
             type="button"
             onClick={() => onNavigate("inv_product_list")}
-            className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition"
+            className="h-12 px-6 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl text-sm font-black transition"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={saving}
-            className="px-6 py-2.5 bg-brand-primary hover:bg-brand-primary-hover text-white rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-sm disabled:opacity-50"
+            className="h-12 px-7 bg-brand-primary hover:bg-brand-primary-hover text-white rounded-xl text-sm font-black transition flex items-center gap-2 shadow-sm disabled:opacity-50"
           >
             {saving ? (
               <>
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2 className="h-5 w-5 animate-spin" />
                 Saving Product...
               </>
             ) : (
               <>
-                <Save className="h-4 w-4" />
+                <Save className="h-5 w-5" />
                 {isEditing ? "Update Product" : "Save Product"}
               </>
             )}
@@ -1034,25 +973,25 @@ export function AddProductView({
       {/* Quick Add Subcategory Modal */}
       {quickSubModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full p-6 border border-slate-200 dark:border-slate-800 shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full p-6 border border-slate-200 dark:border-slate-800 shadow-2xl space-y-5 animate-in fade-in zoom-in-95">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <div className="flex items-center gap-2">
-                <FolderTree className="h-4 w-4 text-brand-primary" />
-                <h3 className="text-sm font-black text-slate-900 dark:text-white">
-                  Add Subcategory under {selectedCategoryObj?.name || "Selected Category"}
+                <FolderTree className="h-5 w-5 text-brand-primary" />
+                <h3 className="text-xl font-black text-slate-900 dark:text-white">
+                  Add Subcategory
                 </h3>
               </div>
               <button
                 onClick={() => setQuickSubModalOpen(false)}
-                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
+                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg"
               >
-                <X className="h-4 w-4" />
+                <X className="h-5 w-5" />
               </button>
             </div>
 
             <form onSubmit={handleQuickCreateSubcategory} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
                   Subcategory Name *
                 </label>
                 <input
@@ -1062,22 +1001,22 @@ export function AddProductView({
                   placeholder="e.g. Antibiotics, Antipyretics, Eye Drops"
                   value={quickSubName}
                   onChange={(e) => setQuickSubName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-brand-primary/20"
+                  className="w-full h-12 px-4 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-base font-bold text-slate-900 dark:text-white outline-none focus:border-brand-primary"
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
                 <button
                   type="button"
                   onClick={() => setQuickSubModalOpen(false)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition"
+                  className="h-11 px-5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl text-sm font-bold transition"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={quickSubSaving || !quickSubName.trim()}
-                  className="px-4 py-2 bg-brand-primary hover:bg-brand-primary-hover text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+                  className="h-11 px-6 bg-brand-primary hover:bg-brand-primary-hover text-white rounded-xl text-sm font-black transition flex items-center gap-2 shadow-sm disabled:opacity-50"
                 >
                   {quickSubSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                   Create & Select

@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo } from "react";
 import { fetchApi } from "@/lib/api";
+import { showAlert } from "@/lib/swal";
 import {
   Archive,
   Layers,
@@ -100,11 +101,13 @@ export function CreateRackView({ selectedBranchId, onNavigate }: CreateRackViewP
         throw new Error(res.message || "Failed to create rack structure");
       }
 
-      setSuccessMsg(
-        `Successfully created complete Rack structure "${rackName.trim()}" with ${totalShelves} Shelves and ${totalBins} Total Bins!`
-      );
+      const msg = `Successfully created complete Rack structure "${rackName.trim()}" with ${totalShelves} Shelves and ${totalBins} Total Bins!`;
+      setSuccessMsg(msg);
+      showAlert.success("Rack Created Successfully!", msg);
     } catch (err: any) {
-      setErrorMsg(err.message || "Failed to create rack structure");
+      const msg = err.message || "Failed to create rack structure";
+      setErrorMsg(msg);
+      showAlert.error("Rack Creation Failed", msg);
     } finally {
       setSubmitting(false);
     }
@@ -128,37 +131,34 @@ export function CreateRackView({ selectedBranchId, onNavigate }: CreateRackViewP
             <span>/</span>
             <span className="text-brand-primary font-bold">Create Rack</span>
           </div>
-          <h1 className="text-xl font-black text-slate-900 dark:text-white flex items-center gap-2">
-            <PlusCircle className="h-6 w-6 text-brand-primary" />
-            Quick Rack Structure Creator
+          <h1 className="text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2">
+            <PlusCircle className="h-7 w-7 text-brand-primary" />
+            Create Rack Structure
           </h1>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Quickly generate an entire physical Rack → Shelf → Bin hierarchy at once with clean location codes.
-          </p>
         </div>
 
         {onNavigate && (
           <button
             onClick={() => onNavigate("loc_rack_list")}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition shadow-xs"
+            className="inline-flex items-center gap-2 h-11 px-5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition shadow-xs"
           >
             <List className="h-4 w-4 text-slate-400" />
-            <span>View Rack List</span>
+            <span>Rack List</span>
           </button>
         )}
       </div>
 
       {/* Global Alerts */}
       {errorMsg && (
-        <div className="p-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-2xl text-rose-700 dark:text-rose-300 text-xs flex items-center gap-2.5 font-bold">
+        <div className="p-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-2xl text-rose-700 dark:text-rose-300 text-sm flex items-center gap-2.5 font-bold">
           <AlertCircle className="h-5 w-5 shrink-0 text-rose-600" />
           <span>{errorMsg}</span>
         </div>
       )}
 
       {successMsg && (
-        <div className="p-5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 rounded-2xl text-emerald-800 dark:text-emerald-200 text-xs space-y-2">
-          <div className="flex items-center gap-2 font-black text-sm">
+        <div className="p-5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 rounded-2xl text-emerald-800 dark:text-emerald-200 text-sm space-y-2 font-bold">
+          <div className="flex items-center gap-2 font-black text-base">
             <CheckCircle2 className="h-5 w-5 text-emerald-600" />
             <span>{successMsg}</span>
           </div>
@@ -166,14 +166,14 @@ export function CreateRackView({ selectedBranchId, onNavigate }: CreateRackViewP
             {onNavigate && (
               <button
                 onClick={() => onNavigate("loc_rack_list")}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition shadow-xs"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white h-10 px-4 rounded-xl text-xs font-bold transition shadow-xs"
               >
                 Go to Rack List
               </button>
             )}
             <button
               onClick={handleReset}
-              className="px-4 py-2 rounded-xl border border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-xs font-bold hover:bg-emerald-100/50 transition"
+              className="h-10 px-4 rounded-xl border border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-xs font-bold hover:bg-emerald-100/50 transition"
             >
               Create Another Rack
             </button>
@@ -185,15 +185,15 @@ export function CreateRackView({ selectedBranchId, onNavigate }: CreateRackViewP
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Form Left */}
         <div className="lg:col-span-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-xs space-y-5">
-          <h2 className="text-sm font-black text-slate-900 dark:text-white flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
-            <Archive className="h-4 w-4 text-brand-primary" />
-            Rack Structure Parameters
+          <h2 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
+            <Archive className="h-5 w-5 text-brand-primary" />
+            Rack Parameters
           </h2>
 
           <form onSubmit={handleQuickCreate} className="space-y-4">
             {/* Rack Name / Code */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+              <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">
                 Rack Name / Code *
               </label>
               <input
@@ -202,14 +202,13 @@ export function CreateRackView({ selectedBranchId, onNavigate }: CreateRackViewP
                 onChange={(e) => setRackName(e.target.value)}
                 placeholder="e.g. R01, Rack A, Dispensary 1"
                 required
-                className="w-full text-sm font-bold px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+                className="w-full h-12 text-base font-bold px-4 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
               />
-              <p className="text-[11px] text-slate-400 mt-1">Short codes like &quot;R01&quot; or &quot;R02&quot; work best.</p>
             </div>
 
             {/* Number of Shelves */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+              <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">
                 Number of Shelves (1 – 50) *
               </label>
               <input
@@ -219,14 +218,13 @@ export function CreateRackView({ selectedBranchId, onNavigate }: CreateRackViewP
                 value={numberOfShelves}
                 onChange={(e) => setNumberOfShelves(parseInt(e.target.value, 10) || 1)}
                 required
-                className="w-full text-sm font-bold px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+                className="w-full h-12 text-base font-bold px-4 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
               />
-              <p className="text-[11px] text-slate-400 mt-1">Generates S01, S02, S03... automatically.</p>
             </div>
 
             {/* Bins per Shelf */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+              <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">
                 Bins per Shelf (1 – 50) *
               </label>
               <input
@@ -236,13 +234,12 @@ export function CreateRackView({ selectedBranchId, onNavigate }: CreateRackViewP
                 value={binsPerShelf}
                 onChange={(e) => setBinsPerShelf(parseInt(e.target.value, 10) || 1)}
                 required
-                className="w-full text-sm font-bold px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+                className="w-full h-12 text-base font-bold px-4 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
               />
-              <p className="text-[11px] text-slate-400 mt-1">Generates B01, B02, B03... on every shelf.</p>
             </div>
 
             {/* Quick Summary Card */}
-            <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700 text-xs space-y-1.5">
+            <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700 text-sm space-y-2">
               <div className="flex justify-between text-slate-600 dark:text-slate-300">
                 <span>Rack:</span>
                 <span className="font-bold text-slate-900 dark:text-white">{rackName.trim() || "R01"}</span>
@@ -255,8 +252,8 @@ export function CreateRackView({ selectedBranchId, onNavigate }: CreateRackViewP
                 <span>Bins per Shelf:</span>
                 <span className="font-bold text-slate-900 dark:text-white">{totalBinsPerShelf} Bins</span>
               </div>
-              <div className="flex justify-between pt-1 border-t border-slate-200 dark:border-slate-700 text-brand-primary font-black">
-                <span>Total Locations Created:</span>
+              <div className="flex justify-between pt-2 border-t border-slate-200 dark:border-slate-700 text-brand-primary font-black">
+                <span>Total Locations:</span>
                 <span>{totalBins} Bins</span>
               </div>
             </div>
@@ -266,7 +263,7 @@ export function CreateRackView({ selectedBranchId, onNavigate }: CreateRackViewP
               <button
                 type="button"
                 onClick={handleReset}
-                className="px-5 py-3 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition"
+                className="h-12 px-5 rounded-xl border-2 border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition"
               >
                 Cancel
               </button>
@@ -274,7 +271,7 @@ export function CreateRackView({ selectedBranchId, onNavigate }: CreateRackViewP
               <button
                 type="submit"
                 disabled={submitting || !rackName.trim()}
-                className="flex-1 inline-flex items-center justify-center gap-2 bg-brand-primary hover:bg-brand-primary/90 text-white px-6 py-3 rounded-xl font-black text-xs shadow-xs transition disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 h-12 inline-flex items-center justify-center gap-2 bg-brand-primary hover:bg-brand-primary/90 text-white px-6 rounded-xl font-black text-sm shadow-sm transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {submitting ? (
                   <>

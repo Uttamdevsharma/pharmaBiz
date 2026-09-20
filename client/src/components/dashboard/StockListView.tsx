@@ -19,13 +19,15 @@ import {
   MapPin,
   Loader2,
   AlertTriangle,
-  Layers,
   ArrowRight,
   ArrowLeft,
   X,
   Barcode,
   Calendar,
   ChevronRight,
+  Package,
+  Sparkles,
+  Layers,
 } from "lucide-react";
 
 export interface BatchStockItem extends InventoryItem {
@@ -60,13 +62,12 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
   // Selected Batch for POS-style instant detail view
   const [selectedBatch, setSelectedBatch] = useState<BatchStockItem | null>(null);
 
-
   // Load branch inventory batches
   const loadBranchStock = async () => {
     try {
       setLoading(true);
       const params = new URLSearchParams();
-      params.append("limit", "500");
+      params.append("limit", "1000");
 
       const targetPath =
         effectiveBranchId && effectiveBranchId !== "all"
@@ -102,12 +103,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Autofocus search on mount
-  useEffect(() => {
-    searchInputRef.current?.focus();
-  }, []);
-
-  // Format and sort all batches by FEFO (Earliest Expiry Date First - like POS!)
+  // Format and sort all batches by FEFO (Earliest Expiry Date First)
   const sortedBatches: BatchStockItem[] = useMemo(() => {
     const now = new Date();
 
@@ -148,7 +144,6 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
       };
     });
 
-    // Sort: Earliest expiry date first
     return mapped.sort((a, b) => {
       if (!a.expiryDate) return 1;
       if (!b.expiryDate) return -1;
@@ -169,19 +164,20 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
     if (!search.trim()) return sortedBatches.slice(0, 20);
     const q = search.toLowerCase().trim();
 
-    return sortedBatches.filter((item) => {
-      const matchName = (item.productName || "").toLowerCase().includes(q);
-      const matchGen = (item.genericName || "").toLowerCase().includes(q);
-      const matchBarcode = (item.barcode || "").toLowerCase().includes(q);
-      const matchSku = (item.sku || "").toLowerCase().includes(q);
-      const matchBatch = (item.batchNumber || "").toLowerCase().includes(q);
-      return matchName || matchGen || matchBarcode || matchSku || matchBatch;
-    }).slice(0, 30);
+    return sortedBatches
+      .filter((item) => {
+        const matchName = (item.productName || "").toLowerCase().includes(q);
+        const matchGen = (item.genericName || "").toLowerCase().includes(q);
+        const matchBarcode = (item.barcode || "").toLowerCase().includes(q);
+        const matchSku = (item.sku || "").toLowerCase().includes(q);
+        const matchBatch = (item.batchNumber || "").toLowerCase().includes(q);
+        return matchName || matchGen || matchBarcode || matchSku || matchBatch;
+      })
+      .slice(0, 30);
   }, [sortedBatches, search]);
 
-
   // Handler: Select a batch
-  const handleSelectBatch = (batchItem: any) => {
+  const handleSelectBatch = (batchItem: BatchStockItem) => {
     setSelectedBatch(batchItem);
     setIsSearchOpen(false);
   };
@@ -208,7 +204,6 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
 
     const overallPackaging = calculatePackaging(selectedBatch.quantity || 0, packConfig);
 
-    // Locations for this batch
     const locationsList: Array<{
       id: string;
       rackName: string;
@@ -269,34 +264,39 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
   }, [selectedBatch, sortedBatches]);
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b-2 border-slate-200 dark:border-slate-800">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white flex items-center gap-2.5">
-            <Boxes className="h-7 w-7 text-emerald-600 dark:text-emerald-400 shrink-0" />
+          <div className="flex items-center gap-2 text-xs text-slate-400 mb-1">
+            <span>Stock Management</span>
+            <span>/</span>
+            <span className="text-brand-primary font-bold">Stock List</span>
+          </div>
+          <h2 className="text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2.5">
+            <Boxes className="h-7 w-7 text-brand-primary" />
             Stock List
-          </h1>
+          </h2>
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 px-3.5 py-1.5 rounded-xl text-sm font-bold text-slate-800 dark:text-slate-200">
-            <Store className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+          <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-300">
+            <Store className="h-4 w-4 text-brand-primary shrink-0" />
             <span>{currentBranch?.name || (effectiveBranchId ? "Current Branch" : "All Branches")}</span>
           </div>
 
           <button
             type="button"
             onClick={() => onNavigate("stock_add_stock")}
-            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-black transition flex items-center gap-1.5 shadow-sm"
+            className="h-11 px-5 bg-brand-primary hover:opacity-90 text-white rounded-xl text-xs sm:text-sm font-bold transition flex items-center gap-2 shadow-md shadow-brand-primary/20 cursor-pointer active:scale-95"
           >
             <Plus className="h-4 w-4" />
-            Receive Stock
+            <span>Receive Stock</span>
           </button>
         </div>
       </div>
 
-      {/* Prominent Search Bar (POS Style) */}
+      {/* Prominent Search Bar (POS Style with Auto-Suggest Dropdown) */}
       <div ref={searchContainerRef} className="relative z-30">
         <div className="relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
@@ -305,10 +305,12 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
             type="text"
             placeholder="Search medicine by name, generic, barcode, batch #..."
             value={search}
-            onFocus={() => setIsSearchOpen(true)}
+            onClick={() => {
+              if (!loading) setIsSearchOpen(true);
+            }}
             onChange={(e) => {
               setSearch(e.target.value);
-              setIsSearchOpen(true);
+              if (!loading) setIsSearchOpen(true);
             }}
             onKeyDown={(e) => {
               if (e.key === "Enter" && searchResults.length > 0) {
@@ -322,7 +324,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                 }
               }
             }}
-            className="w-full pl-12 pr-12 py-3.5 bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 focus:border-emerald-500 rounded-2xl text-base sm:text-lg font-bold text-slate-900 dark:text-white placeholder:text-slate-400 shadow-sm outline-none transition"
+            className="w-full pl-12 pr-12 h-14 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:border-brand-primary rounded-2xl text-base font-bold text-slate-900 dark:text-white placeholder:text-slate-400 shadow-sm outline-none transition"
           />
 
           {search ? (
@@ -332,18 +334,18 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                 setSearch("");
                 searchInputRef.current?.focus();
               }}
-              className="absolute right-4 top-1/2 -translate-y-1/2 p-1 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              className="absolute right-4 top-1/2 -translate-y-1/2 p-1.5 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition cursor-pointer"
             >
               <X className="h-5 w-5" />
             </button>
           ) : null}
         </div>
 
-        {/* Auto-Suggest Dropdown (Identical to POS layout) */}
-        {isSearchOpen && (
-          <div className="absolute top-full left-0 right-0 mt-1.5 z-50 bg-white dark:bg-slate-900 border-2 border-emerald-500/60 rounded-xl shadow-2xl max-h-[420px] overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
+        {/* Auto-Suggest Dropdown */}
+        {isSearchOpen && !loading && (
+          <div className="absolute top-full left-0 right-0 mt-2 z-50 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl max-h-[420px] overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
             {searchResults.length === 0 ? (
-              <div className="p-6 text-center text-slate-400 font-bold text-sm">
+              <div className="p-8 text-center text-slate-400 font-bold text-sm">
                 No matching medicine batch found
               </div>
             ) : (
@@ -355,31 +357,31 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                   <div
                     key={`${item.id}-${idx}`}
                     onClick={() => handleSelectBatch(item)}
-                    className="p-3.5 hover:bg-emerald-50/80 dark:hover:bg-emerald-950/30 cursor-pointer transition flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
+                    className="p-3.5 hover:bg-slate-50 dark:hover:bg-slate-800/60 cursor-pointer transition flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
                   >
-                    {/* Left: Product Name + Batch + Generic + Variant (No Product ID or SKU) */}
+                    {/* Left: Product Name + Batch + Generic + Variant */}
                     <div className="space-y-1 min-w-0">
-                      <div className="text-[15px] font-black text-slate-900 dark:text-white flex items-center gap-2 flex-wrap">
+                      <div className="text-[15px] font-bold text-slate-900 dark:text-white flex items-center gap-2 flex-wrap">
                         <span className="text-slate-900 dark:text-white font-extrabold text-base">
                           {item.productName}
                         </span>
-                        <span className="text-xs font-black font-mono bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 px-2 py-0.5 rounded-md">
+                        <span className="text-xs font-black font-mono bg-brand-primary/10 text-brand-primary border border-brand-primary/20 px-2 py-0.5 rounded-md">
                           Batch: {item.batchNumber || "Default"}
                         </span>
                         {barcodeVal && (
-                          <span className="text-slate-500 dark:text-slate-400 font-mono text-xs">
+                          <span className="text-slate-400 font-mono text-xs">
                             ({barcodeVal})
                           </span>
                         )}
                       </div>
                       <div className="text-xs text-slate-500 dark:text-slate-400 font-medium flex items-center gap-2 flex-wrap">
                         {item.genericName && (
-                          <span className="text-emerald-700 dark:text-emerald-400 font-bold">
+                          <span className="text-emerald-600 dark:text-emerald-400 font-bold">
                             {item.genericName}
                           </span>
                         )}
                         {variantStr && (
-                          <span className="text-slate-600 dark:text-slate-400">
+                          <span className="text-slate-500 dark:text-slate-400">
                             • Variant: <strong className="text-slate-700 dark:text-slate-300">{variantStr}</strong>
                           </span>
                         )}
@@ -388,31 +390,31 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
 
                     {/* Right: Stock Pill + Expiry Pill + Location */}
                     <div className="flex items-center gap-2 shrink-0 flex-wrap">
-                      <span className="px-2.5 py-1 rounded-full text-xs font-black bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 font-mono">
+                      <span className="px-2.5 py-1 rounded-xl text-xs font-black bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 font-mono">
                         Stock: {item.quantity.toLocaleString()}
                       </span>
 
                       {item.isExpired ? (
-                        <span className="px-2.5 py-1 rounded-full text-xs font-black bg-rose-100 text-rose-700 border border-rose-300">
+                        <span className="px-2.5 py-1 rounded-xl text-xs font-black bg-rose-50 text-rose-700 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50">
                           Expired
                         </span>
                       ) : item.daysLeft !== null ? (
                         <span
-                          className={`px-2.5 py-1 rounded-full text-xs font-black border ${
+                          className={`px-2.5 py-1 rounded-xl text-xs font-black border ${
                             item.daysLeft <= 90
-                              ? "bg-amber-100 text-amber-800 border-amber-300"
-                              : "bg-emerald-100 text-emerald-800 border-emerald-300"
+                              ? "bg-amber-50 text-amber-800 dark:bg-amber-950/40 border-amber-200 dark:border-amber-900/50"
+                              : "bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-900/50"
                           }`}
                         >
-                          Expire: {item.daysLeft} days left
+                          {item.daysLeft}d left
                         </span>
                       ) : (
-                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-500">
+                        <span className="px-2.5 py-1 rounded-xl text-xs font-medium text-slate-400">
                           No Expiry
                         </span>
                       )}
 
-                      <span className="text-xs font-bold text-slate-500 bg-slate-50 dark:bg-slate-800 px-2 py-1 rounded-md border border-slate-200 dark:border-slate-700">
+                      <span className="text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-xl border border-slate-200 dark:border-slate-700">
                         📍 {item.primaryLocation}
                       </span>
                     </div>
@@ -425,12 +427,12 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
       </div>
 
       {/* ========================================================================= */}
-      {/* 1. SELECTED BATCH SINGLE-SCREEN VIEW (POS-Style Clean Details)            */}
+      {/* 1. SELECTED BATCH SINGLE-SCREEN DETAIL VIEW                               */}
       {/* ========================================================================= */}
       {selectedBatch && selectedBatchDetails ? (
         <div className="space-y-5 animate-in fade-in duration-150">
-          {/* SECTION 1: MEDICINE & BATCH HERO HEADER */}
-          <div className="bg-white dark:bg-slate-900 rounded-3xl border-2 border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-sm space-y-4">
+          {/* Hero Header */}
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-sm space-y-4">
             {/* Top Row: Back button & Expiry Status */}
             <div className="flex items-center justify-between gap-3 pb-3.5 border-b border-slate-100 dark:border-slate-800 flex-wrap">
               <button
@@ -440,7 +442,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                   setSearch("");
                   setTimeout(() => searchInputRef.current?.focus(), 50);
                 }}
-                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl font-bold text-xs sm:text-sm transition inline-flex items-center gap-2 shadow-xs cursor-pointer active:scale-95"
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl font-bold text-xs sm:text-sm transition inline-flex items-center gap-2 cursor-pointer active:scale-95"
               >
                 <ArrowLeft className="h-4 w-4 text-slate-500" />
                 <span>← Search Another Medicine</span>
@@ -449,24 +451,24 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
               {/* Expiry Badge */}
               <div>
                 {selectedBatch.isExpired ? (
-                  <div className="px-3.5 py-1.5 rounded-xl text-xs font-black bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-2 border-rose-300 dark:border-rose-800 flex items-center gap-1.5">
+                  <div className="px-3.5 py-1.5 rounded-xl text-xs font-black bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-900/50 flex items-center gap-1.5">
                     <AlertTriangle className="h-4 w-4 shrink-0 text-rose-600" />
-                    <span>Expired ({selectedBatch.expiryDate ? new Date(selectedBatch.expiryDate).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }) : "N/A"})</span>
+                    <span>Expired ({selectedBatch.expiryDate ? new Date(selectedBatch.expiryDate).toLocaleDateString() : "N/A"})</span>
                   </div>
                 ) : selectedBatch.daysLeft !== null ? (
                   <div
-                    className={`px-3.5 py-1.5 rounded-xl text-xs font-black border-2 flex items-center gap-2 ${
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-black border flex items-center gap-2 ${
                       selectedBatch.daysLeft <= 90
-                        ? "bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-800"
-                        : "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800"
+                        ? "bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-900/50"
+                        : "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-900/50"
                     }`}
                   >
                     <Calendar className="h-4 w-4 shrink-0" />
                     <span>
-                      Expire: <strong className="font-mono">{selectedBatch.daysLeft} days left</strong>
+                      Expiry: <strong className="font-mono">{selectedBatch.daysLeft} days left</strong>
                       {selectedBatch.expiryDate && (
                         <span className="opacity-75 font-normal ml-1">
-                          ({new Date(selectedBatch.expiryDate).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })})
+                          ({new Date(selectedBatch.expiryDate).toLocaleDateString()})
                         </span>
                       )}
                     </span>
@@ -477,39 +479,26 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
 
             {/* Main Product Details */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="space-y-1.5">
-                {/* Generic Name Tag */}
+              <div className="space-y-1">
+                <h3 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
+                  {selectedBatch.productName}
+                </h3>
                 {selectedBatch.genericName && (
-                  <div className="text-xs font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                    <span>Generic: {selectedBatch.genericName}</span>
+                  <div className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
+                    {selectedBatch.genericName}
                   </div>
                 )}
-
-                {/* Medicine Title & Variant */}
-                <div className="flex items-center gap-3 flex-wrap">
-                  <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
-                    {selectedBatch.productName}
-                  </h1>
-                  {selectedBatch.size && (
-                    <span className="px-3 py-1 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-xl text-sm font-black border border-slate-300 dark:border-slate-700 shadow-xs">
-                      {selectedBatch.size}
-                    </span>
-                  )}
-                </div>
               </div>
 
-              {/* Metadata Badges (Batch & Barcode) */}
+              {/* Metadata Badges */}
               <div className="flex items-center gap-2.5 flex-wrap shrink-0">
-                {/* Batch Badge */}
-                <div className="px-3.5 py-2 bg-emerald-50 dark:bg-emerald-950/50 border-2 border-emerald-200 dark:border-emerald-800 rounded-xl text-xs font-black text-emerald-900 dark:text-emerald-200">
-                  <span className="text-emerald-600 dark:text-emerald-400 font-bold mr-1.5">Batch:</span>
+                <div className="px-3.5 py-2 bg-slate-100 dark:bg-slate-800 rounded-xl text-xs font-black text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700">
+                  <span className="text-slate-400 font-bold mr-1.5">Batch:</span>
                   <span className="font-mono text-sm font-extrabold">{selectedBatch.batchNumber || "Default"}</span>
                 </div>
 
-                {/* Barcode Badge */}
                 {(selectedBatch.barcode || selectedBatch.sku) && (
-                  <div className="px-3.5 py-2 bg-slate-50 dark:bg-slate-800/60 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-xs font-black text-slate-700 dark:text-slate-300 flex items-center gap-1.5 font-mono">
+                  <div className="px-3.5 py-2 bg-slate-50 dark:bg-slate-800/60 rounded-xl text-xs font-black text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 flex items-center gap-1.5 font-mono">
                     <Barcode className="h-4 w-4 text-slate-400 shrink-0" />
                     <span>{selectedBatch.barcode || selectedBatch.sku}</span>
                   </div>
@@ -518,22 +507,22 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
             </div>
           </div>
 
-          {/* SECTION 2: TOP 2 SUMMARY CARDS (BATCH STOCK & UNALLOCATED) */}
+          {/* Top 2 Summary Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {/* Card 1: Batch Total Stock */}
-            <div className="bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm flex flex-col justify-between">
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 sm:p-6 shadow-sm flex flex-col justify-between">
               <div>
-                <div className="text-xs font-black text-slate-500 uppercase tracking-wider flex items-center justify-between">
+                <div className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
                   <span>Batch Total Stock</span>
-                  <span className="text-xs font-bold text-slate-400 font-mono">
-                    {selectedBatch.quantity.toLocaleString()} {selectedBatch.unit}s
+                  <span className="font-mono">
+                    {selectedBatch.quantity.toLocaleString()} {selectedBatch.unit || "units"}
                   </span>
                 </div>
                 <div className="text-3xl sm:text-4xl font-black font-mono text-slate-900 dark:text-white mt-1">
                   {selectedBatch.quantity.toLocaleString()}{" "}
-                  <span className="text-base font-bold text-slate-500">{selectedBatch.unit}s</span>
+                  <span className="text-base font-bold text-slate-500">{selectedBatch.unit || "units"}</span>
                 </div>
-                <div className="text-xs font-bold text-emerald-700 dark:text-emerald-400 mt-1">
+                <div className="text-xs font-bold text-brand-primary mt-1">
                   📦 {selectedBatchDetails.overallPackaging.displayText || `${selectedBatch.quantity} units`}
                 </div>
               </div>
@@ -541,14 +530,14 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
               {/* Visual Split Bar */}
               <div className="pt-3 border-t border-slate-100 dark:border-slate-800 mt-3 space-y-1.5">
                 <div className="flex items-center justify-between text-xs font-bold">
-                  <span className="text-emerald-700 dark:text-emerald-400">
+                  <span className="text-emerald-600 dark:text-emerald-400">
                     In Shelves: {selectedBatchDetails.inRack.toLocaleString()} ({selectedBatch.quantity > 0 ? Math.round((selectedBatchDetails.inRack / selectedBatch.quantity) * 100) : 0}%)
                   </span>
-                  <span className="text-amber-700 dark:text-amber-400">
+                  <span className="text-amber-600 dark:text-amber-400">
                     Unallocated: {selectedBatchDetails.notInRack.toLocaleString()} ({selectedBatch.quantity > 0 ? Math.round((selectedBatchDetails.notInRack / selectedBatch.quantity) * 100) : 0}%)
                   </span>
                 </div>
-                <div className="w-full h-2.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden flex">
+                <div className="w-full h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden flex">
                   <div
                     className="bg-emerald-500 h-full transition-all"
                     style={{ width: `${selectedBatch.quantity > 0 ? (selectedBatchDetails.inRack / selectedBatch.quantity) * 100 : 0}%` }}
@@ -561,23 +550,23 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
               </div>
             </div>
 
-            {/* Card 2: Not in Rack (Unallocated) */}
-            <div className={`border-2 rounded-2xl p-5 shadow-sm flex flex-col justify-between ${
+            {/* Card 2: Unallocated Status */}
+            <div className={`border rounded-3xl p-5 sm:p-6 shadow-sm flex flex-col justify-between ${
               selectedBatchDetails.notInRack > 0
-                ? "bg-amber-50/70 dark:bg-amber-950/25 border-amber-300 dark:border-amber-800/70"
-                : "bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/60"
+                ? "bg-amber-50/50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/40"
+                : "bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900/40"
             }`}>
               <div>
-                <div className="text-xs font-black uppercase tracking-wider flex items-center justify-between">
+                <div className="text-xs font-bold uppercase tracking-wider flex items-center justify-between">
                   <span className={selectedBatchDetails.notInRack > 0 ? "text-amber-800 dark:text-amber-300" : "text-emerald-800 dark:text-emerald-300"}>
                     Unallocated (Not in Rack)
                   </span>
                   {selectedBatchDetails.notInRack === 0 ? (
-                    <span className="text-xs text-emerald-700 dark:text-emerald-400 font-black bg-emerald-100 dark:bg-emerald-900/60 px-2.5 py-0.5 rounded-md">
+                    <span className="text-xs text-emerald-700 dark:text-emerald-400 font-bold bg-emerald-100 dark:bg-emerald-900/50 px-2.5 py-0.5 rounded-lg">
                       100% Allocated ✅
                     </span>
                   ) : (
-                    <span className="text-xs text-amber-800 dark:text-amber-300 font-black bg-amber-100 dark:bg-amber-900/60 px-2.5 py-0.5 rounded-md">
+                    <span className="text-xs text-amber-800 dark:text-amber-300 font-bold bg-amber-100 dark:bg-amber-900/50 px-2.5 py-0.5 rounded-lg">
                       Placement Needed
                     </span>
                   )}
@@ -587,10 +576,10 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                   <span className={selectedBatchDetails.notInRack > 0 ? "text-amber-700 dark:text-amber-400" : "text-emerald-700 dark:text-emerald-400"}>
                     {selectedBatchDetails.notInRack.toLocaleString()}
                   </span>{" "}
-                  <span className="text-base font-bold text-slate-500">{selectedBatch.unit}s</span>
+                  <span className="text-base font-bold text-slate-500">{selectedBatch.unit || "units"}</span>
                 </div>
 
-                <div className="text-xs font-bold text-slate-600 dark:text-slate-300">
+                <div className="text-xs font-medium text-slate-600 dark:text-slate-300">
                   {selectedBatchDetails.notInRack > 0 ? (
                     <span>
                       📦 {selectedBatchDetails.bulkUnallocatedPkg.fullCartons > 0 ? `${selectedBatchDetails.bulkUnallocatedPkg.fullCartons} Cartons ` : ""}
@@ -602,39 +591,38 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                 </div>
               </div>
 
-              <div className="pt-3 border-t border-slate-200 dark:border-slate-800 mt-3 flex items-center justify-between gap-3">
-                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+              <div className="pt-3 border-t border-slate-200/60 dark:border-slate-800 mt-3 flex items-center justify-between gap-3">
+                <span className="text-xs font-bold text-slate-400">
                   {selectedBatchDetails.notInRack > 0 ? "Store room / Bulk storage" : "Ready at billing counter"}
                 </span>
                 {selectedBatchDetails.notInRack > 0 && (
                   <button
                     type="button"
                     onClick={() => handleNavigateToAllocate(selectedBatch.id, selectedBatch.productId)}
-                    className="px-4 py-2 bg-amber-600 hover:bg-amber-700 active:scale-95 text-white rounded-xl text-xs font-black transition flex items-center gap-1.5 shrink-0 shadow-sm"
+                    className="px-4 py-2 bg-brand-primary hover:opacity-90 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shrink-0 shadow-sm cursor-pointer active:scale-95"
                   >
                     <span>Allocate to Shelf Now</span>
-                    <ArrowRight className="h-4 w-4" />
+                    <ArrowRight className="h-3.5 w-3.5" />
                   </button>
                 )}
               </div>
             </div>
           </div>
 
-          {/* SECTION 3: PHYSICAL RACK & SHELF LOCATIONS */}
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border-2 border-slate-200 dark:border-slate-800 p-5 shadow-sm space-y-4">
-            {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b-2 border-slate-100 dark:border-slate-800">
+          {/* Physical Rack & Shelf Locations */}
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-sm space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
               <div>
                 <div className="flex items-center gap-2">
-                  <MapPin className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  <MapPin className="h-5 w-5 text-brand-primary shrink-0" />
                   <h3 className="text-lg font-black text-slate-900 dark:text-white">
-                    Physical Rack & Shelf Locations
+                    Physical Rack &amp; Shelf Locations
                   </h3>
                 </div>
-                <div className="text-xs font-bold text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-2">
+                <div className="text-xs font-bold text-slate-400 mt-0.5 flex items-center gap-2">
                   <span>{selectedBatchDetails.locationsList.length} Shelf Location{selectedBatchDetails.locationsList.length !== 1 ? "s" : ""}</span>
                   <span>•</span>
-                  <span>Total Placed: <strong className="text-slate-900 dark:text-white font-mono">{selectedBatchDetails.inRack.toLocaleString()}</strong> {selectedBatch.unit}s</span>
+                  <span>Total Placed: <strong className="text-slate-900 dark:text-white font-mono">{selectedBatchDetails.inRack.toLocaleString()}</strong> {selectedBatch.unit || "units"}</span>
                 </div>
               </div>
 
@@ -642,7 +630,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                 <button
                   type="button"
                   onClick={() => handleNavigateToAllocate(selectedBatch.id, selectedBatch.productId)}
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl text-xs font-black transition flex items-center gap-1.5 shadow-xs shrink-0 self-start sm:self-auto"
+                  className="px-4 py-2 bg-brand-primary hover:opacity-90 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm shrink-0 self-start sm:self-auto cursor-pointer active:scale-95"
                 >
                   <Plus className="h-4 w-4" />
                   <span>+ Allocate More to Shelf</span>
@@ -650,80 +638,73 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
               )}
             </div>
 
-            {/* Scrollable Container */}
             {selectedBatchDetails.locationsList.length === 0 ? (
-              <div className="p-8 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-700 text-center space-y-3">
+              <div className="p-8 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 text-center space-y-3">
                 <div className="h-12 w-12 rounded-2xl bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto">
                   <MapPin className="h-6 w-6" />
                 </div>
                 <div className="space-y-1">
-                  <p className="text-base font-black text-slate-800 dark:text-slate-200">
+                  <p className="text-base font-bold text-slate-800 dark:text-slate-200">
                     No Shelf Location Assigned Yet
                   </p>
-                  <p className="text-xs font-bold text-slate-500 max-w-md mx-auto">
-                    All {selectedBatch.quantity.toLocaleString()} {selectedBatch.unit}s are in bulk reserve. Assign them to racks and shelves so staff can find them quickly.
+                  <p className="text-xs text-slate-400 max-w-md mx-auto">
+                    All {selectedBatch.quantity.toLocaleString()} {selectedBatch.unit || "units"} are in bulk reserve. Assign them to racks and shelves so staff can find them quickly.
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => handleNavigateToAllocate(selectedBatch.id, selectedBatch.productId)}
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition inline-flex items-center gap-1.5 shadow-sm"
+                  className="px-4 py-2 bg-brand-primary hover:opacity-90 text-white rounded-xl text-xs font-bold transition inline-flex items-center gap-1.5 shadow-sm cursor-pointer active:scale-95"
                 >
                   <Plus className="h-4 w-4" />
                   Allocate to Rack Now
                 </button>
               </div>
             ) : (
-              <div className="max-h-[360px] overflow-y-auto pr-1 space-y-2.5">
+              <div className="space-y-2.5">
                 {selectedBatchDetails.locationsList.map((loc, idx) => {
                   const percent = selectedBatch.quantity > 0 ? Math.round((loc.quantity / selectedBatch.quantity) * 100) : 0;
                   return (
                     <div
                       key={loc.id || idx}
-                      className="p-4 bg-slate-50 dark:bg-slate-800/50 hover:bg-emerald-50/40 dark:hover:bg-emerald-950/20 rounded-2xl border-2 border-slate-200 dark:border-slate-700 transition flex flex-col md:flex-row md:items-center justify-between gap-3.5"
+                      className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 transition flex flex-col md:flex-row md:items-center justify-between gap-3.5"
                     >
-                      {/* Visual Location Steps */}
                       <div className="space-y-1.5 min-w-0">
-                        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                          {/* Rack Badge */}
-                          <span className="bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-600 px-3 py-1 rounded-xl text-xs font-black flex items-center gap-1 shadow-xs">
-                            <span className="text-slate-500 font-bold">Rack:</span>
-                            <span className="text-emerald-700 dark:text-emerald-400 font-mono text-sm">{loc.rackName}</span>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-1 rounded-xl text-xs font-black flex items-center gap-1">
+                            <span className="text-slate-400 font-bold">Rack:</span>
+                            <span className="text-brand-primary font-mono text-sm">{loc.rackName}</span>
                           </span>
 
-                          <ChevronRight className="h-4 w-4 text-slate-400 shrink-0" />
+                          <ChevronRight className="h-3.5 w-3.5 text-slate-400 shrink-0" />
 
-                          {/* Shelf Badge */}
-                          <span className="bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-600 px-3 py-1 rounded-xl text-xs font-black flex items-center gap-1 shadow-xs">
-                            <span className="text-slate-500 font-bold">Shelf:</span>
-                            <span className="text-emerald-700 dark:text-emerald-400 font-mono text-sm">{loc.shelfName}</span>
+                          <span className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-1 rounded-xl text-xs font-black flex items-center gap-1">
+                            <span className="text-slate-400 font-bold">Shelf:</span>
+                            <span className="text-brand-primary font-mono text-sm">{loc.shelfName}</span>
                           </span>
 
-                          <ChevronRight className="h-4 w-4 text-slate-400 shrink-0" />
+                          <ChevronRight className="h-3.5 w-3.5 text-slate-400 shrink-0" />
 
-                          {/* Bin Badge */}
-                          <span className="bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-600 px-3 py-1 rounded-xl text-xs font-black flex items-center gap-1 shadow-xs">
-                            <span className="text-slate-500 font-bold">Bin:</span>
-                            <span className="text-emerald-700 dark:text-emerald-400 font-mono text-sm">{loc.binName}</span>
+                          <span className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-1 rounded-xl text-xs font-black flex items-center gap-1">
+                            <span className="text-slate-400 font-bold">Bin:</span>
+                            <span className="text-brand-primary font-mono text-sm">{loc.binName}</span>
                           </span>
                         </div>
 
-                        {/* Packaging Breakdown */}
-                        <div className="flex items-center gap-2 text-xs font-bold text-emerald-700 dark:text-emerald-400 flex-wrap">
+                        <div className="flex items-center gap-2 text-xs font-bold text-brand-primary flex-wrap">
                           <span>📦 {loc.displayText}</span>
                           <span className="text-slate-300 dark:text-slate-700">•</span>
-                          <span className="text-slate-600 dark:text-slate-400 font-medium">
+                          <span className="text-slate-400 font-medium">
                             {percent}% of total batch stock
                           </span>
                         </div>
                       </div>
 
-                      {/* Quantity + Manage Button */}
                       <div className="flex items-center gap-4 shrink-0 justify-between md:justify-end border-t md:border-t-0 pt-2.5 md:pt-0 border-slate-200 dark:border-slate-700">
                         <div className="text-left md:text-right">
-                          <div className="text-2xl font-black font-mono text-slate-900 dark:text-white">
+                          <div className="text-xl font-black font-mono text-slate-900 dark:text-white">
                             {loc.quantity.toLocaleString()}{" "}
-                            <span className="text-xs font-bold text-slate-500">{selectedBatch.unit}s</span>
+                            <span className="text-xs font-bold text-slate-500">{selectedBatch.unit || "units"}</span>
                           </div>
                           <div className="text-[11px] font-bold text-slate-400">
                             Stock in this Shelf
@@ -733,7 +714,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                         <button
                           type="button"
                           onClick={() => handleNavigateToAllocate(selectedBatch.id, selectedBatch.productId)}
-                          className="px-3.5 py-2 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-100 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs"
+                          className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer active:scale-95"
                           title="Adjust or relocate stock"
                         >
                           <span>Manage</span>
@@ -747,11 +728,11 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
             )}
           </div>
 
-          {/* OTHER BATCHES OF SAME PRODUCT (IF ANY) */}
+          {/* Other Batches for Same Product */}
           {selectedBatchDetails.otherBatches.length > 0 && (
-            <div className="bg-white dark:bg-slate-900 rounded-2xl border-2 border-slate-200 dark:border-slate-800 p-5 shadow-sm space-y-3">
+            <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm space-y-3">
               <div className="text-sm font-black text-slate-900 dark:text-white flex items-center gap-2">
-                <Calendar className="h-4 w-4 text-emerald-600" />
+                <Calendar className="h-4 w-4 text-brand-primary" />
                 Other Batches for {selectedBatch.productName} ({selectedBatchDetails.otherBatches.length})
               </div>
 
@@ -760,14 +741,14 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                   <div
                     key={b.id}
                     onClick={() => setSelectedBatch(b)}
-                    className="py-3 px-2 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl cursor-pointer transition flex items-center justify-between gap-3 text-xs font-bold"
+                    className="py-3 px-2 hover:bg-slate-50 dark:hover:bg-slate-800/50 rounded-xl cursor-pointer transition flex items-center justify-between gap-3 text-xs font-bold"
                   >
                     <div className="flex items-center gap-2">
                       <span className="font-mono font-black text-slate-900 dark:text-white">
                         Batch: {b.batchNumber || "—"}
                       </span>
                       {b.daysLeft !== null && (
-                        <span className="text-slate-500">
+                        <span className="text-slate-400 font-medium">
                           • Exp: {b.daysLeft} days left
                         </span>
                       )}
@@ -775,9 +756,9 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
 
                     <div className="flex items-center gap-3">
                       <span className="font-mono font-black text-slate-900 dark:text-white">
-                        Stock: {b.quantity.toLocaleString()} {b.unit}s
+                        Stock: {b.quantity.toLocaleString()} {b.unit || "units"}
                       </span>
-                      <span className="text-emerald-600 dark:text-emerald-400">
+                      <span className="text-brand-primary">
                         View ➔
                       </span>
                     </div>
@@ -788,14 +769,27 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
           )}
         </div>
       ) : loading ? (
-        /* ========================================================================= */
-        /* 2. LOADING STATE ONLY (No bulky prompt box)                               */
-        /* ========================================================================= */
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border-2 border-slate-200 dark:border-slate-800 p-12 flex flex-col items-center justify-center text-slate-400">
-          <Loader2 className="h-8 w-8 animate-spin text-emerald-600 mb-2" />
+        /* Loading State */
+        <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-12 flex flex-col items-center justify-center text-slate-400">
+          <Loader2 className="h-8 w-8 animate-spin text-brand-primary mb-2" />
           <p className="text-sm font-bold text-slate-600 dark:text-slate-300">Loading stock inventory...</p>
         </div>
-      ) : null}
+      ) : (
+        /* Clean Prompt when no batch selected */
+        <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-12 text-center space-y-3 shadow-sm">
+          <div className="h-14 w-14 rounded-2xl bg-brand-primary/10 text-brand-primary flex items-center justify-center mx-auto">
+            <Search className="h-7 w-7" />
+          </div>
+          <div className="space-y-1 max-w-sm mx-auto">
+            <h3 className="text-base font-bold text-slate-900 dark:text-white">
+              Please search in the search bar above
+            </h3>
+            <p className="text-xs text-slate-400">
+              Type medicine name, generic, barcode, or batch number to inspect stock details and shelf locations.
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

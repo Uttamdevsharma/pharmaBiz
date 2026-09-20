@@ -8,8 +8,9 @@ export class PaymentService {
    * Initiate SSLCOMMERZ payment for a subscription
    */
   static async initiateSubscriptionPayment(
-    tenantId: string,
-    data: InitiatePaymentInput
+    tenantId: string | undefined,
+    data: InitiatePaymentInput,
+    userRole?: string
   ) {
     const subscription = await (prisma as any).subscription.findUnique({
       where: { id: data.subscriptionId },
@@ -23,12 +24,22 @@ export class PaymentService {
       throw new Error("Subscription not found");
     }
 
-    if (subscription.tenantId !== tenantId) {
-      throw new Error("Unauthorized access to this subscription");
-    }
-
     if (subscription.status === "ACTIVE") {
       throw new Error("This subscription is already active and paid for");
+    }
+
+    // Permission checks:
+    // 1. Super Admin is always authorized to initiate checkout for any subscription
+    // 2. The tenant owner whose tenantId matches subscription.tenantId is authorized
+    // 3. Initial subscription payment for an approved registration (verificationStatus === "APPROVED_PENDING_PAYMENT" & subscription.status === "PENDING")
+    const isSuperAdmin = userRole === "SUPER_ADMIN";
+    const isMatchingTenant = Boolean(tenantId && subscription.tenantId === tenantId);
+    const isApprovedPendingRegistration =
+      subscription.tenant?.verificationStatus === "APPROVED_PENDING_PAYMENT" &&
+      subscription.status === "PENDING";
+
+    if (!isSuperAdmin && !isMatchingTenant && !isApprovedPendingRegistration) {
+      throw new Error("Unauthorized access to this subscription");
     }
 
     const tranId = `TXN_${Date.now()}_${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
@@ -37,10 +48,10 @@ export class PaymentService {
     const isYearly = durationDays > 45;
     const amount = isYearly ? Math.round(basePrice * 12 * 0.85) : basePrice;
 
-    // Save pending payment record in DB
+    // Save pending payment record in DB (ALWAYS linked to subscription.tenantId)
     const payment = await (prisma as any).payment.create({
       data: {
-        tenantId,
+        tenantId: subscription.tenantId,
         subscriptionId: subscription.id,
         amount,
         currency: "BDT",
@@ -61,7 +72,7 @@ export class PaymentService {
       customerCity: data.customerCity || "Dhaka",
       productName: `${subscription.plan.name} Subscription Plan`,
       productCategory: "SaaS Subscription",
-      valueA: tenantId,
+      valueA: subscription.tenantId,
       valueB: subscription.id,
       valueC: "SUBSCRIBE",
     });

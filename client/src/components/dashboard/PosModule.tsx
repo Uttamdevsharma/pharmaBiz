@@ -4,6 +4,7 @@ import React, { useEffect, useState, useCallback, useRef, useMemo } from "react"
 import { createPortal } from "react-dom";
 import { useAuth } from "@/context/AuthContext";
 import { fetchApi } from "@/lib/api";
+import { showAlert } from "@/lib/swal";
 import { useBranchContext } from "@/context/BranchContext";
 import { useSettings } from "@/context/SettingsContext";
 import { Product } from "@/types";
@@ -815,6 +816,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
       };
 
       setInvoiceData(receiptDoc);
+      showAlert.toast("Payment submitted successfully!", "success");
       setSuccessToast("Payment submitted successfully!");
       setTimeout(() => setSuccessToast(null), 4000);
 

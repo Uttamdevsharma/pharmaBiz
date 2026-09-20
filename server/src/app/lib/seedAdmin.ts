@@ -225,23 +225,33 @@ export async function seedSuperAdmin(): Promise<void> {
             price: planDef.price,
             billingCycle: planDef.billingCycle,
             maxBranches: planDef.maxBranches,
-            features: planDef.features,
+            features: {
+              ...planDef.features,
+              maxStaffPerBranch: planDef.maxStaffPerBranch,
+              maxTotalStaff: planDef.maxTotalStaff,
+              trialDays: planDef.trialDays || 7,
+            },
             isActive: true,
           },
         });
         console.log(`[Seed] Created ${planDef.name} (${tier}).`);
       } else {
-        // Update limits & features in case they were updated
-        await (prisma as any).subscriptionPlan.update({
-          where: { tier },
-          data: {
-            name: planDef.name,
-            price: planDef.price,
-            maxBranches: planDef.maxBranches,
-            features: planDef.features,
-            isActive: true,
-          },
-        });
+        // Backfill features without overwriting super-admin customized name, price, maxBranches, or features
+        const currentFeat = (typeof existingPlan.features === "object" && existingPlan.features !== null) ? existingPlan.features : {};
+        if (currentFeat.maxStaffPerBranch === undefined) {
+          await (prisma as any).subscriptionPlan.update({
+            where: { tier },
+            data: {
+              features: {
+                ...planDef.features,
+                maxStaffPerBranch: planDef.maxStaffPerBranch,
+                maxTotalStaff: planDef.maxTotalStaff,
+                trialDays: planDef.trialDays || 7,
+                ...currentFeat,
+              },
+            },
+          });
+        }
       }
     }
     console.log("[Seed] All 4 subscription plans (Plan 0 Free Trial, Plan 1, Plan 2, Plan 3) verified.");

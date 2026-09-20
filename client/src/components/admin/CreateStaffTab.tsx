@@ -4,18 +4,21 @@ import React, { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { fetchApi } from "@/lib/api";
 import {
-  UserPlus,
-  ShieldCheck,
+  User,
+  Mail,
+  Lock,
+  Phone,
+  Building,
   KeyRound,
+  ShieldCheck,
+  Eye,
+  EyeOff,
   CheckCircle2,
   AlertCircle,
   Loader2,
-  Eye,
-  EyeOff,
   Users,
-  ArrowLeft,
-  Sparkles,
-  Info,
+  ArrowRight,
+  PlusCircle,
 } from "lucide-react";
 
 interface CustomRole {
@@ -31,7 +34,11 @@ interface CreateStaffTabProps {
   onNavigateToRoles?: () => void;
 }
 
-export function CreateStaffTab({ onSuccess, onNavigateToList, onNavigateToRoles }: CreateStaffTabProps) {
+export function CreateStaffTab({
+  onSuccess,
+  onNavigateToList,
+  onNavigateToRoles,
+}: CreateStaffTabProps) {
   const { isSuperAdmin } = useAuth();
   const [roles, setRoles] = useState<CustomRole[]>([]);
   const [loadingRoles, setLoadingRoles] = useState(true);
@@ -42,6 +49,7 @@ export function CreateStaffTab({ onSuccess, onNavigateToList, onNavigateToRoles 
   const [password, setPassword] = useState("");
   const [phone, setPhone] = useState("");
   const [selectedRole, setSelectedRole] = useState("");
+  const [assignedDepartment, setAssignedDepartment] = useState("Platform Headquarters (HQ)");
 
   // UI state
   const [showPassword, setShowPassword] = useState(false);
@@ -57,7 +65,6 @@ export function CreateStaffTab({ onSuccess, onNavigateToList, onNavigateToRoles 
         const res = await fetchApi<CustomRole[]>("/super-admin/roles");
         if (res.success && res.data && res.data.length > 0) {
           setRoles(res.data);
-          // Default to first role (e.g. CTO or Project Manager)
           setSelectedRole(res.data[0].id);
         }
       } catch (err: any) {
@@ -102,7 +109,6 @@ export function CreateStaffTab({ onSuccess, onNavigateToList, onNavigateToRoles 
 
       if (res.success) {
         setSuccessMsg(`Platform staff member "${name}" was created successfully.`);
-        // Reset form
         setName("");
         setEmail("");
         setPassword("");
@@ -127,37 +133,29 @@ export function CreateStaffTab({ onSuccess, onNavigateToList, onNavigateToRoles 
   };
 
   return (
-    <div className="space-y-6 max-w-3xl mx-auto">
-      {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-6 w-full">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
         <div>
-          <div className="flex items-center gap-3">
-            {onNavigateToList && (
-              <button
-                type="button"
-                onClick={onNavigateToList}
-                className="p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white transition"
-              >
-                <ArrowLeft className="h-4 w-4" />
-              </button>
-            )}
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
-              Create Staff Member
-            </h1>
+          <div className="flex items-center gap-2 text-xs font-bold text-slate-400 mb-1">
+            <span>Staff Management</span>
+            <span>/</span>
+            <span className="text-brand-primary">Create Staff</span>
           </div>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Add a new platform staff member and assign their dynamic role.
-          </p>
+          <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white flex items-center gap-2.5">
+            <Users className="h-7 w-7 text-brand-primary" />
+            Create Staff Member
+          </h1>
         </div>
 
         {onNavigateToList && (
           <button
             type="button"
             onClick={onNavigateToList}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 transition"
+            className="h-11 px-5 rounded-xl text-sm font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 transition flex items-center gap-2 cursor-pointer"
           >
-            <Users className="h-4 w-4" />
-            <span>Staff List</span>
+            <span>View Staff List</span>
+            <ArrowRight className="h-4 w-4" />
           </button>
         )}
       </div>
@@ -177,89 +175,96 @@ export function CreateStaffTab({ onSuccess, onNavigateToList, onNavigateToRoles 
         </div>
       )}
 
-      {/* Staff Information Form */}
-      <form onSubmit={handleSubmit} className="bg-white dark:bg-slate-900 p-6 md:p-8 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-6">
-        <div className="flex items-center gap-2.5 pb-4 border-b border-slate-100 dark:border-slate-800">
-          <div className="h-9 w-9 rounded-xl bg-brand-primary/10 text-brand-primary flex items-center justify-center font-bold">
-            <UserPlus className="h-5 w-5" />
-          </div>
-          <div>
-            <h3 className="text-base font-bold text-slate-900 dark:text-white">Staff Member Information</h3>
-            <p className="text-xs text-slate-400">Enter personal credentials and select a role</p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+      {/* Staff Information Form Card */}
+      <form
+        onSubmit={handleSubmit}
+        className="bg-white dark:bg-slate-900 p-6 sm:p-8 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-6"
+      >
+        {/* Row 1: Full Name, Email Address, Phone Number */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
           {/* Full Name */}
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
               Full Name <span className="text-red-500">*</span>
             </label>
-            <input
-              type="text"
-              required
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Sarah Jenkins"
-              className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary"
-            />
+            <div className="relative">
+              <User className="h-4 w-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                required
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. Shakil Ahmed"
+                className="w-full pl-10 pr-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary"
+              />
+            </div>
           </div>
 
-          {/* Email */}
+          {/* Email Address */}
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
               Email Address <span className="text-red-500">*</span>
             </label>
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="e.g. sarah@pharmabiz.com"
-              className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary"
-            />
+            <div className="relative">
+              <Mail className="h-4 w-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="name@pharmacy.com"
+                className="w-full pl-10 pr-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary"
+              />
+            </div>
           </div>
 
+          {/* Phone Number */}
+          <div>
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+              Phone Number
+            </label>
+            <div className="relative">
+              <Phone className="h-4 w-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="01700000000"
+                className="w-full pl-10 pr-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Row 2: Password, Select Role, Assign to Department */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
           {/* Password */}
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
               Password <span className="text-red-500">*</span>
             </label>
             <div className="relative">
+              <Lock className="h-4 w-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
               <input
                 type={showPassword ? "text" : "password"}
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="At least 6 characters"
-                className="w-full pl-3.5 pr-10 py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                placeholder="Minimum 6 characters"
+                className="w-full pl-10 pr-10 py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary font-mono"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
               >
                 {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
             </div>
           </div>
 
-          {/* Phone */}
+          {/* Select Role */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-              Phone Number <span className="text-slate-400 font-normal">(Optional)</span>
-            </label>
-            <input
-              type="text"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="e.g. +1 555-0199"
-              className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary"
-            />
-          </div>
-
-          {/* Role Selector */}
-          <div className="md:col-span-2">
             <div className="flex items-center justify-between mb-1.5">
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
                 Select Role <span className="text-red-500">*</span>
@@ -268,61 +273,75 @@ export function CreateStaffTab({ onSuccess, onNavigateToList, onNavigateToRoles 
                 <button
                   type="button"
                   onClick={onNavigateToRoles}
-                  className="text-[11px] font-bold text-brand-primary hover:underline flex items-center gap-1"
+                  className="text-[11px] font-bold text-brand-primary hover:underline cursor-pointer"
                 >
-                  <Sparkles className="h-3 w-3" />
-                  <span>Manage Roles & Permissions</span>
+                  Manage Roles
                 </button>
               )}
             </div>
-            <select
-              required
-              value={selectedRole}
-              onChange={(e) => setSelectedRole(e.target.value)}
-              disabled={loadingRoles}
-              className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-brand-primary cursor-pointer"
-            >
-              {loadingRoles ? (
-                <option>Loading roles...</option>
-              ) : (
-                roles.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.name} {r.description ? `— ${r.description}` : ""}
-                  </option>
-                ))
-              )}
-            </select>
-          </div>
-        </div>
-
-        {/* Role & Permissions Inheritance Information Notice */}
-        <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/60 flex items-start gap-3">
-          <div className="p-2 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5">
-            <KeyRound className="h-4 w-4" />
-          </div>
-          <div className="space-y-1 text-xs">
-            <div className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-              <span>Automatic Role Permissions Inheritance</span>
-              {selectedRoleObj && (
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-brand-primary/10 text-brand-primary">
-                  {selectedRoleObj.name} ({selectedRoleObj.permissions.length} Permissions)
-                </span>
-              )}
+            <div className="relative">
+              <KeyRound className="h-4 w-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <select
+                required
+                value={selectedRole}
+                onChange={(e) => setSelectedRole(e.target.value)}
+                disabled={loadingRoles}
+                className="w-full pl-10 pr-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-brand-primary cursor-pointer appearance-none"
+              >
+                {loadingRoles ? (
+                  <option>Loading roles...</option>
+                ) : (
+                  roles.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name}
+                    </option>
+                  ))
+                )}
+              </select>
             </div>
-            <p className="text-slate-500 dark:text-slate-400 leading-relaxed">
-              Staff members automatically inherit all module permissions configured for their role. Permissions are managed centrally under the{" "}
-              <strong className="text-slate-700 dark:text-slate-300">Roles & Permissions</strong> section.
-            </p>
+          </div>
+
+          {/* Assign Department / Scope */}
+          <div>
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+              Assign to Branch / Department
+            </label>
+            <div className="relative">
+              <Building className="h-4 w-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <select
+                value={assignedDepartment}
+                onChange={(e) => setAssignedDepartment(e.target.value)}
+                className="w-full pl-10 pr-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-brand-primary cursor-pointer appearance-none"
+              >
+                <option value="Main Branch (Dhanmondi, Dhaka)">Main Branch (Dhanmondi, Dhaka)</option>
+                <option value="Platform Headquarters (HQ)">Platform Headquarters (HQ)</option>
+                <option value="System Administration">System Administration</option>
+                <option value="Customer Operations">Customer Operations</option>
+              </select>
+            </div>
           </div>
         </div>
 
-        {/* Submit & Action Buttons */}
+        {/* Row 3: Role Info Card */}
+        <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 flex items-center justify-between text-xs font-bold shadow-2xs">
+          <div className="flex items-center gap-2 text-slate-900 dark:text-white">
+            <ShieldCheck className="h-4 w-4 text-brand-primary" />
+            <span>
+              Assigned Role: {selectedRoleObj?.name || "Super Admin"}
+            </span>
+          </div>
+          <span className="text-brand-primary font-mono text-xs">
+            {selectedRoleObj?.permissions?.length || 10} Modules Permitted
+          </span>
+        </div>
+
+        {/* Footer Actions */}
         <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
           {onNavigateToList && (
             <button
               type="button"
               onClick={onNavigateToList}
-              className="px-5 py-2.5 rounded-xl text-sm font-semibold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 transition"
+              className="h-11 px-6 rounded-xl text-sm font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 transition cursor-pointer"
             >
               Cancel
             </button>
@@ -331,9 +350,13 @@ export function CreateStaffTab({ onSuccess, onNavigateToList, onNavigateToRoles 
           <button
             type="submit"
             disabled={submitting}
-            className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold bg-brand-primary hover:bg-brand-primary/90 text-white shadow-md transition"
+            className="h-11 px-6 rounded-xl text-sm font-bold bg-brand-primary hover:bg-brand-primary-hover text-white shadow-xs transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
           >
-            {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
+            {submitting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <PlusCircle className="h-4 w-4" />
+            )}
             <span>Create Staff Member</span>
           </button>
         </div>

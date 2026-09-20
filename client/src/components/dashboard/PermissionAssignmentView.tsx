@@ -177,25 +177,25 @@ export function PermissionAssignmentView() {
   }, [filteredPermissions]);
 
   return (
-    <div className="space-y-5 max-w-7xl mx-auto">
-      {/* Simple Clean Header Bar */}
+    <div className="space-y-6 w-full">
+      {/* Header Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-1">
-        <div>
+        <div className="flex items-center gap-3">
+          <div className="p-3 bg-brand-primary/10 rounded-2xl text-brand-primary">
+            <Sliders className="h-6 w-6" />
+          </div>
           <h1 className="text-2xl font-black text-slate-900 dark:text-white">
             Permission Assignment
           </h1>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Select module permissions for each pharmacy staff role.
-          </p>
         </div>
 
         <div className="flex items-center gap-3">
           <button
             onClick={loadData}
             disabled={loading || saving}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 transition"
+            className="flex items-center gap-2 h-11 px-5 rounded-xl text-sm font-bold bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition shadow-xs cursor-pointer"
           >
-            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             <span>Refresh</span>
           </button>
         </div>
@@ -204,45 +204,44 @@ export function PermissionAssignmentView() {
       {/* Action Notification */}
       {actionMsg && (
         <div
-          className={`flex items-center justify-between p-4 rounded-xl text-xs font-medium transition-all ${
+          className={`flex items-center justify-between p-4 rounded-xl text-sm font-bold transition-all ${
             actionMsg.type === "success"
               ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
               : "bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800"
           }`}
         >
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             {actionMsg.type === "success" ? (
-              <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+              <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" />
             ) : (
-              <XCircle className="h-4 w-4 text-red-500 shrink-0" />
+              <XCircle className="h-5 w-5 text-red-500 shrink-0" />
             )}
             <span>{actionMsg.text}</span>
           </div>
-          <button onClick={() => setActionMsg(null)} className="text-slate-400 hover:text-slate-600">
+          <button onClick={() => setActionMsg(null)} className="text-slate-400 hover:text-slate-600 p-1">
             <X className="h-4 w-4" />
           </button>
         </div>
       )}
 
       {/* Controls Bar: Search & Category Filter */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 p-3 rounded-2xl border border-slate-200 dark:border-slate-800">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-4 rounded-2xl border-2 border-slate-200 dark:border-slate-800 shadow-xs">
         <div className="relative flex-1 max-w-md">
-          <Search className="h-4 w-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+          <Search className="h-4 w-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             placeholder="Search permissions..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:outline-none"
+            className="w-full h-12 pl-11 pr-4 bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold focus:outline-none focus:border-brand-primary transition"
           />
         </div>
 
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-medium text-slate-400">Category:</span>
+        <div className="flex items-center gap-3">
           <select
             value={selectedCategory}
             onChange={(e) => setSelectedCategory(e.target.value)}
-            className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold focus:outline-none cursor-pointer"
+            className="h-12 px-4 bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold focus:outline-none focus:border-brand-primary cursor-pointer transition text-slate-800 dark:text-slate-200"
           >
             <option value="ALL">All Categories</option>
             {CATEGORIES.map((cat) => (
@@ -256,29 +255,29 @@ export function PermissionAssignmentView() {
 
       {/* Clean Permission Matrix Table */}
       {loading ? (
-        <div className="py-20 flex flex-col items-center justify-center text-slate-400 gap-2">
-          <Loader2 className="h-6 w-6 animate-spin text-brand-primary" />
-          <span className="text-xs font-medium">Loading matrix...</span>
+        <div className="py-24 flex flex-col items-center justify-center text-slate-400 gap-3">
+          <Loader2 className="h-8 w-8 animate-spin text-brand-primary" />
+          <span className="text-sm font-bold">Loading matrix...</span>
         </div>
       ) : (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-xs">
-          <div className="overflow-x-auto max-h-[70vh]">
-            <table className="w-full text-left text-xs border-collapse">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border-2 border-slate-200 dark:border-slate-800 overflow-hidden shadow-xs">
+          <div className="overflow-x-auto max-h-[72vh]">
+            <table className="w-full text-left text-sm border-collapse">
               {/* Sticky Table Header */}
-              <thead className="sticky top-0 z-20 bg-slate-100 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">
+              <thead className="sticky top-0 z-20 bg-slate-100 dark:bg-slate-800 border-b-2 border-slate-200 dark:border-slate-700">
                 <tr>
-                  <th className="p-4 font-bold text-slate-700 dark:text-slate-200 min-w-[260px] w-[300px]">
+                  <th className="p-4 px-5 font-black text-xs uppercase tracking-wider text-slate-700 dark:text-slate-200 min-w-[280px] w-[320px]">
                     Permissions
                   </th>
 
-                  {/* Role Column Headers (Large, Clear Font, NO Staff counts, NO Permission counts) */}
+                  {/* Role Column Headers */}
                   {roles.map((role) => (
                     <th
                       key={role.id}
-                      className="p-4 text-center min-w-[160px] border-l border-slate-200 dark:border-slate-700"
+                      className="p-4 text-center min-w-[170px] border-l-2 border-slate-200 dark:border-slate-700"
                     >
                       <div className="flex flex-col items-center space-y-2">
-                        <div className="text-lg font-bold text-slate-900 dark:text-white tracking-tight">
+                        <div className="text-lg font-black text-slate-900 dark:text-white tracking-tight">
                           {role.name}
                         </div>
 
@@ -288,15 +287,15 @@ export function PermissionAssignmentView() {
                             <button
                               type="button"
                               onClick={() => handleSelectAllForRole(role.id)}
-                              className="text-[11px] font-bold text-brand-primary hover:underline"
+                              className="text-xs font-bold text-brand-primary hover:underline cursor-pointer"
                             >
                               Select All
                             </button>
-                            <span className="text-slate-300">|</span>
+                            <span className="text-slate-300 dark:text-slate-600">|</span>
                             <button
                               type="button"
                               onClick={() => handleClearAllForRole(role.id)}
-                              className="text-[11px] font-bold text-slate-400 hover:text-red-500"
+                              className="text-xs font-bold text-slate-400 hover:text-red-500 cursor-pointer"
                             >
                               Clear All
                             </button>
@@ -315,23 +314,23 @@ export function PermissionAssignmentView() {
                   return (
                     <React.Fragment key={category}>
                       {/* Category Header Row */}
-                      <tr className="bg-slate-50 dark:bg-slate-800/50">
+                      <tr className="bg-slate-50 dark:bg-slate-800/60">
                         <td
                           colSpan={roles.length + 1}
-                          className="px-4 py-2 font-bold uppercase text-[11px] tracking-wider text-slate-500"
+                          className="px-5 py-3 font-black uppercase text-xs tracking-wider text-slate-600 dark:text-slate-300"
                         >
                           {category}
                         </td>
                       </tr>
 
-                      {/* Permissions Rows (Only Permission Names) */}
+                      {/* Permissions Rows */}
                       {categoryPerms.map((perm) => (
                         <tr
                           key={perm.id}
                           className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors"
                         >
                           {/* Permission Name Only */}
-                          <td className="px-4 py-3 font-semibold text-slate-800 dark:text-slate-200 text-xs">
+                          <td className="px-5 py-4 font-bold text-slate-900 dark:text-slate-100 text-sm">
                             {perm.name}
                           </td>
 
@@ -343,7 +342,7 @@ export function PermissionAssignmentView() {
                               <td
                                 key={`${role.id}-${perm.id}`}
                                 onClick={() => handleToggleCell(role.id, perm.id)}
-                                className={`px-4 py-3 text-center align-middle border-l border-slate-100 dark:border-slate-800 cursor-pointer select-none transition ${
+                                className={`px-4 py-4 text-center align-middle border-l border-slate-100 dark:border-slate-800 cursor-pointer select-none transition ${
                                   isChecked ? "bg-brand-primary/5" : ""
                                 }`}
                               >
@@ -351,7 +350,7 @@ export function PermissionAssignmentView() {
                                   {isChecked ? (
                                     <CheckSquare className="h-5 w-5 text-brand-primary" />
                                   ) : (
-                                    <Square className="h-5 w-5 text-slate-300 dark:text-slate-700" />
+                                    <Square className="h-5 w-5 text-slate-300 dark:text-slate-600" />
                                   )}
                                 </div>
                               </td>
@@ -370,18 +369,18 @@ export function PermissionAssignmentView() {
 
       {/* Sticky Bottom Save Action Bar */}
       {isOwner && isDirty && (
-        <div className="sticky bottom-4 z-30 p-4 rounded-2xl bg-slate-900 text-white shadow-xl flex items-center justify-between gap-4">
+        <div className="sticky bottom-4 z-30 p-4 px-6 rounded-2xl bg-slate-900 text-white shadow-2xl flex items-center justify-between gap-4 border border-slate-800">
           <div>
-            <div className="font-bold text-sm">Unsaved changes</div>
-            <div className="text-xs text-slate-400">
-              Save changes to update staff permissions.
+            <div className="font-black text-base text-white">Unsaved Changes</div>
+            <div className="text-xs text-slate-400 font-medium">
+              Save changes to update staff role permissions.
             </div>
           </div>
 
           <div className="flex items-center gap-3">
             <button
               onClick={handleReset}
-              className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
+              className="h-11 px-5 rounded-xl text-sm font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 transition cursor-pointer"
             >
               Reset
             </button>
@@ -389,7 +388,7 @@ export function PermissionAssignmentView() {
             <button
               onClick={handleSaveMatrix}
               disabled={saving}
-              className="flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-bold bg-brand-primary hover:bg-brand-primary/90 text-white shadow-md transition"
+              className="h-11 px-6 rounded-xl text-sm font-black bg-brand-primary hover:bg-brand-primary/90 text-white shadow-lg transition flex items-center gap-2 cursor-pointer"
             >
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               <span>{saving ? "Saving..." : "Save Changes"}</span>

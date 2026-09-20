@@ -89,7 +89,7 @@ let cachedAvailablePlans: any[] | null = null;
 export default function RoleBasedDashboard() {
   const router = useRouter();
   const pathname = usePathname();
-  const { user, isAuthenticated, isSuperAdmin, isPlatformStaff, hasPermission, loading: authLoading } = useAuth();
+  const { user, isAuthenticated, isSuperAdmin, isPlatformStaff, hasPermission, loading: authLoading, logout } = useAuth();
 
   const [activeModule, setActiveModule] = useState<OwnerModule>(() => {
     const currentPath = typeof window !== "undefined" ? window.location.pathname : pathname;
@@ -287,9 +287,17 @@ export default function RoleBasedDashboard() {
   const isExpired = endDate ? endDate.getTime() <= Date.now() : false;
   const trialDaysRemaining = isTrial ? calculateRemainingTrialDays(currentSub?.endDate) : 0;
   const isTrialExpired = isTrial && isExpired;
+  const paidDaysRemaining = !isTrial && endDate ? Math.ceil((endDate.getTime() - Date.now()) / (1000 * 3600 * 24)) : null;
+  const isExpiringSoon = !isTrial && !isExpired && paidDaysRemaining !== null && paidDaysRemaining <= 5 && paidDaysRemaining >= 0;
 
-  // Barrier 1: Expired Trial or Expired Paid Subscription (Blocks Management)
+  // Barrier 1: Expired Trial or Expired Paid Subscription for Pharmacy Owner (Blocks all dashboard access)
   if (isExpired && user?.role === "COMPANY_OWNER") {
+    const selectedPlan = availablePlans.find((p: any) => p.id === upgradePlanId);
+    const isRenewingCurrent =
+      selectedPlan?.id === currentSub?.planId ||
+      selectedPlan?.tier === currentSub?.plan?.tier ||
+      selectedPlan?.tier === tenantProfile?.tier;
+
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4 sm:p-6">
         <div className="max-w-2xl w-full rounded-3xl bg-slate-950 border border-red-500/30 shadow-2xl p-6 sm:p-10 text-center space-y-8 relative overflow-hidden">
@@ -306,10 +314,10 @@ export default function RoleBasedDashboard() {
               {isTrial ? "7-Day Free Trial Expired" : "Subscription Expired"}
             </div>
             <h1 className="text-3xl font-black text-white tracking-tight">
-              {isTrial ? "Upgrade to Continue Managing Your Pharmacy" : "Renew Your Subscription Plan"}
+              {isTrial ? "Upgrade to Continue Managing Your Pharmacy" : "Renew or Upgrade Your Subscription Plan"}
             </h1>
             <p className="text-sm text-slate-400 max-w-lg mx-auto leading-relaxed">
-              Your organization account <strong>{tenantProfile?.name || "Your Pharmacy"}</strong> has reached the end of its {isTrial ? "7-day Free Trial" : "active subscription period"}. Choose a paid plan below to instantly re-activate your counter POS, catalog, branch network, and staff access.
+              Your organization account <strong>{tenantProfile?.name || "Your Pharmacy"}</strong> has reached the end of its {isTrial ? "7-day Free Trial" : "active subscription period"}. Dashboard operations, POS sales, and staff access are temporarily locked. Choose a plan below to renew your existing plan or upgrade to a higher tier.
             </p>
           </div>
 
@@ -317,6 +325,7 @@ export default function RoleBasedDashboard() {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-left">
             {availablePlans.map((plan: any) => {
               const isSelected = upgradePlanId === plan.id;
+              const isCurrent = plan.id === currentSub?.planId || plan.tier === currentSub?.plan?.tier || plan.tier === tenantProfile?.tier;
               const isGrowth = plan.tier === "GROWTH";
               return (
                 <div
@@ -328,11 +337,15 @@ export default function RoleBasedDashboard() {
                       : "bg-slate-900/80 border-slate-800 hover:border-slate-700"
                   }`}
                 >
-                  {isGrowth && (
+                  {isCurrent ? (
+                    <span className="absolute -top-2.5 right-3 px-2 py-0.5 rounded-full bg-emerald-500 text-white text-[10px] font-extrabold uppercase">
+                      Current Plan (Renew)
+                    </span>
+                  ) : isGrowth ? (
                     <span className="absolute -top-2.5 right-3 px-2 py-0.5 rounded-full bg-brand-primary text-white text-[10px] font-extrabold uppercase">
                       Recommended
                     </span>
-                  )}
+                  ) : null}
                   <div className="text-xs font-bold text-slate-400 uppercase">{plan.tier}</div>
                   <div className="text-lg font-black text-white">{plan.name}</div>
                   <div className="text-2xl font-extrabold text-brand-primary">
@@ -364,25 +377,64 @@ export default function RoleBasedDashboard() {
             <button
               onClick={() => handleInitiateUpgrade(upgradePlanId || availablePlans[0]?.id)}
               disabled={initiatingPay || !upgradePlanId}
-              className="w-full py-4 rounded-2xl bg-brand-primary text-white font-bold text-base shadow-xl hover:opacity-90 transition active:scale-95 flex items-center justify-center gap-3 disabled:opacity-50"
+              className="w-full py-4 rounded-2xl bg-brand-primary text-white font-bold text-base shadow-xl hover:opacity-90 transition active:scale-95 flex items-center justify-center gap-3 disabled:opacity-50 cursor-pointer"
             >
               {initiatingPay ? (
                 <>
                   <Loader2 className="h-5 w-5 animate-spin" />
-                  Connecting to SSLCOMMERZ Sandbox...
+                  Connecting to SSLCOMMERZ Secure Checkout...
+                </>
+              ) : isRenewingCurrent ? (
+                <>
+                  <CreditCard className="h-5 w-5" />
+                  Renew {selectedPlan?.name || "Current Plan"} & Pay via SSLCOMMERZ
                 </>
               ) : (
                 <>
                   <CreditCard className="h-5 w-5" />
-                  Upgrade & Pay via SSLCOMMERZ Sandbox Gateway
+                  Upgrade to {selectedPlan?.name || "Plan"} & Pay via SSLCOMMERZ
                 </>
               )}
             </button>
             <div className="text-xs text-slate-500 flex items-center justify-center gap-2">
               <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-              <span>Instant activation & restriction removal upon payment</span>
+              <span>Instant account activation & restriction removal upon successful payment</span>
             </div>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Barrier 2: Expired Subscription for Staff Members (Cashiers, Managers, Executives)
+  if (isExpired && user?.role !== "COMPANY_OWNER") {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4 sm:p-6">
+        <div className="max-w-md w-full rounded-3xl bg-slate-950 border border-amber-500/30 shadow-2xl p-6 sm:p-8 text-center space-y-6">
+          <div className="h-16 w-16 rounded-3xl bg-amber-500/10 border border-amber-500/30 text-amber-500 mx-auto flex items-center justify-center shadow-lg">
+            <Clock className="h-8 w-8 animate-pulse" />
+          </div>
+          <div className="space-y-2">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-amber-500/10 text-amber-400 border border-amber-500/20">
+              Subscription Expired
+            </div>
+            <h1 className="text-2xl font-black text-white">
+              Pharmacy Account Locked
+            </h1>
+            <p className="text-sm text-slate-400 leading-relaxed">
+              The subscription for <strong>{tenantProfile?.name || "your pharmacy"}</strong> has reached the end of its active billing period. Operational and POS access is temporarily restricted.
+            </p>
+            <p className="text-xs text-slate-500">
+              Please contact your Pharmacy Owner or Super Administrator to renew the subscription plan and restore system access.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={logout}
+            className="w-full py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-sm transition cursor-pointer"
+          >
+            Sign Out
+          </button>
         </div>
       </div>
     );
@@ -405,14 +457,43 @@ export default function RoleBasedDashboard() {
 
           <div className="flex items-center gap-3">
             <button
-              onClick={() => setActiveModule("subscription")}
-              className="px-3 py-1 rounded-lg bg-white/20 hover:bg-white/30 text-white font-bold backdrop-blur-sm transition flex items-center gap-1.5"
+              onClick={() => handleNavigate("subscription")}
+              className="px-3 py-1 rounded-lg bg-white/20 hover:bg-white/30 text-white font-bold backdrop-blur-sm transition flex items-center gap-1.5 cursor-pointer"
             >
               <Sparkles className="h-3.5 w-3.5 text-amber-300" />
               Upgrade to Paid Plan
               <ArrowRight className="h-3 w-3" />
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Paid Subscription Expiring Soon Warning Banner (5 days or less) */}
+      {isExpiringSoon && (
+        <div className="shrink-0 bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 text-white px-4 sm:px-6 py-2.5 flex flex-col sm:flex-row items-center justify-between gap-2 shadow-sm z-50 text-xs font-semibold">
+          <div className="flex items-center gap-2.5">
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white" />
+            </span>
+            <span>
+              <strong>Subscription Expiring Soon:</strong> {paidDaysRemaining} day{paidDaysRemaining === 1 ? "" : "s"} remaining (Expires on {endDate?.toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" })}). Renew now to maintain uninterrupted POS, sales, and branch operations.
+            </span>
+          </div>
+
+          {user?.role === "COMPANY_OWNER" && (
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => handleNavigate("subscription")}
+                className="px-3.5 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white font-bold backdrop-blur-sm transition flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
+              >
+                <Sparkles className="h-3.5 w-3.5 text-amber-300" />
+                <span>Renew / Upgrade Plan</span>
+                <ArrowRight className="h-3 w-3" />
+              </button>
+            </div>
+          )}
         </div>
       )}
 

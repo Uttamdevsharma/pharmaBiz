@@ -284,19 +284,16 @@ export function CategoryListView({ onNavigate }: CategoryListViewProps) {
             <span>/</span>
             <span className="text-brand-primary font-bold">Category List</span>
           </div>
-          <h2 className="text-xl font-black text-slate-900 dark:text-white flex items-center gap-2">
-            <FolderTree className="h-6 w-6 text-brand-primary" />
-            Category Hierarchy & Subcategories
+          <h2 className="text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2">
+            <FolderTree className="h-7 w-7 text-brand-primary" />
+            Category List
           </h2>
-          <p className="text-xs text-slate-500 mt-0.5">
-            View main categories, subcategories, assigned product counts, and manage statuses.
-          </p>
         </div>
 
         {onNavigate && (
           <button
             onClick={() => onNavigate("cat_create")}
-            className="px-4 py-2 bg-brand-primary hover:bg-brand-primary-hover text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shrink-0 shadow-sm"
+            className="h-11 px-5 bg-brand-primary hover:bg-brand-primary-hover text-white rounded-xl text-sm font-bold transition flex items-center gap-2 shrink-0 shadow-sm"
           >
             <Plus className="h-4 w-4" />
             Create Category
@@ -306,21 +303,21 @@ export function CategoryListView({ onNavigate }: CategoryListViewProps) {
 
       {/* Notifications */}
       {success && (
-        <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 rounded-2xl text-emerald-800 dark:text-emerald-300 text-xs flex items-center gap-2.5 font-bold animate-in fade-in">
-          <CheckCircle2 className="h-4.5 w-4.5 shrink-0 text-emerald-600" />
+        <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 rounded-2xl text-emerald-800 dark:text-emerald-300 text-sm flex items-center gap-2.5 font-bold animate-in fade-in">
+          <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" />
           <span>{success}</span>
         </div>
       )}
 
       {error && (
-        <div className="p-3.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-2xl text-rose-800 dark:text-rose-300 text-xs flex items-center gap-2.5 font-semibold">
-          <AlertCircle className="h-4.5 w-4.5 shrink-0 text-rose-600" />
+        <div className="p-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-2xl text-rose-800 dark:text-rose-300 text-sm flex items-center gap-2.5 font-bold">
+          <AlertCircle className="h-5 w-5 shrink-0 text-rose-600" />
           <span>{error}</span>
         </div>
       )}
 
       {/* Overview Cards Bar */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
         {categories.map((c) => {
           const isSelected = selectedCategoryFilter === c.id;
           const isActive = c.isActive ?? true;
@@ -328,7 +325,7 @@ export function CategoryListView({ onNavigate }: CategoryListViewProps) {
             <div
               key={c.id}
               onClick={() => setSelectedCategoryFilter(isSelected ? "ALL" : c.id)}
-              className={`p-3.5 rounded-2xl border text-left transition relative overflow-hidden flex flex-col justify-between cursor-pointer ${
+              className={`p-4 rounded-2xl border text-left transition relative overflow-hidden flex flex-col justify-between cursor-pointer ${
                 isSelected
                   ? "bg-white dark:bg-slate-900 border-brand-primary ring-2 ring-brand-primary/20 shadow-sm"
                   : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700"
@@ -339,7 +336,7 @@ export function CategoryListView({ onNavigate }: CategoryListViewProps) {
                   {getCategoryIcon(c.name)}
                 </div>
                 <span
-                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                  className={`text-xs font-bold px-2.5 py-0.5 rounded-full ${
                     isActive
                       ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
                       : "bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
@@ -349,10 +346,10 @@ export function CategoryListView({ onNavigate }: CategoryListViewProps) {
                 </span>
               </div>
               <div>
-                <h4 className="text-xs font-black text-slate-900 dark:text-white truncate">
+                <h4 className="text-sm font-black text-slate-900 dark:text-white truncate">
                   {c.name}
                 </h4>
-                <div className="text-[11px] text-slate-400 font-medium mt-0.5 flex items-center justify-between">
+                <div className="text-xs text-slate-400 font-semibold mt-1 flex items-center justify-between">
                   <span>{c.subcategories?.length || 0} sub</span>
                   <span>{c._count?.products || 0} items</span>
                 </div>
@@ -363,25 +360,25 @@ export function CategoryListView({ onNavigate }: CategoryListViewProps) {
       </div>
 
       {/* Search & Filter Bar */}
-      <div className="bg-white dark:bg-slate-900 p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row items-center gap-3">
+      <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row items-center gap-3">
         <div className="relative flex-1 w-full">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
           <input
             type="text"
             placeholder="Search categories or subcategories..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-brand-primary/20 font-medium"
+            className="w-full h-12 pl-11 pr-4 bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-brand-primary/20 font-semibold"
           />
         </div>
 
         {selectedCategoryFilter !== "ALL" && (
           <button
             onClick={() => setSelectedCategoryFilter("ALL")}
-            className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold flex items-center gap-1 hover:bg-slate-200 transition shrink-0"
+            className="h-12 px-4 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-slate-200 transition shrink-0"
           >
             <span>Show All Categories</span>
-            <X className="h-3.5 w-3.5" />
+            <X className="h-4 w-4" />
           </button>
         )}
       </div>
@@ -595,23 +592,23 @@ export function CategoryListView({ onNavigate }: CategoryListViewProps) {
       {/* MODAL 1: Immediate Add Subcategory */}
       {addingSubForCat && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in">
-          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 max-w-md w-full p-6 shadow-2xl space-y-4">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 max-w-md w-full p-6 shadow-2xl space-y-5">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <h3 className="text-sm font-black text-slate-900 dark:text-white flex items-center gap-2">
-                <Plus className="h-4 w-4 text-brand-primary" />
-                Add Subcategory under "{addingSubForCat.name}"
+              <h3 className="text-xl font-black text-slate-900 dark:text-white flex items-center gap-2">
+                <Plus className="h-5 w-5 text-brand-primary" />
+                Add Subcategory ({addingSubForCat.name})
               </h3>
               <button
                 onClick={() => setAddingSubForCat(null)}
-                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
+                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg"
               >
-                <X className="h-4 w-4" />
+                <X className="h-5 w-5" />
               </button>
             </div>
 
             <form onSubmit={handleSaveQuickSubcategory} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">
                   Subcategory Name *
                 </label>
                 <input
@@ -620,24 +617,24 @@ export function CategoryListView({ onNavigate }: CategoryListViewProps) {
                   placeholder="e.g. Tablet, Capsule, Cream, Drops"
                   value={quickSubName}
                   onChange={(e) => setQuickSubName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-brand-primary/20"
+                  className="w-full h-12 px-4 bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-base font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-brand-primary/20"
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-2">
+              <div className="flex items-center justify-end gap-3 pt-2">
                 <button
                   type="button"
                   onClick={() => setAddingSubForCat(null)}
-                  className="px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl"
+                  className="h-11 px-5 text-sm font-bold text-slate-500 hover:bg-slate-100 rounded-xl"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={saving || !quickSubName.trim()}
-                  className="px-5 py-2 bg-brand-primary text-white rounded-xl text-xs font-bold hover:bg-brand-primary-hover transition flex items-center gap-1.5 disabled:opacity-50"
+                  className="h-11 px-6 bg-brand-primary text-white rounded-xl text-sm font-black hover:bg-brand-primary-hover transition flex items-center gap-2 disabled:opacity-50"
                 >
-                  {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                   Add Subcategory
                 </button>
               </div>
@@ -649,23 +646,23 @@ export function CategoryListView({ onNavigate }: CategoryListViewProps) {
       {/* MODAL 2: Edit Main Category */}
       {editingMainCat && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in">
-          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 max-w-md w-full p-6 shadow-2xl space-y-4">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 max-w-md w-full p-6 shadow-2xl space-y-5">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <h3 className="text-sm font-black text-slate-900 dark:text-white flex items-center gap-2">
-                <Edit2 className="h-4 w-4 text-brand-primary" />
+              <h3 className="text-xl font-black text-slate-900 dark:text-white flex items-center gap-2">
+                <Edit2 className="h-5 w-5 text-brand-primary" />
                 Edit Category Name
               </h3>
               <button
                 onClick={() => setEditingMainCat(null)}
-                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
+                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg"
               >
-                <X className="h-4 w-4" />
+                <X className="h-5 w-5" />
               </button>
             </div>
 
             <form onSubmit={handleSaveEditMain} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">
                   Category Name *
                 </label>
                 <input
@@ -673,24 +670,24 @@ export function CategoryListView({ onNavigate }: CategoryListViewProps) {
                   required
                   value={editMainName}
                   onChange={(e) => setEditMainName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-brand-primary/20"
+                  className="w-full h-12 px-4 bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-base font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-brand-primary/20"
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-2">
+              <div className="flex items-center justify-end gap-3 pt-2">
                 <button
                   type="button"
                   onClick={() => setEditingMainCat(null)}
-                  className="px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl"
+                  className="h-11 px-5 text-sm font-bold text-slate-500 hover:bg-slate-100 rounded-xl"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={saving || !editMainName.trim()}
-                  className="px-5 py-2 bg-brand-primary text-white rounded-xl text-xs font-bold hover:bg-brand-primary-hover transition flex items-center gap-1.5 disabled:opacity-50"
+                  className="h-11 px-6 bg-brand-primary text-white rounded-xl text-sm font-black hover:bg-brand-primary-hover transition flex items-center gap-2 disabled:opacity-50"
                 >
-                  {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Save Changes"}
+                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save Changes"}
                 </button>
               </div>
             </form>
@@ -701,23 +698,23 @@ export function CategoryListView({ onNavigate }: CategoryListViewProps) {
       {/* MODAL 3: Edit Subcategory */}
       {editingSubcategory && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in">
-          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 max-w-md w-full p-6 shadow-2xl space-y-4">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 max-w-md w-full p-6 shadow-2xl space-y-5">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <h3 className="text-sm font-black text-slate-900 dark:text-white flex items-center gap-2">
-                <Edit2 className="h-4 w-4 text-brand-primary" />
-                Edit Subcategory under "{editingSubcategory.parentName}"
+              <h3 className="text-xl font-black text-slate-900 dark:text-white flex items-center gap-2">
+                <Edit2 className="h-5 w-5 text-brand-primary" />
+                Edit Subcategory
               </h3>
               <button
                 onClick={() => setEditingSubcategory(null)}
-                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
+                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg"
               >
-                <X className="h-4 w-4" />
+                <X className="h-5 w-5" />
               </button>
             </div>
 
             <form onSubmit={handleSaveEditSub} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">
                   Subcategory Name *
                 </label>
                 <input
@@ -725,24 +722,24 @@ export function CategoryListView({ onNavigate }: CategoryListViewProps) {
                   required
                   value={editSubName}
                   onChange={(e) => setEditSubName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-brand-primary/20"
+                  className="w-full h-12 px-4 bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-base font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-brand-primary/20"
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-2">
+              <div className="flex items-center justify-end gap-3 pt-2">
                 <button
                   type="button"
                   onClick={() => setEditingSubcategory(null)}
-                  className="px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl"
+                  className="h-11 px-5 text-sm font-bold text-slate-500 hover:bg-slate-100 rounded-xl"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={saving || !editSubName.trim()}
-                  className="px-5 py-2 bg-brand-primary text-white rounded-xl text-xs font-bold hover:bg-brand-primary-hover transition flex items-center gap-1.5 disabled:opacity-50"
+                  className="h-11 px-6 bg-brand-primary text-white rounded-xl text-sm font-black hover:bg-brand-primary-hover transition flex items-center gap-2 disabled:opacity-50"
                 >
-                  {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Save Changes"}
+                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save Changes"}
                 </button>
               </div>
             </form>

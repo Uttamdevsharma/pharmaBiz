@@ -2,6 +2,7 @@ import { prisma } from "../../app/lib/prisma";
 import { CreatePlanInput, UpdatePlanInput, ListTenantsQuery } from "./super-admin.validation";
 import { PlatformAnalyticsResponse, PharmacyGrowthPoint, SubscriptionByPlanData } from "./super-admin.types";
 import { EmailService } from "../../app/lib/email.service";
+import { CENTRAL_PLAN_DEFINITIONS, PricingTierType } from "../../app/lib/planLimits";
 
 export class SuperAdminService {
   /**
@@ -74,6 +75,13 @@ export class SuperAdminService {
       throw new Error(`A subscription plan already exists for tier ${data.tier}. Please update the existing plan.`);
     }
 
+    const feat = {
+      ...(data.features || {}),
+      ...(data.maxStaffPerBranch !== undefined && { maxStaffPerBranch: data.maxStaffPerBranch }),
+      ...(data.maxTotalStaff !== undefined && { maxTotalStaff: data.maxTotalStaff }),
+      ...(data.trialDays !== undefined && { trialDays: data.trialDays }),
+    };
+
     return await (prisma as any).subscriptionPlan.create({
       data: {
         name: data.name,
@@ -81,20 +89,31 @@ export class SuperAdminService {
         price: data.price,
         billingCycle: data.billingCycle,
         maxBranches: data.maxBranches,
-        features: data.features || {},
+        features: feat,
         isActive: data.isActive,
       },
     });
   }
 
   static async listPlans() {
-    return await (prisma as any).subscriptionPlan.findMany({
+    const plans = await (prisma as any).subscriptionPlan.findMany({
       orderBy: { price: "asc" },
       include: {
         _count: {
           select: { subscriptions: true },
         },
       },
+    });
+
+    return plans.map((p: any) => {
+      const feat = (typeof p.features === "object" && p.features !== null) ? p.features : {};
+      const fallback: any = CENTRAL_PLAN_DEFINITIONS[p.tier as PricingTierType] || CENTRAL_PLAN_DEFINITIONS.TRIAL;
+      return {
+        ...p,
+        maxStaffPerBranch: feat.maxStaffPerBranch ?? fallback.maxStaffPerBranch ?? 1,
+        maxTotalStaff: feat.maxTotalStaff ?? fallback.maxTotalStaff ?? (p.maxBranches * (feat.maxStaffPerBranch ?? 1)),
+        trialDays: feat.trialDays ?? fallback.trialDays ?? 7,
+      };
     });
   }
 
@@ -118,7 +137,14 @@ export class SuperAdminService {
       throw new Error("Subscription plan not found");
     }
 
-    return plan;
+    const feat = (typeof plan.features === "object" && plan.features !== null) ? plan.features : {};
+    const fallback: any = CENTRAL_PLAN_DEFINITIONS[plan.tier as PricingTierType] || CENTRAL_PLAN_DEFINITIONS.TRIAL;
+    return {
+      ...plan,
+      maxStaffPerBranch: feat.maxStaffPerBranch ?? fallback.maxStaffPerBranch ?? 1,
+      maxTotalStaff: feat.maxTotalStaff ?? fallback.maxTotalStaff ?? (plan.maxBranches * (feat.maxStaffPerBranch ?? 1)),
+      trialDays: feat.trialDays ?? fallback.trialDays ?? 7,
+    };
   }
 
   static async updatePlan(id: string, data: UpdatePlanInput) {
@@ -127,6 +153,15 @@ export class SuperAdminService {
       throw new Error("Subscription plan not found");
     }
 
+    const currentFeatures = (typeof plan.features === "object" && plan.features !== null) ? plan.features : {};
+    const updatedFeatures = {
+      ...currentFeatures,
+      ...(data.features || {}),
+      ...(data.maxStaffPerBranch !== undefined && { maxStaffPerBranch: data.maxStaffPerBranch }),
+      ...(data.maxTotalStaff !== undefined && { maxTotalStaff: data.maxTotalStaff }),
+      ...(data.trialDays !== undefined && { trialDays: data.trialDays }),
+    };
+
     return await (prisma as any).subscriptionPlan.update({
       where: { id },
       data: {
@@ -134,7 +169,7 @@ export class SuperAdminService {
         ...(data.price !== undefined && { price: data.price }),
         ...(data.billingCycle && { billingCycle: data.billingCycle }),
         ...(data.maxBranches !== undefined && { maxBranches: data.maxBranches }),
-        ...(data.features && { features: data.features }),
+        features: updatedFeatures,
         ...(data.isActive !== undefined && { isActive: data.isActive }),
       },
     });
@@ -188,6 +223,14 @@ export class SuperAdminService {
 
     if (query.isActive !== undefined) {
       where.isActive = query.isActive;
+    }
+
+    if (query.subscriptionStatus) {
+      where.subscriptions = {
+        some: {
+          status: query.subscriptionStatus,
+        },
+      };
     }
 
     const dateRange = SuperAdminService.getDateRangeFilter(query.datePreset, query.startDate, query.endDate);
@@ -401,9 +444,30 @@ export class SuperAdminService {
   /**
    * Platform Payments & Transactions
    */
-  static async listPlatformPayments(page = 1, limit = 50) {
+  static async listPlatformPayments(
+    page = 1,
+    limit = 50,
+    datePreset?: string,
+    startDate?: string,
+    endDate?: string,
+    search?: string
+  ) {
     const skip = (page - 1) * limit;
     const where: any = { tenant: { name: { not: "Platform HQ" } } };
+
+    if (search && search.trim()) {
+      const s = search.trim();
+      where.OR = [
+        { tranId: { contains: s, mode: "insensitive" } },
+        { paymentMethod: { contains: s, mode: "insensitive" } },
+        { tenant: { name: { contains: s, mode: "insensitive" } } },
+      ];
+    }
+
+    const dateRange = SuperAdminService.getDateRangeFilter(datePreset, startDate, endDate);
+    if (dateRange) {
+      where.createdAt = dateRange;
+    }
 
     const [total, payments] = await Promise.all([
       (prisma as any).payment.count({ where }),
@@ -1575,7 +1639,7 @@ export class SuperAdminService {
     }
 
     // Build payment checkout URL
-    const clientUrl = process.env.CLIENT_URL || "http://localhost:3000";
+    const clientUrl = process.env.CLIENT_URL || "http://localhost:3001";
     const paymentUrl = `${clientUrl}/verification-status?tenantId=${tenant.id}&email=${encodeURIComponent(owner.email || tenant.email || "")}`;
 
     // Send Approval Email

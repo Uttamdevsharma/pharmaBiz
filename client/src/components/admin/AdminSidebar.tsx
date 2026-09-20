@@ -141,9 +141,9 @@ export function AdminSidebar({
           </button>
         </div>
 
-        {/* Collapsed Icon-Only Mode */}
+        {/* Collapsed Icon-Only View */}
         {isCollapsed ? (
-          <div className="p-2.5 space-y-2.5 flex-1 sidebar-scrollbar flex flex-col items-center">
+          <div className="py-5 flex flex-col items-center gap-3.5 flex-1 sidebar-scrollbar overflow-y-auto w-full px-2">
             {/* Overview */}
             <div className="relative group w-full flex justify-center">
               <button
@@ -158,12 +158,12 @@ export function AdminSidebar({
               >
                 <LayoutDashboard className="h-5 w-5 shrink-0" />
               </button>
-              <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 px-2.5 py-1.5 rounded-xl bg-slate-900 dark:bg-slate-800 text-white text-xs font-semibold shadow-xl opacity-0 pointer-events-none group-hover:opacity-100 transition whitespace-nowrap z-50 border border-slate-700">
+              <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 px-3 py-1.5 rounded-xl bg-slate-900 dark:bg-slate-800 text-white text-xs font-bold shadow-xl opacity-0 pointer-events-none group-hover:opacity-100 transition whitespace-nowrap z-50 border border-slate-700">
                 Overview
               </div>
             </div>
 
-            {/* Pharmacy Verification */}
+            {/* Pending Approvals */}
             {canViewTenants && (
               <div className="relative group w-full flex justify-center">
                 <button
@@ -174,13 +174,12 @@ export function AdminSidebar({
                       ? "bg-brand-primary text-white shadow-md shadow-brand-primary/20"
                       : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
                   }`}
-                  aria-label="Pharmacy Verification"
+                  aria-label="Pending Approvals"
                 >
                   <ShieldCheck className="h-5 w-5 shrink-0" />
-                  <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-amber-500 ring-2 ring-white dark:ring-slate-900" />
                 </button>
-                <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 px-2.5 py-1.5 rounded-xl bg-slate-900 dark:bg-slate-800 text-white text-xs font-semibold shadow-xl opacity-0 pointer-events-none group-hover:opacity-100 transition whitespace-nowrap z-50 border border-slate-700">
-                  Pharmacy Verification
+                <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 px-3 py-1.5 rounded-xl bg-slate-900 dark:bg-slate-800 text-white text-xs font-bold shadow-xl opacity-0 pointer-events-none group-hover:opacity-100 transition whitespace-nowrap z-50 border border-slate-700">
+                  Pending Approvals
                 </div>
               </div>
             )}
@@ -200,7 +199,7 @@ export function AdminSidebar({
                 >
                   <Building2 className="h-5 w-5 shrink-0" />
                 </button>
-                <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 px-2.5 py-1.5 rounded-xl bg-slate-900 dark:bg-slate-800 text-white text-xs font-semibold shadow-xl opacity-0 pointer-events-none group-hover:opacity-100 transition whitespace-nowrap z-50 border border-slate-700">
+                <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 px-3 py-1.5 rounded-xl bg-slate-900 dark:bg-slate-800 text-white text-xs font-bold shadow-xl opacity-0 pointer-events-none group-hover:opacity-100 transition whitespace-nowrap z-50 border border-slate-700">
                   Pharmacies & Tenants
                 </div>
               </div>
@@ -221,7 +220,7 @@ export function AdminSidebar({
                 >
                   <Users className="h-5 w-5 shrink-0" />
                 </button>
-                <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 px-2.5 py-1.5 rounded-xl bg-slate-900 dark:bg-slate-800 text-white text-xs font-semibold shadow-xl opacity-0 pointer-events-none group-hover:opacity-100 transition whitespace-nowrap z-50 border border-slate-700">
+                <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 px-3 py-1.5 rounded-xl bg-slate-900 dark:bg-slate-800 text-white text-xs font-bold shadow-xl opacity-0 pointer-events-none group-hover:opacity-100 transition whitespace-nowrap z-50 border border-slate-700">
                   Staff Management
                 </div>
               </div>
@@ -244,29 +243,29 @@ export function AdminSidebar({
                 >
                   <PackageCheck className="h-5 w-5 shrink-0" />
                 </button>
-                <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 px-2.5 py-1.5 rounded-xl bg-slate-900 dark:bg-slate-800 text-white text-xs font-semibold shadow-xl opacity-0 pointer-events-none group-hover:opacity-100 transition whitespace-nowrap z-50 border border-slate-700">
+                <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 px-3 py-1.5 rounded-xl bg-slate-900 dark:bg-slate-800 text-white text-xs font-bold shadow-xl opacity-0 pointer-events-none group-hover:opacity-100 transition whitespace-nowrap z-50 border border-slate-700">
                   Subscription Plans
                 </div>
               </div>
             )}
 
-            {/* Subscriptions */}
-            {canViewSubscriptions && (
+            {/* Payments */}
+            {canViewPayments && (
               <div className="relative group w-full flex justify-center">
                 <button
                   type="button"
-                  onClick={() => handleTabClick("subscriptions")}
+                  onClick={() => handleTabClick("payments")}
                   className={`h-11 w-11 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
-                    activeTab === "subscriptions"
+                    activeTab === "payments"
                       ? "bg-brand-primary text-white shadow-md shadow-brand-primary/20"
                       : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
                   }`}
-                  aria-label="Subscriptions"
+                  aria-label="Payments & Invoices"
                 >
-                  <Layers className="h-5 w-5 shrink-0" />
+                  <CreditCard className="h-5 w-5 shrink-0" />
                 </button>
-                <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 px-2.5 py-1.5 rounded-xl bg-slate-900 dark:bg-slate-800 text-white text-xs font-semibold shadow-xl opacity-0 pointer-events-none group-hover:opacity-100 transition whitespace-nowrap z-50 border border-slate-700">
-                  Subscriptions
+                <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 px-3 py-1.5 rounded-xl bg-slate-900 dark:bg-slate-800 text-white text-xs font-bold shadow-xl opacity-0 pointer-events-none group-hover:opacity-100 transition whitespace-nowrap z-50 border border-slate-700">
+                  Payments & Invoices
                 </div>
               </div>
             )}
@@ -286,49 +285,44 @@ export function AdminSidebar({
                 >
                   <Palette className="h-5 w-5 shrink-0" />
                 </button>
-                <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 px-2.5 py-1.5 rounded-xl bg-slate-900 dark:bg-slate-800 text-white text-xs font-semibold shadow-xl opacity-0 pointer-events-none group-hover:opacity-100 transition whitespace-nowrap z-50 border border-slate-700">
+                <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 px-3 py-1.5 rounded-xl bg-slate-900 dark:bg-slate-800 text-white text-xs font-bold shadow-xl opacity-0 pointer-events-none group-hover:opacity-100 transition whitespace-nowrap z-50 border border-slate-700">
                   Branding & Theme
                 </div>
               </div>
             )}
           </div>
         ) : (
-          /* Full Expanded Sidebar Content */
-          <div className="p-4 space-y-1.5 flex-1 sidebar-scrollbar">
-            <div className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+          /* Full Expanded Sidebar Content with larger, readable fonts */
+          <div className="p-3.5 xl:p-4 space-y-2 flex-1 sidebar-scrollbar overflow-y-auto">
+            <div className="px-3.5 py-2 text-xs font-black uppercase tracking-wider text-slate-400">
               Platform Management
             </div>
 
             {/* Overview */}
             <button
               onClick={() => handleTabClick("overview")}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
+              className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-sm sm:text-base font-bold transition-all cursor-pointer ${
                 activeTab === "overview"
                   ? "bg-brand-primary text-white shadow-sm"
                   : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white"
               }`}
             >
-              <LayoutDashboard className="h-4 w-4 shrink-0" />
+              <LayoutDashboard className="h-5 w-5 shrink-0" />
               <span>Overview</span>
             </button>
 
-            {/* Pharmacy Verification & Compliance */}
+            {/* Pending Approvals */}
             {canViewTenants && (
               <button
                 onClick={() => handleTabClick("verifications")}
-                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
+                className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-sm sm:text-base font-bold transition-all cursor-pointer ${
                   activeTab === "verifications"
                     ? "bg-brand-primary text-white shadow-sm"
                     : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white"
                 }`}
               >
-                <div className="flex items-center gap-3">
-                  <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-500" />
-                  <span>Pharmacy Verification</span>
-                </div>
-                <span className="px-1.5 py-0.5 rounded-md bg-amber-500/20 text-amber-600 dark:text-amber-400 text-[10px] font-extrabold">
-                  Review
-                </span>
+                <ShieldCheck className="h-5 w-5 shrink-0" />
+                <span>Pending Approvals</span>
               </button>
             )}
 
@@ -336,13 +330,13 @@ export function AdminSidebar({
             {canViewTenants && (
               <button
                 onClick={() => handleTabClick("tenants")}
-                className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
+                className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-sm sm:text-base font-bold transition-all cursor-pointer ${
                   activeTab === "tenants"
                     ? "bg-brand-primary text-white shadow-sm"
                     : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white"
                 }`}
               >
-                <Building2 className="h-4 w-4 shrink-0" />
+                <Building2 className="h-5 w-5 shrink-0" />
                 <span>Pharmacies</span>
               </button>
             )}
@@ -353,7 +347,7 @@ export function AdminSidebar({
                 <button
                   type="button"
                   onClick={() => setStaffMenuOpen(!staffMenuOpen)}
-                  className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
+                  className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl text-sm sm:text-base font-bold transition-all cursor-pointer ${
                     isStaffTabActive && !staffMenuOpen
                       ? "bg-brand-primary/10 text-brand-primary"
                       : isStaffTabActive && staffMenuOpen
@@ -361,29 +355,29 @@ export function AdminSidebar({
                       : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white"
                   }`}
                 >
-                  <div className="flex items-center gap-3">
-                    <Users className="h-4 w-4 shrink-0" />
+                  <div className="flex items-center gap-3.5">
+                    <Users className="h-5 w-5 shrink-0" />
                     <span>Staff Management</span>
                   </div>
                   {staffMenuOpen ? (
-                    <ChevronDown className="h-4 w-4 text-slate-400" />
+                    <ChevronDown className="h-4.5 w-4.5 text-slate-400" />
                   ) : (
-                    <ChevronRight className="h-4 w-4 text-slate-400" />
+                    <ChevronRight className="h-4.5 w-4.5 text-slate-400" />
                   )}
                 </button>
 
                 {staffMenuOpen && (
-                  <div className="pl-4 pr-1 py-1 space-y-1 border-l-2 border-slate-100 dark:border-slate-800 ml-5 mt-1">
+                  <div className="pl-4 pr-1 py-1 space-y-1.5 border-l-2 border-slate-100 dark:border-slate-800 ml-6 mt-1.5">
                     {canViewStaffList && (
                       <button
                         onClick={() => handleTabClick("staff-list")}
-                        className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                        className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
                           activeTab === "staff-list" || activeTab === "staff"
                             ? "bg-brand-primary text-white shadow-xs"
-                            : "text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
+                            : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
                         }`}
                       >
-                        <Users className="h-3.5 w-3.5 shrink-0" />
+                        <Users className="h-4 w-4 shrink-0" />
                         <span>Staff Directory</span>
                       </button>
                     )}
@@ -391,13 +385,13 @@ export function AdminSidebar({
                     {canCreateStaff && (
                       <button
                         onClick={() => handleTabClick("staff-create")}
-                        className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                        className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
                           activeTab === "staff-create"
                             ? "bg-brand-primary text-white shadow-xs"
-                            : "text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
+                            : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
                         }`}
                       >
-                        <UserPlus className="h-3.5 w-3.5 shrink-0" />
+                        <UserPlus className="h-4 w-4 shrink-0" />
                         <span>Create Staff</span>
                       </button>
                     )}
@@ -407,47 +401,47 @@ export function AdminSidebar({
                         <button
                           type="button"
                           onClick={() => setRoleMenuOpen(!roleMenuOpen)}
-                          className={`w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                          className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
                             isRoleTabActive && !roleMenuOpen
-                              ? "bg-brand-primary/10 text-brand-primary font-semibold"
+                              ? "bg-brand-primary/10 text-brand-primary font-bold"
                               : isRoleTabActive && roleMenuOpen
-                              ? "bg-slate-100 dark:bg-slate-800 font-semibold text-slate-900 dark:text-white"
-                              : "text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
+                              ? "bg-slate-100 dark:bg-slate-800 font-bold text-slate-900 dark:text-white"
+                              : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
                           }`}
                         >
-                          <div className="flex items-center gap-2">
-                            <KeyRound className="h-3.5 w-3.5 shrink-0" />
+                          <div className="flex items-center gap-2.5">
+                            <KeyRound className="h-4 w-4 shrink-0" />
                             <span>Roles & RBAC</span>
                           </div>
                           {roleMenuOpen ? (
-                            <ChevronDown className="h-3 w-3 text-slate-400" />
+                            <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
                           ) : (
-                            <ChevronRight className="h-3 w-3 text-slate-400" />
+                            <ChevronRight className="h-3.5 w-3.5 text-slate-400" />
                           )}
                         </button>
 
                         {roleMenuOpen && (
-                          <div className="pl-3 pr-1 py-1 space-y-1 border-l-2 border-slate-200 dark:border-slate-700 ml-4 mt-1">
+                          <div className="pl-3.5 pr-1 py-1 space-y-1 border-l-2 border-slate-200 dark:border-slate-700 ml-4 mt-1">
                             <button
                               onClick={() => handleTabClick("create-role")}
-                              className={`w-full flex items-center gap-2 px-2.5 py-1 rounded-md text-[11px] transition-all cursor-pointer ${
+                              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer ${
                                 activeTab === "create-role"
                                   ? "bg-brand-primary text-white shadow-xs"
                                   : "text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
                               }`}
                             >
-                              <ShieldPlus className="h-3 w-3 shrink-0" />
+                              <ShieldPlus className="h-3.5 w-3.5 shrink-0" />
                               <span>Create Role</span>
                             </button>
                             <button
                               onClick={() => handleTabClick("permission-assignment")}
-                              className={`w-full flex items-center gap-2 px-2.5 py-1 rounded-md text-[11px] transition-all cursor-pointer ${
+                              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer ${
                                 activeTab === "permission-assignment"
                                   ? "bg-brand-primary text-white shadow-xs"
                                   : "text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
                               }`}
                             >
-                              <CheckSquare className="h-3 w-3 shrink-0" />
+                              <CheckSquare className="h-3.5 w-3.5 shrink-0" />
                               <span>Assign Permissions</span>
                             </button>
                           </div>
@@ -459,7 +453,7 @@ export function AdminSidebar({
               </div>
             )}
 
-            <div className="px-3 pt-4 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+            <div className="px-3.5 pt-5 pb-2 text-xs font-black uppercase tracking-wider text-slate-400">
               SaaS Billing & Config
             </div>
 
@@ -467,29 +461,29 @@ export function AdminSidebar({
             {canViewPlans && (
               <button
                 onClick={() => handleTabClick("plans")}
-                className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
+                className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-sm sm:text-base font-bold transition-all cursor-pointer ${
                   activeTab === "plans"
                     ? "bg-brand-primary text-white shadow-sm"
                     : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white"
                 }`}
               >
-                <PackageCheck className="h-4 w-4 shrink-0" />
+                <PackageCheck className="h-5 w-5 shrink-0" />
                 <span>Subscription Plans</span>
               </button>
             )}
 
-            {/* Subscriptions */}
-            {canViewSubscriptions && (
+            {/* Payments & Invoices */}
+            {canViewPayments && (
               <button
-                onClick={() => handleTabClick("subscriptions")}
-                className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
-                  activeTab === "subscriptions"
+                onClick={() => handleTabClick("payments")}
+                className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-sm sm:text-base font-bold transition-all cursor-pointer ${
+                  activeTab === "payments"
                     ? "bg-brand-primary text-white shadow-sm"
                     : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white"
                 }`}
               >
-                <Layers className="h-4 w-4 shrink-0" />
-                <span>Subscriptions</span>
+                <CreditCard className="h-5 w-5 shrink-0" />
+                <span>Payments & Invoices</span>
               </button>
             )}
 
@@ -497,13 +491,13 @@ export function AdminSidebar({
             {canViewSettings && (
               <button
                 onClick={() => handleTabClick("settings")}
-                className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
+                className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-sm sm:text-base font-bold transition-all cursor-pointer ${
                   activeTab === "settings"
                     ? "bg-brand-primary text-white shadow-sm"
                     : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white"
                 }`}
               >
-                <Palette className="h-4 w-4 shrink-0" />
+                <Palette className="h-5 w-5 shrink-0" />
                 <span>Branding & Theme</span>
               </button>
             )}
@@ -513,14 +507,14 @@ export function AdminSidebar({
         {/* User Role Card (Expanded only) */}
         {!isCollapsed && (
           <div className="mt-auto p-3.5 border-t border-slate-100 dark:border-slate-800/80 shrink-0">
-            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-800 text-xs text-slate-500 space-y-1">
-              <div className="flex items-center justify-between font-semibold text-slate-700 dark:text-slate-300">
+            <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-800 text-xs text-slate-500 space-y-1.5">
+              <div className="flex items-center justify-between font-bold text-slate-800 dark:text-slate-200 text-sm">
                 <span className="truncate">{isSuperAdmin ? "Super Admin Root" : user?.customRoleName || user?.role || "Staff"}</span>
-                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-brand-primary/10 text-brand-primary shrink-0">
+                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-black bg-brand-primary/10 text-brand-primary shrink-0">
                   {isSuperAdmin ? "Full Root" : "RBAC Gated"}
                 </span>
               </div>
-              <p className="text-[11px] leading-tight text-slate-400">
+              <p className="text-xs leading-tight text-slate-400">
                 {isSuperAdmin
                   ? "Operating with unrestricted Super Admin authority."
                   : `Active permissions: ${user?.permissions?.length || 0} module(s)`}
@@ -535,23 +529,23 @@ export function AdminSidebar({
             <button
               type="button"
               onClick={onToggleCollapse}
-              className={`w-full flex items-center ${isCollapsed ? "justify-center" : "justify-between px-2.5"} py-2 rounded-xl hover:bg-slate-200/60 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white transition duration-150 group relative cursor-pointer`}
+              className={`w-full flex items-center ${isCollapsed ? "justify-center" : "justify-between px-3"} py-2.5 rounded-xl hover:bg-slate-200/60 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white transition duration-150 group relative cursor-pointer`}
               title={isCollapsed ? "Expand Sidebar (Ctrl+B)" : "Collapse Sidebar (Ctrl+B)"}
             >
               {isCollapsed ? (
                 <>
                   <PanelLeftOpen className="h-5 w-5 text-brand-primary" />
-                  <span className="absolute left-full ml-3 px-2.5 py-1 rounded-xl bg-slate-900 dark:bg-slate-800 text-white text-xs font-semibold shadow-xl opacity-0 pointer-events-none group-hover:opacity-100 transition whitespace-nowrap z-50 border border-slate-700">
+                  <span className="absolute left-full ml-3 px-3 py-1.5 rounded-xl bg-slate-900 dark:bg-slate-800 text-white text-xs font-bold shadow-xl opacity-0 pointer-events-none group-hover:opacity-100 transition whitespace-nowrap z-50 border border-slate-700">
                     Expand Sidebar (Ctrl+B)
                   </span>
                 </>
               ) : (
                 <>
-                  <div className="flex items-center gap-2 text-xs 2xl:text-sm font-bold text-slate-600 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white">
-                    <PanelLeftClose className="h-4 w-4 text-slate-400 group-hover:text-brand-primary transition" />
+                  <div className="flex items-center gap-2 text-sm font-bold text-slate-600 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white">
+                    <PanelLeftClose className="h-4.5 w-4.5 text-slate-400 group-hover:text-brand-primary transition" />
                     <span>Collapse Sidebar</span>
                   </div>
-                  <kbd className="hidden xl:inline-block px-1.5 py-0.5 text-[10px] font-mono text-slate-400 bg-slate-100 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
+                  <kbd className="hidden xl:inline-block px-2 py-0.5 text-xs font-mono font-bold text-slate-400 bg-slate-100 dark:bg-slate-800 rounded-md border border-slate-200 dark:border-slate-700">
                     Ctrl+B
                   </kbd>
                 </>

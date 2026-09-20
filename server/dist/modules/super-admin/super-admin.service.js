@@ -1377,7 +1377,7 @@ class SuperAdminService {
             });
         }
         // Build payment checkout URL
-        const clientUrl = process.env.CLIENT_URL || "http://localhost:3000";
+        const clientUrl = process.env.CLIENT_URL || "http://localhost:3001";
         const paymentUrl = `${clientUrl}/verification-status?tenantId=${tenant.id}&email=${encodeURIComponent(owner.email || tenant.email || "")}`;
         // Send Approval Email
         const emailRecipient = owner.email || tenant.email;

@@ -3413,6 +3413,19 @@ var authenticate = (req, res, next) => {
     res.status(401).json({ success: false, message: "Invalid or expired token" });
   }
 };
+var optionalAuthenticate = (req, _res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      const token = authHeader.split(" ")[1];
+      const secret = process.env.JWT_SECRET || "default_secret";
+      const decoded = jwt2.verify(token, secret);
+      req.user = decoded;
+    }
+  } catch (error) {
+  }
+  next();
+};
 
 // src/modules/auth/auth.routes.ts
 var router = Router();
@@ -4773,7 +4786,7 @@ var SuperAdminService = class _SuperAdminService {
         include: { plan: true }
       });
     }
-    const clientUrl = process.env.CLIENT_URL || "http://localhost:3000";
+    const clientUrl = process.env.CLIENT_URL || "http://localhost:3001";
     const paymentUrl = `${clientUrl}/verification-status?tenantId=${tenant.id}&email=${encodeURIComponent(owner.email || tenant.email || "")}`;
     const emailRecipient = owner.email || tenant.email;
     if (emailRecipient) {
@@ -5904,10 +5917,11 @@ var SSLCommerzService = class {
     formData.append("total_amount", data.totalAmount.toFixed(2));
     formData.append("currency", data.currency || "BDT");
     formData.append("tran_id", data.tranId);
-    formData.append("success_url", data.successUrl || process.env.SSLCOMMERZ_SUCCESS_URL || "http://localhost:3000/api/payments/sslcommerz/success");
-    formData.append("fail_url", data.failUrl || process.env.SSLCOMMERZ_FAIL_URL || "http://localhost:3000/api/payments/sslcommerz/fail");
-    formData.append("cancel_url", data.cancelUrl || process.env.SSLCOMMERZ_CANCEL_URL || "http://localhost:3000/api/payments/sslcommerz/cancel");
-    formData.append("ipn_url", data.ipnUrl || process.env.SSLCOMMERZ_IPN_URL || "http://localhost:3000/api/payments/sslcommerz/ipn");
+    const defaultServerUrl = process.env.SERVER_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
+    formData.append("success_url", data.successUrl || process.env.SSLCOMMERZ_SUCCESS_URL || `${defaultServerUrl}/api/payments/sslcommerz/success`);
+    formData.append("fail_url", data.failUrl || process.env.SSLCOMMERZ_FAIL_URL || `${defaultServerUrl}/api/payments/sslcommerz/fail`);
+    formData.append("cancel_url", data.cancelUrl || process.env.SSLCOMMERZ_CANCEL_URL || `${defaultServerUrl}/api/payments/sslcommerz/cancel`);
+    formData.append("ipn_url", data.ipnUrl || process.env.SSLCOMMERZ_IPN_URL || `${defaultServerUrl}/api/payments/sslcommerz/ipn`);
     formData.append("cus_name", data.customerName || "Customer");
     formData.append("cus_email", data.customerEmail || "customer@example.com");
     formData.append("cus_add1", data.customerAddress || "Dhaka, Bangladesh");
@@ -5973,7 +5987,7 @@ var PaymentService = class {
   /**
    * Initiate SSLCOMMERZ payment for a subscription
    */
-  static async initiateSubscriptionPayment(tenantId, data) {
+  static async initiateSubscriptionPayment(tenantId, data, userRole) {
     const subscription = await prisma.subscription.findUnique({
       where: { id: data.subscriptionId },
       include: {
@@ -5984,11 +5998,14 @@ var PaymentService = class {
     if (!subscription) {
       throw new Error("Subscription not found");
     }
-    if (subscription.tenantId !== tenantId) {
-      throw new Error("Unauthorized access to this subscription");
-    }
     if (subscription.status === "ACTIVE") {
       throw new Error("This subscription is already active and paid for");
+    }
+    const isSuperAdmin = userRole === "SUPER_ADMIN";
+    const isMatchingTenant = Boolean(tenantId && subscription.tenantId === tenantId);
+    const isApprovedPendingRegistration = subscription.tenant?.verificationStatus === "APPROVED_PENDING_PAYMENT" && subscription.status === "PENDING";
+    if (!isSuperAdmin && !isMatchingTenant && !isApprovedPendingRegistration) {
+      throw new Error("Unauthorized access to this subscription");
     }
     const tranId = `TXN_${Date.now()}_${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
     const basePrice = Number(subscription.plan.price);
@@ -5997,7 +6014,7 @@ var PaymentService = class {
     const amount = isYearly ? Math.round(basePrice * 12 * 0.85) : basePrice;
     const payment = await prisma.payment.create({
       data: {
-        tenantId,
+        tenantId: subscription.tenantId,
         subscriptionId: subscription.id,
         amount,
         currency: "BDT",
@@ -6016,7 +6033,7 @@ var PaymentService = class {
       customerCity: data.customerCity || "Dhaka",
       productName: `${subscription.plan.name} Subscription Plan`,
       productCategory: "SaaS Subscription",
-      valueA: tenantId,
+      valueA: subscription.tenantId,
       valueB: subscription.id,
       valueC: "SUBSCRIBE"
     });
@@ -6250,8 +6267,9 @@ var PaymentController = class {
    */
   static async initiate(req, res) {
     try {
-      const tenantId = req.user.tenantId;
-      const result = await PaymentService.initiateSubscriptionPayment(tenantId, req.body);
+      const tenantId = req.user?.tenantId;
+      const userRole = req.user?.role;
+      const result = await PaymentService.initiateSubscriptionPayment(tenantId, req.body, userRole);
       res.status(200).json({
         success: true,
         message: "Payment session initialized successfully",
@@ -6420,8 +6438,7 @@ router4.post("/cancel", PaymentController.handleCancel);
 router4.get("/cancel", PaymentController.handleCancel);
 router4.post(
   "/initiate",
-  authenticate,
-  authorize(["COMPANY_OWNER", "SUPER_ADMIN"]),
+  optionalAuthenticate,
   validateRequest({ body: initiatePaymentSchema }),
   PaymentController.initiate
 );
@@ -12555,6 +12572,55 @@ var SalesService = class {
     };
   }
   /**
+   * Get Distinct Recent Customers with Phone, Name, Address
+   */
+  static async getCustomers(tenantId, search) {
+    const where = {
+      tenantId,
+      customerPhone: { not: null }
+    };
+    if (search && search.trim()) {
+      const q = search.trim();
+      where.OR = [
+        { customerPhone: { contains: q, mode: "insensitive" } },
+        { customerName: { contains: q, mode: "insensitive" } }
+      ];
+    }
+    const sales = await prisma.sale.findMany({
+      where,
+      select: {
+        customerPhone: true,
+        customerName: true,
+        customerEmail: true,
+        notes: true,
+        createdAt: true
+      },
+      orderBy: { createdAt: "desc" },
+      take: 200
+    });
+    const customerMap = /* @__PURE__ */ new Map();
+    for (const s of sales) {
+      const phone = s.customerPhone?.trim();
+      if (!phone || customerMap.has(phone)) continue;
+      let address = "";
+      if (s.notes) {
+        const match = s.notes.match(/address:\s*([^\n\r|]+)/i);
+        if (match && match[1]) {
+          address = match[1].trim();
+        } else if (!s.notes.includes(":") && s.notes.length < 120 && !s.notes.toLowerCase().includes("via")) {
+          address = s.notes.trim();
+        }
+      }
+      customerMap.set(phone, {
+        phone,
+        name: s.customerName?.trim() || "Customer",
+        email: s.customerEmail?.trim() || void 0,
+        address: address || void 0
+      });
+    }
+    return Array.from(customerMap.values());
+  }
+  /**
    * Get Single Sale with Itemized Batches
    */
   static async getSaleById(saleId, tenantId) {
@@ -12822,6 +12888,16 @@ var SalesController = class {
       res.status(500).json({ success: false, message: error.message });
     }
   }
+  static async getCustomers(req, res) {
+    try {
+      const tenantId = req.user.tenantId;
+      const search = req.query.search;
+      const customers = await SalesService.getCustomers(tenantId, search);
+      res.status(200).json({ success: true, data: customers });
+    } catch (error) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
   static async getSaleById(req, res) {
     try {
       const { id } = req.params;
@@ -12944,6 +13020,7 @@ router11.get(
   validateRequest({ query: listSalesQuerySchema }),
   SalesController.listSales
 );
+router11.get("/customers", requirePermission("pos.manage"), SalesController.getCustomers);
 router11.get("/:id", requirePermission("pos.history"), SalesController.getSaleById);
 router11.get("/:id/receipt", requirePermission("pos.history"), SalesController.getReceipt);
 router11.post(
@@ -15598,11 +15675,11 @@ var SupplierService = class {
       throw new Error("One or more selected products are invalid or inactive");
     }
     const productMap = new Map(products.map((p) => [p.id, p]));
-    let totalPurchaseAmount = 0;
+    let subtotalAmount = 0;
     const preparedItems = data.items.map((item) => {
       const prod = productMap.get(item.productId);
-      const itemTotal = Number(item.unitPurchasePrice) * item.quantity;
-      totalPurchaseAmount += itemTotal;
+      const itemTotal = item.lineTotal !== void 0 && item.lineTotal !== null ? Number(item.lineTotal) : Number(item.unitPurchasePrice) * item.quantity;
+      subtotalAmount += itemTotal;
       return {
         productId: item.productId,
         batchNumber: item.batchNumber || null,
@@ -15621,9 +15698,23 @@ var SupplierService = class {
         shelfLocation: item.shelfLocation || prod.shelfLocation || null
       };
     });
+    let invoiceDiscount = 0;
+    if (data.discountType === "PERCENT") {
+      invoiceDiscount = subtotalAmount * (Number(data.discountAmount) || 0) / 100;
+    } else if (data.discountType === "FIXED") {
+      invoiceDiscount = Number(data.discountAmount) || 0;
+    }
+    const invoiceTax = Number(data.taxAmount) || 0;
+    const computedTotal = Math.max(0, Math.round((subtotalAmount - invoiceDiscount + invoiceTax) * 100) / 100);
+    const totalPurchaseAmount = data.totalAmount !== void 0 && data.totalAmount !== null ? Number(data.totalAmount) : computedTotal;
     const paidAmount = Number(data.paidAmount || 0);
-    const dueAmount = Math.max(0, totalPurchaseAmount - paidAmount);
+    const dueAmount = Math.max(0, Math.round((totalPurchaseAmount - paidAmount) * 100) / 100);
     const paymentStatus = dueAmount === 0 ? "PAID" : paidAmount > 0 ? "PARTIAL" : "DUE";
+    const noteParts = [];
+    if (data.notes) noteParts.push(data.notes);
+    if (invoiceDiscount > 0) noteParts.push(`Discount: -\u09F3${invoiceDiscount.toFixed(2)} (${data.discountType})`);
+    if (invoiceTax > 0) noteParts.push(`Tax: +\u09F3${invoiceTax.toFixed(2)}`);
+    const finalNotes = noteParts.length > 0 ? noteParts.join(" | ") : null;
     const purchaseDate = data.purchaseDate ? new Date(data.purchaseDate) : /* @__PURE__ */ new Date();
     const result = await prisma.$transaction(async (tx) => {
       let contactPersonName = data.contactPersonName || null;
@@ -15651,7 +15742,7 @@ var SupplierService = class {
           dueAmount,
           paymentStatus,
           paymentMethod: data.paymentMethod || "CASH",
-          notes: data.notes || null,
+          notes: finalNotes,
           receivedBy: userId,
           items: {
             create: preparedItems
@@ -16363,6 +16454,7 @@ var purchaseItemInputSchema = z17.object({
   mfgDate: z17.string().optional().nullable(),
   expiryDate: z17.string().optional().nullable(),
   packageType: z17.string().optional().nullable().default("Medicine"),
+  receivingUnit: z17.enum(["CARTON", "BOX", "STRIP", "PIECE"]).optional().default("BOX"),
   cartonQuantity: z17.number().int().nonnegative().optional().nullable(),
   boxQuantity: z17.number().int().nonnegative().optional().nullable(),
   stripsPerBox: z17.number().int().nonnegative().optional().nullable(),
@@ -16370,6 +16462,10 @@ var purchaseItemInputSchema = z17.object({
   quantity: z17.number().int().positive("Quantity must be at least 1"),
   unitPurchasePrice: z17.number().nonnegative("Purchase price must be positive"),
   unitSellingPrice: z17.number().nonnegative("Selling price must be positive"),
+  unitCostBeforeDiscount: z17.number().nonnegative().optional().nullable(),
+  discountPercent: z17.number().nonnegative().optional().default(0),
+  profitMarginPercent: z17.number().optional().nullable(),
+  lineTotal: z17.number().nonnegative().optional().nullable(),
   shelfLocation: z17.string().optional().nullable()
 });
 var createPurchaseSchema = z17.object({
@@ -16380,6 +16476,11 @@ var createPurchaseSchema = z17.object({
   invoiceNo: z17.string().optional().nullable(),
   purchaseDate: z17.string().optional(),
   items: z17.array(purchaseItemInputSchema).min(1, "At least one item is required in purchase"),
+  discountType: z17.enum(["NONE", "FIXED", "PERCENT"]).optional().default("NONE"),
+  discountAmount: z17.number().nonnegative().optional().default(0),
+  taxAmount: z17.number().nonnegative().optional().default(0),
+  subtotal: z17.number().nonnegative().optional().nullable(),
+  totalAmount: z17.number().nonnegative().optional().nullable(),
   paidAmount: z17.number().nonnegative().default(0),
   paymentMethod: z17.string().default("CASH"),
   financialAccountId: z17.string().optional().nullable(),

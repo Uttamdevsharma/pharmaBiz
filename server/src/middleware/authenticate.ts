@@ -15,7 +15,6 @@ export const authenticate = (req: Request, res: Response, next: NextFunction): v
     const secret = process.env.JWT_SECRET || "default_secret";
 
     const decoded = jwt.verify(token, secret) as AuthenticatedUser;
-    
     // Attach user to request
     req.user = decoded;
     
@@ -24,3 +23,20 @@ export const authenticate = (req: Request, res: Response, next: NextFunction): v
     res.status(401).json({ success: false, message: "Invalid or expired token" });
   }
 };
+
+export const optionalAuthenticate = (req: Request, _res: Response, next: NextFunction): void => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      const token = authHeader.split(" ")[1];
+      const secret = process.env.JWT_SECRET || "default_secret";
+      const decoded = jwt.verify(token, secret) as AuthenticatedUser;
+      req.user = decoded;
+    }
+  } catch (error) {
+    // Token missing or invalid, proceed without attaching req.user
+  }
+  next();
+};
+
+

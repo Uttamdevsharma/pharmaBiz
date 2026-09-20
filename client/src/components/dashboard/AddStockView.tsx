@@ -4,6 +4,7 @@ import React, { useEffect, useState, useMemo, useRef } from "react";
 import { fetchApi } from "@/lib/api";
 import { Product, Supplier, Branch, SupplierContact } from "@/types";
 import { useAuth } from "@/context/AuthContext";
+import { showAlert } from "@/lib/swal";
 import {
   Search,
   Plus,
@@ -638,11 +639,12 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
         setShowAddProductModal(false);
         setNewProdName("");
         setNewProdGeneric("");
+        showAlert.success("Product Created", `"${createdProd.name}" has been created and added to the stock table.`);
       } else {
-        alert(res.message || "Failed to create product");
+        showAlert.error("Failed to Create Product", res.message || "Failed to create product");
       }
     } catch (err: any) {
-      alert(err.message || "Failed to create product");
+      showAlert.error("Creation Error", err.message || "Failed to create product");
     } finally {
       setSavingNewProduct(false);
     }
@@ -729,11 +731,19 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
       }
 
       setSuccess(true);
-      setTimeout(() => {
-        onNavigate("stock_stock_list");
-      }, 1500);
+      await showAlert.success(
+        "Stock Added Successfully!",
+        `Purchase invoice ${payload.invoiceNo} recorded with ${lineItems.length} product(s). Batches added to inventory. Total: ৳${Number(netTotalAmount || 0).toLocaleString()}`,
+        {
+          confirmButtonText: "OK",
+          timer: 3500,
+        }
+      );
+      onNavigate("stock_stock_list");
     } catch (err: any) {
-      setError(err.message || "An error occurred while saving stock");
+      const msg = err.message || "An error occurred while saving stock";
+      setError(msg);
+      showAlert.error("Stock Intake Failed", msg);
     } finally {
       setSubmitting(false);
     }

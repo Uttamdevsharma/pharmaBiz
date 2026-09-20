@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useSettings } from "@/context/SettingsContext";
+import { showAlert } from "@/lib/swal";
 import {
   User,
   Lock,
@@ -60,10 +61,14 @@ function LoginFormContent() {
       } else if (res.success) {
         router.replace("/dashboard");
       } else {
-        setError(res.message || "Invalid email/username or password");
+        const msg = res.message || "Invalid email/username or password";
+        setError(msg);
+        showAlert.error("Login Failed", msg);
       }
     } catch (err: any) {
-      setError(err.message || "An unexpected error occurred. Please try again.");
+      const msg = err.message || "An unexpected error occurred. Please try again.";
+      setError(msg);
+      showAlert.error("Login Error", msg);
     } finally {
       setLoading(false);
     }

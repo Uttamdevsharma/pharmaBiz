@@ -4,6 +4,7 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 import { fetchApi } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { checkUserPermission } from "@/lib/permissions";
+import { showAlert } from "@/lib/swal";
 
 export type UserRole =
   | "SUPER_ADMIN"
@@ -192,6 +193,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setToken(null);
     localStorage.removeItem("token");
     localStorage.removeItem("user");
+    showAlert.toast("You have been logged out successfully.", "info");
     router.push("/login");
   };
 

@@ -6,22 +6,19 @@ import { fetchApi } from "@/lib/api";
 import {
   Users,
   ShieldCheck,
-  ShieldAlert,
-  UserPlus,
-  Search,
-  Filter,
+  Plus,
+  Trash2,
   CheckCircle2,
   XCircle,
-  Edit2,
-  Trash2,
   Loader2,
-  KeyRound,
-  Shield,
-  Eye,
-  Lock,
   X,
   RefreshCw,
-  SlidersHorizontal,
+  User,
+  Mail,
+  Lock,
+  Phone,
+  KeyRound,
+  Building,
 } from "lucide-react";
 
 interface CustomRole {
@@ -44,39 +41,34 @@ interface StaffUser {
   permissions: string[];
   isActive: boolean;
   createdAt: string;
+  branchName?: string;
 }
 
 interface StaffListTabProps {
   onNavigateToCreate?: () => void;
 }
 
-const ALL_AVAILABLE_PERMISSIONS: { id: string; name: string; category: string }[] = [
-  { id: "pharmacies.manage", name: "Manage Pharmacies", category: "Pharmacies & Tenants" },
-  { id: "subscriptions.manage", name: "Manage Subscriptions", category: "Subscriptions & Billing" },
-  { id: "plans.manage", name: "Manage Plans", category: "Subscriptions & Billing" },
-  { id: "payments.view", name: "View Payments", category: "Subscriptions & Billing" },
-  { id: "reports.view", name: "View Reports", category: "Analytics & Telemetry" },
-  { id: "staff.create", name: "Create Staff", category: "Staff & Access Control" },
-  { id: "staff.manage", name: "Manage Staff", category: "Staff & Access Control" },
-  { id: "roles.manage", name: "Manage Roles & Permissions", category: "Staff & Access Control" },
-  { id: "settings.manage", name: "Manage System Settings", category: "Platform Administration" },
-  { id: "platform.data", name: "Manage Platform Data", category: "Platform Administration" },
-];
-
 export function StaffListTab({ onNavigateToCreate }: StaffListTabProps) {
-  const { isSuperAdmin, hasPermission, user: currentUser } = useAuth();
+  const { isSuperAdmin, hasPermission } = useAuth();
   const [staffList, setStaffList] = useState<StaffUser[]>([]);
   const [roles, setRoles] = useState<CustomRole[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [roleFilter, setRoleFilter] = useState("ALL");
-  const [statusFilter, setStatusFilter] = useState("ALL");
 
-  // Notifications
+  // Notification
   const [actionMsg, setActionMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  // Modals
-  const [selectedStaffForPerms, setSelectedStaffForPerms] = useState<StaffUser | null>(null);
+  // Quick Add Modal
+  const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
+  const [quickFormData, setQuickFormData] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    password: "",
+    role: "",
+  });
+  const [quickSubmitting, setQuickSubmitting] = useState(false);
+
+  // Edit Modal
   const [editingStaff, setEditingStaff] = useState<StaffUser | null>(null);
   const [editFormData, setEditFormData] = useState({
     name: "",
@@ -84,7 +76,6 @@ export function StaffListTab({ onNavigateToCreate }: StaffListTabProps) {
     phone: "",
     role: "",
     password: "",
-    permissions: [] as string[],
   });
   const [savingEdit, setSavingEdit] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -106,6 +97,9 @@ export function StaffListTab({ onNavigateToCreate }: StaffListTabProps) {
       }
       if (rolesRes.success && rolesRes.data) {
         setRoles(rolesRes.data);
+        if (!quickFormData.role && rolesRes.data.length > 0) {
+          setQuickFormData((prev) => ({ ...prev, role: rolesRes.data![0].id }));
+        }
       }
     } catch (err: any) {
       setActionMsg({ type: "error", text: err.message || "Failed to load staff list" });
@@ -118,13 +112,54 @@ export function StaffListTab({ onNavigateToCreate }: StaffListTabProps) {
     loadData();
   }, []);
 
-  const handleToggleStatus = async (staff: StaffUser) => {
-    if (staff.role === "SUPER_ADMIN") {
-      setActionMsg({ type: "error", text: "Super Admin account cannot be deactivated." });
+  // Quick Add submit
+  const handleQuickAdd = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quickFormData.name.trim() || !quickFormData.email.trim() || !quickFormData.password.trim() || !quickFormData.role) {
+      setActionMsg({ type: "error", text: "Please fill all required fields." });
       return;
     }
-    if (!canManageStaff) {
-      setActionMsg({ type: "error", text: "You do not have permission to manage staff status." });
+
+    try {
+      setQuickSubmitting(true);
+      const res = await fetchApi<StaffUser>("/super-admin/staff", {
+        method: "POST",
+        body: JSON.stringify({
+          name: quickFormData.name.trim(),
+          email: quickFormData.email.trim(),
+          username: quickFormData.email.trim(),
+          phone: quickFormData.phone.trim() || undefined,
+          password: quickFormData.password.trim(),
+          role: quickFormData.role,
+        }),
+      });
+
+      if (res.success && res.data) {
+        setStaffList((prev) => [res.data!, ...prev]);
+        setActionMsg({ type: "success", text: `Staff member "${quickFormData.name}" added successfully.` });
+        setIsQuickAddOpen(false);
+        setQuickFormData({
+          name: "",
+          email: "",
+          phone: "",
+          password: "",
+          role: roles[0]?.id || "",
+        });
+      } else {
+        setActionMsg({ type: "error", text: res.message || "Failed to add staff member" });
+      }
+    } catch (err: any) {
+      setActionMsg({ type: "error", text: err.message || "Error creating staff member" });
+    } finally {
+      setQuickSubmitting(false);
+    }
+  };
+
+  // Toggle active status
+  const handleToggleStatus = async (staff: StaffUser) => {
+    if (!canManageStaff && !isSuperAdmin) return;
+    if (staff.role === "SUPER_ADMIN") {
+      setActionMsg({ type: "error", text: "Root Super Admin account cannot be disabled." });
       return;
     }
 
@@ -141,29 +176,29 @@ export function StaffListTab({ onNavigateToCreate }: StaffListTabProps) {
         );
         setActionMsg({
           type: "success",
-          text: `Staff member ${staff.name || staff.username} has been ${!staff.isActive ? "activated" : "deactivated"}.`,
+          text: `Staff member "${staff.name || staff.username}" is now ${!staff.isActive ? "Active" : "Disabled"}.`,
         });
       } else {
-        setActionMsg({ type: "error", text: res.message || "Failed to update staff status" });
+        setActionMsg({ type: "error", text: res.message || "Failed to update status" });
       }
     } catch (err: any) {
-      setActionMsg({ type: "error", text: err.message || "Error updating status" });
+      setActionMsg({ type: "error", text: err.message || "Error toggling status" });
     } finally {
       setTogglingId(null);
     }
   };
 
+  // Delete staff member
   const handleDeleteStaff = async (staff: StaffUser) => {
+    if (!canManageStaff && !isSuperAdmin) return;
     if (staff.role === "SUPER_ADMIN") {
-      setActionMsg({ type: "error", text: "Super Admin root account cannot be deleted." });
-      return;
-    }
-    if (!canManageStaff) {
-      setActionMsg({ type: "error", text: "You do not have permission to delete staff." });
+      setActionMsg({ type: "error", text: "Root Super Admin account cannot be deleted." });
       return;
     }
 
-    const confirmed = window.confirm(`Are you sure you want to remove ${staff.name || staff.username}? This action is irreversible.`);
+    const confirmed = window.confirm(
+      `Are you sure you want to delete staff member "${staff.name || staff.username}"?`
+    );
     if (!confirmed) return;
 
     try {
@@ -174,9 +209,12 @@ export function StaffListTab({ onNavigateToCreate }: StaffListTabProps) {
 
       if (res.success) {
         setStaffList((prev) => prev.filter((s) => s.id !== staff.id));
-        setActionMsg({ type: "success", text: `Staff member ${staff.name || staff.username} was successfully removed.` });
+        setActionMsg({
+          type: "success",
+          text: `Staff member "${staff.name || staff.username}" deleted successfully.`,
+        });
       } else {
-        setActionMsg({ type: "error", text: res.message || "Failed to remove staff member" });
+        setActionMsg({ type: "error", text: res.message || "Failed to delete staff member" });
       }
     } catch (err: any) {
       setActionMsg({ type: "error", text: err.message || "Error deleting staff member" });
@@ -185,37 +223,19 @@ export function StaffListTab({ onNavigateToCreate }: StaffListTabProps) {
     }
   };
 
+  // Open Edit Modal
   const handleOpenEdit = (staff: StaffUser) => {
     setEditingStaff(staff);
     setEditFormData({
-      name: staff.name || "",
+      name: staff.name || staff.username,
       email: staff.email || "",
       phone: staff.phone || "",
-      role: staff.customRoleId || staff.customRoleName || staff.role,
+      role: staff.customRoleId || staff.role || (roles[0]?.id ?? ""),
       password: "",
-      permissions: staff.permissions || [],
     });
   };
 
-  const handleRoleChangeInEdit = (roleIdOrName: string) => {
-    const selectedRole = roles.find((r) => r.id === roleIdOrName || r.name === roleIdOrName);
-    setEditFormData((prev) => ({
-      ...prev,
-      role: roleIdOrName,
-      permissions: selectedRole?.permissions || prev.permissions,
-    }));
-  };
-
-  const handleTogglePermissionInEdit = (permId: string) => {
-    setEditFormData((prev) => {
-      const exists = prev.permissions.includes(permId);
-      const newPerms = exists
-        ? prev.permissions.filter((p) => p !== permId)
-        : [...prev.permissions, permId];
-      return { ...prev, permissions: newPerms };
-    });
-  };
-
+  // Save Edit
   const handleSaveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingStaff) return;
@@ -227,7 +247,6 @@ export function StaffListTab({ onNavigateToCreate }: StaffListTabProps) {
         email: editFormData.email,
         phone: editFormData.phone || undefined,
         role: editFormData.role,
-        permissions: editFormData.permissions,
       };
 
       if (editFormData.password.trim()) {
@@ -255,339 +274,217 @@ export function StaffListTab({ onNavigateToCreate }: StaffListTabProps) {
     }
   };
 
-  // Filter staff
-  const filteredStaff = staffList.filter((s) => {
-    const matchesSearch =
-      (s.name || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (s.email || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (s.username || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (s.customRoleName || s.role || "").toLowerCase().includes(searchTerm.toLowerCase());
-
-    const matchesRole =
-      roleFilter === "ALL" ||
-      s.role === roleFilter ||
-      s.customRoleName === roleFilter ||
-      s.customRoleId === roleFilter;
-
-    const matchesStatus =
-      statusFilter === "ALL" ||
-      (statusFilter === "ACTIVE" && s.isActive) ||
-      (statusFilter === "INACTIVE" && !s.isActive);
-
-    return matchesSearch && matchesRole && matchesStatus;
-  });
-
-  const totalStaffCount = staffList.length;
-  const activeStaffCount = staffList.filter((s) => s.isActive).length;
-  const customRoleCount = roles.length;
-
   return (
-    <div className="space-y-6">
-      {/* Header & Quick Action */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-6 w-full">
+      {/* Top Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
         <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
-              Platform Staff Directory
-            </h1>
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-brand-primary/10 text-brand-primary">
-              {totalStaffCount} Members
-            </span>
+          <div className="flex items-center gap-2 text-xs font-bold text-slate-400 mb-1">
+            <span>Staff Management</span>
+            <span>/</span>
+            <span className="text-brand-primary">Staff List</span>
           </div>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Manage administrative delegates, dynamic roles, and granular permission access.
-          </p>
+          <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white flex items-center gap-2.5">
+            <Users className="h-7 w-7 text-brand-primary" />
+            Staff List
+          </h1>
         </div>
 
         <div className="flex items-center gap-3">
-          <button
-            onClick={loadData}
-            disabled={loading}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-medium bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition"
-          >
-            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-            <span>Refresh</span>
-          </button>
-
           {canCreateStaff && onNavigateToCreate && (
             <button
+              type="button"
               onClick={onNavigateToCreate}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-brand-primary hover:bg-brand-primary/90 text-white shadow-sm transition"
+              className="h-11 px-5 rounded-xl bg-brand-primary text-white text-sm font-bold shadow-xs hover:bg-brand-primary-hover transition flex items-center gap-2 cursor-pointer"
             >
-              <UserPlus className="h-4 w-4" />
-              <span>Create Staff Member</span>
+              <Plus className="h-4 w-4" />
+              <span>Create Staff</span>
             </button>
           )}
+
+          <button
+            type="button"
+            onClick={() => setIsQuickAddOpen(true)}
+            className="h-11 px-5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 text-sm font-bold transition flex items-center gap-2 cursor-pointer"
+          >
+            <Plus className="h-4 w-4" />
+            <span>Quick Add</span>
+          </button>
         </div>
       </div>
 
       {/* Notifications */}
       {actionMsg && (
         <div
-          className={`flex items-center justify-between p-4 rounded-xl text-sm font-medium transition-all ${
+          className={`p-4 rounded-xl text-xs font-semibold flex items-center justify-between transition-all ${
             actionMsg.type === "success"
               ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
               : "bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800"
           }`}
         >
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2">
             {actionMsg.type === "success" ? (
-              <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" />
+              <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
             ) : (
-              <XCircle className="h-5 w-5 text-red-500 shrink-0" />
+              <XCircle className="h-4 w-4 text-red-500 shrink-0" />
             )}
             <span>{actionMsg.text}</span>
           </div>
-          <button onClick={() => setActionMsg(null)} className="text-slate-400 hover:text-slate-600">
+          <button onClick={() => setActionMsg(null)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
             <X className="h-4 w-4" />
           </button>
         </div>
       )}
 
-      {/* Stats Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Staff</p>
-            <p className="text-2xl font-black text-slate-900 dark:text-white mt-1">{totalStaffCount}</p>
-          </div>
-          <div className="h-11 w-11 rounded-xl bg-blue-50 dark:bg-blue-950/50 flex items-center justify-center text-blue-600">
-            <Users className="h-6 w-6" />
-          </div>
-        </div>
-
-        <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Active Access</p>
-            <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">{activeStaffCount}</p>
-          </div>
-          <div className="h-11 w-11 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 flex items-center justify-center text-emerald-600">
-            <CheckCircle2 className="h-6 w-6" />
-          </div>
-        </div>
-
-        <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Custom Roles</p>
-            <p className="text-2xl font-black text-indigo-600 dark:text-indigo-400 mt-1">{customRoleCount}</p>
-          </div>
-          <div className="h-11 w-11 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 flex items-center justify-center text-indigo-600">
-            <KeyRound className="h-6 w-6" />
-          </div>
-        </div>
-
-        <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Root Security</p>
-            <p className="text-xs font-bold text-amber-600 dark:text-amber-400 mt-1">Super Admin Invariant</p>
-            <p className="text-[11px] text-slate-400">Master role is protected</p>
-          </div>
-          <div className="h-11 w-11 rounded-xl bg-amber-50 dark:bg-amber-950/50 flex items-center justify-center text-amber-600">
-            <Shield className="h-6 w-6" />
-          </div>
-        </div>
-      </div>
-
-      {/* Filter & Search Bar */}
-      <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 flex flex-col md:flex-row gap-3 items-center justify-between">
-        <div className="relative w-full md:w-80">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search by name, email, role..."
-            className="w-full pl-10 pr-4 py-2 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary"
-          />
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
-          {/* Role Filter */}
-          <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800/60 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
-            <SlidersHorizontal className="h-3.5 w-3.5 text-slate-400" />
-            <span className="text-slate-500 font-medium">Role:</span>
-            <select
-              value={roleFilter}
-              onChange={(e) => setRoleFilter(e.target.value)}
-              className="bg-transparent font-semibold text-slate-700 dark:text-slate-200 focus:outline-none cursor-pointer"
-            >
-              <option value="ALL">All Roles</option>
-              <option value="SUPER_ADMIN">Super Admin</option>
-              {roles.map((r) => (
-                <option key={r.id} value={r.name}>
-                  {r.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Status Filter */}
-          <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800/60 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
-            <span className="text-slate-500 font-medium">Status:</span>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="bg-transparent font-semibold text-slate-700 dark:text-slate-200 focus:outline-none cursor-pointer"
-            >
-              <option value="ALL">All Status</option>
-              <option value="ACTIVE">Active Only</option>
-              <option value="INACTIVE">Deactivated</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      {/* Staff Table */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-xs">
+      {/* Staff Table Card */}
+      <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
         {loading ? (
-          <div className="p-12 flex flex-col items-center justify-center text-slate-400 gap-3">
-            <Loader2 className="h-7 w-7 animate-spin text-brand-primary" />
-            <span className="text-sm font-medium">Loading Platform Staff directory...</span>
+          <div className="py-20 flex flex-col items-center justify-center gap-2 text-slate-500">
+            <Loader2 className="h-6 w-6 animate-spin text-brand-primary" />
+            <span className="text-xs font-medium">Loading staff list...</span>
           </div>
-        ) : filteredStaff.length === 0 ? (
-          <div className="p-12 text-center text-slate-500">
-            <Users className="h-10 w-10 mx-auto text-slate-300 dark:text-slate-700 mb-3" />
-            <p className="text-base font-bold text-slate-700 dark:text-slate-300">No staff members found</p>
-            <p className="text-xs text-slate-400 mt-1">Try adjusting your filters or search query.</p>
-          </div>
-        ) : (
-          <div className="table-responsive-container">
-            <table className="w-full min-w-[750px] text-left border-collapse">
-              <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                  <th className="py-3.5 px-4">Staff Member</th>
-                  <th className="py-3.5 px-4">Dynamic Role</th>
-                  <th className="py-3.5 px-4">Granted Permissions</th>
-                  <th className="py-3.5 px-4">Status</th>
-                  <th className="py-3.5 px-4">Created On</th>
-                  <th className="py-3.5 px-4 text-right">Actions</th>
+        ) : staffList.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="text-xs uppercase bg-slate-50/75 dark:bg-slate-800/50 text-slate-500 border-b border-slate-200 dark:border-slate-800 font-black tracking-wider">
+                <tr>
+                  <th className="px-6 py-4 font-black">Staff Member</th>
+                  <th className="px-6 py-4 font-black">Assigned Role</th>
+                  <th className="px-6 py-4 font-black">Branch</th>
+                  <th className="px-6 py-4 font-black">Phone</th>
+                  <th className="px-6 py-4 font-black">Status</th>
+                  <th className="px-6 py-4 font-black text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-sm">
-                {filteredStaff.map((staff) => {
-                  const isRootSuperAdmin = staff.role === "SUPER_ADMIN";
-                  const roleTitle = isRootSuperAdmin ? "Super Admin" : staff.customRoleName || staff.customRole?.name || staff.role;
-                  const permsCount = isRootSuperAdmin ? ALL_AVAILABLE_PERMISSIONS.length : (staff.permissions?.length || 0);
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
+                {staffList.map((member) => {
+                  const isRootSuperAdmin = member.role === "SUPER_ADMIN";
+                  const roleTitle = isRootSuperAdmin
+                    ? "Super Admin"
+                    : member.customRoleName || member.customRole?.name || member.role.replace("_", " ");
+
+                  const initial = (member.name || member.username || "S").charAt(0).toUpperCase();
 
                   return (
                     <tr
-                      key={staff.id}
-                      className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors"
+                      key={member.id}
+                      className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors"
                     >
-                      {/* Name / User Info */}
-                      <td className="py-3.5 px-4">
+                      {/* Staff Member (Avatar + Name + Email) */}
+                      <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <div
-                            className={`h-9 w-9 rounded-xl flex items-center justify-center font-bold text-sm ${
+                            className={`h-9 w-9 rounded-xl flex items-center justify-center font-black text-sm ${
                               isRootSuperAdmin
-                                ? "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300"
+                                ? "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300"
                                 : "bg-brand-primary/10 text-brand-primary"
                             }`}
                           >
-                            {(staff.name || staff.username || "S").charAt(0).toUpperCase()}
+                            {initial}
                           </div>
                           <div>
-                            <div className="font-semibold text-slate-900 dark:text-white flex items-center gap-1.5">
-                              <span>{staff.name || staff.username}</span>
+                            <div className="font-bold text-base text-slate-900 dark:text-white flex items-center gap-2">
+                              <span>{member.name || member.username}</span>
                               {isRootSuperAdmin && (
-                                <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-extrabold bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300">
-                                  MASTER
+                                <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.2 rounded bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 font-extrabold">
+                                  ROOT
                                 </span>
                               )}
                             </div>
-                            <div className="text-xs text-slate-400">{staff.email}</div>
+                            <div className="text-xs text-slate-400 font-medium">
+                              {member.email || member.username}
+                            </div>
                           </div>
                         </div>
                       </td>
 
-                      {/* Dynamic Role */}
-                      <td className="py-3.5 px-4">
+                      {/* Assigned Role */}
+                      <td className="px-6 py-4">
                         <span
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold ${
+                          className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold ${
                             isRootSuperAdmin
                               ? "bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20"
-                              : roleTitle === "CTO"
-                              ? "bg-purple-500/10 text-purple-700 dark:text-purple-400 border border-purple-500/20"
-                              : roleTitle === "Project Manager"
-                              ? "bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-500/20"
-                              : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20"
+                              : "bg-brand-primary/10 text-brand-primary border border-brand-primary/20"
                           }`}
                         >
-                          <ShieldCheck className="h-3.5 w-3.5" />
+                          <ShieldCheck className="h-4 w-4" />
                           <span>{roleTitle}</span>
                         </span>
                       </td>
 
-                      {/* Granted Permissions */}
-                      <td className="py-3.5 px-4">
-                        <button
-                          type="button"
-                          onClick={() => setSelectedStaffForPerms(staff)}
-                          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 transition"
-                        >
-                          <KeyRound className="h-3.5 w-3.5 text-brand-primary" />
-                          <span>
-                            {isRootSuperAdmin
-                              ? "Full Root Access (10/10)"
-                              : `${permsCount} / ${ALL_AVAILABLE_PERMISSIONS.length} Permissions`}
-                          </span>
-                          <Eye className="h-3 w-3 text-slate-400 ml-0.5" />
-                        </button>
+                      {/* Branch */}
+                      <td className="px-6 py-4 text-sm font-semibold text-slate-700 dark:text-slate-300">
+                        {member.branchName || "Main Branch"}
+                      </td>
+
+                      {/* Phone */}
+                      <td className="px-6 py-4 text-sm font-medium text-slate-600 dark:text-slate-400">
+                        {member.phone || "—"}
                       </td>
 
                       {/* Status */}
-                      <td className="py-3.5 px-4">
-                        <button
-                          type="button"
-                          disabled={isRootSuperAdmin || !canManageStaff || togglingId === staff.id}
-                          onClick={() => handleToggleStatus(staff)}
-                          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold transition ${
-                            staff.isActive
-                              ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 hover:opacity-80"
-                              : "bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 hover:opacity-80"
-                          } ${isRootSuperAdmin ? "cursor-not-allowed opacity-90" : "cursor-pointer"}`}
+                      <td className="px-6 py-4">
+                        <span
+                          className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${
+                            member.isActive
+                              ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                              : "bg-red-500/10 text-red-600 dark:text-red-400"
+                          }`}
                         >
-                          {togglingId === staff.id ? (
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                          ) : staff.isActive ? (
-                            <CheckCircle2 className="h-3 w-3 text-emerald-500" />
-                          ) : (
-                            <XCircle className="h-3 w-3 text-rose-500" />
-                          )}
-                          <span>{staff.isActive ? "Active" : "Suspended"}</span>
-                        </button>
-                      </td>
-
-                      {/* Created On */}
-                      <td className="py-3.5 px-4 text-xs text-slate-400">
-                        {new Date(staff.createdAt).toLocaleDateString()}
+                          <span
+                            className={`h-2 w-2 rounded-full ${
+                              member.isActive ? "bg-emerald-500" : "bg-red-500"
+                            }`}
+                          />
+                          {member.isActive ? "Active" : "Disabled"}
+                        </span>
                       </td>
 
                       {/* Actions */}
-                      <td className="py-3.5 px-4 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          {/* Edit Details & Permissions */}
+                      <td className="px-6 py-4 text-right">
+                        <div className="inline-flex items-center gap-2">
+                          {/* Edit Action */}
                           <button
                             type="button"
-                            disabled={!canManageStaff && !isSuperAdmin}
-                            onClick={() => handleOpenEdit(staff)}
-                            title="Edit Staff & Permissions"
-                            className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 hover:text-brand-primary transition"
+                            onClick={() => handleOpenEdit(member)}
+                            className="h-9 px-3.5 rounded-xl text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 transition cursor-pointer"
                           >
-                            <Edit2 className="h-4 w-4" />
+                            Edit
                           </button>
 
-                          {/* Delete */}
+                          {/* Deactivate / Activate Action */}
                           {!isRootSuperAdmin && (
                             <button
                               type="button"
-                              disabled={!canManageStaff || deletingId === staff.id}
-                              onClick={() => handleDeleteStaff(staff)}
-                              title="Delete Staff Member"
-                              className="p-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/50 text-slate-400 hover:text-rose-600 transition"
+                              disabled={togglingId === member.id}
+                              onClick={() => handleToggleStatus(member)}
+                              className={`h-9 px-3.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                                member.isActive
+                                  ? "bg-amber-50 text-amber-700 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-300"
+                                  : "bg-emerald-50 text-emerald-600 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300"
+                              }`}
                             >
-                              {deletingId === staff.id ? (
-                                <Loader2 className="h-4 w-4 animate-spin text-rose-500" />
+                              {togglingId === member.id ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : member.isActive ? (
+                                "Deactivate"
+                              ) : (
+                                "Activate"
+                              )}
+                            </button>
+                          )}
+
+                          {/* Delete Action */}
+                          {!isRootSuperAdmin && (
+                            <button
+                              type="button"
+                              disabled={deletingId === member.id}
+                              onClick={() => handleDeleteStaff(member)}
+                              className="h-9 w-9 flex items-center justify-center rounded-xl text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50 transition cursor-pointer disabled:opacity-50"
+                              title="Delete Staff Member"
+                            >
+                              {deletingId === member.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin text-red-500" />
                               ) : (
                                 <Trash2 className="h-4 w-4" />
                               )}
@@ -601,222 +498,223 @@ export function StaffListTab({ onNavigateToCreate }: StaffListTabProps) {
               </tbody>
             </table>
           </div>
+        ) : (
+          <div className="py-16 text-center text-slate-400 text-sm">
+            No staff members found. Click &quot;Create Staff&quot; or &quot;Quick Add&quot; to register team members.
+          </div>
         )}
       </div>
 
-      {/* Permissions View Popover Modal */}
-      {selectedStaffForPerms && (
+      {/* Quick Add Modal */}
+      {isQuickAddOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-xl w-full border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
-            <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-xl bg-brand-primary/10 text-brand-primary flex items-center justify-center font-bold">
-                  <KeyRound className="h-5 w-5" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-base text-slate-900 dark:text-white">
-                    Assigned Permissions
-                  </h3>
-                  <p className="text-xs text-slate-400">
-                    {selectedStaffForPerms.name || selectedStaffForPerms.username} •{" "}
-                    <span className="font-semibold text-brand-primary">
-                      {selectedStaffForPerms.role === "SUPER_ADMIN"
-                        ? "Super Admin (Root)"
-                        : selectedStaffForPerms.customRoleName || selectedStaffForPerms.role}
-                    </span>
-                  </p>
-                </div>
-              </div>
+          <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <h3 className="font-bold text-lg text-slate-900 dark:text-white">Quick Add Staff</h3>
               <button
-                onClick={() => setSelectedStaffForPerms(null)}
-                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg"
+                type="button"
+                onClick={() => setIsQuickAddOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg cursor-pointer"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            <div className="p-6 max-h-[65vh] overflow-y-auto space-y-3">
-              {selectedStaffForPerms.role === "SUPER_ADMIN" ? (
-                <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-200 space-y-1">
-                  <div className="font-bold flex items-center gap-1.5">
-                    <ShieldCheck className="h-4 w-4 text-amber-600" />
-                    Unrestricted Root Authority
-                  </div>
-                  <p>
-                    Super Admin possesses unconditional root bypass permissions over all platform modules and features.
-                  </p>
-                </div>
-              ) : null}
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                {ALL_AVAILABLE_PERMISSIONS.map((perm) => {
-                  const hasPerm =
-                    selectedStaffForPerms.role === "SUPER_ADMIN" ||
-                    selectedStaffForPerms.permissions.includes("*") ||
-                    selectedStaffForPerms.permissions.includes(perm.id);
-
-                  return (
-                    <div
-                      key={perm.id}
-                      className={`p-3 rounded-xl border flex items-start gap-2.5 transition ${
-                        hasPerm
-                          ? "bg-emerald-50/60 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/60 text-slate-900 dark:text-slate-100"
-                          : "bg-slate-50 dark:bg-slate-800/40 border-slate-200/60 dark:border-slate-800 text-slate-400 opacity-60"
-                      }`}
-                    >
-                      {hasPerm ? (
-                        <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
-                      ) : (
-                        <XCircle className="h-4 w-4 text-slate-400 shrink-0 mt-0.5" />
-                      )}
-                      <div>
-                        <div className="text-xs font-bold leading-tight">{perm.name}</div>
-                        <div className="text-[10px] text-slate-400 mt-0.5">{perm.category}</div>
-                      </div>
-                    </div>
-                  );
-                })}
+            <form onSubmit={handleQuickAdd} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                  Full Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={quickFormData.name}
+                  onChange={(e) => setQuickFormData({ ...quickFormData, name: e.target.value })}
+                  placeholder="e.g. Alif Hossain"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                />
               </div>
-            </div>
 
-            <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 flex justify-end">
-              <button
-                type="button"
-                onClick={() => setSelectedStaffForPerms(null)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 transition"
-              >
-                Close
-              </button>
-            </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                  Email Address <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={quickFormData.email}
+                  onChange={(e) => setQuickFormData({ ...quickFormData, email: e.target.value })}
+                  placeholder="alif@gmail.com"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                  Password <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="password"
+                  required
+                  value={quickFormData.password}
+                  onChange={(e) => setQuickFormData({ ...quickFormData, password: e.target.value })}
+                  placeholder="Minimum 6 characters"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                  Select Role <span className="text-red-500">*</span>
+                </label>
+                <select
+                  required
+                  value={quickFormData.role}
+                  onChange={(e) => setQuickFormData({ ...quickFormData, role: e.target.value })}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-brand-primary cursor-pointer"
+                >
+                  {roles.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                  Phone Number
+                </label>
+                <input
+                  type="text"
+                  value={quickFormData.phone}
+                  onChange={(e) => setQuickFormData({ ...quickFormData, phone: e.target.value })}
+                  placeholder="01782878766"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setIsQuickAddOpen(false)}
+                  className="px-5 py-2.5 rounded-xl text-sm font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={quickSubmitting}
+                  className="px-5 py-2.5 rounded-xl text-sm font-bold bg-brand-primary hover:bg-brand-primary-hover text-white shadow-xs transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  {quickSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                  <span>Add Member</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
 
-      {/* Edit Staff & Permissions Modal */}
+      {/* Edit Staff Modal */}
       {editingStaff && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-2xl w-full border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
-            <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
-              <div>
-                <h3 className="font-bold text-base text-slate-900 dark:text-white">
-                  Edit Staff & Permissions
-                </h3>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Update role assignment, profile data, or fine-tune module permissions.
-                </p>
-              </div>
+          <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <h3 className="font-bold text-lg text-slate-900 dark:text-white">Edit Staff Member</h3>
               <button
+                type="button"
                 onClick={() => setEditingStaff(null)}
-                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg"
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg cursor-pointer"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveEdit}>
-              <div className="p-6 max-h-[70vh] overflow-y-auto space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                      Full Name
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={editFormData.name}
-                      onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
-                      className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                      Email Address
-                    </label>
-                    <input
-                      type="email"
-                      required
-                      value={editFormData.email}
-                      onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
-                      className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                      Phone Number (Optional)
-                    </label>
-                    <input
-                      type="text"
-                      value={editFormData.phone}
-                      onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value })}
-                      className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                      Assigned Role
-                    </label>
-                    {editingStaff.role === "SUPER_ADMIN" ? (
-                      <div className="px-3 py-2 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl text-xs font-bold text-amber-800 dark:text-amber-200">
-                        Super Admin (Protected Master Role)
-                      </div>
-                    ) : (
-                      <select
-                        value={editFormData.role}
-                        onChange={(e) => handleRoleChangeInEdit(e.target.value)}
-                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary cursor-pointer font-semibold"
-                      >
-                        {roles.map((r) => (
-                          <option key={r.id} value={r.id}>
-                            {r.name}
-                          </option>
-                        ))}
-                      </select>
-                    )}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Reset Password (leave blank to keep existing)
-                  </label>
-                  <input
-                    type="password"
-                    placeholder="Enter new password"
-                    value={editFormData.password}
-                    onChange={(e) => setEditFormData({ ...editFormData, password: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                  />
-                </div>
-
-                {/* Role Inheritance Information Notice */}
-                {editingStaff.role !== "SUPER_ADMIN" && (
-                  <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/60 flex items-start gap-2.5 text-xs text-slate-500 dark:text-slate-400">
-                    <KeyRound className="h-4 w-4 text-brand-primary shrink-0 mt-0.5" />
-                    <div>
-                      <span className="font-bold text-slate-800 dark:text-slate-200">Role-Based Permission Management: </span>
-                      Permissions are configured per role in the Roles & Permissions section. This staff member automatically inherits all permissions assigned to their selected role.
-                    </div>
-                  </div>
-                )}
+            <form onSubmit={handleSaveEdit} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                  Full Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editFormData.name}
+                  onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                />
               </div>
 
-              <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 flex justify-end gap-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                  Email Address <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={editFormData.email}
+                  onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                  Select Role <span className="text-red-500">*</span>
+                </label>
+                <select
+                  required
+                  value={editFormData.role}
+                  onChange={(e) => setEditFormData({ ...editFormData, role: e.target.value })}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-brand-primary cursor-pointer"
+                >
+                  {roles.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                  Phone Number
+                </label>
+                <input
+                  type="text"
+                  value={editFormData.phone}
+                  onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value })}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                  New Password <span className="text-slate-400 font-normal">(Leave blank to keep unchanged)</span>
+                </label>
+                <input
+                  type="password"
+                  value={editFormData.password}
+                  onChange={(e) => setEditFormData({ ...editFormData, password: e.target.value })}
+                  placeholder="Optional new password"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary font-mono"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
                 <button
                   type="button"
                   onClick={() => setEditingStaff(null)}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 transition"
+                  className="px-5 py-2.5 rounded-xl text-sm font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 transition cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={savingEdit}
-                  className="px-5 py-2 rounded-xl text-xs font-bold bg-brand-primary hover:bg-brand-primary/90 text-white shadow-sm transition flex items-center gap-2"
+                  className="px-5 py-2.5 rounded-xl text-sm font-bold bg-brand-primary hover:bg-brand-primary-hover text-white shadow-xs transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
                 >
-                  {savingEdit ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  {savingEdit ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
                   <span>Save Changes</span>
                 </button>
               </div>
@@ -827,4 +725,3 @@ export function StaffListTab({ onNavigateToCreate }: StaffListTabProps) {
     </div>
   );
 }
-

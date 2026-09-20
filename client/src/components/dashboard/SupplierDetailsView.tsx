@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import { fetchApi } from "@/lib/api";
 import { Supplier, SupplierContact } from "@/types";
 import { useAuth } from "@/context/AuthContext";
+import { showAlert } from "@/lib/swal";
 import {
   Building,
   ArrowLeft,
@@ -29,6 +30,10 @@ import {
   TrendingDown,
   Package,
   Clock,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
 } from "lucide-react";
 
 interface SupplierDetailsViewProps {
@@ -117,6 +122,14 @@ export function SupplierDetailsView({ supplierId, onBack, onNavigate }: Supplier
 
   // Selected Invoice Modal
   const [selectedInvoice, setSelectedInvoice] = useState<any | null>(null);
+
+  // Purchase History Pagination
+  const [purchasePage, setPurchasePage] = useState(1);
+  const [purchasePageSize, setPurchasePageSize] = useState(10);
+
+  useEffect(() => {
+    setPurchasePage(1);
+  }, [datePreset, customStartDate, customEndDate, supplierId]);
 
   const loadSupplierData = async () => {
     try {
@@ -218,21 +231,25 @@ export function SupplierDetailsView({ supplierId, onBack, onNavigate }: Supplier
           body: JSON.stringify(contactForm),
         });
         if (!res.success) throw new Error(res.message || "Failed to update contact");
-        setSuccess(`Contact "${contactForm.name}" updated successfully!`);
+        const msg = `Contact "${contactForm.name}" updated successfully!`;
+        setSuccess(msg);
+        showAlert.success("Contact Updated", msg);
       } else {
         const res = await fetchApi(`/suppliers/${supplierId}/contacts`, {
           method: "POST",
           body: JSON.stringify(contactForm),
         });
         if (!res.success) throw new Error(res.message || "Failed to add contact");
-        setSuccess(`Contact "${contactForm.name}" added successfully!`);
+        const msg = `Contact "${contactForm.name}" added successfully!`;
+        setSuccess(msg);
+        showAlert.success("Contact Added", msg);
       }
 
       setContactModalOpen(false);
       loadSupplierData();
       setTimeout(() => setSuccess(null), 3000);
     } catch (err: any) {
-      alert(err.message);
+      showAlert.error("Operation Failed", err.message || "Failed to save contact");
     } finally {
       setSavingContact(false);
     }
@@ -241,7 +258,11 @@ export function SupplierDetailsView({ supplierId, onBack, onNavigate }: Supplier
   const handleToggleContactStatus = async (contact: SupplierContact) => {
     const nextStatus = !contact.isActive;
     const actionLabel = nextStatus ? "activate" : "deactivate";
-    if (!confirm(`Are you sure you want to ${actionLabel} contact "${contact.name}"?`)) return;
+    const confirmed = await showAlert.confirm(
+      `${nextStatus ? "Activate" : "Deactivate"} Contact?`,
+      `Are you sure you want to ${actionLabel} contact "${contact.name}"?`
+    );
+    if (!confirmed) return;
 
     try {
       const res = await fetchApi(`/suppliers/${supplierId}/contacts/${contact.id}`, {
@@ -249,12 +270,16 @@ export function SupplierDetailsView({ supplierId, onBack, onNavigate }: Supplier
         body: JSON.stringify({ isActive: nextStatus }),
       });
       if (res.success) {
-        setSuccess(`Contact "${contact.name}" ${nextStatus ? "activated" : "deactivated"}!`);
+        const msg = `Contact "${contact.name}" ${nextStatus ? "activated" : "deactivated"}!`;
+        setSuccess(msg);
+        showAlert.success("Status Updated", msg);
         loadSupplierData();
         setTimeout(() => setSuccess(null), 3000);
+      } else {
+        showAlert.error("Failed", res.message || "Failed to update contact status");
       }
     } catch (err: any) {
-      alert(err.message);
+      showAlert.error("Error", err.message || "Update error");
     }
   };
 
@@ -282,12 +307,14 @@ export function SupplierDetailsView({ supplierId, onBack, onNavigate }: Supplier
       });
       if (!res.success) throw new Error(res.message || "Failed to update supplier profile");
 
-      setSuccess("Supplier company details updated successfully!");
+      const msg = "Supplier company details updated successfully!";
+      setSuccess(msg);
+      showAlert.success("Supplier Updated", msg);
       setEditProfileModalOpen(false);
       loadSupplierData();
       setTimeout(() => setSuccess(null), 3000);
     } catch (err: any) {
-      alert(err.message);
+      showAlert.error("Update Failed", err.message || "Failed to update supplier profile");
     } finally {
       setSavingProfile(false);
     }
@@ -305,7 +332,7 @@ export function SupplierDetailsView({ supplierId, onBack, onNavigate }: Supplier
     e.preventDefault();
     if (!supplier || payAmount <= 0) return;
     if (!selectedAccountId) {
-      alert("A valid financial account created for the selected branch is required to record supplier payment.");
+      showAlert.error("Account Required", "A valid financial account created for the selected branch is required to record supplier payment.");
       return;
     }
 
@@ -323,12 +350,14 @@ export function SupplierDetailsView({ supplierId, onBack, onNavigate }: Supplier
 
       if (!res.success) throw new Error(res.message || "Payment recording failed");
 
-      setSuccess(`Payment of ৳${payAmount.toFixed(2)} settled successfully!`);
+      const msg = `Payment of ৳${payAmount.toFixed(2)} settled successfully!`;
+      setSuccess(msg);
+      showAlert.success("Payment Recorded Successfully!", msg);
       setPayModalOpen(false);
       loadSupplierData();
       setTimeout(() => setSuccess(null), 3500);
     } catch (err: any) {
-      alert(err.message);
+      showAlert.error("Payment Failed", err.message || "Payment recording failed");
     } finally {
       setPaying(false);
     }
@@ -378,6 +407,22 @@ export function SupplierDetailsView({ supplierId, onBack, onNavigate }: Supplier
   const contacts = supplier.contacts || [];
   const purchases = supplier.purchases || [];
 
+  const supplierDisplayName =
+    supplier.name && supplier.name.trim().length > 2
+      ? supplier.name
+      : supplier.company && supplier.company.trim().length > 2
+        ? supplier.company
+        : supplier.name || supplier.company || "Supplier";
+
+  const totalPurchaseCount = purchases.length;
+  const totalPurchasePages = Math.max(1, Math.ceil(totalPurchaseCount / purchasePageSize));
+  const purchaseStartItem = totalPurchaseCount === 0 ? 0 : (purchasePage - 1) * purchasePageSize + 1;
+  const purchaseEndItem = Math.min(purchasePage * purchasePageSize, totalPurchaseCount);
+  const paginatedPurchases = purchases.slice(
+    (purchasePage - 1) * purchasePageSize,
+    purchasePage * purchasePageSize
+  );
+
   const getPresetLabel = () => {
     switch (datePreset) {
       case "TODAY":
@@ -400,75 +445,214 @@ export function SupplierDetailsView({ supplierId, onBack, onNavigate }: Supplier
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
-      {/* Top Header & Breadcrumb */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
-        <div>
-          <button
-            type="button"
-            onClick={onBack}
-            className="text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 flex items-center gap-1.5 mb-2 font-bold transition"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            Back to Suppliers
-          </button>
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-2xl bg-brand-primary/10 text-brand-primary flex items-center justify-center font-black text-lg shrink-0">
-              {supplier.name.charAt(0)}
-            </div>
-            <div>
-              <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2">
-                {supplier.name}
-              </h1>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Pharmaceutical Manufacturer & Distributor Ledger
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2.5 flex-wrap">
-          {lifetimeDue > 0 && (
-            <button
-              onClick={handleOpenPayModal}
-              className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm active:scale-95"
-            >
-              <CreditCard className="h-4 w-4" />
-              Settle Due (৳{lifetimeDue.toFixed(2)})
-            </button>
-          )}
-          <button
-            onClick={handleOpenAddContact}
-            className="px-4 py-2.5 bg-brand-primary hover:bg-brand-primary-hover text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm"
-          >
-            <Plus className="h-4 w-4" />
-            Add Contact Person
-          </button>
-          <button
-            onClick={handleOpenEditProfile}
-            className="px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition flex items-center gap-1.5"
-            title="Edit Company Profile"
-          >
-            <Edit2 className="h-3.5 w-3.5" />
-            Edit Profile
-          </button>
-        </div>
+      {/* Top Navigation */}
+      <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+        <button
+          type="button"
+          onClick={onBack}
+          className="text-xs sm:text-sm text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 flex items-center gap-1.5 font-bold transition cursor-pointer"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          <span>Back to Suppliers</span>
+        </button>
       </div>
 
       {/* Notifications */}
       {success && (
-        <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 rounded-2xl flex items-center gap-3 text-emerald-800 dark:text-emerald-200 text-xs font-bold animate-in fade-in">
-          <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
+        <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 rounded-2xl flex items-center gap-3 text-emerald-800 dark:text-emerald-200 text-xs sm:text-sm font-bold animate-in fade-in">
+          <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
           <span>{success}</span>
         </div>
       )}
 
-      {/* Date Filter Bar - Positioned at top before Stat Cards */}
+      {/* ========================================================================= */}
+      {/* SECTION 1 (TOP HERO): COMPANY INFORMATION & SALES REPRESENTATIVES (SRs)    */}
+      {/* ========================================================================= */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+        {/* Company Profile Card (Left 5 Cols) */}
+        <div className="lg:col-span-5 bg-white dark:bg-slate-900 p-5 sm:p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between space-y-4">
+          <div>
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                Company Information
+              </span>
+              <button
+                onClick={handleOpenEditProfile}
+                className="text-xs sm:text-sm font-bold text-brand-primary hover:underline flex items-center gap-1 cursor-pointer"
+              >
+                <Edit2 className="h-3.5 w-3.5" />
+                <span>Edit Profile</span>
+              </button>
+            </div>
+
+            <div className="flex items-center gap-3.5 pt-3.5">
+              <div className="h-12 w-12 rounded-2xl bg-brand-primary/10 text-brand-primary flex items-center justify-center font-black text-xl shrink-0">
+                {supplierDisplayName.charAt(0).toUpperCase()}
+              </div>
+              <div className="min-w-0">
+                <h2 className="text-lg sm:text-xl md:text-2xl font-black text-slate-900 dark:text-white leading-tight break-words">
+                  {supplierDisplayName}
+                </h2>
+                <span className="text-xs font-mono text-slate-400">
+                  ID: #{supplier.id.slice(0, 8)}
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-2.5 pt-4 text-xs sm:text-sm">
+              <div className="flex items-center gap-2.5 text-slate-700 dark:text-slate-300">
+                <Phone className="h-4 w-4 text-slate-400 shrink-0" />
+                {supplier.phone ? (
+                  <a
+                    href={`tel:${supplier.phone}`}
+                    className="font-mono font-bold text-slate-800 dark:text-slate-200 hover:text-brand-primary transition"
+                  >
+                    {supplier.phone}
+                  </a>
+                ) : (
+                  <span className="text-slate-400">—</span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2.5 text-slate-700 dark:text-slate-300">
+                <Mail className="h-4 w-4 text-slate-400 shrink-0" />
+                {supplier.email ? (
+                  <a
+                    href={`mailto:${supplier.email}`}
+                    className="hover:text-brand-primary truncate"
+                  >
+                    {supplier.email}
+                  </a>
+                ) : (
+                  <span className="text-slate-400">—</span>
+                )}
+              </div>
+
+              <div className="flex items-start gap-2.5 text-slate-700 dark:text-slate-300">
+                <MapPin className="h-4 w-4 text-slate-400 shrink-0 mt-0.5" />
+                <span className="text-slate-600 dark:text-slate-300">
+                  {supplier.address || "No depot/office address"}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Contact Persons & Representatives (Right 7 Cols) */}
+        <div className="lg:col-span-7 bg-white dark:bg-slate-900 p-5 sm:p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+            <div className="flex items-center gap-2">
+              <User className="h-4 w-4 text-brand-primary" />
+              <h2 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">
+                Sales Representatives & SRs
+              </h2>
+              <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold">
+                {contacts.length}
+              </span>
+            </div>
+
+            <button
+              onClick={handleOpenAddContact}
+              className="px-3 py-1.5 bg-brand-primary/10 hover:bg-brand-primary text-brand-primary hover:text-white rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              <span>Add Representative</span>
+            </button>
+          </div>
+
+          {contacts.length === 0 ? (
+            <div className="py-8 text-center text-slate-400 space-y-2">
+              <User className="h-8 w-8 mx-auto text-slate-300 dark:text-slate-700" />
+              <p className="text-xs font-bold text-slate-600 dark:text-slate-400">
+                No representatives registered yet
+              </p>
+              <p className="text-[11px] text-slate-400 max-w-sm mx-auto">
+                Add Sales Representatives (SR) or Territory Officers to easily contact them for batch orders.
+              </p>
+              <button
+                onClick={handleOpenAddContact}
+                className="mt-1 px-3 py-1 bg-brand-primary text-white rounded-lg text-xs font-semibold inline-flex items-center gap-1 cursor-pointer"
+              >
+                <Plus className="h-3 w-3" />
+                Add SR Now
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[220px] overflow-y-auto pr-1">
+              {contacts.map((c) => (
+                <div
+                  key={c.id}
+                  className={`p-3 rounded-2xl border transition relative space-y-2 ${
+                    c.isActive
+                      ? "bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700"
+                      : "bg-slate-100/50 dark:bg-slate-900/50 border-slate-200/60 dark:border-slate-800 opacity-60"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="h-9 w-9 rounded-xl bg-brand-primary/10 text-brand-primary flex items-center justify-center font-bold text-sm shrink-0">
+                        {c.name.charAt(0)}
+                      </div>
+                      <div className="overflow-hidden">
+                        <div className="font-bold text-xs sm:text-sm text-slate-900 dark:text-white truncate">
+                          {c.name}
+                        </div>
+                        <div className="text-[11px] sm:text-xs text-brand-primary font-semibold truncate">
+                          {c.designation || "Representative (SR)"}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-0.5">
+                      <button
+                        onClick={() => handleOpenEditContact(c)}
+                        className="p-1 text-slate-400 hover:text-brand-primary rounded transition cursor-pointer"
+                        title="Edit Contact"
+                      >
+                        <Edit2 className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleToggleContactStatus(c)}
+                        className={`p-1 rounded transition cursor-pointer ${
+                          c.isActive ? "text-slate-400 hover:text-rose-500" : "text-slate-400 hover:text-emerald-500"
+                        }`}
+                        title={c.isActive ? "Deactivate Contact" : "Activate Contact"}
+                      >
+                        {c.isActive ? <Ban className="h-3.5 w-3.5" /> : <Check className="h-3.5 w-3.5" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-200/60 dark:border-slate-700 text-xs sm:text-sm space-y-1">
+                    <div className="flex items-center gap-1.5 font-mono font-bold text-slate-800 dark:text-slate-200">
+                      <Phone className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                      <a href={`tel:${c.phone}`} className="hover:underline">
+                        {c.phone}
+                      </a>
+                    </div>
+                    {c.email && (
+                      <div className="flex items-center gap-1.5 text-xs text-slate-400 truncate">
+                        <Mail className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                        <span className="truncate">{c.email}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* SECTION 2 (MIDDLE): DATE RANGE & DYNAMIC FINANCIAL PERFORMANCE            */}
+      {/* ========================================================================= */}
       <div className="p-4 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <Calendar className="h-4 w-4 text-brand-primary" />
-            <span className="text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-wider">
-              Filter Statistics by Date:
+            <span className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
+              Filter Financials by Date:
             </span>
             <span className="px-2.5 py-0.5 rounded-full bg-brand-primary/10 text-brand-primary text-xs font-bold">
               {getPresetLabel()}
@@ -489,7 +673,7 @@ export function SupplierDetailsView({ supplierId, onBack, onNavigate }: Supplier
               <button
                 key={t.id}
                 onClick={() => setDatePreset(t.id)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                   datePreset === t.id
                     ? "bg-brand-primary text-white shadow-sm"
                     : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
@@ -524,7 +708,7 @@ export function SupplierDetailsView({ supplierId, onBack, onNavigate }: Supplier
             <button
               onClick={loadSupplierData}
               disabled={!customStartDate || !customEndDate}
-              className="px-4 py-1.5 bg-brand-primary text-white rounded-xl text-xs font-bold shadow-xs hover:opacity-95 disabled:opacity-50 transition"
+              className="px-4 py-1.5 bg-brand-primary text-white rounded-xl text-xs font-bold shadow-xs hover:opacity-95 disabled:opacity-50 transition cursor-pointer"
             >
               Apply Filter
             </button>
@@ -537,7 +721,7 @@ export function SupplierDetailsView({ supplierId, onBack, onNavigate }: Supplier
         {/* Card 1: Total Purchased */}
         <div className="p-5 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between transition hover:shadow-md">
           <div className="flex items-center justify-between">
-            <div className="text-[11px] font-black text-slate-400 uppercase tracking-wider">
+            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
               Total Purchased
             </div>
             <div className="h-8 w-8 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 flex items-center justify-center">
@@ -545,7 +729,7 @@ export function SupplierDetailsView({ supplierId, onBack, onNavigate }: Supplier
             </div>
           </div>
           <div className="mt-2">
-            <div className="text-2xl font-black font-mono text-slate-900 dark:text-white">
+            <div className="text-xl sm:text-2xl font-black font-mono text-slate-900 dark:text-white">
               ৳{periodPurchased.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
             <div className="flex items-center justify-between text-[11px] mt-1 text-slate-500">
@@ -563,7 +747,7 @@ export function SupplierDetailsView({ supplierId, onBack, onNavigate }: Supplier
         {/* Card 2: Total Settled / Paid */}
         <div className="p-5 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between transition hover:shadow-md">
           <div className="flex items-center justify-between">
-            <div className="text-[11px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
+            <div className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
               Settled / Paid
             </div>
             <div className="h-8 w-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
@@ -571,7 +755,7 @@ export function SupplierDetailsView({ supplierId, onBack, onNavigate }: Supplier
             </div>
           </div>
           <div className="mt-2">
-            <div className="text-2xl font-black font-mono text-emerald-600 dark:text-emerald-400">
+            <div className="text-xl sm:text-2xl font-black font-mono text-emerald-600 dark:text-emerald-400">
               ৳{periodPaid.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
             <div className="flex items-center justify-between text-[11px] mt-1 text-emerald-700 dark:text-emerald-300">
@@ -589,7 +773,7 @@ export function SupplierDetailsView({ supplierId, onBack, onNavigate }: Supplier
         {/* Card 3: Period Due */}
         <div className="p-5 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between transition hover:shadow-md">
           <div className="flex items-center justify-between">
-            <div className="text-[11px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-wider">
+            <div className="text-[11px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">
               Period Due
             </div>
             <div className="h-8 w-8 rounded-xl bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 flex items-center justify-center">
@@ -597,7 +781,7 @@ export function SupplierDetailsView({ supplierId, onBack, onNavigate }: Supplier
             </div>
           </div>
           <div className="mt-2">
-            <div className="text-2xl font-black font-mono text-amber-600 dark:text-amber-400">
+            <div className="text-xl sm:text-2xl font-black font-mono text-amber-600 dark:text-amber-400">
               ৳{periodDue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
             <div className="text-[11px] mt-1 text-slate-500">
@@ -618,7 +802,7 @@ export function SupplierDetailsView({ supplierId, onBack, onNavigate }: Supplier
             : "border-slate-200 dark:border-slate-800"
         }`}>
           <div className="flex items-center justify-between">
-            <div className="text-[11px] font-black text-rose-500 uppercase tracking-wider">
+            <div className="text-[11px] font-bold text-rose-500 uppercase tracking-wider">
               Total Outstanding Due
             </div>
             <div className="h-8 w-8 rounded-xl bg-rose-50 dark:bg-rose-950/50 text-rose-500 flex items-center justify-center">
@@ -626,7 +810,7 @@ export function SupplierDetailsView({ supplierId, onBack, onNavigate }: Supplier
             </div>
           </div>
           <div className="mt-2">
-            <div className="text-2xl font-black font-mono text-rose-600 dark:text-rose-400">
+            <div className="text-xl sm:text-2xl font-black font-mono text-rose-600 dark:text-rose-400">
               ৳{lifetimeDue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
             <div className="text-[11px] mt-1 text-rose-500 font-semibold">
@@ -638,7 +822,7 @@ export function SupplierDetailsView({ supplierId, onBack, onNavigate }: Supplier
             {lifetimeDue > 0 && (
               <button
                 onClick={handleOpenPayModal}
-                className="text-[11px] font-black text-rose-600 dark:text-rose-400 hover:underline flex items-center gap-1"
+                className="text-xs font-bold text-rose-600 dark:text-rose-400 hover:underline flex items-center gap-1 cursor-pointer"
               >
                 Settle Due &rarr;
               </button>
@@ -647,145 +831,20 @@ export function SupplierDetailsView({ supplierId, onBack, onNavigate }: Supplier
         </div>
       </div>
 
-      {/* Company Info & Overview Card */}
-      <div className="p-6 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Company Information</div>
-          <button
-            onClick={handleOpenEditProfile}
-            className="text-xs font-bold text-brand-primary hover:underline flex items-center gap-1"
-          >
-            <Edit2 className="h-3 w-3" />
-            Edit Profile
-          </button>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-xs pt-1">
-          <div className="flex items-center gap-2 text-slate-800 dark:text-slate-200 font-semibold">
-            <Building className="h-4 w-4 text-slate-400 shrink-0" />
-            <span className="truncate">{supplier.company || supplier.name}</span>
-          </div>
-          <div className="flex items-center gap-2 text-slate-800 dark:text-slate-200 font-mono">
-            <Phone className="h-4 w-4 text-slate-400 shrink-0" />
-            <span>{supplier.phone || "—"}</span>
-          </div>
-          <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
-            <Mail className="h-4 w-4 text-slate-400 shrink-0" />
-            <span className="truncate">{supplier.email || "—"}</span>
-          </div>
-          <div className="flex items-start gap-2 text-slate-600 dark:text-slate-400">
-            <MapPin className="h-4 w-4 text-slate-400 shrink-0 mt-0.5" />
-            <span className="truncate">{supplier.address || "—"}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Section 1: Contact Persons */}
-      <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-        <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-          <div className="flex items-center gap-2">
-            <User className="h-5 w-5 text-brand-primary" />
-            <div>
-              <h2 className="text-base font-black text-slate-900 dark:text-white">Contact Persons & Representatives</h2>
-              <p className="text-xs text-slate-400">Representatives (e.g. SR, Territory Officers) who deliver orders for {supplier.name}</p>
-            </div>
-          </div>
-
-          <button
-            onClick={handleOpenAddContact}
-            className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-brand-primary rounded-xl text-xs font-bold transition flex items-center gap-1.5"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Add Representative
-          </button>
-        </div>
-
-        {contacts.length === 0 ? (
-          <div className="py-8 text-center text-slate-400">
-            <User className="h-8 w-8 mx-auto text-slate-300 dark:text-slate-700 mb-2" />
-            <p className="text-xs font-bold text-slate-600 dark:text-slate-400">No contact persons registered yet</p>
-            <p className="text-[11px] mt-0.5">Click "Add Representative" above to record SR / medical rep contact numbers.</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
-            {contacts.map((c) => (
-              <div
-                key={c.id}
-                className={`p-4 rounded-2xl border transition relative space-y-2.5 ${
-                  c.isActive
-                    ? "bg-slate-50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700"
-                    : "bg-slate-100/50 dark:bg-slate-900/50 border-slate-200/60 dark:border-slate-800 opacity-60"
-                }`}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <div className="h-8 w-8 rounded-xl bg-brand-primary/10 text-brand-primary flex items-center justify-center font-bold text-xs">
-                      {c.name.charAt(0)}
-                    </div>
-                    <div>
-                      <div className="font-bold text-xs text-slate-900 dark:text-white flex items-center gap-1.5">
-                        {c.name}
-                        {!c.isActive && (
-                          <span className="text-[9px] px-1.5 py-0.5 bg-slate-200 text-slate-600 rounded-md font-bold">
-                            Inactive
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-[11px] text-brand-primary font-semibold">
-                        {c.designation || "Representative"}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => handleOpenEditContact(c)}
-                      className="p-1 text-slate-400 hover:text-brand-primary rounded-lg transition"
-                      title="Edit Contact"
-                    >
-                      <Edit2 className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      onClick={() => handleToggleContactStatus(c)}
-                      className={`p-1 rounded-lg transition ${
-                        c.isActive ? "text-slate-400 hover:text-rose-500" : "text-slate-400 hover:text-emerald-500"
-                      }`}
-                      title={c.isActive ? "Deactivate Contact" : "Activate Contact"}
-                    >
-                      {c.isActive ? <Ban className="h-3.5 w-3.5" /> : <Check className="h-3.5 w-3.5" />}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="space-y-1 text-[11px] pt-1 border-t border-slate-200/50 dark:border-slate-700/50">
-                  <div className="flex items-center gap-1.5 font-mono text-slate-800 dark:text-slate-200 font-bold">
-                    <Phone className="h-3 w-3 text-slate-400" />
-                    <a href={`tel:${c.phone}`} className="hover:underline">{c.phone}</a>
-                  </div>
-                  {c.email && (
-                    <div className="flex items-center gap-1.5 text-slate-500">
-                      <Mail className="h-3 w-3 text-slate-400" />
-                      <span className="truncate">{c.email}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Section 2: Complete Purchase History */}
-      <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+      {/* ========================================================================= */}
+      {/* SECTION 3 (BOTTOM): INWARD PURCHASE ORDERS & INVOICE HISTORY               */}
+      {/* ========================================================================= */}
+      <div className="bg-white dark:bg-slate-900 p-5 sm:p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             <Receipt className="h-5 w-5 text-brand-primary" />
             <div>
-              <h2 className="text-base font-black text-slate-900 dark:text-white">Purchase & Inward Order History</h2>
-              <p className="text-xs text-slate-400">Medicine intake orders received from {supplier.name}.</p>
+              <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Purchase & Inward Order History</h2>
+              <p className="text-xs sm:text-sm text-slate-400">Medicine intake orders received from {supplierDisplayName}.</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 text-xs text-slate-500 font-bold">
+          <div className="flex items-center gap-2 text-xs sm:text-sm text-slate-500 font-bold">
             <span className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-xl text-slate-600 dark:text-slate-300">
               Orders for: <strong className="text-brand-primary font-black">{getPresetLabel()}</strong> ({purchases.length} invoices)
             </span>
@@ -796,117 +855,184 @@ export function SupplierDetailsView({ supplierId, onBack, onNavigate }: Supplier
         {purchases.length === 0 ? (
           <div className="py-12 text-center text-slate-400">
             <Receipt className="h-8 w-8 mx-auto text-slate-300 dark:text-slate-700 mb-2" />
-            <p className="text-xs font-bold text-slate-600 dark:text-slate-400">No purchase records found for this period</p>
-            <p className="text-[11px] mt-0.5">Purchases recorded during Stock Intake will automatically appear here.</p>
+            <p className="text-xs sm:text-sm font-bold text-slate-600 dark:text-slate-400">No purchase records found for this period</p>
+            <p className="text-xs mt-0.5">Purchases recorded during Stock Intake will automatically appear here.</p>
           </div>
         ) : (
-          <div className="table-responsive-container rounded-2xl border border-slate-100 dark:border-slate-800">
-            <table className="w-full min-w-[950px] text-left text-xs border-collapse">
-              <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 uppercase font-bold text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-800">
-                <tr>
-                  <th className="py-3.5 px-4">Date</th>
-                  <th className="py-3.5 px-4">Invoice #</th>
-                  <th className="py-3.5 px-4">Branch</th>
-                  <th className="py-3.5 px-4">Contact Person</th>
-                  <th className="py-3.5 px-4">Products Supplied</th>
-                  <th className="py-3.5 px-4 text-right">Total Amount</th>
-                  <th className="py-3.5 px-4 text-right">Paid</th>
-                  <th className="py-3.5 px-4 text-right">Due</th>
-                  <th className="py-3.5 px-4 text-center">Status</th>
-                  <th className="py-3.5 px-4 text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium text-slate-700 dark:text-slate-300">
-                {purchases.map((p: any) => {
-                  const pTotal = Number(p.totalAmount || 0);
-                  const pPaid = Number(p.paidAmount || 0);
-                  const pDue = Number(p.dueAmount || 0);
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+            <div className="table-responsive-container">
+              <table className="w-full min-w-[750px] text-left border-collapse">
+                <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 uppercase font-bold text-xs tracking-wider border-b border-slate-200 dark:border-slate-800">
+                  <tr>
+                    <th className="py-4 px-4">Date</th>
+                    <th className="py-4 px-4">Branch</th>
+                    <th className="py-4 px-4">Contact Person</th>
+                    <th className="py-4 px-4 text-right">Total Amount</th>
+                    <th className="py-4 px-4 text-right">Paid</th>
+                    <th className="py-4 px-4 text-right">Due</th>
+                    <th className="py-4 px-4 text-center">Status</th>
+                    <th className="py-4 px-4 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium text-slate-700 dark:text-slate-300 text-xs sm:text-sm">
+                  {paginatedPurchases.map((p: any) => {
+                    const pTotal = Number(p.totalAmount || 0);
+                    const pPaid = Number(p.paidAmount || 0);
+                    const pDue = Number(p.dueAmount || 0);
 
-                  const repName =
-                    p.contactPerson?.name ||
-                    p.contactPersonName ||
-                    supplier.contactPerson ||
-                    "—";
+                    const repName =
+                      p.contactPerson?.name ||
+                      p.contactPersonName ||
+                      supplier.contactPerson ||
+                      "—";
 
-                  const productNames =
-                    p.items?.map((item: any) => item.product?.name).filter(Boolean).join(", ") ||
-                    "Direct stock intake";
+                    return (
+                      <tr key={p.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition">
+                        <td className="py-4 px-4 font-mono font-semibold text-xs sm:text-sm text-slate-800 dark:text-slate-200">
+                          {new Date(p.purchaseDate || p.createdAt).toLocaleDateString()}
+                        </td>
 
-                  return (
-                    <tr key={p.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition">
-                      <td className="py-3.5 px-4 font-mono text-[11px]">
-                        {new Date(p.purchaseDate || p.createdAt).toLocaleDateString()}
-                      </td>
+                        <td className="py-4 px-4 text-slate-700 dark:text-slate-300">
+                          {p.branch?.name || "Main Branch"}
+                        </td>
 
-                      <td className="py-3.5 px-4 font-mono font-bold text-slate-900 dark:text-white">
-                        {p.invoiceNo || p.id.slice(-6)}
-                      </td>
-
-                      <td className="py-3.5 px-4 text-slate-600 dark:text-slate-400">
-                        {p.branch?.name || "Main Branch"}
-                      </td>
-
-                      <td className="py-3.5 px-4">
-                        <div className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1">
-                          <User className="h-3 w-3 text-slate-400 shrink-0" />
-                          <span>{repName}</span>
-                        </div>
-                        {p.contactPerson?.phone && (
-                          <div className="text-[10px] text-slate-400 font-mono mt-0.5">
-                            {p.contactPerson.phone}
+                        <td className="py-4 px-4">
+                          <div className="font-semibold text-slate-900 dark:text-white flex items-center gap-1.5">
+                            <User className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                            <span>{repName}</span>
                           </div>
-                        )}
-                      </td>
+                          {p.contactPerson?.phone && (
+                            <div className="text-xs text-slate-400 font-mono mt-0.5">
+                              {p.contactPerson.phone}
+                            </div>
+                          )}
+                        </td>
 
-                      <td className="py-3.5 px-4 max-w-[200px]">
-                        <span className="truncate block font-normal" title={productNames}>
-                          {productNames}
-                        </span>
-                      </td>
+                        <td className="py-4 px-4 text-right font-black font-mono text-sm sm:text-base text-slate-900 dark:text-white">
+                          ৳{pTotal.toFixed(2)}
+                        </td>
 
-                      <td className="py-3.5 px-4 text-right font-black font-mono text-slate-900 dark:text-white">
-                        ৳{pTotal.toFixed(2)}
-                      </td>
+                        <td className="py-4 px-4 text-right text-emerald-600 dark:text-emerald-400 font-bold font-mono text-sm sm:text-base">
+                          ৳{pPaid.toFixed(2)}
+                        </td>
 
-                      <td className="py-3.5 px-4 text-right text-emerald-600 font-bold font-mono">
-                        ৳{pPaid.toFixed(2)}
-                      </td>
+                        <td className="py-4 px-4 text-right font-mono">
+                          {pDue > 0 ? (
+                            <span className="text-rose-600 font-black text-sm sm:text-base">৳{pDue.toFixed(2)}</span>
+                          ) : (
+                            <span className="text-slate-400 text-xs sm:text-sm">৳0.00</span>
+                          )}
+                        </td>
 
-                      <td className="py-3.5 px-4 text-right font-mono">
-                        {pDue > 0 ? (
-                          <span className="text-rose-600 font-black">৳{pDue.toFixed(2)}</span>
-                        ) : (
-                          <span className="text-slate-400 text-[10px]">৳0.00</span>
-                        )}
-                      </td>
+                        <td className="py-4 px-4 text-center">
+                          <span
+                            className={`px-3 py-1 rounded-full text-xs font-bold ${
+                              p.paymentStatus === "PAID"
+                                ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900"
+                                : p.paymentStatus === "PARTIAL"
+                                ? "bg-amber-50 text-amber-700 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900"
+                                : "bg-rose-50 text-rose-700 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900"
+                            }`}
+                          >
+                            {p.paymentStatus}
+                          </span>
+                        </td>
 
-                      <td className="py-3.5 px-4 text-center">
-                        <span
-                          className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                            p.paymentStatus === "PAID"
-                              ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900"
-                              : p.paymentStatus === "PARTIAL"
-                              ? "bg-amber-50 text-amber-700 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900"
-                              : "bg-rose-50 text-rose-700 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900"
-                          }`}
-                        >
-                          {p.paymentStatus}
-                        </span>
-                      </td>
+                        <td className="py-4 px-4 text-right">
+                          <button
+                            onClick={() => setSelectedInvoice(p)}
+                            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold transition cursor-pointer"
+                          >
+                            Details
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
 
-                      <td className="py-3.5 px-4 text-right">
-                        <button
-                          onClick={() => setSelectedInvoice(p)}
-                          className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg text-[10px] font-bold transition"
-                        >
-                          Details
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            {/* Clean Pagination Footer for Purchase History */}
+            {totalPurchaseCount > 0 && (
+              <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/75 dark:bg-slate-800/50 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs sm:text-sm">
+                {/* Record Status */}
+                <div className="text-slate-600 dark:text-slate-400 font-medium">
+                  Showing <strong className="text-slate-900 dark:text-white font-bold">{purchaseStartItem}</strong> to{" "}
+                  <strong className="text-slate-900 dark:text-white font-bold">{purchaseEndItem}</strong> of{" "}
+                  <strong className="text-slate-900 dark:text-white font-bold">{totalPurchaseCount}</strong> invoices
+                </div>
+
+                {/* Controls: Rows per page & Page navigation */}
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-1.5 text-slate-500 font-medium">
+                    <span>Rows per page:</span>
+                    <select
+                      value={purchasePageSize}
+                      onChange={(e) => {
+                        setPurchasePageSize(Number(e.target.value));
+                        setPurchasePage(1);
+                      }}
+                      className="h-8 px-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300 outline-none focus:border-brand-primary cursor-pointer"
+                    >
+                      <option value={5}>5</option>
+                      <option value={10}>10</option>
+                      <option value={20}>20</option>
+                      <option value={50}>50</option>
+                    </select>
+                  </div>
+
+                  {/* Page Buttons */}
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setPurchasePage(1)}
+                      disabled={purchasePage <= 1}
+                      className="h-8 w-8 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center justify-center transition cursor-pointer"
+                      title="First Page"
+                    >
+                      <ChevronsLeft className="h-3.5 w-3.5" />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setPurchasePage((p) => Math.max(1, p - 1))}
+                      disabled={purchasePage <= 1}
+                      className="h-8 px-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-700 font-bold text-xs flex items-center gap-1 transition cursor-pointer"
+                      title="Previous Page"
+                    >
+                      <ChevronLeft className="h-3.5 w-3.5" />
+                      <span className="hidden sm:inline">Prev</span>
+                    </button>
+
+                    <div className="px-2 text-xs font-bold text-slate-700 dark:text-slate-300">
+                      <span className="text-slate-900 dark:text-white font-black">{purchasePage}</span> / {totalPurchasePages}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setPurchasePage((p) => Math.min(totalPurchasePages, p + 1))}
+                      disabled={purchasePage >= totalPurchasePages}
+                      className="h-8 px-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-700 font-bold text-xs flex items-center gap-1 transition cursor-pointer"
+                      title="Next Page"
+                    >
+                      <span className="hidden sm:inline">Next</span>
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setPurchasePage(totalPurchasePages)}
+                      disabled={purchasePage >= totalPurchasePages}
+                      className="h-8 w-8 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center justify-center transition cursor-pointer"
+                      title="Last Page"
+                    >
+                      <ChevronsRight className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

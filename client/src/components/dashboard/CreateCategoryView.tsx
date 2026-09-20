@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { fetchApi } from "@/lib/api";
+import { showAlert } from "@/lib/swal";
 import {
   FolderTree,
   Plus,
@@ -72,17 +73,19 @@ export function CreateCategoryView({ onNavigate }: CreateCategoryViewProps) {
         throw new Error(res.message || "Failed to create Category");
       }
 
-      setSuccessMsg(
-        `Category "${categoryName.trim()}" created successfully ${
-          validSubcategories.length > 0
-            ? `with ${validSubcategories.length} subcategory(ies)`
-            : ""
-        }!`
-      );
+      const msg = `Category "${categoryName.trim()}" created successfully ${
+        validSubcategories.length > 0
+          ? `with ${validSubcategories.length} subcategory(ies)`
+          : ""
+      }!`;
+      setSuccessMsg(msg);
+      showAlert.success("Category Created Successfully!", msg);
       setCategoryName("");
       setSubcategories([""]);
     } catch (err: any) {
-      setError(err.message || "An unexpected error occurred");
+      const msg = err.message || "An unexpected error occurred";
+      setError(msg);
+      showAlert.error("Creation Failed", msg);
     } finally {
       setSaving(false);
     }
@@ -98,29 +101,26 @@ export function CreateCategoryView({ onNavigate }: CreateCategoryViewProps) {
             <span>/</span>
             <span className="text-brand-primary font-bold">Create Category</span>
           </div>
-          <h2 className="text-xl font-black text-slate-900 dark:text-white flex items-center gap-2">
-            <FolderTree className="h-6 w-6 text-brand-primary" />
-            Create New Category
+          <h2 className="text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2">
+            <FolderTree className="h-7 w-7 text-brand-primary" />
+            Create Category
           </h2>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Add a main product category and define optional subcategories.
-          </p>
         </div>
 
         {onNavigate && (
           <button
             onClick={() => onNavigate("cat_list")}
-            className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shrink-0"
+            className="h-11 px-5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-sm font-bold transition flex items-center gap-2 shrink-0"
           >
             <List className="h-4 w-4" />
-            View Category List
+            Category List
           </button>
         )}
       </div>
 
       {/* Notifications */}
       {successMsg && (
-        <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 rounded-2xl text-emerald-800 dark:text-emerald-300 text-xs flex items-center justify-between gap-3 font-bold animate-in fade-in">
+        <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 rounded-2xl text-emerald-800 dark:text-emerald-300 text-sm flex items-center justify-between gap-3 font-bold animate-in fade-in">
           <div className="flex items-center gap-2.5">
             <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
             <span>{successMsg}</span>
@@ -128,9 +128,9 @@ export function CreateCategoryView({ onNavigate }: CreateCategoryViewProps) {
           {onNavigate && (
             <button
               onClick={() => onNavigate("cat_list")}
-              className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition flex items-center gap-1 shrink-0"
+              className="h-9 px-3.5 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 transition flex items-center gap-1 shrink-0"
             >
-              Go to Category List
+              Go to List
               <ArrowRight className="h-3.5 w-3.5" />
             </button>
           )}
@@ -138,7 +138,7 @@ export function CreateCategoryView({ onNavigate }: CreateCategoryViewProps) {
       )}
 
       {error && (
-        <div className="p-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-2xl text-rose-800 dark:text-rose-300 text-xs flex items-center gap-2 font-semibold">
+        <div className="p-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-2xl text-rose-800 dark:text-rose-300 text-sm flex items-center gap-2 font-bold">
           <AlertCircle className="h-5 w-5 text-rose-600 shrink-0" />
           <span>{error}</span>
         </div>
@@ -147,9 +147,9 @@ export function CreateCategoryView({ onNavigate }: CreateCategoryViewProps) {
       {/* Main Creation Card */}
       <form onSubmit={handleSubmit} className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 sm:p-8 shadow-sm space-y-6">
         {/* Category Name Section */}
-        <div className="space-y-2">
-          <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
-            Category Name <span className="text-rose-500">*</span>
+        <div>
+          <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
+            Category Name *
           </label>
           <input
             type="text"
@@ -157,29 +157,21 @@ export function CreateCategoryView({ onNavigate }: CreateCategoryViewProps) {
             placeholder="e.g. Medicine, Syrup, Medical Equipment, Saline"
             value={categoryName}
             onChange={(e) => setCategoryName(e.target.value)}
-            className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-sm font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-brand-primary/20 transition"
+            className="w-full h-12 px-4 bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-2xl text-base font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-brand-primary/20 transition"
           />
-          <p className="text-[11px] text-slate-400">
-            Main category label used across POS, inventory lists, and sales reports.
-          </p>
         </div>
 
         {/* Subcategories Section */}
         <div className="space-y-4 pt-4 border-t border-slate-100 dark:border-slate-800">
           <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-sm font-black text-slate-900 dark:text-white flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-brand-primary" />
-                Subcategories (Optional)
-              </h3>
-              <p className="text-[11px] text-slate-400 mt-0.5">
-                Add specific subcategories under this main category (e.g. Medicine → Tablet, Capsule, Cream).
-              </p>
-            </div>
+            <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-brand-primary" />
+              Subcategories (Optional)
+            </h3>
             <button
               type="button"
               onClick={handleAddSubcategoryInput}
-              className="px-3 py-1.5 bg-brand-primary/10 text-brand-primary hover:bg-brand-primary/20 rounded-xl text-xs font-bold transition flex items-center gap-1.5"
+              className="h-9 px-3.5 bg-brand-primary/10 text-brand-primary hover:bg-brand-primary/20 rounded-xl text-xs font-bold transition flex items-center gap-1.5"
             >
               <Plus className="h-3.5 w-3.5" />
               Add Subcategory
@@ -195,14 +187,14 @@ export function CreateCategoryView({ onNavigate }: CreateCategoryViewProps) {
                     placeholder={`Subcategory #${index + 1} (e.g. Tablet, Capsule, Cream)`}
                     value={sub}
                     onChange={(e) => handleSubcategoryChange(index, e.target.value)}
-                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-brand-primary/20 transition"
+                    className="w-full h-11 px-4 bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-sm font-semibold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-brand-primary/20 transition"
                   />
                 </div>
                 {subcategories.length > 1 && (
                   <button
                     type="button"
                     onClick={() => handleRemoveSubcategoryInput(index)}
-                    className="p-2.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-xl transition shrink-0"
+                    className="h-11 w-11 flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-xl transition shrink-0"
                     title="Remove item"
                   >
                     <Trash2 className="h-4 w-4" />
@@ -210,10 +202,6 @@ export function CreateCategoryView({ onNavigate }: CreateCategoryViewProps) {
                 )}
               </div>
             ))}
-          </div>
-
-          <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200/60 dark:border-slate-700/60 text-[11px] text-slate-500">
-            <strong>Pro Tip:</strong> You can add multiple subcategories now using the <strong>+ Add Subcategory</strong> button, or add them anytime later from the Category List page.
           </div>
         </div>
 
@@ -226,14 +214,14 @@ export function CreateCategoryView({ onNavigate }: CreateCategoryViewProps) {
               setSubcategories([""]);
               setError(null);
             }}
-            className="px-5 py-3 rounded-2xl text-xs font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+            className="h-11 px-5 rounded-2xl text-sm font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
           >
-            Reset Form
+            Reset
           </button>
           <button
             type="submit"
             disabled={saving || !categoryName.trim()}
-            className="px-6 py-3 bg-brand-primary hover:bg-brand-primary-hover text-white rounded-2xl text-xs font-bold transition flex items-center gap-2 shadow-lg disabled:opacity-50"
+            className="h-11 px-6 bg-brand-primary hover:bg-brand-primary-hover text-white rounded-2xl text-sm font-black transition flex items-center gap-2 shadow-md disabled:opacity-50"
           >
             {saving ? (
               <Loader2 className="h-4 w-4 animate-spin" />

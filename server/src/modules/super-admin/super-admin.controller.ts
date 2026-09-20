@@ -132,8 +132,12 @@ export class SuperAdminController {
   static async listPayments(req: Request, res: Response): Promise<void> {
     try {
       const page = req.query.page ? parseInt(req.query.page as string, 10) : 1;
-      const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 50;
-      const result = await SuperAdminService.listPlatformPayments(page, limit);
+      const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 100;
+      const datePreset = req.query.datePreset as string | undefined;
+      const startDate = req.query.startDate as string | undefined;
+      const endDate = req.query.endDate as string | undefined;
+      const search = req.query.search as string | undefined;
+      const result = await SuperAdminService.listPlatformPayments(page, limit, datePreset, startDate, endDate, search);
       res.status(200).json({ success: true, ...result });
     } catch (error: any) {
       res.status(500).json({ success: false, message: error.message });

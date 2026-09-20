@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import { fetchApi } from "@/lib/api";
 import { Supplier } from "@/types";
 import { useAuth } from "@/context/AuthContext";
+import { showAlert } from "@/lib/swal";
 import {
   Truck,
   Plus,
@@ -133,18 +134,22 @@ export function SuppliersModule({ subAction }: SuppliersModuleProps = {}) {
           body: JSON.stringify(formData),
         });
         if (!res.success) throw new Error(res.message || "Failed to update supplier");
+        showAlert.success("Supplier Updated", `Supplier "${formData.name}" updated successfully!`);
       } else {
         const res = await fetchApi("/suppliers", {
           method: "POST",
           body: JSON.stringify(formData),
         });
         if (!res.success) throw new Error(res.message || "Failed to create supplier");
+        showAlert.success("Supplier Created", `Supplier "${formData.name}" created successfully!`);
       }
 
       setModalOpen(false);
       loadSuppliers();
     } catch (err: any) {
-      setError(err.message);
+      const msg = err.message || "Failed to save supplier";
+      setError(msg);
+      showAlert.error("Save Failed", msg);
     } finally {
       setSaving(false);
     }

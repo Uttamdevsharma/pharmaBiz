@@ -7,8 +7,9 @@ export class PaymentController {
    */
   static async initiate(req: Request, res: Response): Promise<void> {
     try {
-      const tenantId = req.user!.tenantId;
-      const result = await PaymentService.initiateSubscriptionPayment(tenantId, req.body);
+      const tenantId = req.user?.tenantId;
+      const userRole = req.user?.role;
+      const result = await PaymentService.initiateSubscriptionPayment(tenantId, req.body, userRole);
       res.status(200).json({
         success: true,
         message: "Payment session initialized successfully",

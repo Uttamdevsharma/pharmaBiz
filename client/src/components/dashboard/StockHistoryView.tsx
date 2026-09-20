@@ -4,7 +4,6 @@ import React, { useEffect, useState } from "react";
 import { fetchApi } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { useBranchContext } from "@/context/BranchContext";
-import { Pagination } from "@/components/common/Pagination";
 import {
   History,
   Search,
@@ -19,6 +18,10 @@ import {
   Clock,
   Layers,
   Filter,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
 } from "lucide-react";
 
 interface StockHistoryViewProps {
@@ -42,6 +45,7 @@ export function StockHistoryView({ selectedBranchId: propBranchId }: StockHistor
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
 
@@ -86,7 +90,7 @@ export function StockHistoryView({ selectedBranchId: propBranchId }: StockHistor
       setLoading(true);
       const params = new URLSearchParams();
       params.append("page", page.toString());
-      params.append("limit", "10");
+      params.append("limit", pageSize.toString());
       if (effectiveBranchId && effectiveBranchId !== "all") {
         params.append("branchId", effectiveBranchId);
       }
@@ -102,10 +106,10 @@ export function StockHistoryView({ selectedBranchId: propBranchId }: StockHistor
         setRecords(recList);
         const pag = (res as any).pagination || res.meta;
         if (pag) {
-          setTotalPages(pag.totalPages || 1);
-          setTotalCount(pag.total || recList.length || 0);
+          setTotalPages(pag.totalPages || Math.ceil((pag.total || recList.length) / pageSize) || 1);
+          setTotalCount(pag.total !== undefined ? pag.total : recList.length);
         } else {
-          setTotalPages(Math.ceil(recList.length / 10) || 1);
+          setTotalPages(Math.ceil(recList.length / pageSize) || 1);
           setTotalCount(recList.length);
         }
       } else {
@@ -116,8 +120,11 @@ export function StockHistoryView({ selectedBranchId: propBranchId }: StockHistor
           setRecords(recList);
           const pag = (fallbackRes as any).pagination || fallbackRes.meta;
           if (pag) {
-            setTotalPages(pag.totalPages || 1);
-            setTotalCount(pag.total || recList.length || 0);
+            setTotalPages(pag.totalPages || Math.ceil((pag.total || recList.length) / pageSize) || 1);
+            setTotalCount(pag.total !== undefined ? pag.total : recList.length);
+          } else {
+            setTotalPages(Math.ceil(recList.length / pageSize) || 1);
+            setTotalCount(recList.length);
           }
         }
       }
@@ -130,7 +137,7 @@ export function StockHistoryView({ selectedBranchId: propBranchId }: StockHistor
 
   useEffect(() => {
     loadReceivingHistory();
-  }, [page, effectiveBranchId, datePreset, startDate, endDate]);
+  }, [page, pageSize, effectiveBranchId, datePreset, startDate, endDate]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -138,19 +145,8 @@ export function StockHistoryView({ selectedBranchId: propBranchId }: StockHistor
     loadReceivingHistory();
   };
 
-  // KPI Calculations
-  const totalEntries = records.length;
-  const totalPurchaseVal = records.reduce(
-    (sum, r) => sum + (Number(r.totalPurchaseValue) || 0),
-    0
-  );
-  const totalUnitsReceived = records.reduce(
-    (sum, r) => sum + (Number(r.totalQuantityUnits) || Number(r.quantity) || 0),
-    0
-  );
-
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-12">
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
         <div>
@@ -159,174 +155,130 @@ export function StockHistoryView({ selectedBranchId: propBranchId }: StockHistor
             <span>/</span>
             <span className="text-brand-primary font-bold">Stock History</span>
           </div>
-          <h2 className="text-xl font-black text-slate-900 dark:text-white flex items-center gap-2">
-            <PackageCheck className="h-6 w-6 text-brand-primary" />
-            Stock Receiving History
+          <h2 className="text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2.5">
+            <PackageCheck className="h-7 w-7 text-brand-primary" />
+            Stock History
           </h2>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Log of stock inward receipts, batch arrivals, supplier purchases, and total received quantities.
-          </p>
         </div>
 
         {/* Active Branch Scope Badge */}
-        <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-200 shadow-xs">
+        <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-300">
           <Store className="h-4 w-4 text-brand-primary shrink-0" />
-          <span>{currentBranch?.name || (effectiveBranchId ? "Selected Branch" : "All Branches (Consolidated)")}</span>
-        </div>
-      </div>
-
-      {/* Summary KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm flex items-center gap-4">
-          <div className="p-3 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 rounded-xl border border-emerald-100 dark:border-emerald-900">
-            <Layers className="h-6 w-6" />
-          </div>
-          <div>
-            <div className="text-xs text-slate-400 font-medium">Receiving Entries</div>
-            <div className="text-lg font-black text-slate-900 dark:text-white mt-0.5">
-              {loading ? "..." : totalEntries.toLocaleString()} Records
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm flex items-center gap-4">
-          <div className="p-3 bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 rounded-xl border border-blue-100 dark:border-blue-900">
-            <Boxes className="h-6 w-6" />
-          </div>
-          <div>
-            <div className="text-xs text-slate-400 font-medium">Total Units Received</div>
-            <div className="text-lg font-black text-slate-900 dark:text-white mt-0.5">
-              {loading ? "..." : `${totalUnitsReceived.toLocaleString()} Units`}
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm flex items-center gap-4">
-          <div className="p-3 bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 rounded-xl border border-amber-100 dark:border-amber-900">
-            <DollarSign className="h-6 w-6" />
-          </div>
-          <div>
-            <div className="text-xs text-slate-400 font-medium">Total Purchase Value</div>
-            <div className="text-lg font-black text-slate-900 dark:text-white mt-0.5">
-              {loading ? "..." : `৳ ${totalPurchaseVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-            </div>
-          </div>
+          <span>{currentBranch?.name || (effectiveBranchId ? "Selected Branch" : "All Branches")}</span>
         </div>
       </div>
 
       {/* Filter and Search Controls */}
-      <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
+      <div className="bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
         {/* Date Presets Bar */}
-        <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-xs font-bold text-slate-400 flex items-center gap-1 mr-1">
-              <Calendar className="h-3.5 w-3.5 text-brand-primary" />
-              Date Filter:
-            </span>
-            {[
-              { id: "ALL", label: "All Time" },
-              { id: "TODAY", label: "Today" },
-              { id: "YESTERDAY", label: "Yesterday" },
-              { id: "THIS_MONTH", label: "This Month" },
-              { id: "LAST_MONTH", label: "Last Month" },
-              { id: "THIS_YEAR", label: "This Year" },
-              { id: "CUSTOM", label: "Custom Date Range" },
-            ].map((preset) => (
-              <button
-                key={preset.id}
-                onClick={() => setDatePreset(preset.id as DatePreset)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                  datePreset === preset.id
-                    ? "bg-brand-primary text-white shadow-xs"
-                    : "bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700"
-                }`}
-              >
-                {preset.label}
-              </button>
-            ))}
-          </div>
+        <div className="flex flex-wrap items-center gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
+          {[
+            { id: "ALL", label: "All Time" },
+            { id: "TODAY", label: "Today" },
+            { id: "YESTERDAY", label: "Yesterday" },
+            { id: "THIS_MONTH", label: "This Month" },
+            { id: "LAST_MONTH", label: "Last Month" },
+            { id: "THIS_YEAR", label: "This Year" },
+            { id: "CUSTOM", label: "Custom Date" },
+          ].map((preset) => (
+            <button
+              key={preset.id}
+              onClick={() => {
+                setDatePreset(preset.id as DatePreset);
+                setPage(1);
+              }}
+              className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer ${
+                datePreset === preset.id
+                  ? "bg-brand-primary text-white shadow-sm"
+                  : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
+              }`}
+            >
+              {preset.label}
+            </button>
+          ))}
         </div>
 
-        {/* Custom Date Pickers & Search Row */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-1">
-          {/* Search Input */}
-          <form onSubmit={handleSearchSubmit} className="flex-1 relative w-full">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search product, supplier, batch, invoice..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none text-slate-900 dark:text-white"
-            />
-          </form>
-
-          {/* Custom Date Inputs */}
-          {datePreset === "CUSTOM" && (
-            <div className="flex items-center gap-2 w-full sm:w-auto bg-slate-50 dark:bg-slate-800/60 p-1.5 rounded-xl border border-slate-200 dark:border-slate-700">
-              <div className="flex items-center gap-1 text-xs">
-                <span className="text-slate-400 font-medium pl-1">From:</span>
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-800 dark:text-slate-200 outline-none"
-                />
-              </div>
-              <div className="flex items-center gap-1 text-xs">
-                <span className="text-slate-400 font-medium">To:</span>
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-800 dark:text-slate-200 outline-none"
-                />
-              </div>
+        {/* Custom Date Inputs */}
+        {datePreset === "CUSTOM" && (
+          <div className="flex flex-wrap items-center gap-3 p-3 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-200 dark:border-slate-700">
+            <div className="flex items-center gap-2 text-xs sm:text-sm">
+              <span className="text-slate-500 font-bold">From:</span>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => {
+                  setStartDate(e.target.value);
+                  setPage(1);
+                }}
+                className="h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-200 outline-none focus:border-brand-primary"
+              />
             </div>
-          )}
-        </div>
+            <div className="flex items-center gap-2 text-xs sm:text-sm">
+              <span className="text-slate-500 font-bold">To:</span>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => {
+                  setEndDate(e.target.value);
+                  setPage(1);
+                }}
+                className="h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-200 outline-none focus:border-brand-primary"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Search Row */}
+        <form onSubmit={handleSearchSubmit} className="relative w-full">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search product, supplier, batch, invoice..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full h-11 pl-10 pr-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm font-medium outline-none text-slate-900 dark:text-white focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary transition"
+          />
+        </form>
       </div>
 
       {/* Stock Receiving Table */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+      <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
         {loading ? (
-          <div className="p-16 flex flex-col items-center justify-center text-slate-400">
-            <Loader2 className="h-8 w-8 animate-spin text-brand-primary mb-2" />
-            <p className="text-xs">Loading stock receiving history...</p>
+          <div className="p-16 flex flex-col items-center justify-center text-slate-400 gap-2">
+            <Loader2 className="h-8 w-8 animate-spin text-brand-primary" />
+            <p className="text-xs sm:text-sm font-semibold">Loading stock history...</p>
           </div>
         ) : records.length === 0 ? (
           <div className="p-16 text-center text-slate-400">
             <Boxes className="h-10 w-10 mx-auto text-slate-300 dark:text-slate-700 mb-3" />
-            <p className="text-sm font-bold text-slate-600 dark:text-slate-400">
-              No stock receiving records found
+            <p className="text-sm sm:text-base font-bold text-slate-700 dark:text-slate-300">
+              No stock history records found
             </p>
-            <p className="text-xs mt-1">
-              Intake records from direct batch entry and supplier purchases will appear here.
+            <p className="text-xs text-slate-400 mt-1">
+              Stock intake and purchase receipt logs will appear here.
             </p>
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="bg-slate-50/75 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 text-slate-500 uppercase tracking-wider font-bold text-[10px]">
-                  <th className="py-3.5 px-4">Date & Time</th>
-                  <th className="py-3.5 px-4">Product</th>
-                  <th className="py-3.5 px-4">Supplier</th>
-                  <th className="py-3.5 px-4">Batch Number</th>
-                  <th className="py-3.5 px-4">Received Quantity</th>
-                  <th className="py-3.5 px-4">Receiving Unit</th>
-                  <th className="py-3.5 px-4">Total Equivalent</th>
-                  <th className="py-3.5 px-4 text-right">Purchase Value</th>
+            <table className="w-full text-left">
+              <thead className="bg-slate-50 dark:bg-slate-800/60 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800">
+                <tr>
+                  <th className="py-4 px-4 font-bold">Date & Time</th>
+                  <th className="py-4 px-4 font-bold">Product</th>
+                  <th className="py-4 px-4 font-bold">Batch #</th>
+                  <th className="py-4 px-4 font-bold">Supplier / Source</th>
+                  <th className="py-4 px-4 font-bold">Received Quantity</th>
+                  <th className="py-4 px-4 font-bold text-right">Purchase Value</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium text-slate-700 dark:text-slate-300">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {records.map((r) => {
                   const dateStr = r.receivedDate || r.createdAt;
                   const formattedDate = dateStr
-                    ? new Date(dateStr).toLocaleString(undefined, {
-                        year: "numeric",
+                    ? new Date(dateStr).toLocaleString("en-GB", {
+                        day: "2-digit",
                         month: "short",
-                        day: "numeric",
+                        year: "numeric",
                         hour: "2-digit",
                         minute: "2-digit",
                       })
@@ -335,77 +287,68 @@ export function StockHistoryView({ selectedBranchId: propBranchId }: StockHistor
                   const prodName = r.product?.name || "Product";
                   const genericName = r.product?.genericName;
                   const supplierName = r.supplierName || r.supplier?.name || "Direct Intake";
-                  const batchNo = r.batchNumber || "No Batch";
+                  const batchNo = r.batchNumber || "—";
                   const recQtyLabel = r.receivedQuantityLabel || `${r.receivedQuantity || r.quantity || 0} ${r.receivingUnit || "Units"}`;
-                  const recUnit = r.receivingUnit || "Unit";
-                  const totalEquiv = r.totalEquivalentLabel || `${r.totalQuantityUnits || r.quantity || 0} Units`;
+                  const totalEquiv = r.totalEquivalentLabel || (r.totalQuantityUnits ? `${r.totalQuantityUnits} Units` : null);
                   const purchaseVal = Number(r.totalPurchaseValue || 0);
 
                   return (
                     <tr
                       key={r.id}
-                      className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors"
+                      className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition"
                     >
                       {/* Date & Time */}
-                      <td className="py-3.5 px-4 whitespace-nowrap font-mono text-[11px] text-slate-500 dark:text-slate-400">
-                        <div className="flex items-center gap-1.5">
-                          <Clock className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                          <span>{formattedDate}</span>
-                        </div>
+                      <td className="py-4 px-4 whitespace-nowrap font-mono text-xs sm:text-sm text-slate-600 dark:text-slate-400">
+                        {formattedDate}
                       </td>
 
                       {/* Product */}
-                      <td className="py-3.5 px-4">
-                        <div className="font-bold text-slate-900 dark:text-white">
+                      <td className="py-4 px-4">
+                        <div className="font-bold text-xs sm:text-sm text-slate-900 dark:text-white">
                           {prodName}
                         </div>
                         {genericName && (
-                          <div className="text-[10px] text-slate-400 mt-0.5">
+                          <div className="text-xs text-slate-400 mt-0.5 font-medium">
                             {genericName}
                           </div>
                         )}
                       </td>
 
-                      {/* Supplier */}
-                      <td className="py-3.5 px-4 whitespace-nowrap">
-                        <div className="flex items-center gap-1.5 text-slate-800 dark:text-slate-200">
-                          <Building2 className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                          <span className="font-semibold">{supplierName}</span>
-                        </div>
-                        {r.invoiceNo && (
-                          <div className="text-[10px] text-slate-400 font-mono mt-0.5">
-                            Inv: #{r.invoiceNo}
-                          </div>
-                        )}
-                      </td>
-
-                      {/* Batch */}
-                      <td className="py-3.5 px-4 whitespace-nowrap">
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-mono font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                      {/* Batch # */}
+                      <td className="py-4 px-4 whitespace-nowrap">
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
                           <Tag className="h-3 w-3 text-brand-primary" />
                           {batchNo}
                         </span>
                       </td>
 
+                      {/* Supplier / Source */}
+                      <td className="py-4 px-4 whitespace-nowrap">
+                        <div className="flex items-center gap-1.5 text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200">
+                          <Building2 className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                          <span>{supplierName}</span>
+                        </div>
+                        {r.invoiceNo && (
+                          <div className="text-xs text-slate-400 font-mono mt-0.5">
+                            Inv #{r.invoiceNo}
+                          </div>
+                        )}
+                      </td>
+
                       {/* Received Quantity */}
-                      <td className="py-3.5 px-4 whitespace-nowrap font-bold text-emerald-600 dark:text-emerald-400">
-                        {recQtyLabel}
-                      </td>
-
-                      {/* Receiving Unit */}
-                      <td className="py-3.5 px-4 whitespace-nowrap">
-                        <span className="inline-block px-2.5 py-0.5 rounded-md text-[11px] font-bold bg-sky-50 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300 border border-sky-200 dark:border-sky-900">
-                          {recUnit}
-                        </span>
-                      </td>
-
-                      {/* Total Equivalent */}
-                      <td className="py-3.5 px-4 text-slate-600 dark:text-slate-300 font-medium">
-                        {totalEquiv}
+                      <td className="py-4 px-4 whitespace-nowrap">
+                        <div className="font-black text-xs sm:text-sm text-brand-primary">
+                          {recQtyLabel}
+                        </div>
+                        {totalEquiv && totalEquiv !== recQtyLabel && (
+                          <div className="text-xs text-slate-400 font-semibold mt-0.5">
+                            ({totalEquiv})
+                          </div>
+                        )}
                       </td>
 
                       {/* Purchase Value */}
-                      <td className="py-3.5 px-4 text-right whitespace-nowrap font-mono font-bold text-slate-900 dark:text-white">
+                      <td className="py-4 px-4 text-right whitespace-nowrap font-mono font-black text-xs sm:text-sm text-slate-900 dark:text-white">
                         ৳ {purchaseVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
                     </tr>
@@ -416,13 +359,82 @@ export function StockHistoryView({ selectedBranchId: propBranchId }: StockHistor
           </div>
         )}
 
-        <Pagination
-          currentPage={page}
-          totalPages={totalPages}
-          totalItems={totalCount}
-          pageSize={10}
-          onPageChange={setPage}
-        />
+        {/* Always-Visible Pagination Controls */}
+        <div className="px-5 py-4 bg-slate-50 dark:bg-slate-800/60 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold">Rows per page:</span>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value));
+                setPage(1);
+              }}
+              className="h-8 px-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-slate-800 dark:text-slate-200 outline-none cursor-pointer"
+            >
+              <option value={10}>10</option>
+              <option value={20}>20</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
+            <span className="ml-2 font-medium text-slate-600 dark:text-slate-400">
+              Showing{" "}
+              <strong className="text-slate-900 dark:text-white">
+                {(totalCount || records.length) === 0 ? 0 : (page - 1) * pageSize + 1}
+              </strong>{" "}
+              to{" "}
+              <strong className="text-slate-900 dark:text-white">
+                {Math.min(page * pageSize, totalCount || records.length)}
+              </strong>{" "}
+              of{" "}
+              <strong className="text-slate-900 dark:text-white">{totalCount || records.length}</strong> records
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setPage(1)}
+              disabled={page <= 1}
+              title="First Page"
+              className="h-8 w-8 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center transition cursor-pointer"
+            >
+              <ChevronsLeft className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              className="h-8 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-800 font-bold text-xs flex items-center gap-1 transition cursor-pointer"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              <span>Previous</span>
+            </button>
+
+            <div className="px-2.5 text-xs font-bold text-slate-700 dark:text-slate-300">
+              Page <span className="text-brand-primary font-black">{page}</span> of{" "}
+              <span className="font-bold">{Math.max(1, totalPages || Math.ceil((totalCount || records.length) / pageSize))}</span>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.min(Math.max(1, totalPages || Math.ceil((totalCount || records.length) / pageSize)), p + 1))}
+              disabled={page >= Math.max(1, totalPages || Math.ceil((totalCount || records.length) / pageSize))}
+              className="h-8 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-800 font-bold text-xs flex items-center gap-1 transition cursor-pointer"
+            >
+              <span>Next</span>
+              <ChevronRight className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setPage(Math.max(1, totalPages || Math.ceil((totalCount || records.length) / pageSize)))}
+              disabled={page >= Math.max(1, totalPages || Math.ceil((totalCount || records.length) / pageSize))}
+              title="Last Page"
+              className="h-8 w-8 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center transition cursor-pointer"
+            >
+              <ChevronsRight className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -864,29 +864,58 @@ export class SupplierService {
     const paymentDate = data.paymentDate ? new Date(data.paymentDate) : new Date();
 
     // Reduce due amounts on open purchases for this supplier
-    const openPurchases = await (prisma as any).purchase.findMany({
-      where: { tenantId, supplierId, dueAmount: { gt: 0 } },
-      orderBy: { purchaseDate: "asc" },
-    });
     let remainingPay = payAmount;
-    for (const p of openPurchases) {
-      if (remainingPay <= 0) break;
-      const pDue = Number(p.dueAmount || 0);
-      const pPaid = Number(p.paidAmount || 0);
-      const chunk = Math.min(pDue, remainingPay);
-      const nextDue = pDue - chunk;
-      const nextPaid = pPaid + chunk;
-      const status = nextDue === 0 ? "PAID" : "PARTIAL";
 
-      await (prisma as any).purchase.update({
-        where: { id: p.id },
-        data: {
-          dueAmount: nextDue,
-          paidAmount: nextPaid,
-          paymentStatus: status,
-        },
+    if (data.purchaseId) {
+      // 1. Specific invoice settlement requested
+      const specificPurchase = await (prisma as any).purchase.findFirst({
+        where: { id: data.purchaseId, tenantId, supplierId },
       });
-      remainingPay -= chunk;
+      if (specificPurchase) {
+        const pDue = Number(specificPurchase.dueAmount || 0);
+        const pPaid = Number(specificPurchase.paidAmount || 0);
+        const chunk = Math.min(pDue, remainingPay);
+        const nextDue = Math.max(0, pDue - chunk);
+        const nextPaid = pPaid + chunk;
+        const status = nextDue === 0 ? "PAID" : "PARTIAL";
+
+        await (prisma as any).purchase.update({
+          where: { id: specificPurchase.id },
+          data: {
+            dueAmount: nextDue,
+            paidAmount: nextPaid,
+            paymentStatus: status,
+          },
+        });
+        remainingPay -= chunk;
+      }
+    }
+
+    // 2. If general payment (no purchaseId specified), distribute across open purchases FIFO
+    if (remainingPay > 0 && !data.purchaseId) {
+      const openPurchases = await (prisma as any).purchase.findMany({
+        where: { tenantId, supplierId, dueAmount: { gt: 0 } },
+        orderBy: { purchaseDate: "asc" },
+      });
+      for (const p of openPurchases) {
+        if (remainingPay <= 0) break;
+        const pDue = Number(p.dueAmount || 0);
+        const pPaid = Number(p.paidAmount || 0);
+        const chunk = Math.min(pDue, remainingPay);
+        const nextDue = pDue - chunk;
+        const nextPaid = pPaid + chunk;
+        const status = nextDue === 0 ? "PAID" : "PARTIAL";
+
+        await (prisma as any).purchase.update({
+          where: { id: p.id },
+          data: {
+            dueAmount: nextDue,
+            paidAmount: nextPaid,
+            paymentStatus: status,
+          },
+        });
+        remainingPay -= chunk;
+      }
     }
 
     // Atomic update of supplier dues, supplierPayment record & financial account balance
