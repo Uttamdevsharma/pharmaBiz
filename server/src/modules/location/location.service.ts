@@ -15,10 +15,21 @@ export class LocationService {
    * If includeInactive is false, only active items are returned.
    * Also computes usedLocations, emptyLocations, and active stock counts.
    */
-  static async getRacks(branchId: string, includeInactive: boolean = false) {
+  static async getRacks(branchId: string, includeInactive: boolean = false, type?: string) {
     const where: any = { branchId };
     if (!includeInactive) {
       where.isActive = true;
+    }
+
+    if (type && type !== "ALL") {
+      const upperType = type.toUpperCase();
+      if (upperType === "RACK") {
+        where.type = "RACK";
+      } else if (upperType === "CUSTOM" || upperType === "OTHER") {
+        where.type = { not: "RACK" };
+      } else {
+        where.type = type;
+      }
     }
 
     const shelfWhere: any = {};
@@ -70,15 +81,22 @@ export class LocationService {
         numberOfBins += s.bins ? s.bins.length : 0;
       }
 
-      // Collect distinct bin IDs that have active stock
-      const usedBinIds = new Set<string>();
+      // Collect distinct locations that have active stock
+      const usedLocationKeys = new Set<string>();
       let totalStockUnits = 0;
       for (const loc of rack.inventoryLocations || []) {
-        if (loc.binId) usedBinIds.add(loc.binId);
+        if (loc.binId) {
+          usedLocationKeys.add(`bin:${loc.binId}`);
+        } else if (loc.shelfId) {
+          usedLocationKeys.add(`shelf:${loc.shelfId}`);
+        } else if (loc.rackId) {
+          usedLocationKeys.add(`rack:${loc.rackId}`);
+        }
         totalStockUnits += loc.quantity || 0;
       }
-      const usedLocations = usedBinIds.size;
-      const emptyLocations = Math.max(0, numberOfBins - usedLocations);
+      const usedLocations = usedLocationKeys.size;
+      const totalCapacitySlots = numberOfBins > 0 ? numberOfBins : (numberOfShelves > 0 ? numberOfShelves : 1);
+      const emptyLocations = Math.max(0, totalCapacitySlots - usedLocations);
 
       return {
         ...rack,
@@ -93,8 +111,10 @@ export class LocationService {
 
   static async quickCreateRack(branchId: string, data: QuickCreateRackInput) {
     const rackName = data.name.trim();
-    const numberOfShelves = Math.max(1, Math.min(50, data.numberOfShelves));
-    const binsPerShelf = Math.max(1, Math.min(50, data.binsPerShelf));
+    const numberOfShelves = Math.max(0, Math.min(50, data.numberOfShelves ?? 0));
+    const binsPerShelf = Math.max(0, Math.min(50, data.binsPerShelf ?? 0));
+    const shelfPrefix = (data.shelfPrefix || "Shelf").trim();
+    const binPrefix = (data.binPrefix || "Bin").trim();
     const isActive = data.isActive ?? true;
 
     // 1. Check for duplicate rack name in this branch
@@ -105,39 +125,60 @@ export class LocationService {
       },
     });
     if (existing) {
-      throw new Error(`A rack with name "${rackName}" already exists in this branch. Please choose a different name.`);
+      throw new Error(`A storage unit with name "${rackName}" already exists in this branch. Please choose a different name.`);
     }
 
-    // 2. Prepare atomic nested structure: Rack -> Shelves -> Bins
-    const shelvesData = Array.from({ length: numberOfShelves }, (_, s) => {
-      const sIdx = s + 1;
-      const shelfNum = sIdx < 10 ? `S0${sIdx}` : `S${sIdx}`;
-      return {
-        name: shelfNum,
-        isActive,
-        bins: {
-          create: Array.from({ length: binsPerShelf }, (_, b) => {
-            const bIdx = b + 1;
-            const binNum = bIdx < 10 ? `B0${bIdx}` : `B${bIdx}`;
-            return {
-              name: binNum,
-              isActive,
-            };
-          }),
-        },
-      };
-    });
+    // Helper for naming items
+    const formatName = (prefix: string, index: number) => {
+      if (prefix.length <= 2 && /^[a-zA-Z]+$/.test(prefix)) {
+        return index < 10 ? `${prefix}0${index}` : `${prefix}${index}`;
+      }
+      return `${prefix} ${index}`;
+    };
+
+    // 2. Prepare atomic nested structure: Unit -> Shelves -> Bins
+    let shelvesData: any[] | undefined = undefined;
+    if (numberOfShelves > 0) {
+      shelvesData = Array.from({ length: numberOfShelves }, (_, s) => {
+        const sIdx = s + 1;
+        const shelfName = formatName(shelfPrefix, sIdx);
+        const shelfObj: any = {
+          name: shelfName,
+          isActive,
+        };
+
+        if (binsPerShelf > 0) {
+          shelfObj.bins = {
+            create: Array.from({ length: binsPerShelf }, (_, b) => {
+              const bIdx = b + 1;
+              const binName = formatName(binPrefix, bIdx);
+              return {
+                name: binName,
+                isActive,
+              };
+            }),
+          };
+        }
+
+        return shelfObj;
+      });
+    }
 
     // 3. Atomically create the entire hierarchy in a single relational query
+    const rackCreateData: any = {
+      branchId,
+      name: rackName,
+      type: (data as any).type?.trim() || "RACK",
+      isActive,
+    };
+    if (shelvesData && shelvesData.length > 0) {
+      rackCreateData.shelves = {
+        create: shelvesData,
+      };
+    }
+
     const rack = await (prisma as any).rack.create({
-      data: {
-        branchId,
-        name: rackName,
-        isActive,
-        shelves: {
-          create: shelvesData,
-        },
-      },
+      data: rackCreateData,
       include: {
         shelves: {
           include: {
@@ -182,6 +223,7 @@ export class LocationService {
       data: {
         branchId,
         name: rackName,
+        type: (data as any).type?.trim() || "RACK",
         isActive: data.isActive ?? true,
       },
       include: {
@@ -195,6 +237,7 @@ export class LocationService {
   static async updateRack(id: string, data: UpdateRackInput) {
     const updateData: any = {};
     if (data.name !== undefined) updateData.name = data.name.trim();
+    if ((data as any).type !== undefined) updateData.type = (data as any).type;
     if (data.isActive !== undefined) updateData.isActive = data.isActive;
 
     return (prisma as any).rack.update({

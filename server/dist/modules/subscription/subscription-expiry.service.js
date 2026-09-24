@@ -40,8 +40,8 @@ class SubscriptionExpiryService {
                 },
             });
             console.log(`ℹ️ [EXPIRY SCHEDULER] Found ${expiringSubscriptions.length} subscription(s) expiring within 2 days awaiting reminders.`);
-            const clientUrl = (process.env.CLIENT_URL || "http://localhost:3000").replace(/\/$/, "");
-            const renewUrl = `${clientUrl}/dashboard?tab=subscription`;
+            const clientUrl = (process.env.CLIENT_URL || "http://localhost:3001").replace(/\/$/, "");
+            const renewUrl = `${clientUrl}/dashboard/subscription/plans`;
             for (const sub of expiringSubscriptions) {
                 try {
                     const tenant = sub.tenant;

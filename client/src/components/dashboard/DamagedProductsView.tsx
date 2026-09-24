@@ -48,6 +48,19 @@ function formatQuantityWithPackaging(qty: number, item: any): string {
   return `${qty} ${pType}${qty > 1 && !pType.endsWith("s") ? "s" : ""}`;
 }
 
+// Persistent module cache
+let cachedDamagedData: any = {
+  summary: {
+    totalDamagedUnits: 0,
+    totalMissingUnits: 0,
+    totalDamagedValue: 0,
+    totalMissingValue: 0,
+    totalLossValue: 0,
+    incidentCount: 0,
+  },
+  data: [],
+};
+
 export function DamagedProductsView({ onNavigate, selectedBranchId: propBranchId }: DamagedProductsViewProps) {
   const {
     selectedBranchId: contextBranchId,
@@ -57,28 +70,8 @@ export function DamagedProductsView({ onNavigate, selectedBranchId: propBranchId
 
   const effectiveBranchId = propBranchId !== undefined ? propBranchId : contextBranchId;
 
-  const [loading, setLoading] = useState(true);
-  const [damagedData, setDamagedData] = useState<{
-    summary: {
-      totalDamagedUnits: number;
-      totalMissingUnits: number;
-      totalDamagedValue: number;
-      totalMissingValue: number;
-      totalLossValue: number;
-      incidentCount: number;
-    };
-    data: any[];
-  }>({
-    summary: {
-      totalDamagedUnits: 0,
-      totalMissingUnits: 0,
-      totalDamagedValue: 0,
-      totalMissingValue: 0,
-      totalLossValue: 0,
-      incidentCount: 0,
-    },
-    data: [],
-  });
+  const [loading, setLoading] = useState(false);
+  const [damagedData, setDamagedData] = useState(() => cachedDamagedData);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [datePreset, setDatePreset] = useState<DatePreset>("ALL");
@@ -184,7 +177,7 @@ export function DamagedProductsView({ onNavigate, selectedBranchId: propBranchId
               Total Transit Loss Value
             </div>
             <div className="text-xl font-black text-red-600 dark:text-red-400 mt-0.5">
-              ৳{(damagedData.summary?.totalLossValue || 0).toFixed(2)}
+              ৳{Math.round(damagedData.summary?.totalLossValue || 0).toLocaleString("en-BD")}
             </div>
           </div>
         </div>
@@ -200,7 +193,7 @@ export function DamagedProductsView({ onNavigate, selectedBranchId: propBranchId
             <div className="text-xl font-black text-slate-900 dark:text-white mt-0.5">
               {damagedData.summary?.totalDamagedUnits || 0} Units
               <span className="text-xs font-normal text-slate-400 ml-1.5">
-                (৳{(damagedData.summary?.totalDamagedValue || 0).toFixed(2)})
+                (৳{Math.round(damagedData.summary?.totalDamagedValue || 0).toLocaleString("en-BD")})
               </span>
             </div>
           </div>
@@ -217,7 +210,7 @@ export function DamagedProductsView({ onNavigate, selectedBranchId: propBranchId
             <div className="text-xl font-black text-slate-900 dark:text-white mt-0.5">
               {damagedData.summary?.totalMissingUnits || 0} Units
               <span className="text-xs font-normal text-slate-400 ml-1.5">
-                (৳{(damagedData.summary?.totalMissingValue || 0).toFixed(2)})
+                (৳{Math.round(damagedData.summary?.totalMissingValue || 0).toLocaleString("en-BD")})
               </span>
             </div>
           </div>
@@ -274,16 +267,11 @@ export function DamagedProductsView({ onNavigate, selectedBranchId: propBranchId
 
       {/* Table */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
-        {loading ? (
-          <div className="py-20 flex flex-col items-center justify-center gap-2 text-slate-400 text-xs">
-            <Loader2 className="h-6 w-6 animate-spin text-amber-500" />
-            <span>Loading damaged products records...</span>
-          </div>
-        ) : damagedData.data.length === 0 ? (
+        {damagedData.data.length === 0 ? (
           <div className="py-20 text-center text-xs text-slate-400 space-y-2">
             <Package className="h-10 w-10 mx-auto text-slate-300 dark:text-slate-700" />
             <p className="font-bold text-slate-600 dark:text-slate-400">
-              No damaged or missing items recorded.
+              {loading ? "Loading damaged products records..." : "No damaged or missing items recorded."}
             </p>
             <p className="text-[11px]">
               When destination branch managers mark damaged or missing units during shipment intake, they will appear here with full cost accounting.
@@ -358,11 +346,11 @@ export function DamagedProductsView({ onNavigate, selectedBranchId: propBranchId
                       </td>
 
                       <td className="py-3.5 px-4 font-bold font-mono text-slate-700 dark:text-slate-300">
-                        ৳{Number(item.costPrice || 0).toFixed(2)}
+                        ৳{Math.round(Number(item.costPrice || 0)).toLocaleString("en-BD")}
                       </td>
 
                       <td className="py-3.5 px-4 font-black font-mono text-red-600 dark:text-red-400 text-sm">
-                        ৳{totalLineLoss.toFixed(2)}
+                        ৳{Math.round(totalLineLoss).toLocaleString("en-BD")}
                       </td>
 
                       <td className="py-3.5 px-4 font-mono text-xs text-brand-primary">

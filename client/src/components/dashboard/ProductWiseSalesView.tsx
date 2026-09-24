@@ -21,6 +21,9 @@ interface ProductWiseSalesViewProps {
   selectedBranchId?: string;
 }
 
+// Persistent module cache
+let cachedDailyData: any = null;
+
 export function ProductWiseSalesView({ onNavigate: _onNavigate, selectedBranchId: propBranchId }: ProductWiseSalesViewProps = {}) {
   const { selectedBranchId: contextBranchId, currentBranch, isAllBranches } = useBranchContext();
   const effectiveBranchId = propBranchId !== undefined ? propBranchId : contextBranchId;
@@ -31,8 +34,8 @@ export function ProductWiseSalesView({ onNavigate: _onNavigate, selectedBranchId
   const [endDate, setEndDate] = useState<string>(new Date().toISOString().split("T")[0]);
 
   // Telemetry Data
-  const [dailyData, setDailyData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [dailyData, setDailyData] = useState<any>(() => cachedDailyData);
+  const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [productSearch, setProductSearch] = useState("");
   const [productSortBy, setProductSortBy] = useState<"amount" | "qty" | "name" | "category">("amount");
@@ -58,6 +61,7 @@ export function ProductWiseSalesView({ onNavigate: _onNavigate, selectedBranchId
 
       if (res.success && res.data) {
         setDailyData(res.data);
+        cachedDailyData = res.data;
       }
     } catch (err) {
       console.error("Failed to load product sales", err);
@@ -223,9 +227,8 @@ export function ProductWiseSalesView({ onNavigate: _onNavigate, selectedBranchId
         </div>
       </div>
 
-      {loading ? (
-        <div className="flex flex-col items-center justify-center py-20 text-slate-500 gap-3">
-          <Loader2 className="h-8 w-8 animate-spin text-emerald-600" />
+      {!dailyData && loading ? (
+        <div className="flex flex-col items-center justify-center py-20 text-slate-500 gap-2">
           <span className="text-xs font-bold">Querying product sales velocity...</span>
         </div>
       ) : (

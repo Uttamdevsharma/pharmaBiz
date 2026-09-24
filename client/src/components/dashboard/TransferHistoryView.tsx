@@ -39,11 +39,15 @@ interface TransferHistoryViewProps {
   onNavigate: (module: OwnerModule) => void;
 }
 
+// Persistent module cache
+let cachedTransfers: any[] = [];
+let cachedTransferBranches: Branch[] = [];
+
 export function TransferHistoryView({ onNavigate }: TransferHistoryViewProps) {
   const { user } = useAuth();
-  const [transfers, setTransfers] = useState<any[]>([]);
-  const [branches, setBranches] = useState<Branch[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [transfers, setTransfers] = useState<any[]>(() => cachedTransfers);
+  const [branches, setBranches] = useState<Branch[]>(() => cachedTransferBranches);
+  const [loading, setLoading] = useState(false);
 
   // Filters
   const [branchFilter, setBranchFilter] = useState<string>("");
@@ -204,7 +208,7 @@ export function TransferHistoryView({ onNavigate }: TransferHistoryViewProps) {
             <DollarSign className="h-4 w-4 text-brand-primary" />
           </div>
           <div className="text-2xl font-black text-brand-primary font-mono">
-            ৳{totalSentValue.toFixed(2)}
+            ৳{Math.round(totalSentValue).toLocaleString("en-BD")}
           </div>
           <div className="text-[10px] text-slate-500">Total purchase/cost price</div>
         </div>
@@ -215,7 +219,7 @@ export function TransferHistoryView({ onNavigate }: TransferHistoryViewProps) {
             <CheckCircle2 className="h-4 w-4 text-emerald-500" />
           </div>
           <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono">
-            ৳{totalReceivedValue.toFixed(2)}
+            ৳{Math.round(totalReceivedValue).toLocaleString("en-BD")}
           </div>
           <div className="text-[10px] text-slate-500">Credited to destination inventories</div>
         </div>
@@ -226,7 +230,7 @@ export function TransferHistoryView({ onNavigate }: TransferHistoryViewProps) {
             <AlertTriangle className="h-4 w-4 text-amber-500" />
           </div>
           <div className="text-2xl font-black text-amber-600 dark:text-amber-400 font-mono">
-            ৳{totalDamageLossValue.toFixed(2)}
+            ৳{Math.round(totalDamageLossValue).toLocaleString("en-BD")}
           </div>
           <div className="text-[10px] text-slate-500">Recorded transit loss</div>
         </div>
@@ -286,16 +290,15 @@ export function TransferHistoryView({ onNavigate }: TransferHistoryViewProps) {
 
       {/* Transfers Ledger Table */}
       <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
-        {loading ? (
-          <div className="p-16 flex flex-col items-center justify-center text-slate-400 text-xs gap-2">
-            <Loader2 className="h-6 w-6 animate-spin text-brand-primary" />
-            <span>Loading transfer transactions...</span>
-          </div>
-        ) : filteredTransfers.length === 0 ? (
+        {filteredTransfers.length === 0 ? (
           <div className="p-16 text-center text-slate-400 text-xs">
             <ArrowLeftRight className="h-10 w-10 mx-auto text-slate-300 dark:text-slate-700 mb-2" />
-            <p className="text-sm font-bold text-slate-600 dark:text-slate-400">No stock transfers recorded</p>
-            <p className="mt-0.5">Click "New Transfer Request" above to initiate a transfer between branches.</p>
+            <p className="text-sm font-bold text-slate-600 dark:text-slate-400">
+              {loading ? "Loading transfer transactions..." : "No stock transfers recorded"}
+            </p>
+            <p className="mt-0.5">
+              {!loading && "Click \"New Transfer Request\" above to initiate a transfer between branches."}
+            </p>
           </div>
         ) : (
           <div className="overflow-x-auto">

@@ -18,6 +18,7 @@ import {
   CheckCircle2,
   HelpCircle,
 } from "lucide-react";
+import { ThemeToggle } from "@/components/common/ThemeToggle";
 
 function LoginFormContent() {
   const router = useRouter();
@@ -90,9 +91,7 @@ function LoginFormContent() {
           <span>Back to Home</span>
         </Link>
 
-        <span className="text-xs font-bold text-slate-400">
-          {/* PharmaBiz Cloud v2.0 */}
-        </span>
+        <ThemeToggle />
       </div>
 
       {/* MAIN CENTERED CARD WITH SUBTLE ELEVATION ON SUBMIT */}
@@ -162,7 +161,7 @@ function LoginFormContent() {
                     value={identifier}
                     onChange={(e) => setIdentifier(e.target.value)}
                     placeholder="Username or email"
-                    className="w-full pl-11 pr-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/80 text-sm font-medium text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition"
+                    className="w-full pl-11 pr-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/80 text-sm font-medium text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-brand-primary focus:ring-4 focus:ring-brand-primary/10 transition"
                   />
                 </div>
               </div>
@@ -177,7 +176,7 @@ function LoginFormContent() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="password"
-                    className="w-full pl-11 pr-11 py-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/80 text-sm font-medium text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition font-mono"
+                    className="w-full pl-11 pr-11 py-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/80 text-sm font-medium text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-brand-primary focus:ring-4 focus:ring-brand-primary/10 transition font-mono"
                   />
                   <button
                     type="button"
@@ -198,7 +197,7 @@ function LoginFormContent() {
                   <button
                     type="button"
                     onClick={() => setShowForgotModal(true)}
-                    className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 transition"
+                    className="text-xs font-semibold text-brand-primary hover:underline transition"
                   >
                     Forgot?
                   </button>
@@ -210,7 +209,7 @@ function LoginFormContent() {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full py-3 px-6 rounded-2xl bg-[#4C6FFF] hover:bg-[#3D5FE6] text-white text-sm font-bold shadow-lg shadow-indigo-500/25 transition-all duration-200 active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-60"
+                  className="w-full py-3.5 px-6 rounded-2xl bg-brand-primary hover:opacity-90 text-white text-sm font-bold shadow-lg shadow-black/10 transition-all duration-200 active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-60 cursor-pointer"
                 >
                   {loading ? (
                     <>
@@ -228,7 +227,7 @@ function LoginFormContent() {
           {/* Quick Demo Credentials Footer Helper */}
           <div className="mt-8 pt-6 border-t border-slate-100 dark:border-slate-800/80">
             <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2.5">
-              <Shield className="h-3 w-3 text-indigo-500" />
+              <Shield className="h-3 w-3 text-brand-primary" />
               <span>Quick Login Credentials</span>
             </div>
             <div className="flex flex-wrap gap-1.5">
@@ -247,8 +246,8 @@ function LoginFormContent() {
                     onClick={() => setDemoCredentials(acc.email, acc.pass)}
                     className={`px-2.5 py-1 rounded-xl text-[11px] font-bold transition ${
                       isActive
-                        ? "bg-indigo-600 text-white shadow-xs"
-                        : "bg-slate-100 text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                        ? "bg-brand-primary text-white shadow-xs"
+                        : "bg-slate-100 text-slate-700 hover:bg-brand-primary/10 hover:text-brand-primary dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
                     }`}
                   >
                     {acc.label}
@@ -302,7 +301,7 @@ function LoginFormContent() {
         <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 animate-in zoom-in-95">
             <div className="flex items-center gap-3">
-              <div className="p-3 rounded-2xl bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400">
+              <div className="p-3 rounded-2xl bg-brand-primary/10 text-brand-primary">
                 <HelpCircle className="h-6 w-6" />
               </div>
               <div>
@@ -320,7 +319,7 @@ function LoginFormContent() {
             <button
               type="button"
               onClick={() => setShowForgotModal(false)}
-              className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition shadow-sm"
+              className="w-full py-2.5 rounded-xl bg-brand-primary hover:opacity-90 text-white text-xs font-bold transition shadow-sm cursor-pointer"
             >
               Got it
             </button>

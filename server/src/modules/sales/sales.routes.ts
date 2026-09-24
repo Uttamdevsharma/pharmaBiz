@@ -9,6 +9,7 @@ import {
   refundSaleSchema,
   voidSaleSchema,
   listSalesQuerySchema,
+  collectDueSchema,
 } from "./sales.validation";
 
 const router = Router();
@@ -30,9 +31,18 @@ router.get(
   validateRequest({ query: listSalesQuerySchema }),
   SalesController.listSales
 );
+router.get("/due-stats", requirePermission("pos.history"), SalesController.getDueStats);
 router.get("/customers", requirePermission("pos.manage"), SalesController.getCustomers);
 router.get("/:id", requirePermission("pos.history"), SalesController.getSaleById);
 router.get("/:id/receipt", requirePermission("pos.history"), SalesController.getReceipt);
+
+// Due Collection
+router.post(
+  "/:id/collect-due",
+  requirePermission("pos.manage"),
+  validateRequest({ body: collectDueSchema }),
+  SalesController.collectDue
+);
 
 // Refund & Void
 router.post(

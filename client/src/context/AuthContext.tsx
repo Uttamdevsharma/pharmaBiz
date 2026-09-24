@@ -189,12 +189,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = () => {
+    showAlert.toast("You have been logged out successfully.", "info");
     setUser(null);
     setToken(null);
     localStorage.removeItem("token");
     localStorage.removeItem("user");
-    showAlert.toast("You have been logged out successfully.", "info");
-    router.push("/login");
+    router.replace("/login");
   };
 
   // Explicit Platform Super Admin vs Pharmacy Role Detection

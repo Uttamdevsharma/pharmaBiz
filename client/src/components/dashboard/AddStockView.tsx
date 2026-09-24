@@ -196,15 +196,6 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
-  // Quick Add Product Modal
-  const [showAddProductModal, setShowAddProductModal] = useState(false);
-  const [newProdName, setNewProdName] = useState("");
-  const [newProdGeneric, setNewProdGeneric] = useState("");
-  const [newProdType, setNewProdType] = useState<"MEDICINE" | "SYRUP" | "EQUIPMENT" | "SALINE">("MEDICINE");
-  const [newProdCost, setNewProdCost] = useState<number>(10);
-  const [newProdPrice, setNewProdPrice] = useState<number>(12);
-  const [savingNewProduct, setSavingNewProduct] = useState(false);
-
   // Branch lock check
   const isBranchLocked = Boolean(
     user?.branchId && user?.role !== "COMPANY_OWNER" && user?.role !== "SUPER_ADMIN"
@@ -308,7 +299,7 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
   // Search logic - opens dropdown instantly on focus or typing
   useEffect(() => {
     if (!searchTerm.trim()) {
-      setSearchResults(allProducts.slice(0, 20));
+      setSearchResults(allProducts.slice(0, 50));
       return;
     }
     const query = searchTerm.toLowerCase().trim();
@@ -325,7 +316,7 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
           barcode.includes(query)
         );
       })
-      .slice(0, 30);
+      .slice(0, 50);
 
     setSearchResults(filtered);
   }, [searchTerm, allProducts]);
@@ -556,22 +547,22 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
     setLineItems((prev) => prev.filter((i) => i.id !== id));
   };
 
-  // Calculate totals
+  // Calculate totals (Auto-rounded whole numbers)
   const subtotal = useMemo(() => {
-    return lineItems.reduce((sum, item) => sum + (item.lineTotal || 0), 0);
+    return Math.round(lineItems.reduce((sum, item) => sum + (item.lineTotal || 0), 0));
   }, [lineItems]);
 
   const totalItemsCount = useMemo(() => {
-    return lineItems.reduce((sum, item) => sum + (Number(item.enteredQuantity) || 0), 0);
+    return Math.round(lineItems.reduce((sum, item) => sum + (Number(item.enteredQuantity) || 0), 0));
   }, [lineItems]);
 
-  // Overall Discount calculation
+  // Overall Discount calculation (Auto-rounded to integer)
   const calculatedInvoiceDiscount = useMemo(() => {
     if (discountType === "PERCENT") {
-      return Math.round(((subtotal * (Number(discountAmount) || 0)) / 100) * 100) / 100;
+      return Math.round((subtotal * (Number(discountAmount) || 0)) / 100);
     }
     if (discountType === "FIXED") {
-      return Math.min(subtotal, Number(discountAmount) || 0);
+      return Math.round(Math.min(subtotal, Number(discountAmount) || 0));
     }
     return 0;
   }, [subtotal, discountType, discountAmount]);
@@ -586,17 +577,17 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
     else if (purchaseTaxOption === "CUSTOM") pct = Number(customTaxPercent) || 0;
 
     const baseForTax = Math.max(0, subtotal - calculatedInvoiceDiscount);
-    return Math.round(((baseForTax * pct) / 100) * 100) / 100;
+    return Math.round((baseForTax * pct) / 100);
   }, [subtotal, calculatedInvoiceDiscount, purchaseTaxOption, customTaxPercent]);
 
-  // Grand Net Total
+  // Grand Net Total (Auto-rounded integer, e.g. 33012.50 -> 33013)
   const netTotalAmount = useMemo(() => {
-    return Math.max(0, Math.round((subtotal - calculatedInvoiceDiscount) * 100) / 100);
-  }, [subtotal, calculatedInvoiceDiscount]);
+    return Math.max(0, Math.round(subtotal - calculatedInvoiceDiscount + calculatedTax));
+  }, [subtotal, calculatedInvoiceDiscount, calculatedTax]);
 
-  // Payment Due
+  // Payment Due (Clean integer)
   const paymentDue = useMemo(() => {
-    return Math.max(0, Math.round((netTotalAmount - (Number(paidAmount) || 0)) * 100) / 100);
+    return Math.max(0, Math.round(netTotalAmount - (Number(paidAmount) || 0)));
   }, [netTotalAmount, paidAmount]);
 
   // Selected supplier details
@@ -611,44 +602,6 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
       (financialAccounts.length > 0 ? financialAccounts[0] : null)
     );
   }, [financialAccounts, selectedAccountId]);
-
-  // Handle Quick Add Product Modal Save
-  const handleCreateQuickProduct = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newProdName.trim()) return;
-
-    try {
-      setSavingNewProduct(true);
-      const res = await fetchApi<any>("/products", {
-        method: "POST",
-        body: JSON.stringify({
-          name: newProdName.trim(),
-          genericName: newProdGeneric.trim() || null,
-          productType: newProdType,
-          basePrice: Number(newProdPrice) || 10,
-          unit: newProdType === "SYRUP" ? "bottle" : newProdType === "EQUIPMENT" ? "piece" : "tablet",
-          stripsPerBox: 10,
-          tabletsPerStrip: 10,
-        }),
-      });
-
-      if (res.success && res.data) {
-        const createdProd: Product = res.data;
-        setAllProducts((prev) => [createdProd, ...prev]);
-        handleAddProductToTable(createdProd);
-        setShowAddProductModal(false);
-        setNewProdName("");
-        setNewProdGeneric("");
-        showAlert.success("Product Created", `"${createdProd.name}" has been created and added to the stock table.`);
-      } else {
-        showAlert.error("Failed to Create Product", res.message || "Failed to create product");
-      }
-    } catch (err: any) {
-      showAlert.error("Creation Error", err.message || "Failed to create product");
-    } finally {
-      setSavingNewProduct(false);
-    }
-  };
 
   // Submit Stock Inward
   const handleSubmitStock = async () => {
@@ -711,11 +664,11 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
         purchaseDate,
         items: preparedItems,
         discountType,
-        discountAmount: Number(discountAmount) || 0,
-        taxAmount: 0,
-        subtotal,
-        totalAmount: netTotalAmount,
-        paidAmount: Number(paidAmount) || 0,
+        discountAmount: Math.round(calculatedInvoiceDiscount),
+        taxAmount: Math.round(calculatedTax),
+        subtotal: Math.round(subtotal),
+        totalAmount: Math.round(netTotalAmount),
+        paidAmount: Math.round(Number(paidAmount) || 0),
         paymentMethod: (effectiveAcc?.type || paymentMethod || "CASH").toUpperCase(),
         financialAccountId: Number(paidAmount) > 0 ? (effectiveAcc?.id || null) : null,
         notes: null,
@@ -748,15 +701,6 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
       setSubmitting(false);
     }
   };
-
-  if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[450px] space-y-4">
-        <Loader2 className="w-12 h-12 text-emerald-600 animate-spin" />
-        <p className="text-base font-bold text-slate-600 dark:text-slate-300">Loading stock intake interface...</p>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6 w-full mx-auto pb-20 px-2 sm:px-4 md:px-6">
@@ -811,7 +755,7 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
           Supplier Information
         </h2>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 sm:gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
           {/* Branch */}
           <div>
             <label className="block text-sm font-black text-slate-800 dark:text-slate-200 mb-2 flex items-center gap-1.5">
@@ -834,17 +778,10 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
 
           {/* Supplier */}
           <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-sm font-black text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                <Building className="w-4 h-4 text-slate-400" />
-                Supplier *
-              </label>
-              {currentSupplier && (
-                <span className="text-xs text-rose-600 dark:text-rose-400 font-black">
-                  Due: ৳{Number(currentSupplier.totalDue || 0).toLocaleString()}
-                </span>
-              )}
-            </div>
+            <label className="block text-sm font-black text-slate-800 dark:text-slate-200 mb-2 flex items-center gap-1.5">
+              <Building className="w-4 h-4 text-slate-400" />
+              Supplier *
+            </label>
             <select
               value={selectedSupplierId}
               onChange={(e) => setSelectedSupplierId(e.target.value)}
@@ -883,7 +820,7 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
           <div>
             <label className="block text-sm font-black text-slate-800 dark:text-slate-200 mb-2 flex items-center gap-1.5">
               <Calendar className="w-4 h-4 text-slate-400" />
-              Challan Date *
+              Purchase Date *
             </label>
             <input
               type="date"
@@ -892,58 +829,59 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
               className="w-full text-sm font-bold bg-slate-50 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 h-11 font-mono"
             />
           </div>
-
-          {/* Invoice / Challan No */}
-          <div>
-            <label className="block text-sm font-black text-slate-800 dark:text-slate-200 mb-2 flex items-center gap-1.5">
-              <FileText className="w-4 h-4 text-slate-400" />
-              Challan / Invoice No *
-            </label>
-            <input
-              type="text"
-              value={invoiceNo}
-              onChange={(e) => setInvoiceNo(e.target.value)}
-              placeholder="e.g. INV-98421"
-              className="w-full text-sm font-bold bg-slate-50 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 font-mono h-11"
-            />
-          </div>
         </div>
       </div>
 
       {/* Section 2: Product Search & Dynamic Stock Items Grid */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border-2 border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
         {/* Search Header Bar */}
-        <div className="p-4 sm:p-5 bg-slate-50/80 dark:bg-slate-800/60 border-b-2 border-slate-200 dark:border-slate-800 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-          <div className="flex items-center gap-3 flex-1 relative" ref={searchContainerRef}>
-            {/* Live Search Input - Clicking shows dropdown automatically */}
-            <div className="relative flex-1">
-              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                <Search className="w-5 h-5" />
+        <div className="p-4 sm:p-5 bg-slate-50/80 dark:bg-slate-800/60 border-b-2 border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+          <div className="relative w-full max-w-xl lg:max-w-2xl" ref={searchContainerRef}>
+            {/* Live Search Input */}
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-emerald-600 dark:text-emerald-400">
+                <Search className="w-5 h-5 sm:w-6 sm:h-6" />
               </div>
               <input
                 ref={searchInputRef}
                 type="text"
                 value={searchTerm}
                 onClick={() => {
-                  setSearchResults(searchTerm.trim() ? searchResults : allProducts.slice(0, 20));
+                  setSearchResults(searchTerm.trim() ? searchResults : allProducts.slice(0, 50));
                   setIsSearchOpen(true);
                 }}
                 onFocus={() => {
-                  setSearchResults(searchTerm.trim() ? searchResults : allProducts.slice(0, 20));
+                  setSearchResults(searchTerm.trim() ? searchResults : allProducts.slice(0, 50));
                   setIsSearchOpen(true);
                 }}
                 onChange={(e) => {
                   setSearchTerm(e.target.value);
                   setIsSearchOpen(true);
                 }}
-                placeholder="Click here or type medicine (Napa, Seclo), syrup, diaper or scan barcode..."
-                className="w-full pl-11 pr-4 py-3 bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl text-sm sm:text-base text-slate-900 dark:text-white placeholder-slate-400 font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition shadow-sm h-12"
+                placeholder="Search medicine or scan barcode..."
+                className="w-full pl-12 sm:pl-13 pr-10 py-3 sm:py-3.5 bg-white dark:bg-slate-900 border-2 border-emerald-500/60 dark:border-emerald-500/40 focus:border-emerald-600 dark:focus:border-emerald-500 rounded-xl text-sm sm:text-base text-slate-900 dark:text-white placeholder-slate-400 font-bold outline-none focus:ring-4 focus:ring-emerald-500/15 transition shadow-sm h-12 sm:h-13"
               />
 
-              {/* Autocomplete Dropdown List */}
-              {isSearchOpen && searchResults.length > 0 && (
-                <div className="absolute left-0 right-0 top-full mt-2 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl z-50 max-h-80 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
-                  {searchResults.map((prod) => {
+              {searchTerm && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchTerm("");
+                    searchInputRef.current?.focus();
+                  }}
+                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition"
+                  title="Clear search"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              )}
+            </div>
+
+            {/* Autocomplete Dropdown List - Fixed Max Height with Smooth Scroll */}
+            {isSearchOpen && (
+              <div className="absolute left-0 right-0 top-full mt-2 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl z-50 max-h-[360px] overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 overscroll-contain">
+                {searchResults.length > 0 ? (
+                  searchResults.map((prod) => {
                     const stock = getProductStockCount(prod);
                     const model = getPackagingModel(prod);
                     return (
@@ -1012,37 +950,55 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
                         </div>
                       </div>
                     );
-                  })}
-                </div>
-              )}
-            </div>
+                  })
+                ) : searchTerm.trim() ? (
+                  <div className="p-6 text-center">
+                    <p className="text-sm sm:text-base font-bold text-slate-700 dark:text-slate-300">
+                      No product found matching &quot;<span className="text-emerald-600 dark:text-emerald-400 font-extrabold">{searchTerm}</span>&quot;
+                    </p>
+                    <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1 mb-4">
+                      Need to register this new medicine in the catalog with full packaging and pricing?
+                    </p>
+                    <button
+                      type="button"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        onNavigate("inv_add_product");
+                      }}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs sm:text-sm font-black shadow-sm transition"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Add Product in Catalog
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            )}
           </div>
 
-          {/* Add New Product Quick Button */}
-          <button
-            type="button"
-            onClick={() => setShowAddProductModal(true)}
-            className="inline-flex items-center justify-center gap-2 px-5 py-3 text-sm sm:text-base font-black rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition h-12"
-          >
-            <Plus className="w-5 h-5" />
-            Add New Product
-          </button>
+          {/* Right side items counter badge */}
+          <div className="flex items-center gap-2 text-xs sm:text-sm font-bold text-slate-600 dark:text-slate-300 self-end sm:self-center">
+            <span className="px-3.5 py-2 rounded-xl bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 shadow-xs flex items-center gap-2">
+              <span className={`w-2.5 h-2.5 rounded-full ${lineItems.length > 0 ? "bg-emerald-500 animate-pulse" : "bg-slate-300 dark:bg-slate-600"}`} />
+              <span>{lineItems.length} {lineItems.length === 1 ? "Product" : "Products"} in Table</span>
+            </span>
+          </div>
         </div>
 
         {/* Dynamic Multi-Product Items Table - Clean & Large Typography */}
         <div className="overflow-x-auto w-full">
           <table className="w-full text-left border-collapse min-w-[1050px]">
             <thead>
-              <tr className="bg-[#1b5e20] dark:bg-emerald-900 text-white text-xs sm:text-sm font-black tracking-wider divide-x divide-emerald-700/50">
-                <th className="py-4 px-3 text-center w-12">#</th>
-                <th className="py-4 px-4 min-w-[260px]">Product / Medicine</th>
-                <th className="py-4 px-4 min-w-[260px]">Stock In Unit & Intake Qty</th>
-                <th className="py-4 px-4 min-w-[160px]">Purchase Cost (৳)</th>
-                <th className="py-4 px-4 min-w-[140px] text-right">Total (৳)</th>
-                <th className="py-4 px-4 min-w-[160px]">Selling Price (MRP)</th>
-                <th className="py-4 px-4 min-w-[170px]">Lot / Batch & EXP Date</th>
-                <th className="py-4 px-3 text-center w-14">
-                  <Trash2 className="w-5 h-5 mx-auto text-emerald-200" />
+              <tr className="bg-brand-primary text-white text-xs sm:text-sm font-black tracking-wider divide-x divide-white/20 shadow-xs">
+                <th className="py-3.5 px-3 text-center w-12">#</th>
+                <th className="py-3.5 px-4 min-w-[220px]">Product / Medicine</th>
+                <th className="py-3.5 px-4 min-w-[240px]">Stock In Unit &amp; Intake Qty</th>
+                <th className="py-3.5 px-3.5 min-w-[140px]">Purchase Cost (৳)</th>
+                <th className="py-3.5 px-4 min-w-[130px] text-right">Total (৳)</th>
+                <th className="py-3.5 px-3.5 min-w-[140px]">Selling Price (MRP)</th>
+                <th className="py-3.5 px-3.5 min-w-[170px]">Lot / Batch &amp; EXP Date</th>
+                <th className="py-3.5 px-2 text-center w-12">
+                  <Trash2 className="w-4 h-4 mx-auto text-white/80" />
                 </th>
               </tr>
             </thead>
@@ -1096,7 +1052,7 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
                                 : "bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300"
                             }`}
                           >
-                            {isTablet ? "Tablet / Capsule" : isBottle ? "Syrup" : isPiece ? "Diaper / Piece" : "Injection"}
+                            {isTablet ? "Tablet / Capsule" : isBottle ? "Syrup" : isPiece ? "Piece" : "Injection"}
                           </span>
                           <span>•</span>
                           <span className="text-emerald-600 dark:text-emerald-400 font-black">
@@ -1116,7 +1072,7 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
                                 onClick={() => updateLineItem(item.id, { receivingMode: "BOX" })}
                                 className={`flex-1 py-1.5 px-2 rounded-lg text-center transition ${
                                   item.receivingMode === "BOX"
-                                    ? "bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-300 shadow-sm"
+                                    ? "bg-white dark:bg-slate-900 text-brand-primary shadow-xs"
                                     : "text-slate-500 hover:text-slate-900"
                                 }`}
                               >
@@ -1127,7 +1083,7 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
                                 onClick={() => updateLineItem(item.id, { receivingMode: "CARTON" })}
                                 className={`flex-1 py-1.5 px-2 rounded-lg text-center transition ${
                                   item.receivingMode === "CARTON"
-                                    ? "bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-300 shadow-sm"
+                                    ? "bg-white dark:bg-slate-900 text-brand-primary shadow-xs"
                                     : "text-slate-500 hover:text-slate-900"
                                 }`}
                               >
@@ -1143,7 +1099,7 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
                                 onClick={() => updateLineItem(item.id, { receivingMode: "BOTTLE" })}
                                 className={`flex-1 py-1.5 px-2 rounded-lg text-center transition ${
                                   item.receivingMode === "BOTTLE"
-                                    ? "bg-white dark:bg-slate-900 text-blue-700 dark:text-blue-300 shadow-sm"
+                                    ? "bg-white dark:bg-slate-900 text-brand-primary shadow-xs"
                                     : "text-slate-500 hover:text-slate-900"
                                 }`}
                               >
@@ -1154,7 +1110,7 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
                                 onClick={() => updateLineItem(item.id, { receivingMode: "CARTON" })}
                                 className={`flex-1 py-1.5 px-2 rounded-lg text-center transition ${
                                   item.receivingMode === "CARTON"
-                                    ? "bg-white dark:bg-slate-900 text-blue-700 dark:text-blue-300 shadow-sm"
+                                    ? "bg-white dark:bg-slate-900 text-brand-primary shadow-xs"
                                     : "text-slate-500 hover:text-slate-900"
                                 }`}
                               >
@@ -1170,7 +1126,7 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
                                 onClick={() => updateLineItem(item.id, { receivingMode: "PIECE" })}
                                 className={`flex-1 py-1.5 px-2 rounded-lg text-center transition ${
                                   item.receivingMode === "PIECE"
-                                    ? "bg-white dark:bg-slate-900 text-amber-700 dark:text-amber-300 shadow-sm"
+                                    ? "bg-white dark:bg-slate-900 text-brand-primary shadow-xs"
                                     : "text-slate-500 hover:text-slate-900"
                                 }`}
                               >
@@ -1181,7 +1137,7 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
                                 onClick={() => updateLineItem(item.id, { receivingMode: "PACK" })}
                                 className={`flex-1 py-1.5 px-2 rounded-lg text-center transition ${
                                   item.receivingMode === "PACK"
-                                    ? "bg-white dark:bg-slate-900 text-amber-700 dark:text-amber-300 shadow-sm"
+                                    ? "bg-white dark:bg-slate-900 text-brand-primary shadow-xs"
                                     : "text-slate-500 hover:text-slate-900"
                                 }`}
                               >
@@ -1197,7 +1153,7 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
                                 onClick={() => updateLineItem(item.id, { receivingMode: "VIAL" })}
                                 className={`flex-1 py-1.5 px-2 rounded-lg text-center transition ${
                                   item.receivingMode === "VIAL"
-                                    ? "bg-white dark:bg-slate-900 text-purple-700 dark:text-purple-300 shadow-sm"
+                                    ? "bg-white dark:bg-slate-900 text-brand-primary shadow-xs"
                                     : "text-slate-500 hover:text-slate-900"
                                 }`}
                               >
@@ -1208,7 +1164,7 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
                                 onClick={() => updateLineItem(item.id, { receivingMode: "BOX" })}
                                 className={`flex-1 py-1.5 px-2 rounded-lg text-center transition ${
                                   item.receivingMode === "BOX"
-                                    ? "bg-white dark:bg-slate-900 text-purple-700 dark:text-purple-300 shadow-sm"
+                                    ? "bg-white dark:bg-slate-900 text-brand-primary shadow-xs"
                                     : "text-slate-500 hover:text-slate-900"
                                 }`}
                               >
@@ -1230,7 +1186,7 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
                                 enteredQuantity: Math.max(1, Number(e.target.value) || 1),
                               })
                             }
-                            className="w-28 text-sm sm:text-base font-black text-slate-900 dark:text-white bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-right focus:ring-2 focus:ring-emerald-500 font-mono shadow-sm"
+                            className="w-24 sm:w-28 h-10 text-sm sm:text-base font-black text-slate-900 dark:text-white bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-3 text-right focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20 font-mono shadow-xs outline-none"
                           />
                           <span className="text-sm font-black text-slate-800 dark:text-slate-200">
                             {item.receivingMode === "CARTON"
@@ -1272,71 +1228,75 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
 
                       {/* Purchase Cost */}
                       <td className="py-4 px-3.5">
-                        <div className="text-xs font-black text-slate-500 dark:text-slate-400 mb-1.5">
-                          {isTablet
-                            ? "Cost / Box (৳):"
-                            : isBottle
-                            ? "Cost / Bottle (৳):"
-                            : item.receivingMode === "PACK"
-                            ? "Cost / Pack (৳):"
-                            : "Cost / Piece (৳):"}
-                        </div>
-                        <input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={item.unitCostBeforeDiscount}
-                          onChange={(e) =>
-                            updateLineItem(item.id, {
-                              unitCostBeforeDiscount: Math.max(0, Number(e.target.value) || 0),
-                            })
-                          }
-                          className="w-full text-sm sm:text-base font-black text-slate-900 dark:text-white bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-right focus:ring-2 focus:ring-emerald-500 font-mono"
-                        />
-                        {isTablet && (
-                          <div className="text-xs font-bold text-slate-500 mt-1 text-right font-mono">
-                            ৳{item.lowestUnitCost.toFixed(2)}/tab
+                        <div className="max-w-[130px]">
+                          <div className="text-xs font-black text-slate-500 dark:text-slate-400 mb-1.5 whitespace-nowrap">
+                            {isTablet
+                              ? "Cost / Box (৳):"
+                              : isBottle
+                              ? "Cost / Bottle (৳):"
+                              : item.receivingMode === "PACK"
+                              ? "Cost / Pack (৳):"
+                              : "Cost / Piece (৳):"}
                           </div>
-                        )}
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={item.unitCostBeforeDiscount}
+                            onChange={(e) =>
+                              updateLineItem(item.id, {
+                                unitCostBeforeDiscount: Math.max(0, Number(e.target.value) || 0),
+                              })
+                            }
+                            className="w-full h-10 text-sm sm:text-base font-black text-slate-900 dark:text-white bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-3 text-right focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20 font-mono outline-none shadow-xs"
+                          />
+                          {isTablet && (
+                            <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mt-1 text-right font-mono">
+                              ৳{item.lowestUnitCost.toFixed(2)}/tab
+                            </div>
+                          )}
+                        </div>
                       </td>
 
                       {/* Total (৳) */}
                       <td className="py-4 px-4 text-right align-middle">
-                        <div className="inline-flex items-center justify-end px-3.5 py-2.5 rounded-xl bg-emerald-50/80 dark:bg-emerald-950/60 border-2 border-emerald-200 dark:border-emerald-800/80 shadow-sm">
-                          <span className="text-base sm:text-xl font-black text-emerald-700 dark:text-emerald-300 font-mono">
-                            ৳{item.lineTotal.toFixed(2)}
+                        <div className="inline-flex items-center justify-end px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 shadow-2xs">
+                          <span className="text-base sm:text-lg font-black text-brand-primary font-mono">
+                            ৳{Math.round(item.lineTotal).toLocaleString("en-BD")}
                           </span>
                         </div>
                       </td>
 
                       {/* Selling Price / MRP */}
                       <td className="py-4 px-3.5">
-                        <div className="text-xs font-black text-slate-500 dark:text-slate-400 mb-1.5">
-                          {isTablet
-                            ? "MRP / Box (৳):"
-                            : isBottle
-                            ? "MRP / Bottle (৳):"
-                            : item.receivingMode === "PACK"
-                            ? "MRP / Pack (৳):"
-                            : "MRP / Piece (৳):"}
-                        </div>
-                        <input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={item.unitSellingPrice}
-                          onChange={(e) =>
-                            updateLineItem(item.id, {
-                              unitSellingPrice: Math.max(0, Number(e.target.value) || 0),
-                            })
-                          }
-                          className="w-full text-sm sm:text-base font-black text-slate-900 dark:text-white bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-right focus:ring-2 focus:ring-emerald-500 font-mono"
-                        />
-                        {isTablet && (
-                          <div className="text-xs font-bold text-slate-500 mt-1 text-right font-mono">
-                            ৳{item.lowestUnitSelling.toFixed(2)}/tab
+                        <div className="max-w-[130px]">
+                          <div className="text-xs font-black text-slate-500 dark:text-slate-400 mb-1.5 whitespace-nowrap">
+                            {isTablet
+                              ? "MRP / Box (৳):"
+                              : isBottle
+                              ? "MRP / Bottle (৳):"
+                              : item.receivingMode === "PACK"
+                              ? "MRP / Pack (৳):"
+                              : "MRP / Piece (৳):"}
                           </div>
-                        )}
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={item.unitSellingPrice}
+                            onChange={(e) =>
+                              updateLineItem(item.id, {
+                                unitSellingPrice: Math.max(0, Number(e.target.value) || 0),
+                              })
+                            }
+                            className="w-full h-10 text-sm sm:text-base font-black text-slate-900 dark:text-white bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-3 text-right focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20 font-mono outline-none shadow-xs"
+                          />
+                          {isTablet && (
+                            <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mt-1 text-right font-mono">
+                              ৳{item.lowestUnitSelling.toFixed(2)}/tab
+                            </div>
+                          )}
+                        </div>
                       </td>
 
                       {/* Lot / Batch & Expiry Date */}
@@ -1350,10 +1310,10 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
                             })
                           }
                           placeholder="Batch / Lot #"
-                          className="w-full text-xs sm:text-sm font-bold font-mono bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-2.5 py-1.5 focus:ring-2 focus:ring-emerald-500"
+                          className="w-full h-9 text-xs sm:text-sm font-bold font-mono bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-3 focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20 outline-none"
                         />
-                        <div className="flex items-center gap-1 text-xs font-black text-slate-500">
-                          <span>EXP:</span>
+                        <div className="flex items-center gap-1.5 text-xs font-black text-slate-500">
+                          <span className="text-[11px] font-black uppercase text-slate-400">EXP:</span>
                           <input
                             type="date"
                             value={item.expiryDate}
@@ -1362,17 +1322,17 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
                                 expiryDate: e.target.value,
                               })
                             }
-                            className="text-xs font-black bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-2 py-1 text-slate-900 dark:text-white font-mono w-full"
+                            className="h-9 text-xs font-bold bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-2 text-slate-900 dark:text-white font-mono w-full focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20 outline-none"
                           />
                         </div>
                       </td>
 
                       {/* Action: Delete */}
-                      <td className="py-4 px-2.5 text-center">
+                      <td className="py-4 px-2.5 text-center align-middle">
                         <button
                           type="button"
                           onClick={() => removeLineItem(item.id)}
-                          className="p-2 rounded-xl text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition"
+                          className="p-2 rounded-xl text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition cursor-pointer"
                           title="Remove item"
                         >
                           <X className="w-5 h-5 mx-auto" />
@@ -1391,14 +1351,14 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
           <div className="flex items-center gap-2.5">
             <span className="text-sm font-black text-slate-600 dark:text-slate-300">Total Items:</span>
             <span className="font-black text-slate-900 dark:text-white font-mono text-base sm:text-lg">
-              {totalItemsCount.toFixed(2)}
+              {Math.round(totalItemsCount).toLocaleString()}
             </span>
           </div>
 
           <div className="flex items-center gap-2.5">
             <span className="text-sm font-black text-slate-600 dark:text-slate-300">Subtotal Amount:</span>
             <span className="font-black text-slate-900 dark:text-white font-mono text-xl sm:text-2xl">
-              ৳{subtotal.toFixed(2)}
+              ৳{Math.round(subtotal).toLocaleString("en-BD")}
             </span>
           </div>
         </div>
@@ -1451,21 +1411,21 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
               <div className="flex justify-between items-center py-1">
                 <span className="text-sm sm:text-base font-bold text-slate-600 dark:text-slate-400">Subtotal:</span>
                 <span className="font-black text-slate-900 dark:text-white font-mono text-base sm:text-lg">
-                  ৳{subtotal.toFixed(2)}
+                  ৳{Math.round(subtotal).toLocaleString("en-BD")}
                 </span>
               </div>
 
               <div className="flex justify-between items-center pt-3">
                 <span className="text-sm sm:text-base font-bold text-slate-600 dark:text-slate-400">Discount:(-)</span>
                 <span className="font-black text-rose-600 dark:text-rose-400 font-mono text-base sm:text-lg">
-                  ৳{calculatedInvoiceDiscount.toFixed(2)}
+                  ৳{Math.round(calculatedInvoiceDiscount).toLocaleString("en-BD")}
                 </span>
               </div>
 
               <div className="flex justify-between items-center pt-4">
                 <span className="text-base sm:text-lg font-black text-slate-900 dark:text-white">Net Total Amount:</span>
                 <span className="text-2xl sm:text-3xl font-black text-emerald-600 dark:text-emerald-400 font-mono">
-                  ৳{netTotalAmount.toFixed(2)}
+                  ৳{Math.round(netTotalAmount).toLocaleString("en-BD")}
                 </span>
               </div>
             </div>
@@ -1483,9 +1443,20 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
           {/* Amount Paid */}
           <div>
-            <label className="block text-sm font-black text-slate-800 dark:text-slate-200 mb-2">
-              Paid Amount:*
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm font-black text-slate-800 dark:text-slate-200">
+                Paid Amount:*
+              </label>
+              {netTotalAmount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setPaidAmount(netTotalAmount)}
+                  className="text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer"
+                >
+                  Pay Full (৳{netTotalAmount.toLocaleString("en-BD")})
+                </button>
+              )}
+            </div>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400 font-black text-sm">
                 ৳
@@ -1493,9 +1464,10 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
               <input
                 type="number"
                 min="0"
-                step="0.01"
+                step="1"
+                placeholder={`৳${netTotalAmount}`}
                 value={paidAmount}
-                onChange={(e) => setPaidAmount(Math.max(0, Number(e.target.value) || 0))}
+                onChange={(e) => setPaidAmount(Math.max(0, Math.round(Number(e.target.value) || 0)))}
                 className="w-full pl-8 pr-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-xl text-sm sm:text-base font-black text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 font-mono h-11"
               />
             </div>
@@ -1530,7 +1502,7 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
                         : "text-emerald-600 dark:text-emerald-400"
                     }`}
                   >
-                    ৳{Number(selectedAccount.balance || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    ৳{Math.round(Number(selectedAccount.balance || 0)).toLocaleString("en-BD")}
                   </span>
                 </span>
               )}
@@ -1550,154 +1522,40 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
               {financialAccounts.length > 0 ? (
                 financialAccounts.map((acc) => (
                   <option key={acc.id} value={acc.id}>
-                    {acc.name} ({acc.type}) — ৳{Number(acc.balance || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {acc.name} ({acc.type}) — ৳{Math.round(Number(acc.balance || 0)).toLocaleString("en-BD")}
                   </option>
                 ))
               ) : (
-                <option value="">No accounts found (৳0.00)</option>
+                <option value="">No accounts found (৳0)</option>
               )}
             </select>
           </div>
         </div>
 
-        {/* Payment Due Summary & Save Action */}
-        <div className="pt-5 border-t-2 border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-5">
-          <div className="text-base sm:text-lg font-black text-slate-800 dark:text-slate-200 flex items-center gap-3">
-            <span>Payment due:</span>
-            <span
-              className={`font-mono text-xl sm:text-2xl font-black ${
-                paymentDue > 0 ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"
-              }`}
-            >
-              ৳{paymentDue.toFixed(2)}
-            </span>
-            {paymentDue > 0 && (
-              <span className="text-xs px-3 py-1 rounded-full bg-amber-100 dark:bg-amber-900/60 text-amber-900 dark:text-amber-200 font-black">
-                Credit to Supplier Ledger
-              </span>
-            )}
-          </div>
-
+        {/* Save Action */}
+        <div className="pt-5 border-t-2 border-slate-200 dark:border-slate-800 flex justify-end">
           <button
             type="button"
             disabled={submitting || lineItems.length === 0}
             onClick={handleSubmitStock}
-            className="w-full sm:w-auto px-10 py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-base sm:text-lg font-black shadow-lg hover:shadow-xl transition flex items-center justify-center gap-2.5 disabled:opacity-50 disabled:cursor-not-allowed h-13"
+            className="w-full sm:w-auto px-10 py-3.5 bg-brand-primary hover:bg-brand-primary-hover text-white rounded-xl text-base sm:text-lg font-black shadow-lg hover:shadow-xl transition flex items-center justify-center gap-2.5 disabled:opacity-50 disabled:cursor-not-allowed h-13 cursor-pointer"
           >
             {submitting ? (
               <>
                 <Loader2 className="w-5 h-5 animate-spin" />
-                Saving Purchase...
+                Saving Stock...
               </>
             ) : (
               <>
                 <Save className="w-5 h-5" />
-                Save Stock & Invoice
+                Save Stock
               </>
             )}
           </button>
         </div>
       </div>
 
-      {/* Quick Add Product Modal */}
-      {showAddProductModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 rounded-2xl p-6 max-w-lg w-full shadow-2xl space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b-2 border-slate-100 dark:border-slate-800">
-              <h3 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white flex items-center gap-2">
-                <Plus className="w-6 h-6 text-emerald-600" />
-                Add New Medicine / Product
-              </h3>
-              <button
-                type="button"
-                onClick={() => setShowAddProductModal(false)}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-              >
-                <X className="w-6 h-6" />
-              </button>
-            </div>
 
-            <form onSubmit={handleCreateQuickProduct} className="space-y-4 text-sm">
-              <div>
-                <label className="block font-black text-slate-800 dark:text-slate-200 mb-1.5">
-                  Medicine / Product Name *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={newProdName}
-                  onChange={(e) => setNewProdName(e.target.value)}
-                  placeholder="e.g. Napa Extra, Ace Plus 500mg"
-                  className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white font-bold focus:ring-2 focus:ring-emerald-500 h-11"
-                />
-              </div>
-
-              <div>
-                <label className="block font-black text-slate-800 dark:text-slate-200 mb-1.5">
-                  Generic Name
-                </label>
-                <input
-                  type="text"
-                  value={newProdGeneric}
-                  onChange={(e) => setNewProdGeneric(e.target.value)}
-                  placeholder="e.g. Paracetamol + Caffeine"
-                  className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white font-bold focus:ring-2 focus:ring-emerald-500 h-11"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block font-black text-slate-800 dark:text-slate-200 mb-1.5">
-                    Product Type
-                  </label>
-                  <select
-                    value={newProdType}
-                    onChange={(e) => setNewProdType(e.target.value as any)}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white font-bold focus:ring-2 focus:ring-emerald-500 h-11"
-                  >
-                    <option value="MEDICINE">Tablet / Capsule</option>
-                    <option value="SYRUP">Syrup / Suspension</option>
-                    <option value="EQUIPMENT">Medical Equipment</option>
-                    <option value="SALINE">Saline / Injection</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-black text-slate-800 dark:text-slate-200 mb-1.5">
-                    MRP / Selling Price *
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    required
-                    value={newProdPrice}
-                    onChange={(e) => setNewProdPrice(Number(e.target.value))}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white font-black text-right font-mono focus:ring-2 focus:ring-emerald-500 h-11"
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-4 border-t-2 border-slate-100 dark:border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setShowAddProductModal(false)}
-                  className="px-5 py-2.5 rounded-xl border-2 border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 font-bold"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={savingNewProduct || !newProdName.trim()}
-                  className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black flex items-center gap-2 shadow-md disabled:opacity-50"
-                >
-                  {savingNewProduct ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                  Create & Add
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

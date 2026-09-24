@@ -199,10 +199,42 @@ async function seedSuperAdmin() {
                 });
             }
         }
-        // 5. Seed / Upsert all 4 subscription plans: Plan 0 (Free Trial), Plan 1 (Starter), Plan 2 (Growth), Plan 3 (Enterprise)
-        const tiers = ["TRIAL", "STARTER", "GROWTH", "ENTERPRISE"];
+        // 5. Seed / Upsert the 3 paid subscription plans: Plan 1 (Starter), Plan 2 (Growth), Plan 3 (Enterprise)
+        // Delete/Purge any legacy Free / Trial plan from the system
+        try {
+            const trialPlan = await prisma_1.prisma.subscriptionPlan.findUnique({
+                where: { tier: "TRIAL" },
+            });
+            if (trialPlan) {
+                // Migrate any tenants referencing TRIAL to STARTER
+                await prisma_1.prisma.tenant.updateMany({
+                    where: { tier: "TRIAL" },
+                    data: { tier: "STARTER" },
+                });
+                // Delete or deactivate the trial plan
+                try {
+                    await prisma_1.prisma.subscriptionPlan.delete({
+                        where: { id: trialPlan.id },
+                    });
+                    console.log("[Seed] Successfully purged Free Trial subscription plan from database.");
+                }
+                catch {
+                    await prisma_1.prisma.subscriptionPlan.update({
+                        where: { id: trialPlan.id },
+                        data: { isActive: false },
+                    });
+                    console.log("[Seed] Deactivated legacy Free Trial subscription plan.");
+                }
+            }
+        }
+        catch (e) {
+            console.warn("[Seed] Note during trial purge:", e.message);
+        }
+        const tiers = ["STARTER", "GROWTH", "ENTERPRISE"];
         for (const tier of tiers) {
             const planDef = planLimits_1.CENTRAL_PLAN_DEFINITIONS[tier];
+            if (!planDef)
+                continue;
             const existingPlan = await prisma_1.prisma.subscriptionPlan.findUnique({
                 where: { tier },
             });
@@ -214,27 +246,35 @@ async function seedSuperAdmin() {
                         price: planDef.price,
                         billingCycle: planDef.billingCycle,
                         maxBranches: planDef.maxBranches,
-                        features: planDef.features,
+                        features: {
+                            ...planDef.features,
+                            maxStaffPerBranch: planDef.maxStaffPerBranch,
+                            maxTotalStaff: planDef.maxTotalStaff,
+                        },
                         isActive: true,
                     },
                 });
                 console.log(`[Seed] Created ${planDef.name} (${tier}).`);
             }
             else {
-                // Update limits & features in case they were updated
-                await prisma_1.prisma.subscriptionPlan.update({
-                    where: { tier },
-                    data: {
-                        name: planDef.name,
-                        price: planDef.price,
-                        maxBranches: planDef.maxBranches,
-                        features: planDef.features,
-                        isActive: true,
-                    },
-                });
+                // Backfill features without overwriting super-admin customized name, price, maxBranches, or features
+                const currentFeat = (typeof existingPlan.features === "object" && existingPlan.features !== null) ? existingPlan.features : {};
+                if (currentFeat.maxStaffPerBranch === undefined) {
+                    await prisma_1.prisma.subscriptionPlan.update({
+                        where: { tier },
+                        data: {
+                            features: {
+                                ...planDef.features,
+                                maxStaffPerBranch: planDef.maxStaffPerBranch,
+                                maxTotalStaff: planDef.maxTotalStaff,
+                                ...currentFeat,
+                            },
+                        },
+                    });
+                }
             }
         }
-        console.log("[Seed] All 4 subscription plans (Plan 0 Free Trial, Plan 1, Plan 2, Plan 3) verified.");
+        console.log("[Seed] All 3 subscription plans (Plan 1 Starter, Plan 2 Growth, Plan 3 Enterprise) verified.");
         // 6. Ensure PlatformRole table and seed default dynamic roles
         try {
             await prisma_1.prisma.$executeRawUnsafe(`

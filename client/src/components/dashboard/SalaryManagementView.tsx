@@ -100,6 +100,10 @@ interface FinancialAccount {
   branchName?: string;
 }
 
+// Persistent module cache
+let cachedSalaryEmployees: EmployeeItem[] = [];
+let cachedSalaryAccounts: FinancialAccount[] = [];
+
 export function SalaryManagementView({
   selectedBranchId: propBranchId,
   onSelectEmployee,
@@ -123,9 +127,9 @@ export function SalaryManagementView({
   const canSetBaseSalary = isOwner || isBranchManager || (hasPermission ? hasPermission("salaries.base_salary.edit") : false);
 
   const [currentMonth, setCurrentMonth] = useState<string>(() => new Date().toISOString().slice(0, 7));
-  const [employees, setEmployees] = useState<EmployeeItem[]>([]);
-  const [financialAccounts, setFinancialAccounts] = useState<FinancialAccount[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [employees, setEmployees] = useState<EmployeeItem[]>(() => cachedSalaryEmployees);
+  const [financialAccounts, setFinancialAccounts] = useState<FinancialAccount[]>(() => cachedSalaryAccounts);
+  const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
@@ -494,21 +498,16 @@ export function SalaryManagementView({
 
       {/* Staff Salary Table */}
       <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-xs">
-        {loading ? (
-          <div className="p-12 text-center text-slate-400 flex flex-col items-center gap-2">
-            <Loader2 className="h-6 w-6 animate-spin text-brand-primary" />
-            <span className="text-xs">Loading branch staff and salary records...</span>
-          </div>
-        ) : filteredEmployees.length === 0 ? (
+        {filteredEmployees.length === 0 ? (
           <div className="p-12 text-center text-slate-400 space-y-3">
             <div className="h-12 w-12 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-400 flex items-center justify-center mx-auto">
               <Users className="h-6 w-6" />
             </div>
             <div className="text-sm font-semibold text-slate-600 dark:text-slate-300">
-              No staff members found
+              {loading ? "Loading branch staff and salary records..." : "No staff members found"}
             </div>
             <p className="text-xs text-slate-400 max-w-sm mx-auto">
-              Add staff members to this branch in Staff Management to configure their payroll.
+              {!loading && "Add staff members to this branch in Staff Management to configure their payroll."}
             </p>
           </div>
         ) : (

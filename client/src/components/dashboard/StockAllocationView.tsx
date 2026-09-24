@@ -572,10 +572,18 @@ export function StockAllocationView({
       setErrorMsg(null);
       setSuccessMsg(null);
 
-      const destRackName = selectedRack?.name || "Rack";
-      const destShelfName = selectedShelf?.name || "Shelf";
-      const destBinName = availableBins.find((b: any) => b.id === binId)?.name || "Bin";
-      const destLabel = `${destRackName} → ${destShelfName}${binId ? ` → ${destBinName}` : ""}`;
+      const destRackName = selectedRack?.name || "Location";
+      const destShelfName = selectedShelf?.name || "";
+      const destBinName = availableBins.find((b: any) => b.id === binId)?.name || "";
+      let destLabel = destRackName;
+      if (destShelfName) {
+        destLabel += ` → ${destShelfName}`;
+        if (destBinName) {
+          destLabel += ` → ${destBinName}`;
+        }
+      } else {
+        destLabel += ` (Direct)`;
+      }
 
       const res = await fetchApi("/inventory/allocate", {
         method: "POST",
@@ -1200,39 +1208,55 @@ export function StockAllocationView({
 
                       <div>
                         <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">
-                          Shelf
+                          Shelf / Section
                         </label>
                         <select
                           value={shelfId}
                           onChange={(e) => setShelfId(e.target.value)}
-                          disabled={!rackId}
+                          disabled={!rackId || availableShelves.length === 0}
                           className="w-full h-12 text-sm px-3.5 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-semibold disabled:opacity-50"
                         >
-                          <option value="">-- Select Shelf --</option>
-                          {availableShelves.map((s: any) => (
-                            <option key={s.id} value={s.id}>
-                              {s.name}
+                          {availableShelves.length === 0 ? (
+                            <option value="">
+                              {rackId ? "No Shelves (Direct in Unit)" : "-- Select Location First --"}
                             </option>
-                          ))}
+                          ) : (
+                            <>
+                              <option value="">-- Select Shelf --</option>
+                              {availableShelves.map((s: any) => (
+                                <option key={s.id} value={s.id}>
+                                  {s.name}
+                                </option>
+                              ))}
+                            </>
+                          )}
                         </select>
                       </div>
 
                       <div>
                         <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">
-                          Bin (Optional)
+                          Bin / Khop (Optional)
                         </label>
                         <select
                           value={binId}
                           onChange={(e) => setBinId(e.target.value)}
-                          disabled={!shelfId}
+                          disabled={!shelfId || availableBins.length === 0}
                           className="w-full h-12 text-sm px-3.5 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-semibold disabled:opacity-50"
                         >
-                          <option value="">-- Select Bin --</option>
-                          {availableBins.map((b: any) => (
-                            <option key={b.id} value={b.id}>
-                              {b.name}
+                          {availableBins.length === 0 ? (
+                            <option value="">
+                              {shelfId ? "No Bins (Direct in Shelf)" : "-- Bin (Optional) --"}
                             </option>
-                          ))}
+                          ) : (
+                            <>
+                              <option value="">-- Select Bin --</option>
+                              {availableBins.map((b: any) => (
+                                <option key={b.id} value={b.id}>
+                                  {b.name}
+                                </option>
+                              ))}
+                            </>
+                          )}
                         </select>
                       </div>
                     </div>
@@ -1366,29 +1390,45 @@ export function StockAllocationView({
                 <select
                   value={destShelfId}
                   onChange={(e) => setDestShelfId(e.target.value)}
-                  disabled={!destRackId}
+                  disabled={!destRackId || availableDestShelves.length === 0}
                   className="w-full h-12 text-sm px-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-semibold disabled:opacity-50"
                 >
-                  <option value="">-- Choose Shelf --</option>
-                  {availableDestShelves.map((s: any) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
+                  {availableDestShelves.length === 0 ? (
+                    <option value="">
+                      {destRackId ? "No Shelves (Direct in Unit)" : "-- Choose Shelf --"}
                     </option>
-                  ))}
+                  ) : (
+                    <>
+                      <option value="">-- Choose Shelf --</option>
+                      {availableDestShelves.map((s: any) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name}
+                        </option>
+                      ))}
+                    </>
+                  )}
                 </select>
 
                 <select
                   value={destBinId}
                   onChange={(e) => setDestBinId(e.target.value)}
-                  disabled={!destShelfId}
+                  disabled={!destShelfId || availableDestBins.length === 0}
                   className="w-full h-12 text-sm px-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-semibold disabled:opacity-50"
                 >
-                  <option value="">-- Bin (Optional) --</option>
-                  {availableDestBins.map((b: any) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name}
+                  {availableDestBins.length === 0 ? (
+                    <option value="">
+                      {destShelfId ? "No Bins (Direct in Shelf)" : "-- Bin (Optional) --"}
                     </option>
-                  ))}
+                  ) : (
+                    <>
+                      <option value="">-- Bin (Optional) --</option>
+                      {availableDestBins.map((b: any) => (
+                        <option key={b.id} value={b.id}>
+                          {b.name}
+                        </option>
+                      ))}
+                    </>
+                  )}
                 </select>
               </div>
             </div>

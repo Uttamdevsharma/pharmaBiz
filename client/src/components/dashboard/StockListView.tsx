@@ -43,6 +43,12 @@ interface StockListViewProps {
   selectedBranchId?: string;
 }
 
+let cachedStockList: InventoryItem[] = [];
+
+export function setCachedStockData(stock: InventoryItem[]) {
+  cachedStockList = stock;
+}
+
 export function StockListView({ onNavigate, selectedBranchId: propBranchId }: StockListViewProps) {
   const {
     selectedBranchId: contextBranchId,
@@ -50,8 +56,8 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
   } = useBranchContext();
 
   const effectiveBranchId = propBranchId !== undefined ? propBranchId : contextBranchId;
-  const [rawInventory, setRawInventory] = useState<InventoryItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [rawInventory, setRawInventory] = useState<InventoryItem[]>(() => cachedStockList);
+  const [loading, setLoading] = useState(() => cachedStockList.length === 0);
 
   // Search state & Auto-suggest dropdown
   const [search, setSearch] = useState("");
@@ -65,7 +71,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
   // Load branch inventory batches
   const loadBranchStock = async () => {
     try {
-      setLoading(true);
+      if (cachedStockList.length === 0) setLoading(true);
       const params = new URLSearchParams();
       params.append("limit", "1000");
 
@@ -76,6 +82,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
 
       const res = await fetchApi(targetPath);
       if (res.success && res.data) {
+        cachedStockList = res.data;
         setRawInventory(res.data);
       }
     } catch (err) {
@@ -159,22 +166,43 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
     }
   }, [sortedBatches]);
 
-  // Search Results for Auto-Suggest Dropdown (Matching POS layout)
-  const searchResults = useMemo(() => {
-    if (!search.trim()) return sortedBatches.slice(0, 20);
+  // Pagination / Chunk Loading (20 at a time on scroll for smooth performance)
+  const [visibleCount, setVisibleCount] = useState(20);
+
+  // Reset pagination when search query changes
+  useEffect(() => {
+    setVisibleCount(20);
+  }, [search]);
+
+  // Filter all matching batches for the current query
+  const filteredBatches = useMemo(() => {
+    if (!search.trim()) return sortedBatches;
     const q = search.toLowerCase().trim();
 
-    return sortedBatches
-      .filter((item) => {
-        const matchName = (item.productName || "").toLowerCase().includes(q);
-        const matchGen = (item.genericName || "").toLowerCase().includes(q);
-        const matchBarcode = (item.barcode || "").toLowerCase().includes(q);
-        const matchSku = (item.sku || "").toLowerCase().includes(q);
-        const matchBatch = (item.batchNumber || "").toLowerCase().includes(q);
-        return matchName || matchGen || matchBarcode || matchSku || matchBatch;
-      })
-      .slice(0, 30);
+    return sortedBatches.filter((item) => {
+      const matchName = (item.productName || "").toLowerCase().includes(q);
+      const matchGen = (item.genericName || "").toLowerCase().includes(q);
+      const matchBarcode = (item.barcode || "").toLowerCase().includes(q);
+      const matchSku = (item.sku || "").toLowerCase().includes(q);
+      const matchBatch = (item.batchNumber || "").toLowerCase().includes(q);
+      return matchName || matchGen || matchBarcode || matchSku || matchBatch;
+    });
   }, [sortedBatches, search]);
+
+  // Paginated visible batches (starts with 20, loads 20 more on scroll)
+  const visibleSearchResults = useMemo(() => {
+    return filteredBatches.slice(0, visibleCount);
+  }, [filteredBatches, visibleCount]);
+
+  // Handle scroll in dropdown to load next 20 items
+  const handleDropdownScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+    if (scrollHeight - scrollTop - clientHeight < 60) {
+      if (visibleCount < filteredBatches.length) {
+        setVisibleCount((prev) => Math.min(prev + 20, filteredBatches.length));
+      }
+    }
+  };
 
   // Handler: Select a batch
   const handleSelectBatch = (batchItem: BatchStockItem) => {
@@ -296,8 +324,8 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
         </div>
       </div>
 
-      {/* Prominent Search Bar (POS Style with Auto-Suggest Dropdown) */}
-      <div ref={searchContainerRef} className="relative z-30">
+      {/* Prominent Search Bar (Constrained Width for Clean Balance) */}
+      <div ref={searchContainerRef} className="relative z-30 max-w-3xl">
         <div className="relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
           <input
@@ -306,21 +334,24 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
             placeholder="Search medicine by name, generic, barcode, batch #..."
             value={search}
             onClick={() => {
-              if (!loading) setIsSearchOpen(true);
+              setIsSearchOpen(true);
+            }}
+            onFocus={() => {
+              setIsSearchOpen(true);
             }}
             onChange={(e) => {
               setSearch(e.target.value);
-              if (!loading) setIsSearchOpen(true);
+              setIsSearchOpen(true);
             }}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && searchResults.length > 0) {
-                const exactBarcode = searchResults.find(
+              if (e.key === "Enter" && filteredBatches.length > 0) {
+                const exactBarcode = filteredBatches.find(
                   (item) => item.barcode?.toLowerCase() === search.trim().toLowerCase()
                 );
                 if (exactBarcode) {
                   handleSelectBatch(exactBarcode);
                 } else {
-                  handleSelectBatch(searchResults[0]);
+                  handleSelectBatch(filteredBatches[0]);
                 }
               }
             }}
@@ -341,86 +372,100 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
           ) : null}
         </div>
 
-        {/* Auto-Suggest Dropdown */}
-        {isSearchOpen && !loading && (
-          <div className="absolute top-full left-0 right-0 mt-2 z-50 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl max-h-[420px] overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
-            {searchResults.length === 0 ? (
+        {/* Auto-Suggest Dropdown - Paginated & Scrollable */}
+        {isSearchOpen && (
+          <div
+            onScroll={handleDropdownScroll}
+            className="absolute top-full left-0 right-0 mt-2 z-50 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl max-h-[380px] overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 overscroll-contain"
+          >
+            {loading ? (
+              <div className="p-8 text-center text-slate-400 font-bold text-sm flex flex-col items-center justify-center gap-2">
+                <Loader2 className="h-6 w-6 animate-spin text-brand-primary" />
+                <span>Loading available stocks...</span>
+              </div>
+            ) : visibleSearchResults.length === 0 ? (
               <div className="p-8 text-center text-slate-400 font-bold text-sm">
                 No matching medicine batch found
               </div>
             ) : (
-              searchResults.map((item, idx) => {
-                const barcodeVal = item.barcode || item.sku || "";
-                const variantStr = item.size || (item.unit ? `Unit: ${item.unit}` : "");
+              <>
+                {visibleSearchResults.map((item, idx) => {
+                  const barcodeVal = item.barcode || item.sku || "";
+                  const variantStr = item.size || (item.unit ? `Unit: ${item.unit}` : "");
 
-                return (
-                  <div
-                    key={`${item.id}-${idx}`}
-                    onClick={() => handleSelectBatch(item)}
-                    className="p-3.5 hover:bg-slate-50 dark:hover:bg-slate-800/60 cursor-pointer transition flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
-                  >
-                    {/* Left: Product Name + Batch + Generic + Variant */}
-                    <div className="space-y-1 min-w-0">
-                      <div className="text-[15px] font-bold text-slate-900 dark:text-white flex items-center gap-2 flex-wrap">
-                        <span className="text-slate-900 dark:text-white font-extrabold text-base">
-                          {item.productName}
-                        </span>
-                        <span className="text-xs font-black font-mono bg-brand-primary/10 text-brand-primary border border-brand-primary/20 px-2 py-0.5 rounded-md">
-                          Batch: {item.batchNumber || "Default"}
-                        </span>
-                        {barcodeVal && (
-                          <span className="text-slate-400 font-mono text-xs">
-                            ({barcodeVal})
+                  return (
+                    <div
+                      key={`${item.id}-${idx}`}
+                      onClick={() => handleSelectBatch(item)}
+                      className="p-3.5 hover:bg-slate-50 dark:hover:bg-slate-800/60 cursor-pointer transition flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
+                    >
+                      {/* Left: Product Name + Batch + Generic + Variant */}
+                      <div className="space-y-1 min-w-0">
+                        <div className="text-[15px] font-bold text-slate-900 dark:text-white flex items-center gap-2 flex-wrap">
+                          <span className="text-slate-900 dark:text-white font-extrabold text-base">
+                            {item.productName}
                           </span>
-                        )}
+                          <span className="text-xs font-black font-mono bg-brand-primary/10 text-brand-primary border border-brand-primary/20 px-2 py-0.5 rounded-md">
+                            Batch: {item.batchNumber || "Default"}
+                          </span>
+                          {barcodeVal && (
+                            <span className="text-slate-400 font-mono text-xs">
+                              ({barcodeVal})
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-xs text-slate-500 dark:text-slate-400 font-medium flex items-center gap-2 flex-wrap">
+                          {item.genericName && (
+                            <span className="text-emerald-600 dark:text-emerald-400 font-bold">
+                              {item.genericName}
+                            </span>
+                          )}
+                          {variantStr && (
+                            <span className="text-slate-500 dark:text-slate-400">
+                              • Variant: <strong className="text-slate-700 dark:text-slate-300">{variantStr}</strong>
+                            </span>
+                          )}
+                        </div>
                       </div>
-                      <div className="text-xs text-slate-500 dark:text-slate-400 font-medium flex items-center gap-2 flex-wrap">
-                        {item.genericName && (
-                          <span className="text-emerald-600 dark:text-emerald-400 font-bold">
-                            {item.genericName}
+
+                      {/* Right: Stock Pill + Expiry Pill (Location removed as requested) */}
+                      <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                        <span className="px-2.5 py-1 rounded-xl text-xs font-black bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 font-mono">
+                          Stock: {item.quantity.toLocaleString()}
+                        </span>
+
+                        {item.isExpired ? (
+                          <span className="px-2.5 py-1 rounded-xl text-xs font-black bg-rose-50 text-rose-700 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50">
+                            Expired
                           </span>
-                        )}
-                        {variantStr && (
-                          <span className="text-slate-500 dark:text-slate-400">
-                            • Variant: <strong className="text-slate-700 dark:text-slate-300">{variantStr}</strong>
+                        ) : item.daysLeft !== null ? (
+                          <span
+                            className={`px-2.5 py-1 rounded-xl text-xs font-black border ${
+                              item.daysLeft <= 90
+                                ? "bg-amber-50 text-amber-800 dark:bg-amber-950/40 border-amber-200 dark:border-amber-900/50"
+                                : "bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-900/50"
+                            }`}
+                          >
+                            {item.daysLeft}d left
+                          </span>
+                        ) : (
+                          <span className="px-2.5 py-1 rounded-xl text-xs font-medium text-slate-400">
+                            No Expiry
                           </span>
                         )}
                       </div>
                     </div>
+                  );
+                })}
 
-                    {/* Right: Stock Pill + Expiry Pill + Location */}
-                    <div className="flex items-center gap-2 shrink-0 flex-wrap">
-                      <span className="px-2.5 py-1 rounded-xl text-xs font-black bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 font-mono">
-                        Stock: {item.quantity.toLocaleString()}
-                      </span>
-
-                      {item.isExpired ? (
-                        <span className="px-2.5 py-1 rounded-xl text-xs font-black bg-rose-50 text-rose-700 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50">
-                          Expired
-                        </span>
-                      ) : item.daysLeft !== null ? (
-                        <span
-                          className={`px-2.5 py-1 rounded-xl text-xs font-black border ${
-                            item.daysLeft <= 90
-                              ? "bg-amber-50 text-amber-800 dark:bg-amber-950/40 border-amber-200 dark:border-amber-900/50"
-                              : "bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-900/50"
-                          }`}
-                        >
-                          {item.daysLeft}d left
-                        </span>
-                      ) : (
-                        <span className="px-2.5 py-1 rounded-xl text-xs font-medium text-slate-400">
-                          No Expiry
-                        </span>
-                      )}
-
-                      <span className="text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-xl border border-slate-200 dark:border-slate-700">
-                        📍 {item.primaryLocation}
-                      </span>
-                    </div>
+                {/* Infinite Scroll Indicator */}
+                {visibleCount < filteredBatches.length && (
+                  <div className="p-3 text-center text-xs font-bold text-slate-500 dark:text-slate-400 bg-slate-50/70 dark:bg-slate-800/40 flex items-center justify-center gap-2">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-brand-primary" />
+                    <span>Scroll down for more ({visibleSearchResults.length} of {filteredBatches.length})</span>
                   </div>
-                );
-              })
+                )}
+              </>
             )}
           </div>
         )}
@@ -767,12 +812,6 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
               </div>
             </div>
           )}
-        </div>
-      ) : loading ? (
-        /* Loading State */
-        <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-12 flex flex-col items-center justify-center text-slate-400">
-          <Loader2 className="h-8 w-8 animate-spin text-brand-primary mb-2" />
-          <p className="text-sm font-bold text-slate-600 dark:text-slate-300">Loading stock inventory...</p>
         </div>
       ) : (
         /* Clean Prompt when no batch selected */

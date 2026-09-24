@@ -209,10 +209,40 @@ export async function seedSuperAdmin(): Promise<void> {
       }
     }
 
-    // 5. Seed / Upsert all 4 subscription plans: Plan 0 (Free Trial), Plan 1 (Starter), Plan 2 (Growth), Plan 3 (Enterprise)
-    const tiers: PricingTierType[] = ["TRIAL", "STARTER", "GROWTH", "ENTERPRISE"];
+    // 5. Seed / Upsert the 3 paid subscription plans: Plan 1 (Starter), Plan 2 (Growth), Plan 3 (Enterprise)
+    // Delete/Purge any legacy Free / Trial plan from the system
+    try {
+      const trialPlan = await (prisma as any).subscriptionPlan.findUnique({
+        where: { tier: "TRIAL" },
+      });
+      if (trialPlan) {
+        // Migrate any tenants referencing TRIAL to STARTER
+        await (prisma as any).tenant.updateMany({
+          where: { tier: "TRIAL" },
+          data: { tier: "STARTER" },
+        });
+        // Delete or deactivate the trial plan
+        try {
+          await (prisma as any).subscriptionPlan.delete({
+            where: { id: trialPlan.id },
+          });
+          console.log("[Seed] Successfully purged Free Trial subscription plan from database.");
+        } catch {
+          await (prisma as any).subscriptionPlan.update({
+            where: { id: trialPlan.id },
+            data: { isActive: false },
+          });
+          console.log("[Seed] Deactivated legacy Free Trial subscription plan.");
+        }
+      }
+    } catch (e: any) {
+      console.warn("[Seed] Note during trial purge:", e.message);
+    }
+
+    const tiers: Array<"STARTER" | "GROWTH" | "ENTERPRISE"> = ["STARTER", "GROWTH", "ENTERPRISE"];
     for (const tier of tiers) {
-      const planDef = CENTRAL_PLAN_DEFINITIONS[tier];
+      const planDef = (CENTRAL_PLAN_DEFINITIONS as any)[tier];
+      if (!planDef) continue;
       const existingPlan = await (prisma as any).subscriptionPlan.findUnique({
         where: { tier },
       });
@@ -229,7 +259,6 @@ export async function seedSuperAdmin(): Promise<void> {
               ...planDef.features,
               maxStaffPerBranch: planDef.maxStaffPerBranch,
               maxTotalStaff: planDef.maxTotalStaff,
-              trialDays: planDef.trialDays || 7,
             },
             isActive: true,
           },
@@ -246,7 +275,6 @@ export async function seedSuperAdmin(): Promise<void> {
                 ...planDef.features,
                 maxStaffPerBranch: planDef.maxStaffPerBranch,
                 maxTotalStaff: planDef.maxTotalStaff,
-                trialDays: planDef.trialDays || 7,
                 ...currentFeat,
               },
             },
@@ -254,7 +282,7 @@ export async function seedSuperAdmin(): Promise<void> {
         }
       }
     }
-    console.log("[Seed] All 4 subscription plans (Plan 0 Free Trial, Plan 1, Plan 2, Plan 3) verified.");
+    console.log("[Seed] All 3 subscription plans (Plan 1 Starter, Plan 2 Growth, Plan 3 Enterprise) verified.");
 
     // 6. Ensure PlatformRole table and seed default dynamic roles
     try {

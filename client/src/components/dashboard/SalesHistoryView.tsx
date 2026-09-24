@@ -6,6 +6,7 @@ import { fetchApi } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { OwnerModule } from "./DashboardSidebar";
 import { Pagination } from "@/components/common/Pagination";
+import { offlineDb } from "@/lib/offlineDb";
 import {
   History,
   Search,
@@ -32,6 +33,18 @@ import {
 } from "lucide-react";
 import { useBranchContext } from "@/context/BranchContext";
 
+export function formatPaymentMethod(pm?: string, notes?: string, bankName?: string): string {
+  const u = (pm || "").toUpperCase();
+  const text = `${notes || ""} ${bankName || ""}`.toLowerCase();
+  if (u === "BKASH" || u.includes("BKASH") || text.includes("bkash")) return "bKash";
+  if (u === "NAGAD" || u.includes("NAGAD") || text.includes("nagad")) return "Nagad";
+  if (u === "CARD" || u.includes("CREDIT") || u.includes("DEBIT")) return "Card";
+  if (u === "BANK") return "Bank";
+  if (u === "CASH") return "Cash";
+  if (u === "MOBILE") return "Mobile Banking";
+  return pm || "Cash";
+}
+
 interface SalesHistoryViewProps {
   onNavigate?: (module: OwnerModule) => void;
   selectedBranchId?: string;
@@ -52,6 +65,7 @@ interface SaleRecord {
   bankName?: string | null;
   transactionRef?: string | null;
   status: string;
+  notes?: string | null;
   branch?: { id: string; name: string; location?: string | null } | null;
   user?: { id: string; name: string; username: string } | null;
   items?: Array<{
@@ -65,27 +79,57 @@ interface SaleRecord {
   }>;
 }
 
+// Persistent module-level cache across transitions
+let cachedSalesRecords: SaleRecord[] = [];
+let cachedSalesTotalPages = 1;
+let cachedSalesTotalCount = 0;
+
+export function setCachedSalesData(records: SaleRecord[], totalPages = 1, totalCount = 0) {
+  cachedSalesRecords = records;
+  cachedSalesTotalPages = totalPages;
+  cachedSalesTotalCount = totalCount;
+}
+
+export function getCachedSalesData() {
+  return {
+    sales: cachedSalesRecords,
+    totalPages: cachedSalesTotalPages,
+    totalCount: cachedSalesTotalCount,
+  };
+}
+
 export function SalesHistoryView({ selectedBranchId: propBranchId, onNavigate }: SalesHistoryViewProps = {}) {
   const { user: authUser } = useAuth();
   const { selectedBranchId: contextBranchId, currentBranch, isAllBranches } = useBranchContext();
   const effectiveBranchId = propBranchId !== undefined ? propBranchId : contextBranchId;
 
-  const [sales, setSales] = useState<SaleRecord[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [sales, setSales] = useState<SaleRecord[]>(() => cachedSalesRecords);
+  const [loading, setLoading] = useState(() => cachedSalesRecords.length === 0);
   const [refreshing, setRefreshing] = useState(false);
 
   // Filters
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<string>("");
+  const [paymentStatus, setPaymentStatus] = useState<string>("");
   const [periodPreset, setPeriodPreset] = useState<"today" | "yesterday" | "last7Days" | "thisMonth" | "all" | "custom">("today");
   const [startDate, setStartDate] = useState<string>(new Date().toISOString().split("T")[0]);
   const [endDate, setEndDate] = useState<string>(new Date().toISOString().split("T")[0]);
 
+  // Debounce search input for instant live filtering
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearch(search);
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [search]);
+
   // Pagination
   const [page, setPage] = useState(1);
-  const [limit] = useState(10);
-  const [totalPages, setTotalPages] = useState(1);
-  const [totalCount, setTotalCount] = useState(0);
+  const [limit, setLimit] = useState(10);
+  const [totalPages, setTotalPages] = useState(() => cachedSalesTotalPages);
+  const [totalCount, setTotalCount] = useState(() => cachedSalesTotalCount);
 
   // Selected Sale for View/Print Modal
   const [selectedSale, setSelectedSale] = useState<SaleRecord | null>(null);
@@ -136,14 +180,15 @@ export function SalesHistoryView({ selectedBranchId: propBranchId, onNavigate }:
   const loadSales = async (isManual = false) => {
     try {
       if (isManual) setRefreshing(true);
-      else setLoading(true);
+      else if (cachedSalesRecords.length === 0) setLoading(true);
 
       const params = new URLSearchParams();
       params.append("page", page.toString());
       params.append("limit", limit.toString());
 
-      if (search.trim()) params.append("search", search.trim());
+      if (debouncedSearch.trim()) params.append("search", debouncedSearch.trim());
       if (paymentMethod) params.append("paymentMethod", paymentMethod);
+      if (paymentStatus) params.append("paymentStatus", paymentStatus);
       if (effectiveBranchId && effectiveBranchId !== "all") {
         params.append("branchId", effectiveBranchId);
       }
@@ -156,15 +201,57 @@ export function SalesHistoryView({ selectedBranchId: propBranchId, onNavigate }:
       const res = await fetchApi<any>(`/sales?${params.toString()}`);
 
       if (res.success) {
-        setSales(res.data || []);
+        const list = res.data || [];
+        setSales(list);
+        cachedSalesRecords = list;
         const pagination = (res as any).pagination || res.meta;
         if (pagination) {
-          setTotalPages(pagination.totalPages || 1);
-          setTotalCount(pagination.total || 0);
+          const tp = pagination.totalPages || 1;
+          const tc = pagination.total || 0;
+          setTotalPages(tp);
+          setTotalCount(tc);
+          cachedSalesTotalPages = tp;
+          cachedSalesTotalCount = tc;
         }
       }
     } catch (err) {
       console.error("Failed to load sales history", err);
+      // Fallback to offline cached / pending sales if network unavailable
+      try {
+        const pending = await offlineDb.getPendingSales(
+          effectiveBranchId && effectiveBranchId !== "all" ? effectiveBranchId : undefined
+        );
+        if (pending && pending.length > 0) {
+          const mapped = pending.map((p) => ({
+            id: p.localId,
+            receiptNo: p.receiptNo,
+            createdAt: p.localCreatedAt,
+            customerName: p.customerName,
+            customerPhone: p.customerPhone,
+            totalAmount: p.totalAmount,
+            paidAmount: p.paidAmount,
+            dueAmount: p.dueAmount || 0,
+            discount: p.discount,
+            tax: p.tax,
+            paymentMethod: p.paymentMethod,
+            bankName: p.bankName,
+            notes: p.notes,
+            status: "OFFLINE_PENDING",
+            items: p.items.map((it) => ({
+              id: it.productId,
+              quantity: it.quantity,
+              unitPrice: it.unitPrice,
+              subTotal: it.subTotal,
+              product: { id: it.productId, name: it.name || "Product", sku: "" },
+            })),
+          }));
+          setSales(mapped as any);
+          setTotalPages(1);
+          setTotalCount(mapped.length);
+        }
+      } catch (offlineErr) {
+        console.warn("Could not read offline sales:", offlineErr);
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -173,7 +260,7 @@ export function SalesHistoryView({ selectedBranchId: propBranchId, onNavigate }:
 
   useEffect(() => {
     loadSales();
-  }, [page, periodPreset, startDate, endDate, paymentMethod, effectiveBranchId]);
+  }, [page, limit, periodPreset, startDate, endDate, paymentMethod, paymentStatus, debouncedSearch, effectiveBranchId]);
 
   const handlePeriodPreset = (preset: "today" | "yesterday" | "last7Days" | "thisMonth" | "all" | "custom") => {
     setPeriodPreset(preset);
@@ -300,18 +387,41 @@ export function SalesHistoryView({ selectedBranchId: propBranchId, onNavigate }:
 
         {/* Search & Channel Filters Row */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
-          <form onSubmit={handleSearchSubmit} className="relative flex-1 w-full">
+          <div className="relative flex-1 w-full">
             <Search className="h-4 w-4 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search by receipt # (e.g. REC-12345), customer name, or phone..."
-              className="w-full h-12 pl-11 pr-4 rounded-xl bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-900 dark:text-white outline-none focus:border-brand-primary transition"
+              className="w-full h-12 pl-11 pr-10 rounded-xl bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-900 dark:text-white outline-none focus:border-brand-primary transition"
             />
-          </form>
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
 
-          <div className="flex items-center gap-3 w-full sm:w-auto">
+          <div className="flex flex-wrap sm:flex-nowrap items-center gap-3 w-full sm:w-auto">
+            {/* Payment Status Filter (Paid / Due) */}
+            <select
+              value={paymentStatus}
+              onChange={(e) => {
+                setPaymentStatus(e.target.value);
+                setPage(1);
+              }}
+              className="h-12 px-4 rounded-xl bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-slate-200 outline-none cursor-pointer focus:border-brand-primary transition shrink-0"
+            >
+              <option value="">All Status (Paid & Due)</option>
+              <option value="PAID">Fully Paid Only</option>
+              <option value="DUE">Has Due Only</option>
+            </select>
+
             {/* Payment Method Filter */}
             <select
               value={paymentMethod}
@@ -319,9 +429,9 @@ export function SalesHistoryView({ selectedBranchId: propBranchId, onNavigate }:
                 setPaymentMethod(e.target.value);
                 setPage(1);
               }}
-              className="h-12 px-4 rounded-xl bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-slate-200 outline-none cursor-pointer focus:border-brand-primary transition"
+              className="h-12 px-4 rounded-xl bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-slate-200 outline-none cursor-pointer focus:border-brand-primary transition shrink-0"
             >
-              <option value="">All Payment Methods</option>
+              <option value="">All Methods</option>
               <option value="CASH">Cash</option>
               <option value="BKASH">bKash</option>
               <option value="NAGAD">Nagad</option>
@@ -342,39 +452,75 @@ export function SalesHistoryView({ selectedBranchId: propBranchId, onNavigate }:
 
       {/* Table Section */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border-2 border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
-        {loading ? (
-          <div className="flex flex-col items-center justify-center py-24 text-slate-500 gap-3">
-            <Loader2 className="h-8 w-8 animate-spin text-brand-primary" />
-            <span className="text-sm font-bold">Querying sales history records...</span>
+        {loading && sales.length === 0 ? (
+          <div className="table-responsive-container">
+            <table className="w-full min-w-[880px] text-left text-sm">
+              <thead className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-black uppercase tracking-wider border-b-2 border-slate-200 dark:border-slate-700">
+                <tr>
+                  <th className="py-4 px-5">Date & Time</th>
+                  <th className="py-4 px-4">Branch</th>
+                  <th className="py-4 px-4">Customer</th>
+                  <th className="py-4 px-4">Payment Method</th>
+                  <th className="py-4 px-4 text-right">Total (৳)</th>
+                  <th className="py-4 px-4 text-right">Paid (৳)</th>
+                  <th className="py-4 px-4 text-right">Due (৳)</th>
+                  <th className="py-4 px-4 text-center">Status</th>
+                  <th className="py-4 px-5 text-center">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 animate-pulse">
+                {[...Array(6)].map((_, i) => (
+                  <tr key={i} className="h-16">
+                    <td className="py-4 px-5"><div className="h-4 w-28 bg-slate-200 dark:bg-slate-800 rounded" /></td>
+                    <td className="py-4 px-4"><div className="h-4 w-24 bg-slate-200 dark:bg-slate-800 rounded" /></td>
+                    <td className="py-4 px-4"><div className="h-4 w-32 bg-slate-200 dark:bg-slate-800 rounded" /></td>
+                    <td className="py-4 px-4"><div className="h-6 w-20 bg-slate-200 dark:bg-slate-800 rounded-full" /></td>
+                    <td className="py-4 px-4 text-right"><div className="h-4 w-16 bg-slate-200 dark:bg-slate-800 rounded ml-auto" /></td>
+                    <td className="py-4 px-4 text-right"><div className="h-4 w-16 bg-slate-200 dark:bg-slate-800 rounded ml-auto" /></td>
+                    <td className="py-4 px-4 text-right"><div className="h-4 w-14 bg-slate-200 dark:bg-slate-800 rounded ml-auto" /></td>
+                    <td className="py-4 px-4 text-center"><div className="h-5 w-16 bg-slate-200 dark:bg-slate-800 rounded-full mx-auto" /></td>
+                    <td className="py-4 px-5 text-center"><div className="h-8 w-20 bg-slate-200 dark:bg-slate-800 rounded mx-auto" /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         ) : sales.length === 0 ? (
           <div className="py-20 text-center space-y-3">
             <Receipt className="h-12 w-12 mx-auto text-slate-300 dark:text-slate-700" />
-            <p className="text-base font-bold text-slate-700 dark:text-slate-300">No sales transactions found.</p>
+            <p className="text-base font-bold text-slate-700 dark:text-slate-300">
+              No sales transactions found.
+            </p>
             <p className="text-xs text-slate-400">Try adjusting your date range or search filters.</p>
           </div>
         ) : (
           <div className="table-responsive-container">
-            <table className="w-full min-w-[850px] text-left text-sm">
+            <table className="w-full min-w-[880px] text-left text-sm">
               <thead className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-black uppercase tracking-wider border-b-2 border-slate-200 dark:border-slate-700">
                 <tr>
-                  <th className="py-4 px-5">Receipt #</th>
-                  <th className="py-4 px-4">Date & Time</th>
+                  <th className="py-4 px-5">Date & Time</th>
+                  <th className="py-4 px-4">Branch</th>
                   <th className="py-4 px-4">Customer</th>
-                  <th className="py-4 px-4">Items</th>
                   <th className="py-4 px-4">Payment Method</th>
-                  <th className="py-4 px-4 text-right">Total Amount</th>
-                  <th className="py-4 px-4 text-right">Paid</th>
-                  <th className="py-4 px-4 text-right">Due</th>
+                  <th className="py-4 px-4 text-right">Total (৳)</th>
+                  <th className="py-4 px-4 text-right">Paid (৳)</th>
+                  <th className="py-4 px-4 text-right">Due (৳)</th>
+                  <th className="py-4 px-4 text-center">Status</th>
                   <th className="py-4 px-5 text-center">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {sales.map((sale) => {
-                  const isCash = sale.paymentMethod === "CASH";
-                  const isBkash = sale.paymentMethod === "BKASH";
-                  const isNagad = sale.paymentMethod === "NAGAD";
-                  const isBank = sale.paymentMethod === "BANK" || sale.paymentMethod === "CARD";
+                  const displayMethod = formatPaymentMethod(
+                    sale.paymentMethod,
+                    sale.notes || undefined,
+                    sale.bankName || undefined
+                  );
+                  const isBkash = displayMethod === "bKash";
+                  const isNagad = displayMethod === "Nagad";
+                  const isCash = displayMethod === "Cash";
+                  const isCard = displayMethod === "Card";
+                  const isBank = displayMethod === "Bank";
                   const isDue = Number(sale.dueAmount || 0) > 0;
 
                   return (
@@ -382,67 +528,67 @@ export function SalesHistoryView({ selectedBranchId: propBranchId, onNavigate }:
                       key={sale.id}
                       className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition"
                     >
-                      {/* Receipt No */}
-                      <td className="py-4 px-5">
-                        <div className="font-mono font-bold text-base text-brand-primary">
-                          {sale.receiptNo}
-                        </div>
-                        {sale.branch?.name && (
-                          <div className="text-xs text-slate-400 flex items-center gap-1 font-semibold mt-0.5">
-                            <Store className="h-3 w-3" />
-                            <span>{sale.branch.name}</span>
-                          </div>
-                        )}
-                      </td>
-
-                      {/* Date & Time */}
-                      <td className="py-4 px-4 whitespace-nowrap">
-                        <div className="text-slate-900 dark:text-white text-sm font-bold">
+                      {/* Date & Time with subtle Receipt # */}
+                      <td className="py-4 px-5 whitespace-nowrap">
+                        <div className="text-slate-900 dark:text-white text-sm font-black">
                           {new Date(sale.createdAt).toLocaleDateString("en-US", {
                             month: "short",
                             day: "numeric",
                             year: "numeric",
                           })}
                         </div>
-                        <div className="text-xs text-slate-400 font-mono font-medium flex items-center gap-1 mt-0.5">
-                          <Clock className="h-3 w-3" />
+                        <div className="text-xs text-slate-400 font-mono font-medium flex items-center gap-1.5 mt-0.5">
+                          <Clock className="h-3.5 w-3.5 text-slate-400" />
                           <span>
                             {new Date(sale.createdAt).toLocaleTimeString("en-US", {
                               hour: "2-digit",
                               minute: "2-digit",
                             })}
                           </span>
+                          <span className="text-slate-300 dark:text-slate-600">•</span>
+                          <span className="text-brand-primary font-bold">{sale.receiptNo}</span>
+                        </div>
+                      </td>
+
+                      {/* Branch */}
+                      <td className="py-4 px-4 whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          <div className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500">
+                            <Store className="h-4 w-4" />
+                          </div>
+                          <span className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                            {sale.branch?.name || "Main Branch"}
+                          </span>
                         </div>
                       </td>
 
                       {/* Customer */}
                       <td className="py-4 px-4">
-                        <div className="text-slate-900 dark:text-white text-sm font-bold truncate max-w-[160px]">
+                        <div className="text-slate-900 dark:text-white text-sm font-black truncate max-w-[180px]">
                           {sale.customerName || "Walk-in Customer"}
                         </div>
                         {sale.customerPhone && (
-                          <div className="text-xs text-slate-400 font-mono font-medium mt-0.5">{sale.customerPhone}</div>
+                          <div className="text-xs text-slate-500 font-mono font-medium mt-0.5">
+                            {sale.customerPhone}
+                          </div>
                         )}
-                      </td>
-
-                      {/* Items Count */}
-                      <td className="py-4 px-4">
-                        <span className="font-mono text-sm font-bold text-slate-700 dark:text-slate-300">
-                          {sale.items?.length || 1} {(sale.items?.length || 1) === 1 ? "item" : "items"}
-                        </span>
                       </td>
 
                       {/* Payment Method */}
                       <td className="py-4 px-4 whitespace-nowrap">
                         <span
-                          className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black ${
+                          className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-black ${
                             isCash
                               ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
                               : isBkash
                               ? "bg-pink-100 text-pink-800 dark:bg-pink-950/60 dark:text-pink-300"
                               : isNagad
                               ? "bg-orange-100 text-orange-800 dark:bg-orange-950/60 dark:text-orange-300"
-                              : "bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300"
+                              : isCard
+                              ? "bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300"
+                              : isBank
+                              ? "bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300"
+                              : "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300"
                           }`}
                         >
                           {isCash ? (
@@ -452,33 +598,47 @@ export function SalesHistoryView({ selectedBranchId: propBranchId, onNavigate }:
                           ) : (
                             <CreditCard className="h-3.5 w-3.5" />
                           )}
-                          <span>{sale.paymentMethod}</span>
+                          <span>{displayMethod}</span>
                         </span>
                       </td>
 
                       {/* Total Amount */}
-                      <td className="py-4 px-4 text-right font-mono font-black text-base text-slate-900 dark:text-white">
+                      <td className="py-4 px-4 text-right font-mono font-black text-base text-slate-900 dark:text-white whitespace-nowrap">
                         ৳{Number(sale.totalAmount || 0).toLocaleString("en-BD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
 
                       {/* Paid Amount */}
-                      <td className="py-4 px-4 text-right font-mono font-bold text-base text-emerald-600 dark:text-emerald-400">
+                      <td className="py-4 px-4 text-right font-mono font-bold text-base text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
                         ৳{Number(sale.paidAmount || 0).toLocaleString("en-BD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
 
                       {/* Due Amount */}
-                      <td className="py-4 px-4 text-right font-mono font-bold text-base">
+                      <td className="py-4 px-4 text-right font-mono font-black text-base whitespace-nowrap">
                         {isDue ? (
                           <span className="text-rose-600 dark:text-rose-400">
-                            ৳{Number(sale.dueAmount).toLocaleString("en-BD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            ৳{Number(sale.dueAmount || 0).toLocaleString("en-BD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </span>
                         ) : (
-                          <span className="text-slate-400">৳0.00</span>
+                          <span className="text-slate-400 font-normal">৳0.00</span>
+                        )}
+                      </td>
+
+                      {/* Payment Status (Paid / Due) */}
+                      <td className="py-4 px-4 text-center whitespace-nowrap">
+                        {isDue ? (
+                          <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-black bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-400">
+                            Due
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-black bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                            Paid
+                          </span>
                         )}
                       </td>
 
                       {/* Actions */}
-                      <td className="py-4 px-5 text-center">
+                      <td className="py-4 px-5 text-center whitespace-nowrap">
                         <button
                           onClick={() => openSaleModal(sale)}
                           className="h-9 px-3.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold transition flex items-center gap-1.5 mx-auto cursor-pointer"
@@ -496,13 +656,43 @@ export function SalesHistoryView({ selectedBranchId: propBranchId, onNavigate }:
         )}
 
         {/* Pagination Footer */}
-        <Pagination
-          currentPage={page}
-          totalPages={totalPages}
-          totalItems={totalCount}
-          pageSize={10}
-          onPageChange={setPage}
-        />
+        <div className="border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 font-medium">
+              <span>Rows per page:</span>
+              <select
+                value={limit}
+                onChange={(e) => {
+                  setLimit(Number(e.target.value));
+                  setPage(1);
+                }}
+                className="h-8 px-2 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-slate-200 outline-none cursor-pointer hover:border-brand-primary transition"
+              >
+                <option value={10}>10</option>
+                <option value={20}>20</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+            </div>
+            <div className="h-4 w-px bg-slate-200 dark:bg-slate-700 hidden sm:block" />
+            <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+              Showing <span className="font-bold text-slate-900 dark:text-white">{totalCount === 0 ? 0 : (page - 1) * limit + 1}</span> to{" "}
+              <span className="font-bold text-slate-900 dark:text-white">{Math.min(page * limit, totalCount)}</span> of{" "}
+              <span className="font-bold text-slate-900 dark:text-white">{totalCount}</span> sales
+            </div>
+          </div>
+
+          <Pagination
+            currentPage={page}
+            totalPages={totalPages}
+            totalItems={totalCount}
+            pageSize={limit}
+            onPageChange={setPage}
+            showDetails={false}
+            alwaysShow={true}
+            className="border-t-0 p-0 bg-transparent"
+          />
+        </div>
       </div>
 
       {/* Invoice Details & Thermal Print Modal */}
@@ -594,7 +784,9 @@ export function SalesHistoryView({ selectedBranchId: propBranchId, onNavigate }:
                   </div>
                   <div>
                     <span className="font-bold text-slate-500 print:text-black">Payment Method: </span>
-                    <span className="font-bold text-slate-900 dark:text-white print:text-black">{selectedSale.paymentMethod || "CASH"}</span>
+                    <span className="font-bold text-slate-900 dark:text-white print:text-black">
+                      {formatPaymentMethod(selectedSale.paymentMethod, selectedSale.notes || undefined, selectedSale.bankName || undefined)}
+                    </span>
                   </div>
                 </div>
               </div>

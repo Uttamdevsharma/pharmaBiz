@@ -10,13 +10,13 @@
     --primary-color: #059669;
     --primary-rgb: 5, 150, 105;
     --primary-hover: #047857;
+    color-scheme: light;
   }
 
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --background: #0b0f19;
-      --foreground: #f8fafc;
-    }
+  .dark {
+    --background: #090d16;
+    --foreground: #f8fafc;
+    color-scheme: dark;
   }
 
   * {
@@ -28,6 +28,25 @@
     background-color: var(--background);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     overflow-x: hidden;
+  }
+
+  ::selection {
+    background-color: var(--primary-color);
+    color: #ffffff;
+  }
+
+  /* Enhanced contrast for native inputs in dark mode */
+  .dark input,
+  .dark select,
+  .dark textarea {
+    color-scheme: dark;
+  }
+
+  /* Smooth interactive hover transitions */
+  button, a, input, select, textarea {
+    transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, transform;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    transition-duration: 150ms;
   }
 }
 
@@ -57,8 +76,33 @@
     background-color: rgba(var(--primary-rgb), 0.08);
   }
 
+  .dark .brand-subtle-bg {
+    background-color: rgba(var(--primary-rgb), 0.16);
+  }
+
   .brand-subtle-border {
     border-color: rgba(var(--primary-rgb), 0.2);
+  }
+
+  .dark .brand-subtle-border {
+    border-color: rgba(var(--primary-rgb), 0.35);
+  }
+
+  /* High-contrast table row hover in dark mode */
+  .dark tbody tr:hover {
+    background-color: rgba(30, 41, 59, 0.45);
+  }
+
+  /* Dark mode input placeholder contrast */
+  .dark input::placeholder,
+  .dark textarea::placeholder {
+    color: #94a3b8;
+  }
+
+  .dark input:focus,
+  .dark textarea:focus,
+  .dark select:focus {
+    border-color: var(--primary-color, #059669);
   }
 
   .brand-gradient {
@@ -376,4 +420,31 @@
     page-break-inside: avoid !important;
   }
 }
+
+/* ─── Global Top Loader (NextTopLoader / NProgress) Styling ─────────────────── */
+#nprogress {
+  pointer-events: none;
+}
+
+#nprogress .bar {
+  background: var(--primary-color, #10b981) !important;
+  position: fixed;
+  z-index: 999999 !important;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 3px !important;
+}
+
+#nprogress .peg {
+  display: block;
+  position: absolute;
+  right: 0;
+  width: 120px;
+  height: 100%;
+  box-shadow: 0 0 12px var(--primary-color, #10b981), 0 0 6px var(--primary-color, #10b981) !important;
+  opacity: 1;
+  transform: rotate(3deg) translate(0px, -4px);
+}
+
 

@@ -3,19 +3,27 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.updatePlatformRolePermissionsSchema = exports.updatePlatformStaffSchema = exports.createPlatformStaffSchema = exports.batchUpdatePlatformRolePermissionsSchema = exports.updateRoleSchema = exports.createRoleSchema = exports.listTenantsQuerySchema = exports.updateTenantStatusSchema = exports.updatePlanSchema = exports.createPlanSchema = void 0;
 const zod_1 = require("zod");
 exports.createPlanSchema = zod_1.z.object({
-    name: zod_1.z.string().min(2, "Plan name must be at least 2 characters"),
+    name: zod_1.z.string().min(1, "Plan name must be at least 1 character"),
     tier: zod_1.z.enum(["TRIAL", "STARTER", "GROWTH", "ENTERPRISE"]),
     price: zod_1.z.number().nonnegative("Price must be greater than or equal to 0"),
     billingCycle: zod_1.z.enum(["MONTHLY", "YEARLY"]).default("MONTHLY"),
+    yearlyDiscountPercent: zod_1.z.number().min(0).max(100).optional(),
     maxBranches: zod_1.z.number().int().positive("Max branches must be at least 1"),
+    maxStaffPerBranch: zod_1.z.number().int().positive().optional(),
+    maxTotalStaff: zod_1.z.number().int().positive().optional(),
+    trialDays: zod_1.z.number().int().positive().optional(),
     features: zod_1.z.record(zod_1.z.string(), zod_1.z.any()).optional(),
     isActive: zod_1.z.boolean().default(true),
 });
 exports.updatePlanSchema = zod_1.z.object({
-    name: zod_1.z.string().min(2).optional(),
+    name: zod_1.z.string().min(1).optional(),
     price: zod_1.z.number().nonnegative().optional(),
     billingCycle: zod_1.z.enum(["MONTHLY", "YEARLY"]).optional(),
+    yearlyDiscountPercent: zod_1.z.number().min(0).max(100).optional(),
     maxBranches: zod_1.z.number().int().positive().optional(),
+    maxStaffPerBranch: zod_1.z.number().int().positive().optional(),
+    maxTotalStaff: zod_1.z.number().int().positive().optional(),
+    trialDays: zod_1.z.number().int().positive().optional(),
     features: zod_1.z.record(zod_1.z.string(), zod_1.z.any()).optional(),
     isActive: zod_1.z.boolean().optional(),
 });
@@ -29,6 +37,7 @@ exports.listTenantsQuerySchema = zod_1.z.object({
     search: zod_1.z.string().optional(),
     tier: zod_1.z.enum(["TRIAL", "STARTER", "GROWTH", "ENTERPRISE"]).optional(),
     isActive: zod_1.z.string().optional().transform(v => (v === "true" ? true : v === "false" ? false : undefined)),
+    subscriptionStatus: zod_1.z.enum(["ACTIVE", "PENDING", "EXPIRED", "CANCELLED"]).optional(),
     datePreset: zod_1.z.string().optional(),
     startDate: zod_1.z.string().optional(),
     endDate: zod_1.z.string().optional(),

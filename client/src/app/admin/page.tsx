@@ -26,12 +26,16 @@ export default function AdminDashboardPage() {
   const { user, loading, isAuthenticated, isSuperAdmin, isPlatformStaff, hasPermission } = useAuth();
   const [activeTab, setActiveTab] = useState<AdminTab>("overview");
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem("admin_sidebar_collapsed") === "true";
-    }
-    return false;
-  });
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("admin_sidebar_collapsed");
+      if (saved !== null) {
+        setSidebarCollapsed(saved === "true");
+      }
+    } catch {}
+  }, []);
 
   const toggleSidebarCollapse = () => {
     setSidebarCollapsed((prev) => {
@@ -57,23 +61,18 @@ export default function AdminDashboardPage() {
   useEffect(() => {
     if (!loading) {
       if (!isAuthenticated) {
-        router.push("/login");
+        router.replace("/login");
       } else if (!isPlatformStaff) {
-        router.push("/dashboard");
+        router.replace("/dashboard");
       }
     }
   }, [loading, isAuthenticated, isPlatformStaff, router]);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-100 dark:bg-slate-950 text-slate-500 gap-3">
-        <Loader2 className="h-6 w-6 animate-spin text-brand-primary" />
-        <span className="font-semibold text-sm">Verifying Platform Authorization...</span>
-      </div>
-    );
+  if (loading || !isAuthenticated) {
+    return null;
   }
 
-  if (!isAuthenticated || !isPlatformStaff) {
+  if (!isPlatformStaff) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center bg-slate-100 dark:bg-slate-950 space-y-4">
         <ShieldAlert className="h-12 w-12 text-red-500" />

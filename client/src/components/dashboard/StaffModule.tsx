@@ -34,13 +34,24 @@ interface StaffModuleProps {
   onNavigate?: (module: any) => void;
 }
 
+// Persistent module cache
+let cachedStaff: any[] = [];
+let cachedStaffRoles: PharmacyRole[] = [];
+let cachedStaffBranches: any[] = [];
+
+export function setCachedStaffData(staff: any[], roles: PharmacyRole[] = [], branches: any[] = []) {
+  cachedStaff = staff;
+  if (roles.length > 0) cachedStaffRoles = roles;
+  if (branches.length > 0) cachedStaffBranches = branches;
+}
+
 export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
   const { user } = useAuth();
-  const [staff, setStaff] = useState<any[]>([]);
-  const [roles, setRoles] = useState<PharmacyRole[]>([]);
-  const [branches, setBranches] = useState<any[]>([]);
+  const [staff, setStaff] = useState<any[]>(() => cachedStaff);
+  const [roles, setRoles] = useState<PharmacyRole[]>(() => cachedStaffRoles);
+  const [branches, setBranches] = useState<any[]>(() => cachedStaffBranches);
   const [profile, setProfile] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => cachedStaff.length === 0);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingStaff, setEditingStaff] = useState<any>(null);
   const [saving, setSaving] = useState(false);
@@ -64,7 +75,7 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
 
   const loadData = async () => {
     try {
-      setLoading(true);
+      if (cachedStaff.length === 0) setLoading(true);
       const params = new URLSearchParams();
       if (isManager && user?.branchId) {
         params.append("branchId", user.branchId);
@@ -76,11 +87,18 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
         fetchApi("/users/roles"),
       ]);
 
-      if (sRes.success) setStaff(sRes.data || []);
-      if (bRes.success) setBranches(bRes.data || []);
+      if (sRes.success) {
+        setStaff(sRes.data || []);
+        cachedStaff = sRes.data || [];
+      }
+      if (bRes.success) {
+        setBranches(bRes.data || []);
+        cachedStaffBranches = bRes.data || [];
+      }
       if (pRes.success) setProfile(pRes.data);
       if (rRes.success && rRes.data) {
         setRoles(rRes.data);
+        cachedStaffRoles = rRes.data;
         if (!formData.role && rRes.data.length > 0) {
           setFormData((prev) => ({ ...prev, role: rRes.data[0].id }));
         }
@@ -341,10 +359,11 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
 
       {/* Staff Table */}
       <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-        {loading ? (
+        {staff.length === 0 ? (
           <div className="py-20 flex flex-col items-center justify-center gap-2 text-slate-500">
-            <Loader2 className="h-6 w-6 animate-spin text-brand-primary" />
-            <span className="text-xs font-medium">Loading staff team...</span>
+            <span className="text-xs font-medium">
+              {loading ? "Loading staff team..." : "No staff members found."}
+            </span>
           </div>
         ) : staff.length > 0 ? (
           <div className="overflow-x-auto">

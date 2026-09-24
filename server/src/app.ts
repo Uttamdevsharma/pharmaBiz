@@ -50,6 +50,10 @@ app.use(express.urlencoded({ limit: "25mb", extended: true }));
 import path from "path";
 app.use("/uploads", express.static(path.join(process.cwd(), "public", "uploads")));
 
+// Mount Swagger Documentation & Testing UI
+import { setupSwagger } from "./docs";
+setupSwagger(app);
+
 // Health check
 app.get("/", (req: Request, res: Response) => {
   res.json({
@@ -119,6 +123,5 @@ if (!process.env.VERCEL) {
   });
 }
 
-// Trigger backend restart for Prisma Client update
-
+// Trigger backend restart on free port 3000
 export default app;

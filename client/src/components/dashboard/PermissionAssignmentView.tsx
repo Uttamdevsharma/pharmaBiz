@@ -23,15 +23,19 @@ import {
 } from "lucide-react";
 import { PharmacyRole } from "./CreateRoleView";
 
+// Persistent module cache
+let cachedRoles: PharmacyRole[] = [];
+let cachedRolePermissionsMap: Record<string, string[]> = {};
+
 export function PermissionAssignmentView() {
   const { user } = useAuth();
-  const [roles, setRoles] = useState<PharmacyRole[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [roles, setRoles] = useState<PharmacyRole[]>(() => cachedRoles);
+  const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
   // Matrix state: roleId -> string[]
-  const [rolePermissionsMap, setRolePermissionsMap] = useState<Record<string, string[]>>({});
-  const [initialRolePermissionsMap, setInitialRolePermissionsMap] = useState<Record<string, string[]>>({});
+  const [rolePermissionsMap, setRolePermissionsMap] = useState<Record<string, string[]>>(() => cachedRolePermissionsMap);
+  const [initialRolePermissionsMap, setInitialRolePermissionsMap] = useState<Record<string, string[]>>(() => cachedRolePermissionsMap);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("ALL");
@@ -52,6 +56,7 @@ export function PermissionAssignmentView() {
             role.name.toUpperCase() !== "SUPER_ADMIN"
         );
         setRoles(filteredRoles);
+        cachedRoles = filteredRoles;
 
         const permMap: Record<string, string[]> = {};
         filteredRoles.forEach((role) => {
@@ -59,6 +64,7 @@ export function PermissionAssignmentView() {
         });
         setRolePermissionsMap(permMap);
         setInitialRolePermissionsMap(JSON.parse(JSON.stringify(permMap)));
+        cachedRolePermissionsMap = permMap;
       }
     } catch (err: any) {
       setActionMsg({ type: "error", text: err.message || "Failed to load roles" });
@@ -254,9 +260,8 @@ export function PermissionAssignmentView() {
       </div>
 
       {/* Clean Permission Matrix Table */}
-      {loading ? (
-        <div className="py-24 flex flex-col items-center justify-center text-slate-400 gap-3">
-          <Loader2 className="h-8 w-8 animate-spin text-brand-primary" />
+      {roles.length === 0 && loading ? (
+        <div className="py-24 flex flex-col items-center justify-center text-slate-400 gap-2">
           <span className="text-sm font-bold">Loading matrix...</span>
         </div>
       ) : (

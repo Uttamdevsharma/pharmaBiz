@@ -1127,15 +1127,15 @@ export class ReportService {
     // Finalize branch stats matrix
     const branchWiseList = Object.values(branchStatsMap).map((b) => {
       const gross = Math.max(0, b.salesRevenue - b.costOfSold);
-      const net = Math.round((gross - b.damagedMissingLoss) * 100) / 100;
+      const net = Math.round(gross - b.damagedMissingLoss);
       const margin = b.salesRevenue > 0 ? Math.round((gross / b.salesRevenue) * 1000) / 10 : 0;
       return {
         ...b,
-        inventoryValue: Math.round(b.inventoryValue * 100) / 100,
-        salesRevenue: Math.round(b.salesRevenue * 100) / 100,
-        costOfSold: Math.round(b.costOfSold * 100) / 100,
-        grossProfit: Math.round(gross * 100) / 100,
-        damagedMissingLoss: Math.round(b.damagedMissingLoss * 100) / 100,
+        inventoryValue: Math.round(b.inventoryValue),
+        salesRevenue: Math.round(b.salesRevenue),
+        costOfSold: Math.round(b.costOfSold),
+        grossProfit: Math.round(gross),
+        damagedMissingLoss: Math.round(b.damagedMissingLoss),
         netProfit: net,
         profitMargin: margin,
       };
@@ -1175,30 +1175,30 @@ export class ReportService {
 
         // 1. Current Live Inventory & Purchase Cost Valuation
         totalStockUnits,
-        totalStockCostValue: Math.round(totalInventoryCostValue * 100) / 100,
-        totalInventoryValue: Math.round(totalInventoryCostValue * 100) / 100,
-        totalPurchaseCostValue: Math.round(totalInventoryCostValue * 100) / 100,
+        totalStockCostValue: Math.round(totalInventoryCostValue),
+        totalInventoryValue: Math.round(totalInventoryCostValue),
+        totalPurchaseCostValue: Math.round(totalInventoryCostValue),
 
         // 2. Sales Revenue in Period
-        totalSalesRevenue: Math.round(totalSalesRevenue * 100) / 100,
-        totalRevenue: Math.round(totalSalesRevenue * 100) / 100,
+        totalSalesRevenue: Math.round(totalSalesRevenue),
+        totalRevenue: Math.round(totalSalesRevenue),
         totalSalesCount: sales.length,
         totalTransactions: sales.length,
 
         // 3. Cost of Sold Products (COGS) in Period
-        totalCostOfSold: Math.round(totalCostOfSold * 100) / 100,
+        totalCostOfSold: Math.round(totalCostOfSold),
 
         // 4. Gross Profit in Period
-        totalGrossProfit: Math.round(totalGrossProfit * 100) / 100,
-        totalProfit: Math.round(totalGrossProfit * 100) / 100,
+        totalGrossProfit: Math.round(totalGrossProfit),
+        totalProfit: Math.round(totalGrossProfit),
         grossMargin,
 
         // 5. Damaged & Missing Stock Loss in Period
-        totalDamagedMissingLoss: Math.round(totalDamagedMissingLoss * 100) / 100,
+        totalDamagedMissingLoss: Math.round(totalDamagedMissingLoss),
         damagedMissingUnitsCount,
 
         // 6. Net Realized Profit After Loss
-        netProfitAfterLoss,
+        netProfitAfterLoss: Math.round(netProfitAfterLoss),
         netMargin,
 
         // Alerts & Stock Counts

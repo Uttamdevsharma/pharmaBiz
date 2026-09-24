@@ -62,10 +62,28 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
 
     try {
       setLoading(true);
+      // Pre-load from localStorage cache immediately so offline starts with valid branches
+      if (typeof window !== "undefined") {
+        const cached = localStorage.getItem("pharmabiz_cached_branches");
+        if (cached) {
+          try {
+            const parsed = JSON.parse(cached);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setBranches(parsed);
+              const saved = localStorage.getItem(STORAGE_KEY) || user?.branchId || parsed[0].id;
+              if (saved) setSelectedBranchIdState(saved);
+            }
+          } catch {}
+        }
+      }
+
       const res = await fetchApi<Branch[]>("/branches");
       if (res.success && Array.isArray(res.data)) {
         const activeOnly = res.data.filter((b) => b.isActive !== false);
         setBranches(activeOnly);
+        if (typeof window !== "undefined") {
+          localStorage.setItem("pharmabiz_cached_branches", JSON.stringify(activeOnly));
+        }
 
         // Branch-locked staff is always strictly bound to their assigned branch
         if (isBranchLocked && user?.branchId) {
@@ -79,16 +97,30 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
           if (savedBranchId && activeOnly.some((b) => b.id === savedBranchId)) {
             setSelectedBranchIdState(savedBranchId);
           } else {
-            // Default to All Branches (empty string)
-            setSelectedBranchIdState("");
+            // Default to All Branches or first active branch
+            const defaultBranch = activeOnly.length > 0 ? activeOnly[0].id : "";
+            setSelectedBranchIdState(defaultBranch);
             if (typeof window !== "undefined") {
-              localStorage.setItem(STORAGE_KEY, "");
+              localStorage.setItem(STORAGE_KEY, defaultBranch);
             }
           }
         }
       }
     } catch (err) {
-      console.error("Failed to load branches in BranchContext", err);
+      console.warn("Failed to load branches from cloud, using offline cached branches", err);
+      if (typeof window !== "undefined") {
+        const cached = localStorage.getItem("pharmabiz_cached_branches");
+        if (cached) {
+          try {
+            const parsed = JSON.parse(cached);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setBranches(parsed);
+              const saved = localStorage.getItem(STORAGE_KEY) || user?.branchId || parsed[0].id;
+              if (saved) setSelectedBranchIdState(saved);
+            }
+          } catch {}
+        }
+      }
     } finally {
       setLoading(false);
     }

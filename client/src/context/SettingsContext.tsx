@@ -50,7 +50,7 @@ export interface SiteSettings {
   plans?: PlanItem[];
 }
 
-const DEFAULT_SETTINGS: SiteSettings = {
+export const DEFAULT_SETTINGS: SiteSettings = {
   siteName: "PharmaBiz SaaS",
   logoUrl: "",
   primaryColor: "#059669",
@@ -147,25 +147,20 @@ const SettingsContext = createContext<SettingsContextType>({
   refreshSettings: async () => {},
 });
 
-// Helper to convert hex to RGB
-function hexToRgb(hex: string) {
-  const cleanHex = hex.replace("#", "");
-  let r = 5, g = 150, b = 105;
-  if (cleanHex.length === 6) {
-    r = parseInt(cleanHex.substring(0, 2), 16);
-    g = parseInt(cleanHex.substring(2, 4), 16);
-    b = parseInt(cleanHex.substring(4, 6), 16);
-  } else if (cleanHex.length === 3) {
-    r = parseInt(cleanHex[0] + cleanHex[0], 16);
-    g = parseInt(cleanHex[1] + cleanHex[1], 16);
-    b = parseInt(cleanHex[2] + cleanHex[2], 16);
-  }
-  return `${r}, ${g}, ${b}`;
-}
+import { hexToRgb } from "@/lib/colorUtils";
+export { hexToRgb };
 
-export function SettingsProvider({ children }: { children: React.ReactNode }) {
-  const [settings, setSettings] = useState<SiteSettings>(DEFAULT_SETTINGS);
-  const [loading, setLoading] = useState(true);
+export function SettingsProvider({
+  children,
+  initialSettings,
+}: {
+  children: React.ReactNode;
+  initialSettings?: SiteSettings | null;
+}) {
+  const [settings, setSettings] = useState<SiteSettings>(
+    initialSettings || DEFAULT_SETTINGS
+  );
+  const [loading, setLoading] = useState(!initialSettings);
 
   const applyThemeColor = (color: string) => {
     if (typeof document !== "undefined") {
@@ -183,17 +178,48 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
         if (res.data.primaryColor) {
           applyThemeColor(res.data.primaryColor);
         }
+        if (typeof window !== "undefined") {
+          try {
+            localStorage.setItem("pharmabiz_site_settings", JSON.stringify(res.data));
+          } catch (e) {}
+        }
       }
     } catch (err) {
-      console.warn("Could not load backend public settings, using defaults.", err);
+      console.warn("Could not load backend public settings, using defaults/cached.", err);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
+    if (initialSettings) {
+      setSettings(initialSettings);
+      if (initialSettings.primaryColor) {
+        applyThemeColor(initialSettings.primaryColor);
+      }
+      if (typeof window !== "undefined") {
+        try {
+          localStorage.setItem("pharmabiz_site_settings", JSON.stringify(initialSettings));
+        } catch (e) {}
+      }
+    } else {
+      if (typeof window !== "undefined") {
+        try {
+          const cached = localStorage.getItem("pharmabiz_site_settings");
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            if (parsed && typeof parsed === "object") {
+              setSettings((prev) => ({ ...prev, ...parsed }));
+              if (parsed.primaryColor) {
+                applyThemeColor(parsed.primaryColor);
+              }
+            }
+          }
+        } catch (e) {}
+      }
+    }
     loadSettings();
-  }, []);
+  }, [initialSettings]);
 
   return (
     <SettingsContext.Provider

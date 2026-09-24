@@ -604,7 +604,7 @@ export function InventoryModule({ subAction }: InventoryModuleProps = {}) {
                             <div className="text-[10px] text-slate-500 font-medium">{readableStock}</div>
                           </td>
                           <td className="py-3.5 px-4 font-bold text-slate-900 dark:text-white">
-                            ৳{Number(inv.sellingPrice).toFixed(2)}
+                            ৳{Math.round(Number(inv.sellingPrice)).toLocaleString()}
                             <span className="text-[10px] text-slate-400 font-normal"> / {inv.unit}</span>
                           </td>
                           <td className="py-3.5 px-4">

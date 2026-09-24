@@ -68,6 +68,7 @@ export function SuppliersModule({ subAction }: SuppliersModuleProps = {}) {
       const res = await fetchApi(`/suppliers?${params.toString()}`);
       if (res.success && res.data) {
         setSuppliers(res.data);
+        cachedSuppliers = res.data;
       }
     } catch (err) {
       console.error("Failed to load suppliers", err);
@@ -324,16 +325,13 @@ export function SuppliersModule({ subAction }: SuppliersModuleProps = {}) {
 
       {/* Supplier List */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-        {loading ? (
-          <div className="p-16 flex flex-col items-center justify-center text-slate-400">
-            <Loader2 className="h-8 w-8 animate-spin text-brand-primary mb-2" />
-            <p className="text-xs">Loading supplier directory...</p>
-          </div>
-        ) : suppliers.length === 0 ? (
+        {suppliers.length === 0 ? (
           <div className="p-16 text-center text-slate-400">
             <Truck className="h-10 w-10 mx-auto text-slate-300 dark:text-slate-700 mb-3" />
-            <p className="text-sm font-bold text-slate-600 dark:text-slate-400">No suppliers registered</p>
-            <p className="text-xs mt-1">Add your medicine vendors and distributors to track batch purchases.</p>
+            <p className="text-sm font-bold text-slate-600 dark:text-slate-400">
+              {loading ? "Loading supplier directory..." : "No suppliers registered"}
+            </p>
+            {!loading && <p className="text-xs mt-1">Add your medicine vendors and distributors to track batch purchases.</p>}
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -566,10 +564,9 @@ export function SuppliersModule({ subAction }: SuppliersModuleProps = {}) {
               </button>
             </div>
 
-            {detailLoading ? (
+            {detailLoading && !selectedSupplier ? (
               <div className="p-12 flex flex-col items-center justify-center text-slate-400">
-                <Loader2 className="h-8 w-8 animate-spin text-brand-primary mb-2" />
-                <p className="text-xs">Loading ledger history...</p>
+                <p className="text-xs font-semibold">Loading ledger history...</p>
               </div>
             ) : selectedSupplier ? (
               <div className="mt-4 space-y-6">

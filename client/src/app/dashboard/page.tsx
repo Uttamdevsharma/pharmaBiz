@@ -1,9 +1,11 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { fetchApi } from "@/lib/api";
+import { loadingProgress } from "@/lib/loadingProgress";
+import { preloadModuleData } from "@/lib/modulePreloader";
 import { CENTRAL_CLIENT_PLANS, calculateRemainingTrialDays } from "@/lib/planLimits";
 import { useBranchContext } from "@/context/BranchContext";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
@@ -16,6 +18,7 @@ import {
 import { OverviewModule } from "@/components/dashboard/OverviewModule";
 import { ProfileModule } from "@/components/dashboard/ProfileModule";
 import { BranchModule } from "@/components/dashboard/BranchModule";
+import { BranchCreateView } from "@/components/dashboard/BranchCreateView";
 import { StaffModule } from "@/components/dashboard/StaffModule";
 import { CreateStaffTab } from "@/components/dashboard/CreateStaffTab";
 import { CreateRoleView } from "@/components/dashboard/CreateRoleView";
@@ -23,6 +26,7 @@ import { PermissionAssignmentView } from "@/components/dashboard/PermissionAssig
 import { PosModule } from "@/components/dashboard/PosModule";
 import { ReportsModule } from "@/components/dashboard/ReportsModule";
 import { SubscriptionModule } from "@/components/dashboard/SubscriptionModule";
+import { SubscriptionHistoryView } from "@/components/dashboard/SubscriptionHistoryView";
 import { SettingsModule } from "@/components/dashboard/SettingsModule";
 
 // Dedicated Domain Subpage Views
@@ -38,6 +42,8 @@ import { StockAllocationView } from "@/components/dashboard/StockAllocationView"
 import { StockAllocationHistoryView } from "@/components/dashboard/StockAllocationHistoryView";
 import { CreateRackView } from "@/components/dashboard/CreateRackView";
 import { RackListView } from "@/components/dashboard/RackListView";
+import { CreateCustomLocationView } from "@/components/dashboard/CreateCustomLocationView";
+import { CustomLocationListView } from "@/components/dashboard/CustomLocationListView";
 import { StockHistoryView } from "@/components/dashboard/StockHistoryView";
 import { TransferStockView } from "@/components/dashboard/TransferStockView";
 import { TransferHistoryView } from "@/components/dashboard/TransferHistoryView";
@@ -54,6 +60,7 @@ import { FinancialAccountsView } from "@/components/dashboard/FinancialAccountsV
 import { FundTransferView } from "@/components/dashboard/FundTransferView";
 import { TransactionHistoryView } from "@/components/dashboard/TransactionHistoryView";
 import { SalesHistoryView } from "@/components/dashboard/SalesHistoryView";
+import { DueSalesView } from "@/components/dashboard/DueSalesView";
 import { VatSettingsView } from "@/components/dashboard/VatSettingsView";
 import { ExpensesManagementView } from "@/components/dashboard/ExpensesManagementView";
 import { BillListView } from "@/components/dashboard/BillListView";
@@ -79,6 +86,11 @@ import {
   CheckCircle2,
   Building,
   Users,
+  AlertTriangle,
+  X,
+  RefreshCw,
+  History,
+  Check,
 } from "lucide-react";
 
 // Persistent in-memory cache across dashboard transitions to prevent full-screen loaders
@@ -95,6 +107,20 @@ export default function RoleBasedDashboard() {
     const currentPath = typeof window !== "undefined" ? window.location.pathname : pathname;
     return getModuleFromPathname(currentPath, user?.role);
   });
+  const [displayedModule, setDisplayedModule] = useState<OwnerModule>(() => {
+    const currentPath = typeof window !== "undefined" ? window.location.pathname : pathname;
+    return getModuleFromPathname(currentPath, user?.role);
+  });
+  const [pendingModule, setPendingModule] = useState<OwnerModule | null>(null);
+  const navIdRef = useRef<number>(0);
+
+  // Global Branch Context
+  const {
+    branches,
+    selectedBranchId,
+    setSelectedBranchId,
+  } = useBranchContext();
+
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [preselectedBatchId, setPreselectedBatchId] = useState<string>("");
@@ -102,12 +128,21 @@ export default function RoleBasedDashboard() {
   const [inspectionTransferId, setInspectionTransferId] = useState<string>("");
   const [tenantProfile, setTenantProfile] = useState<any>(() => cachedTenantProfile);
   const [currentSub, setCurrentSub] = useState<any>(() => cachedCurrentSub);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem("pharma_sidebar_collapsed") === "true";
-    }
-    return false;
-  });
+  const [showOwnerExpiryModal, setShowOwnerExpiryModal] = useState<boolean>(false);
+  const [showStaffExpiryModal, setShowStaffExpiryModal] = useState<boolean>(false);
+
+  const subEndDate = currentSub?.endDate ? new Date(currentSub.endDate) : null;
+  const isExpired = subEndDate ? subEndDate.getTime() <= Date.now() : false;
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("pharma_sidebar_collapsed");
+      if (saved !== null) {
+        setSidebarCollapsed(saved === "true");
+      }
+    } catch {}
+  }, []);
 
   const toggleSidebarCollapse = () => {
     setSidebarCollapsed((prev) => {
@@ -131,41 +166,93 @@ export default function RoleBasedDashboard() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  // Instant seamless navigation: update state directly and push URL without unmounting layout
-  const handleNavigate = (mod: OwnerModule) => {
+  // Deferred seamless page transition:
+  // Stays on the previous page while the topbar loading bar crawls slowly, preloading destination data.
+  // When ready, mounts destination page populated directly without skeleton or blank state.
+  const handleNavigate = async (mod: OwnerModule) => {
+    if (mod === displayedModule && !pendingModule) return;
+
+    const currentNavId = ++navIdRef.current;
+
+    // Immediately reflect active menu & pending spinner in sidebar
+    setActiveModule(mod);
+    setPendingModule(mod);
+
+    // Start slow creeping top progress bar
+    loadingProgress.startSlowCrawl();
+
     if (mod !== "inv_add_product") {
       setEditingProduct(null);
     }
     if (mod === "sup_suppliers") {
       setSelectedSupplierDetailId(null);
     }
-    setActiveModule(mod);
+
+    if (isExpired) {
+      if (user?.role === "COMPANY_OWNER") {
+        if (mod === "subscription" || mod === "subscription_plans" || mod === "subscription_history") {
+          setShowOwnerExpiryModal(false);
+        } else {
+          setShowOwnerExpiryModal(true);
+          loadingProgress.finishCrawl();
+          setPendingModule(null);
+          return;
+        }
+      } else {
+        setShowStaffExpiryModal(true);
+        loadingProgress.finishCrawl();
+        setPendingModule(null);
+        return;
+      }
+    }
+
+    const MIN_ANIMATION_MS = 380; // Smooth visual crawl time so user sees progress bar moving
+    const MAX_TIMEOUT_MS = 4500;  // Safety timeout
+
+    try {
+      const preloadPromise = preloadModuleData(mod, selectedBranchId);
+      const minDelayPromise = new Promise((resolve) => setTimeout(resolve, MIN_ANIMATION_MS));
+
+      await Promise.race([
+        Promise.all([preloadPromise, minDelayPromise]),
+        new Promise((resolve) => setTimeout(resolve, MAX_TIMEOUT_MS)),
+      ]);
+    } catch (err) {
+      console.warn("Navigation preload error:", err);
+    }
+
+    // If another menu was clicked during preloading, cancel this navigation
+    if (navIdRef.current !== currentNavId) {
+      return;
+    }
+
+    // Seamlessly transition to the destination module
     const targetPath = getPathFromModule(mod);
+    React.startTransition(() => {
+      setDisplayedModule(mod);
+    });
+
     if (typeof window !== "undefined" && window.location.pathname !== targetPath) {
       window.history.pushState({ module: mod }, "", targetPath);
     }
+
+    loadingProgress.finishCrawl();
+    setPendingModule(null);
   };
 
-  // Handle browser Back / Forward buttons instantly without full page reload or unmount
+  // Handle browser Back / Forward buttons with the same smooth deferred transition
   useEffect(() => {
     const handlePopState = () => {
       const currentPath = window.location.pathname;
       const resolved = getModuleFromPathname(currentPath, user?.role);
-      setActiveModule(resolved);
+      handleNavigate(resolved);
     };
 
     window.addEventListener("popstate", handlePopState);
     return () => {
       window.removeEventListener("popstate", handlePopState);
     };
-  }, [user?.role]);
-
-  // Global Branch Context
-  const {
-    branches,
-    selectedBranchId,
-    setSelectedBranchId,
-  } = useBranchContext();
+  }, [user?.role, selectedBranchId, isExpired]);
 
   const [selectedSupplierDetailId, setSelectedSupplierDetailId] = useState<string | null>(null);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("");
@@ -272,7 +359,20 @@ export default function RoleBasedDashboard() {
     }
   };
 
-  if (authLoading || dataLoading) {
+  useEffect(() => {
+    if (!dataLoading && isExpired) {
+      if (user?.role === "COMPANY_OWNER") {
+        if (activeModule !== "subscription" && activeModule !== "subscription_plans" && activeModule !== "subscription_history") {
+          setShowOwnerExpiryModal(true);
+        }
+      } else {
+        setShowStaffExpiryModal(true);
+      }
+    }
+  }, [dataLoading, isExpired, user?.role, activeModule]);
+
+  if (authLoading || dataLoading || !isAuthenticated) {
+    if (!isAuthenticated) return null;
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 text-slate-500 gap-3">
         <Loader2 className="h-7 w-7 animate-spin text-brand-primary" />
@@ -281,190 +381,43 @@ export default function RoleBasedDashboard() {
     );
   }
 
-  const effectiveTier = (tenantProfile?.tier || currentSub?.plan?.tier || "TRIAL").toUpperCase();
-  const isTrial = effectiveTier === "TRIAL";
+  const effectiveTier = (tenantProfile?.tier || currentSub?.plan?.tier || "STARTER").toUpperCase();
   const endDate = currentSub?.endDate ? new Date(currentSub.endDate) : null;
-  const isExpired = endDate ? endDate.getTime() <= Date.now() : false;
-  const trialDaysRemaining = isTrial ? calculateRemainingTrialDays(currentSub?.endDate) : 0;
-  const isTrialExpired = isTrial && isExpired;
-  const paidDaysRemaining = !isTrial && endDate ? Math.ceil((endDate.getTime() - Date.now()) / (1000 * 3600 * 24)) : null;
-  const isExpiringSoon = !isTrial && !isExpired && paidDaysRemaining !== null && paidDaysRemaining <= 5 && paidDaysRemaining >= 0;
-
-  // Barrier 1: Expired Trial or Expired Paid Subscription for Pharmacy Owner (Blocks all dashboard access)
-  if (isExpired && user?.role === "COMPANY_OWNER") {
-    const selectedPlan = availablePlans.find((p: any) => p.id === upgradePlanId);
-    const isRenewingCurrent =
-      selectedPlan?.id === currentSub?.planId ||
-      selectedPlan?.tier === currentSub?.plan?.tier ||
-      selectedPlan?.tier === tenantProfile?.tier;
-
-    return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4 sm:p-6">
-        <div className="max-w-2xl w-full rounded-3xl bg-slate-950 border border-red-500/30 shadow-2xl p-6 sm:p-10 text-center space-y-8 relative overflow-hidden">
-          {/* Background Ambient Glow */}
-          <div className="absolute -top-24 -left-24 w-72 h-72 bg-red-500/10 rounded-full blur-3xl pointer-events-none" />
-          <div className="absolute -bottom-24 -right-24 w-72 h-72 bg-brand-primary/10 rounded-full blur-3xl pointer-events-none" />
-
-          <div className="h-20 w-20 rounded-3xl bg-red-500/10 border border-red-500/30 text-red-500 mx-auto flex items-center justify-center shadow-lg">
-            <Clock className="h-10 w-10 animate-pulse" />
-          </div>
-
-          <div className="space-y-3">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-red-500/10 text-red-400 border border-red-500/20">
-              {isTrial ? "7-Day Free Trial Expired" : "Subscription Expired"}
-            </div>
-            <h1 className="text-3xl font-black text-white tracking-tight">
-              {isTrial ? "Upgrade to Continue Managing Your Pharmacy" : "Renew or Upgrade Your Subscription Plan"}
-            </h1>
-            <p className="text-sm text-slate-400 max-w-lg mx-auto leading-relaxed">
-              Your organization account <strong>{tenantProfile?.name || "Your Pharmacy"}</strong> has reached the end of its {isTrial ? "7-day Free Trial" : "active subscription period"}. Dashboard operations, POS sales, and staff access are temporarily locked. Choose a plan below to renew your existing plan or upgrade to a higher tier.
-            </p>
-          </div>
-
-          {/* Plan Selector Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-left">
-            {availablePlans.map((plan: any) => {
-              const isSelected = upgradePlanId === plan.id;
-              const isCurrent = plan.id === currentSub?.planId || plan.tier === currentSub?.plan?.tier || plan.tier === tenantProfile?.tier;
-              const isGrowth = plan.tier === "GROWTH";
-              return (
-                <div
-                  key={plan.id}
-                  onClick={() => setUpgradePlanId(plan.id)}
-                  className={`p-5 rounded-2xl border cursor-pointer transition-all duration-200 space-y-3 relative ${
-                    isSelected
-                      ? "bg-brand-primary/10 border-brand-primary ring-2 ring-brand-primary shadow-lg scale-102"
-                      : "bg-slate-900/80 border-slate-800 hover:border-slate-700"
-                  }`}
-                >
-                  {isCurrent ? (
-                    <span className="absolute -top-2.5 right-3 px-2 py-0.5 rounded-full bg-emerald-500 text-white text-[10px] font-extrabold uppercase">
-                      Current Plan (Renew)
-                    </span>
-                  ) : isGrowth ? (
-                    <span className="absolute -top-2.5 right-3 px-2 py-0.5 rounded-full bg-brand-primary text-white text-[10px] font-extrabold uppercase">
-                      Recommended
-                    </span>
-                  ) : null}
-                  <div className="text-xs font-bold text-slate-400 uppercase">{plan.tier}</div>
-                  <div className="text-lg font-black text-white">{plan.name}</div>
-                  <div className="text-2xl font-extrabold text-brand-primary">
-                    ৳{Number(plan.price).toLocaleString()}
-                    <span className="text-xs text-slate-400 font-normal">/mo</span>
-                  </div>
-                  <ul className="text-xs text-slate-400 space-y-1.5 pt-2 border-t border-slate-800">
-                    <li className="flex items-center gap-1.5">
-                      <Building className="h-3.5 w-3.5 text-slate-500" />
-                      <span>{plan.maxBranches >= 999 ? "Unlimited" : `${plan.maxBranches}`} Branches</span>
-                    </li>
-                    <li className="flex items-center gap-1.5">
-                      <Users className="h-3.5 w-3.5 text-slate-500" />
-                      <span>
-                        {plan.tier === "STARTER"
-                          ? "1 Staff / Branch"
-                          : plan.tier === "GROWTH"
-                          ? "3 Staff / Branch"
-                          : "Unlimited Staff"}
-                      </span>
-                    </li>
-                  </ul>
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="space-y-3 pt-2">
-            <button
-              onClick={() => handleInitiateUpgrade(upgradePlanId || availablePlans[0]?.id)}
-              disabled={initiatingPay || !upgradePlanId}
-              className="w-full py-4 rounded-2xl bg-brand-primary text-white font-bold text-base shadow-xl hover:opacity-90 transition active:scale-95 flex items-center justify-center gap-3 disabled:opacity-50 cursor-pointer"
-            >
-              {initiatingPay ? (
-                <>
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                  Connecting to SSLCOMMERZ Secure Checkout...
-                </>
-              ) : isRenewingCurrent ? (
-                <>
-                  <CreditCard className="h-5 w-5" />
-                  Renew {selectedPlan?.name || "Current Plan"} & Pay via SSLCOMMERZ
-                </>
-              ) : (
-                <>
-                  <CreditCard className="h-5 w-5" />
-                  Upgrade to {selectedPlan?.name || "Plan"} & Pay via SSLCOMMERZ
-                </>
-              )}
-            </button>
-            <div className="text-xs text-slate-500 flex items-center justify-center gap-2">
-              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-              <span>Instant account activation & restriction removal upon successful payment</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Barrier 2: Expired Subscription for Staff Members (Cashiers, Managers, Executives)
-  if (isExpired && user?.role !== "COMPANY_OWNER") {
-    return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4 sm:p-6">
-        <div className="max-w-md w-full rounded-3xl bg-slate-950 border border-amber-500/30 shadow-2xl p-6 sm:p-8 text-center space-y-6">
-          <div className="h-16 w-16 rounded-3xl bg-amber-500/10 border border-amber-500/30 text-amber-500 mx-auto flex items-center justify-center shadow-lg">
-            <Clock className="h-8 w-8 animate-pulse" />
-          </div>
-          <div className="space-y-2">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-amber-500/10 text-amber-400 border border-amber-500/20">
-              Subscription Expired
-            </div>
-            <h1 className="text-2xl font-black text-white">
-              Pharmacy Account Locked
-            </h1>
-            <p className="text-sm text-slate-400 leading-relaxed">
-              The subscription for <strong>{tenantProfile?.name || "your pharmacy"}</strong> has reached the end of its active billing period. Operational and POS access is temporarily restricted.
-            </p>
-            <p className="text-xs text-slate-500">
-              Please contact your Pharmacy Owner or Super Administrator to renew the subscription plan and restore system access.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={logout}
-            className="w-full py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-sm transition cursor-pointer"
-          >
-            Sign Out
-          </button>
-        </div>
-      </div>
-    );
-  }
+  const paidDaysRemaining = endDate ? Math.ceil((endDate.getTime() - Date.now()) / (1000 * 3600 * 24)) : null;
+  const isExpiringSoon = !isExpired && paidDaysRemaining !== null && paidDaysRemaining <= 5 && paidDaysRemaining >= 0;
 
   return (
     <div className="h-screen max-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col text-slate-900 dark:text-slate-100 overflow-hidden">
-      {/* Free Trial Active Banner */}
-      {isTrial && !isTrialExpired && (
-        <div className="shrink-0 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white px-4 sm:px-6 py-2.5 flex flex-col sm:flex-row items-center justify-between gap-2 shadow-sm z-50 text-xs font-semibold">
+      {/* Subscription Expired Warning Banner */}
+      {isExpired && (
+        <div className="shrink-0 bg-gradient-to-r from-red-600 via-amber-600 to-red-700 text-white px-4 sm:px-6 py-2.5 flex flex-col sm:flex-row items-center justify-between gap-2 shadow-md z-50 text-xs font-semibold">
           <div className="flex items-center gap-2.5">
             <span className="relative flex h-2.5 w-2.5">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
               <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white" />
             </span>
             <span>
-              <strong>Plan 0 - Free Trial Active:</strong> {trialDaysRemaining} day(s) remaining (Expires {endDate?.toLocaleDateString() || "in 7 days"} • 1 Branch & 1 Staff limit)
+              <strong>সাবস্ক্রিপশনের মেয়াদ শেষ:</strong> আপনার ফার্মেসির সাবস্ক্রিপশন মেয়াদ শেষ হয়ে গেছে। পূর্ণ সেবা সচল করতে অনুগ্রহ করে রিনিউ অথবা আপগ্রেড করুন।
             </span>
           </div>
 
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => handleNavigate("subscription")}
-              className="px-3 py-1 rounded-lg bg-white/20 hover:bg-white/30 text-white font-bold backdrop-blur-sm transition flex items-center gap-1.5 cursor-pointer"
-            >
-              <Sparkles className="h-3.5 w-3.5 text-amber-300" />
-              Upgrade to Paid Plan
-              <ArrowRight className="h-3 w-3" />
-            </button>
-          </div>
+          {user?.role === "COMPANY_OWNER" ? (
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setShowOwnerExpiryModal(true)}
+                className="px-3.5 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white font-bold backdrop-blur-sm transition flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
+              >
+                <Sparkles className="h-3.5 w-3.5 text-amber-300" />
+                <span>রিনিউ অথবা আপগ্রেড করুন</span>
+                <ArrowRight className="h-3 w-3" />
+              </button>
+            </div>
+          ) : (
+            <span className="text-[11px] text-amber-100 font-bold">
+              দয়া করে আপনার ফার্মেসি ওনার (Pharmacy Owner) এর সাথে যোগাযোগ করুন
+            </span>
+          )}
         </div>
       )}
 
@@ -501,8 +454,6 @@ export default function RoleBasedDashboard() {
       <DashboardHeader
         tenantName={tenantProfile?.name}
         tier={effectiveTier}
-        trialDaysRemaining={isTrial ? trialDaysRemaining : undefined}
-        isTrial={isTrial}
         onNavigate={handleNavigate}
         onToggleMobileSidebar={() => setMobileSidebarOpen(!mobileSidebarOpen)}
         isMobileSidebarOpen={mobileSidebarOpen}
@@ -515,6 +466,7 @@ export default function RoleBasedDashboard() {
         {/* Role-Aware Sidebar */}
         <DashboardSidebar
           activeModule={activeModule}
+          pendingModule={pendingModule}
           userRole={user?.role}
           mobileOpen={mobileSidebarOpen}
           onCloseMobile={() => setMobileSidebarOpen(false)}
@@ -525,7 +477,7 @@ export default function RoleBasedDashboard() {
 
         {/* Content Area */}
         {(() => {
-          const isPosActive = activeModule === "pos" || activeModule === "pos_sale";
+          const isPosActive = displayedModule === "pos" || displayedModule === "pos_sale";
           return (
             <main className={`flex-1 h-full min-h-0 w-full min-w-0 ${
               isPosActive
@@ -543,6 +495,209 @@ export default function RoleBasedDashboard() {
           );
         })()}
       </div>
+
+      {/* 🚀 Pharmacy Owner Expiry Popup Modal with 3 Plans */}
+      {showOwnerExpiryModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4 overflow-y-auto">
+          <div className="max-w-4xl w-full bg-white dark:bg-slate-900 rounded-3xl border-2 border-brand-primary shadow-2xl p-6 sm:p-8 space-y-6 relative overflow-hidden my-auto animate-in fade-in zoom-in-95 duration-200">
+            {/* Ambient Background Glow */}
+            <div className="absolute -top-24 -left-24 w-72 h-72 bg-red-500/10 rounded-full blur-3xl pointer-events-none" />
+            <div className="absolute -bottom-24 -right-24 w-72 h-72 bg-brand-primary/10 rounded-full blur-3xl pointer-events-none" />
+
+            {/* Close Button */}
+            <button
+              type="button"
+              onClick={() => setShowOwnerExpiryModal(false)}
+              className="absolute top-5 right-5 p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+            >
+              <X className="h-5 w-5" />
+            </button>
+
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+              <div className="h-14 w-14 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 shadow-sm">
+                <Clock className="h-7 w-7 animate-pulse" />
+              </div>
+              <div className="space-y-1">
+                <div className="inline-flex items-center gap-2 px-3 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20">
+                  Subscription Expired
+                </div>
+                <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
+                  আপনার সাবস্ক্রিপশনের মেয়াদ শেষ হয়ে গেছে!
+                </h2>
+                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
+                  আপনার ফার্মেসি <strong className="text-slate-800 dark:text-slate-200">{tenantProfile?.name || "Your Pharmacy"}</strong>-এর সাবস্ক্রিপশনের মেয়াদ শেষ। ড্যাশবোর্ড ও কাউন্টার সেলস সচল করতে নিচের যে কোনো প্ল্যান রিনিউ অথবা আপগ্রেড করুন।
+                </p>
+              </div>
+            </div>
+
+            {/* 3 Plans Selection Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+              {availablePlans.map((plan: any) => {
+                const currentRank = (CENTRAL_CLIENT_PLANS as any)[effectiveTier]?.planNumber || (effectiveTier === "GROWTH" ? 2 : effectiveTier === "ENTERPRISE" ? 3 : 1);
+                const planRank = (CENTRAL_CLIENT_PLANS as any)[plan.tier]?.planNumber || (plan.tier === "GROWTH" ? 2 : plan.tier === "ENTERPRISE" ? 3 : 1);
+                const isCurrent = plan.tier === currentSub?.plan?.tier || plan.tier === tenantProfile?.tier;
+                const isHigher = planRank > currentRank;
+                const isGrowth = plan.tier === "GROWTH";
+
+                return (
+                  <div
+                    key={plan.id}
+                    className={`p-5 rounded-2xl border transition-all flex flex-col justify-between space-y-4 relative ${
+                      isCurrent
+                        ? "bg-amber-500/5 dark:bg-amber-950/20 border-amber-500 shadow-md ring-1 ring-amber-500/30"
+                        : isGrowth
+                        ? "bg-brand-primary/5 dark:bg-brand-primary/10 border-brand-primary shadow-md"
+                        : "bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-800"
+                    }`}
+                  >
+                    {isCurrent ? (
+                      <span className="absolute -top-2.5 right-3 px-2 py-0.5 rounded-full bg-amber-600 text-white text-[10px] font-extrabold uppercase shadow-xs">
+                        Current Plan
+                      </span>
+                    ) : isGrowth ? (
+                      <span className="absolute -top-2.5 right-3 px-2 py-0.5 rounded-full bg-brand-primary text-white text-[10px] font-extrabold uppercase shadow-xs">
+                        Recommended
+                      </span>
+                    ) : null}
+
+                    <div className="space-y-2">
+                      <div className="text-xs font-bold text-slate-400 uppercase">{plan.tier} Tier</div>
+                      <div className="text-base font-black text-slate-900 dark:text-white">{plan.name}</div>
+                      <div className="text-2xl font-black text-brand-primary">
+                        ৳{Number(plan.price).toLocaleString()}
+                        <span className="text-xs text-slate-400 font-normal ml-1">/ month</span>
+                      </div>
+
+                      <ul className="text-xs text-slate-600 dark:text-slate-400 space-y-1.5 pt-2 border-t border-slate-200 dark:border-slate-700">
+                        <li className="flex items-center gap-1.5">
+                          <Building className="h-3.5 w-3.5 text-brand-primary shrink-0" />
+                          <span>{plan.maxBranches >= 999 ? "Unlimited" : `${plan.maxBranches}`} Branches</span>
+                        </li>
+                        <li className="flex items-center gap-1.5">
+                          <Users className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                          <span>
+                            {plan.tier === "STARTER"
+                              ? "1 Staff / Branch (2 Total)"
+                              : plan.tier === "GROWTH"
+                              ? "3 Staff / Branch (9 Total)"
+                              : "Unlimited Staff"}
+                          </span>
+                        </li>
+                      </ul>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleInitiateUpgrade(plan.id)}
+                      disabled={initiatingPay}
+                      className={`w-full py-3 px-3 rounded-xl font-bold text-xs sm:text-sm shadow-md transition active:scale-95 flex items-center justify-center gap-2 cursor-pointer ${
+                        isCurrent
+                          ? "bg-amber-600 hover:bg-amber-500 text-white"
+                          : isHigher
+                          ? "bg-brand-primary hover:opacity-90 text-white"
+                          : "bg-slate-800 hover:bg-slate-700 text-white"
+                      }`}
+                    >
+                      {initiatingPay ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : isCurrent ? (
+                        <RefreshCw className="h-4 w-4" />
+                      ) : isHigher ? (
+                        <Sparkles className="h-4 w-4" />
+                      ) : (
+                        <ArrowRight className="h-4 w-4" />
+                      )}
+                      <span>
+                        {isCurrent
+                          ? `রিনিউ করুন (Renew)`
+                          : isHigher
+                          ? `আপগ্রেড করুন (Upgrade)`
+                          : `সুইচ করুন (Switch)`}
+                      </span>
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Footer Quick Links */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+              <div className="text-xs text-slate-500 flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                <span>SSLCOMMERZ পেমেন্ট সম্পন্ন হওয়ামাত্রই ড্যাশবোর্ড তৎক্ষণাৎ আনলক হবে।</span>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowOwnerExpiryModal(false);
+                    handleNavigate("subscription_history");
+                  }}
+                  className="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 text-slate-700 dark:text-slate-300 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer"
+                >
+                  <History className="h-3.5 w-3.5 text-brand-primary" />
+                  <span>পেমেন্ট হিস্ট্রি দেখুন</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowOwnerExpiryModal(false);
+                    handleNavigate("subscription_plans");
+                  }}
+                  className="px-3.5 py-2 rounded-xl bg-brand-primary/10 text-brand-primary hover:bg-brand-primary/20 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer"
+                >
+                  <span>সব প্ল্যান দেখুন</span>
+                  <ArrowRight className="h-3 w-3" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🔒 Branch Staff Expiry Popup Modal (For Cashiers, Managers, Executives) */}
+      {showStaffExpiryModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
+          <div className="max-w-md w-full bg-white dark:bg-slate-900 rounded-3xl border border-amber-500/30 shadow-2xl p-6 sm:p-8 text-center space-y-6 relative">
+            <button
+              type="button"
+              onClick={() => setShowStaffExpiryModal(false)}
+              className="absolute top-4 right-4 p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-white transition cursor-pointer"
+            >
+              <X className="h-5 w-5" />
+            </button>
+
+            <div className="h-16 w-16 rounded-3xl bg-amber-500/10 border border-amber-500/30 text-amber-500 mx-auto flex items-center justify-center shadow-lg">
+              <Clock className="h-8 w-8 animate-pulse" />
+            </div>
+
+            <div className="space-y-2">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                Subscription Expired
+              </div>
+              <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
+                সাবস্ক্রিপশনের মেয়াদ শেষ হয়ে গেছে
+              </h2>
+              <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+                আপনার ফার্মেসি <strong>{tenantProfile?.name || "your pharmacy"}</strong>-এর সাবস্ক্রিপশন বিলিং মেয়াদ শেষ হয়ে গেছে।
+              </p>
+              <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-xs font-bold text-amber-800 dark:text-amber-300">
+                অনুগ্রহ করে আপনার ফার্মেসি ওনার (Pharmacy Owner) এর সাথে যোগাযোগ করুন যাতে তিনি সাবস্ক্রিপশন প্ল্যান রিনিউ করেন।
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={logout}
+              className="w-full py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-sm transition cursor-pointer shadow-md"
+            >
+              সাইন আউট করুন
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 
@@ -550,7 +705,84 @@ export default function RoleBasedDashboard() {
     const isOwner = user?.role === "COMPANY_OWNER" || user?.role === "SUPER_ADMIN";
     const isBranchManager = user?.role === "BRANCH_MANAGER" || user?.pharmacyRoleName?.toLowerCase().includes("branch manager");
 
-    switch (activeModule) {
+    // Subscription Expired Restriction View
+    if (isExpired) {
+      if (user?.role === "COMPANY_OWNER") {
+        if (displayedModule === "subscription" || displayedModule === "subscription_plans") {
+          return <SubscriptionModule onNavigate={handleNavigate} />;
+        }
+        if (displayedModule === "subscription_history") {
+          return <SubscriptionHistoryView onNavigate={handleNavigate} />;
+        }
+        return (
+          <div className="p-8 sm:p-12 text-center bg-white dark:bg-slate-900 rounded-3xl border-2 border-amber-500/40 shadow-xl max-w-2xl mx-auto my-12 space-y-6">
+            <div className="h-20 w-20 rounded-3xl bg-amber-500/10 border border-amber-500/30 text-amber-500 mx-auto flex items-center justify-center shadow-lg">
+              <Clock className="h-10 w-10 animate-pulse" />
+            </div>
+            <div className="space-y-2">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                Subscription Expired
+              </div>
+              <h2 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">
+                আপনার সাবস্ক্রিপশনের মেয়াদ শেষ হয়ে গেছে!
+              </h2>
+              <p className="text-sm text-slate-500 dark:text-slate-400 max-w-lg mx-auto leading-relaxed">
+                আপনার ফার্মেসি <strong>{tenantProfile?.name || "Your Pharmacy"}</strong>-এর সাবস্ক্রিপশনের মেয়াদ শেষ হয়ে গেছে। সেলস, ইনভেন্টরি ও পিওএস কার্যক্রম পরিচালনা করতে অনুগ্রহ করে প্ল্যান রিনিউ অথবা আপগ্রেড করুন।
+              </p>
+            </div>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowOwnerExpiryModal(true)}
+                className="w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-brand-primary hover:opacity-90 text-white font-bold text-sm shadow-lg transition active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Sparkles className="h-4 w-4" />
+                <span>রিনিউ অথবা আপগ্রেড করুন</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleNavigate("subscription_history")}
+                className="w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-sm transition active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <History className="h-4 w-4 text-brand-primary" />
+                <span>সাবস্ক্রিপশন হিস্ট্রি দেখুন</span>
+              </button>
+            </div>
+          </div>
+        );
+      } else {
+        return (
+          <div className="p-8 sm:p-12 text-center bg-white dark:bg-slate-900 rounded-3xl border border-amber-500/30 shadow-xl max-w-lg mx-auto my-12 space-y-6">
+            <div className="h-16 w-16 rounded-3xl bg-amber-500/10 border border-amber-500/30 text-amber-500 mx-auto flex items-center justify-center shadow-lg">
+              <Clock className="h-8 w-8 animate-pulse" />
+            </div>
+            <div className="space-y-2">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                Subscription Expired
+              </div>
+              <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
+                সাবস্ক্রিপশনের মেয়াদ শেষ হয়ে গেছে
+              </h2>
+              <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+                আপনার ফার্মেসির সাবস্ক্রিপশন বিলিং মেয়াদ শেষ হয়ে গেছে। সিস্টেমের সমস্ত কার্যক্রম সাময়িকভাবে স্থগিত রয়েছে।
+              </p>
+              <p className="text-xs font-semibold text-amber-600 dark:text-amber-400">
+                অনুগ্রহ করে আপনার ফার্মেসি ওনার (Pharmacy Owner) এর সাথে যোগাযোগ করুন যাতে তিনি সাবস্ক্রিপশন প্ল্যান রিনিউ করেন।
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={logout}
+              className="w-full py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-sm transition cursor-pointer"
+            >
+              সাইন আউট করুন
+            </button>
+          </div>
+        );
+      }
+    }
+
+    switch (displayedModule) {
       // 📊 Overview & Dashboard
       case "overview":
         if (!isOwner && !hasPermission("dashboard.view")) {
@@ -571,6 +803,12 @@ export default function RoleBasedDashboard() {
           return <TenantAccessRestricted moduleName="Sales History" requiredPerm="pos.history" />;
         }
         return <SalesHistoryView onNavigate={handleNavigate} />;
+
+      case "pos_due_sales":
+        if (!isOwner && !hasPermission("pos.history")) {
+          return <TenantAccessRestricted moduleName="Due Sales & Collections" requiredPerm="pos.history" />;
+        }
+        return <DueSalesView onNavigate={handleNavigate} />;
 
       case "pos_vat":
         if (!isOwner && !hasPermission("pos.vat")) {
@@ -762,7 +1000,7 @@ export default function RoleBasedDashboard() {
 
       case "cat_list":
         if (!isOwner && !hasPermission("category.subcategories") && !hasPermission("category.manage")) {
-          return <TenantAccessRestricted moduleName="Manage Subcategories" requiredPerm="category.subcategories" />;
+          return <TenantAccessRestricted moduleName="Category List" requiredPerm="category.subcategories" />;
         }
         return <CategoryListView onNavigate={handleNavigate} />;
 
@@ -786,10 +1024,6 @@ export default function RoleBasedDashboard() {
         return (
           <ProductListView
             onNavigate={handleNavigate}
-            onEditProduct={(p) => {
-              setEditingProduct(p);
-              handleNavigate("inv_add_product");
-            }}
           />
         );
 
@@ -933,6 +1167,28 @@ export default function RoleBasedDashboard() {
           />
         );
 
+      case "loc_create_custom":
+        if (!isOwner && !hasPermission("location.create_custom") && !hasPermission("location.create_rack")) {
+          return <TenantAccessRestricted moduleName="Create Location" requiredPerm="location.create_custom" />;
+        }
+        return (
+          <CreateCustomLocationView
+            selectedBranchId={selectedBranchId}
+            onNavigate={handleNavigate}
+          />
+        );
+
+      case "loc_custom_list":
+        if (!isOwner && !hasPermission("location.custom_list") && !hasPermission("location.rack_list")) {
+          return <TenantAccessRestricted moduleName="Location List" requiredPerm="location.custom_list" />;
+        }
+        return (
+          <CustomLocationListView
+            selectedBranchId={selectedBranchId}
+            onNavigate={handleNavigate}
+          />
+        );
+
       // 🏭 Supplier Management Subpages
       case "sup_create_supplier":
         if (!isOwner && !hasPermission("supplier.manage")) {
@@ -977,7 +1233,13 @@ export default function RoleBasedDashboard() {
         if (!isOwner && !hasPermission("branches.manage")) {
           return <TenantAccessRestricted moduleName="Branch Network" requiredPerm="branches.manage" />;
         }
-        return <BranchModule />;
+        return <BranchModule onNavigate={handleNavigate} />;
+
+      case "branch_create":
+        if (!isOwner && !hasPermission("branches.manage")) {
+          return <TenantAccessRestricted moduleName="Create Branch" requiredPerm="branches.manage" />;
+        }
+        return <BranchCreateView onNavigate={handleNavigate} />;
 
       case "staff":
         if (!isOwner && !hasPermission("staff.view")) {
@@ -1018,10 +1280,17 @@ export default function RoleBasedDashboard() {
         return <ProfileModule />;
 
       case "subscription":
+      case "subscription_plans":
         if (!isOwner) {
           return <TenantAccessRestricted moduleName="Subscription Plan" requiredPerm="Owner Only" />;
         }
-        return <SubscriptionModule />;
+        return <SubscriptionModule onNavigate={handleNavigate} />;
+
+      case "subscription_history":
+        if (!isOwner) {
+          return <TenantAccessRestricted moduleName="Payment History" requiredPerm="Owner Only" />;
+        }
+        return <SubscriptionHistoryView onNavigate={handleNavigate} />;
 
       case "settings":
         if (!isOwner && !hasPermission("settings.manage")) {

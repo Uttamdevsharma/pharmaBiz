@@ -47,15 +47,19 @@ interface SalaryPackage {
   paymentDetails?: string | null;
 }
 
+// Persistent module cache
+let cachedDisbursements: DisbursementItem[] = [];
+let cachedSalaryConfig: SalaryPackage | null = null;
+
 export function StaffSalaryHistoryView({ onBack }: { onBack?: () => void }) {
   const { user } = useAuth();
-  const [disbursements, setDisbursements] = useState<DisbursementItem[]>([]);
-  const [salaryConfig, setSalaryConfig] = useState<SalaryPackage | null>(null);
+  const [disbursements, setDisbursements] = useState<DisbursementItem[]>(() => cachedDisbursements);
+  const [salaryConfig, setSalaryConfig] = useState<SalaryPackage | null>(() => cachedSalaryConfig);
   const [summary, setSummary] = useState<{ totalDisbursed: number; totalPayments: number }>({
     totalDisbursed: 0,
     totalPayments: 0,
   });
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const loadHistory = async () => {
@@ -184,21 +188,16 @@ export function StaffSalaryHistoryView({ onBack }: { onBack?: () => void }) {
           <span className="text-xs text-slate-400">{disbursements.length} records</span>
         </div>
 
-        {loading ? (
-          <div className="p-12 text-center text-slate-400 flex flex-col items-center gap-2">
-            <Loader2 className="h-6 w-6 animate-spin text-brand-primary" />
-            <span className="text-xs">Loading payment records...</span>
-          </div>
-        ) : disbursements.length === 0 ? (
+        {disbursements.length === 0 ? (
           <div className="p-12 text-center text-slate-400 space-y-3">
             <div className="h-12 w-12 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-400 flex items-center justify-center mx-auto">
               <Receipt className="h-6 w-6" />
             </div>
             <div className="text-sm font-semibold text-slate-600 dark:text-slate-300">
-              No salary disbursement records found
+              {loading ? "Loading payment records..." : "No salary disbursement records found"}
             </div>
             <p className="text-xs text-slate-400 max-w-sm mx-auto">
-              When monthly salary disbursements are paid by your Branch/Accounts Manager, your vouchers will appear here.
+              {!loading && "When monthly salary disbursements are paid by your Branch/Accounts Manager, your vouchers will appear here."}
             </p>
           </div>
         ) : (

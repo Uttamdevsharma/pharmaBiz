@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.SuperAdminService = void 0;
 const prisma_1 = require("../../app/lib/prisma");
 const email_service_1 = require("../../app/lib/email.service");
+const planLimits_1 = require("../../app/lib/planLimits");
 class SuperAdminService {
     /**
      * Helper: Calculate Prisma date range filter for date presets and custom date ranges
@@ -64,6 +65,13 @@ class SuperAdminService {
         if (existing) {
             throw new Error(`A subscription plan already exists for tier ${data.tier}. Please update the existing plan.`);
         }
+        const feat = {
+            ...(data.features || {}),
+            ...(data.maxStaffPerBranch !== undefined && { maxStaffPerBranch: data.maxStaffPerBranch }),
+            ...(data.maxTotalStaff !== undefined && { maxTotalStaff: data.maxTotalStaff }),
+            ...(data.trialDays !== undefined && { trialDays: data.trialDays }),
+            ...(data.yearlyDiscountPercent !== undefined && { yearlyDiscountPercent: data.yearlyDiscountPercent }),
+        };
         return await prisma_1.prisma.subscriptionPlan.create({
             data: {
                 name: data.name,
@@ -71,19 +79,30 @@ class SuperAdminService {
                 price: data.price,
                 billingCycle: data.billingCycle,
                 maxBranches: data.maxBranches,
-                features: data.features || {},
+                features: feat,
                 isActive: data.isActive,
             },
         });
     }
     static async listPlans() {
-        return await prisma_1.prisma.subscriptionPlan.findMany({
+        const plans = await prisma_1.prisma.subscriptionPlan.findMany({
             orderBy: { price: "asc" },
             include: {
                 _count: {
                     select: { subscriptions: true },
                 },
             },
+        });
+        return plans.map((p) => {
+            const feat = (typeof p.features === "object" && p.features !== null) ? p.features : {};
+            const fallback = planLimits_1.CENTRAL_PLAN_DEFINITIONS[p.tier] || planLimits_1.CENTRAL_PLAN_DEFINITIONS.STARTER;
+            return {
+                ...p,
+                maxStaffPerBranch: feat.maxStaffPerBranch ?? fallback.maxStaffPerBranch ?? 1,
+                maxTotalStaff: feat.maxTotalStaff ?? fallback.maxTotalStaff ?? (p.maxBranches * (feat.maxStaffPerBranch ?? 1)),
+                trialDays: 0,
+                yearlyDiscountPercent: feat.yearlyDiscountPercent ?? 0,
+            };
         });
     }
     static async getPlanById(id) {
@@ -104,13 +123,30 @@ class SuperAdminService {
         if (!plan) {
             throw new Error("Subscription plan not found");
         }
-        return plan;
+        const feat = (typeof plan.features === "object" && plan.features !== null) ? plan.features : {};
+        const fallback = planLimits_1.CENTRAL_PLAN_DEFINITIONS[plan.tier] || planLimits_1.CENTRAL_PLAN_DEFINITIONS.STARTER;
+        return {
+            ...plan,
+            maxStaffPerBranch: feat.maxStaffPerBranch ?? fallback.maxStaffPerBranch ?? 1,
+            maxTotalStaff: feat.maxTotalStaff ?? fallback.maxTotalStaff ?? (plan.maxBranches * (feat.maxStaffPerBranch ?? 1)),
+            trialDays: 0,
+            yearlyDiscountPercent: feat.yearlyDiscountPercent ?? 0,
+        };
     }
     static async updatePlan(id, data) {
         const plan = await prisma_1.prisma.subscriptionPlan.findUnique({ where: { id } });
         if (!plan) {
             throw new Error("Subscription plan not found");
         }
+        const currentFeatures = (typeof plan.features === "object" && plan.features !== null) ? plan.features : {};
+        const updatedFeatures = {
+            ...currentFeatures,
+            ...(data.features || {}),
+            ...(data.maxStaffPerBranch !== undefined && { maxStaffPerBranch: data.maxStaffPerBranch }),
+            ...(data.maxTotalStaff !== undefined && { maxTotalStaff: data.maxTotalStaff }),
+            ...(data.trialDays !== undefined && { trialDays: data.trialDays }),
+            ...(data.yearlyDiscountPercent !== undefined && { yearlyDiscountPercent: data.yearlyDiscountPercent }),
+        };
         return await prisma_1.prisma.subscriptionPlan.update({
             where: { id },
             data: {
@@ -118,7 +154,7 @@ class SuperAdminService {
                 ...(data.price !== undefined && { price: data.price }),
                 ...(data.billingCycle && { billingCycle: data.billingCycle }),
                 ...(data.maxBranches !== undefined && { maxBranches: data.maxBranches }),
-                ...(data.features && { features: data.features }),
+                features: updatedFeatures,
                 ...(data.isActive !== undefined && { isActive: data.isActive }),
             },
         });
@@ -163,6 +199,13 @@ class SuperAdminService {
         }
         if (query.isActive !== undefined) {
             where.isActive = query.isActive;
+        }
+        if (query.subscriptionStatus) {
+            where.subscriptions = {
+                some: {
+                    status: query.subscriptionStatus,
+                },
+            };
         }
         const dateRange = SuperAdminService.getDateRangeFilter(query.datePreset, query.startDate, query.endDate);
         if (dateRange) {
@@ -351,9 +394,21 @@ class SuperAdminService {
     /**
      * Platform Payments & Transactions
      */
-    static async listPlatformPayments(page = 1, limit = 50) {
+    static async listPlatformPayments(page = 1, limit = 50, datePreset, startDate, endDate, search) {
         const skip = (page - 1) * limit;
         const where = { tenant: { name: { not: "Platform HQ" } } };
+        if (search && search.trim()) {
+            const s = search.trim();
+            where.OR = [
+                { tranId: { contains: s, mode: "insensitive" } },
+                { paymentMethod: { contains: s, mode: "insensitive" } },
+                { tenant: { name: { contains: s, mode: "insensitive" } } },
+            ];
+        }
+        const dateRange = SuperAdminService.getDateRangeFilter(datePreset, startDate, endDate);
+        if (dateRange) {
+            where.createdAt = dateRange;
+        }
         const [total, payments] = await Promise.all([
             prisma_1.prisma.payment.count({ where }),
             prisma_1.prisma.payment.findMany({

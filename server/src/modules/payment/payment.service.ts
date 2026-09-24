@@ -212,10 +212,33 @@ export class PaymentService {
       // 2. Activate Subscription
       let updatedSubscription = null;
       if (payment.subscriptionId) {
+        const subRecord = await tx.subscription.findUnique({
+          where: { id: payment.subscriptionId },
+          include: { plan: true },
+        });
+
+        const billingCycle = subRecord?.plan?.billingCycle || "MONTHLY";
+        const durationDays = billingCycle === "YEARLY" ? 365 : 30;
+        const now = new Date();
+        const endDate = new Date(now.getTime() + durationDays * 24 * 60 * 60 * 1000);
+
+        // Mark any older subscriptions for this tenant as EXPIRED
+        await tx.subscription.updateMany({
+          where: {
+            tenantId: payment.tenantId,
+            id: { not: payment.subscriptionId },
+            status: "ACTIVE",
+          },
+          data: { status: "EXPIRED" },
+        });
+
         updatedSubscription = await tx.subscription.update({
           where: { id: payment.subscriptionId },
           data: {
             status: "ACTIVE",
+            startDate: now,
+            endDate: endDate,
+            expiryReminderSentAt: null,
           },
           include: { plan: true },
         });
@@ -287,13 +310,17 @@ export class PaymentService {
   }
 
   /**
-   * Get Tenant Payment History
+   * Get Tenant Payment History (Only successful, completed subscription payments)
    */
   static async getTenantPayments(tenantId: string) {
     return await (prisma as any).payment.findMany({
-      where: { tenantId },
+      where: {
+        tenantId,
+        status: "VALIDATED",
+      },
       orderBy: { createdAt: "desc" },
       include: {
+        tenant: true,
         subscription: {
           include: { plan: true },
         },

@@ -23,6 +23,7 @@ import { getClientPlanConfig } from "@/lib/planLimits";
 import { useBranchContext } from "@/context/BranchContext";
 import { OwnerModule } from "./DashboardSidebar";
 import { ChangePasswordModal } from "./ChangePasswordModal";
+import { ThemeToggle } from "@/components/common/ThemeToggle";
 
 interface DashboardHeaderProps {
   tenantName?: string;
@@ -164,19 +165,10 @@ export function DashboardHeader({
             </div>
           </Link>
 
-          <span className="text-slate-300 dark:text-slate-700 hidden md:inline">/</span>
-
-          {isTrialTier ? (
-            <span className="hidden md:inline-flex items-center gap-1.5 px-2.5 py-0.5 xl:px-3 xl:py-1 rounded-full text-[11px] xl:text-xs font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shrink-0">
-              <Clock className="h-3 w-3 xl:h-3.5 xl:w-3.5" />
-              {trialDaysRemaining !== undefined ? `Free Trial (${trialDaysRemaining}d left)` : "Plan 0 - Free Trial"}
-            </span>
-          ) : (
-            <span className="hidden md:inline-flex items-center gap-1.5 px-2.5 py-0.5 xl:px-3 xl:py-1 rounded-full text-[11px] xl:text-xs font-bold uppercase tracking-wider bg-brand-primary/10 text-brand-primary border border-brand-primary/20 shrink-0">
-              <Sparkles className="h-3 w-3 xl:h-3.5 xl:w-3.5" />
-              {planConfig.name}
-            </span>
-          )}
+          <span className="hidden md:inline-flex items-center gap-1.5 px-2.5 py-0.5 xl:px-3 xl:py-1 rounded-full text-[11px] xl:text-xs font-bold uppercase tracking-wider bg-brand-primary/10 text-brand-primary border border-brand-primary/20 shrink-0">
+            <Sparkles className="h-3 w-3 xl:h-3.5 xl:w-3.5" />
+            {planConfig.name}
+          </span>
         </div>
 
         <div className="flex items-center gap-2 sm:gap-4 shrink-0">
@@ -211,6 +203,9 @@ export function DashboardHeader({
           )}
 
           <div className="h-4 w-[1px] bg-slate-200 dark:bg-slate-800 hidden xs:block" />
+
+          {/* Quick Theme Toggle Button */}
+          <ThemeToggle />
 
           {/* Top-Right Staff Profile Menu */}
           <div className="relative" ref={menuRef}>
@@ -313,6 +308,9 @@ export function DashboardHeader({
                     <History className="h-4 w-4 text-slate-400" />
                     <span>Salary History</span>
                   </button>
+
+                  {/* Dark / Light Mode Option */}
+                  <ThemeToggle variant="dropdown-item" />
                 </div>
 
                 <div className="my-1.5 h-[1px] bg-slate-200 dark:bg-slate-800" />

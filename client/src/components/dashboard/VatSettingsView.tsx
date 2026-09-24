@@ -16,14 +16,17 @@ interface VatSettingsViewProps {
   onNavigate?: (module: OwnerModule) => void;
 }
 
+// Persistent module cache
+let cachedActiveVat: number | null = null;
+
 export function VatSettingsView({ onNavigate }: VatSettingsViewProps = {}) {
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   // Active saved VAT rate from the database
-  const [activeVat, setActiveVat] = useState<number>(0);
+  const [activeVat, setActiveVat] = useState<number>(() => cachedActiveVat ?? 0);
 
   // New input value to update VAT (starts empty, cleared after saving)
   const [vatInput, setVatInput] = useState<string>("");
@@ -36,6 +39,7 @@ export function VatSettingsView({ onNavigate }: VatSettingsViewProps = {}) {
       if (res.success && res.data) {
         const rate = typeof res.data.vatPercent === "number" ? res.data.vatPercent : 0;
         setActiveVat(rate);
+        cachedActiveVat = rate;
       }
     } catch (err: any) {
       console.error("Failed to load VAT settings", err);
@@ -90,10 +94,9 @@ export function VatSettingsView({ onNavigate }: VatSettingsViewProps = {}) {
     }
   };
 
-  if (loading) {
+  if (loading && cachedActiveVat === null) {
     return (
-      <div className="flex flex-col items-center justify-center py-28 text-slate-500 gap-3">
-        <Loader2 className="h-8 w-8 animate-spin text-emerald-600" />
+      <div className="flex flex-col items-center justify-center py-28 text-slate-500 gap-2">
         <span className="text-xs xl:text-sm font-bold">Loading VAT configuration...</span>
       </div>
     );

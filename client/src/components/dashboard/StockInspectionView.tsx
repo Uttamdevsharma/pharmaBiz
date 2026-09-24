@@ -349,9 +349,8 @@ export function StockInspectionView({ transferId, onNavigate }: StockInspectionV
 
   if (loading) {
     return (
-      <div className="py-24 flex flex-col items-center justify-center gap-3 text-slate-400 text-xs">
-        <Loader2 className="h-8 w-8 animate-spin text-brand-primary" />
-        <span>Loading shipment inspection workspace...</span>
+      <div className="py-24 text-center text-slate-400 text-xs">
+        <p className="font-semibold text-slate-500">Preparing shipment workspace...</p>
       </div>
     );
   }
@@ -862,7 +861,7 @@ export function StockInspectionView({ transferId, onNavigate }: StockInspectionV
                 <Package className="h-4 w-4 text-slate-400" />
               </div>
               <div className="text-2xl font-black font-mono text-slate-900 dark:text-white">
-                ৳{totalSentValue.toFixed(2)}
+                ৳{Math.round(totalSentValue).toLocaleString("en-BD")}
               </div>
               <p className="text-xs text-slate-500">
                 {totalSentUnits} total units dispatched from {transfer.fromBranch?.name}.
@@ -876,7 +875,7 @@ export function StockInspectionView({ transferId, onNavigate }: StockInspectionV
                 <CheckCircle2 className="h-4 w-4 text-emerald-600" />
               </div>
               <div className="text-2xl font-black font-mono text-emerald-700 dark:text-emerald-200">
-                ৳{totalReceivedValue.toFixed(2)}
+                ৳{Math.round(totalReceivedValue).toLocaleString("en-BD")}
               </div>
               <p className="text-xs text-emerald-700/80 dark:text-emerald-400">
                 {totalReceivedUnits} usable units will be added to {transfer.toBranch?.name} inventory.
@@ -890,7 +889,7 @@ export function StockInspectionView({ transferId, onNavigate }: StockInspectionV
                 <AlertTriangle className="h-4 w-4 text-amber-600" />
               </div>
               <div className="text-2xl font-black font-mono text-amber-700 dark:text-amber-200">
-                ৳{totalLossValue.toFixed(2)}
+                ৳{Math.round(totalLossValue).toLocaleString("en-BD")}
               </div>
               <p className="text-xs text-amber-700/80 dark:text-amber-400">
                 {totalDamagedUnits + totalMissingUnits} damaged/missing units recorded as company stock loss.

@@ -111,10 +111,13 @@ function getPermissionIcon(permId: string, category: string): React.ComponentTyp
   }
 }
 
+// Persistent module cache
+let cachedAllRoles: PharmacyRole[] = [];
+
 export function RolesModule() {
   const { user } = useAuth();
-  const [roles, setRoles] = useState<PharmacyRole[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [roles, setRoles] = useState<PharmacyRole[]>(() => cachedAllRoles);
+  const [loading, setLoading] = useState(false);
   const [actionMsg, setActionMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   // Modal state
@@ -136,6 +139,7 @@ export function RolesModule() {
       const res = await fetchApi<PharmacyRole[]>("/users/roles");
       if (res.success && res.data) {
         setRoles(res.data);
+        cachedAllRoles = res.data;
       }
     } catch (err: any) {
       setActionMsg({ type: "error", text: err.message || "Failed to load roles" });
@@ -366,9 +370,8 @@ export function RolesModule() {
       )}
 
       {/* Roles Cards Grid */}
-      {loading ? (
-        <div className="py-20 flex flex-col items-center justify-center text-slate-400 gap-3">
-          <Loader2 className="h-7 w-7 animate-spin text-brand-primary" />
+      {loading && roles.length === 0 ? (
+        <div className="py-20 flex flex-col items-center justify-center text-slate-400 gap-2">
           <span className="text-xs font-medium">Loading pharmacy role matrix...</span>
         </div>
       ) : (

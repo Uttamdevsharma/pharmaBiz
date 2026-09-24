@@ -13,6 +13,7 @@ function PaymentSuccessContent() {
 
   const [loading, setLoading] = useState(true);
   const [subData, setSubData] = useState<any>(null);
+  const [hasToken, setHasToken] = useState(false);
 
   useEffect(() => {
     async function checkSubscriptionStatus() {
@@ -26,6 +27,9 @@ function PaymentSuccessContent() {
       } finally {
         setLoading(false);
       }
+    }
+    if (typeof window !== "undefined" && localStorage.getItem("token")) {
+      setHasToken(true);
     }
     checkSubscriptionStatus();
   }, []);
@@ -73,11 +77,11 @@ function PaymentSuccessContent() {
         </div>
 
         <Link
-          href={typeof window !== "undefined" && localStorage.getItem("token") ? "/dashboard" : "/login?payment=success"}
+          href={hasToken ? "/dashboard" : "/login?payment=success"}
           className="w-full py-3.5 rounded-xl bg-brand-primary text-white font-bold text-sm shadow-md hover:opacity-90 transition active:scale-95 flex items-center justify-center gap-2"
         >
           <Store className="h-4 w-4" />
-          <span>{typeof window !== "undefined" && localStorage.getItem("token") ? "Enter Pharmacy Owner Dashboard" : "Login to Enter Dashboard"}</span>
+          <span>{hasToken ? "Enter Pharmacy Owner Dashboard" : "Login to Enter Dashboard"}</span>
           <ArrowRight className="h-4 w-4" />
         </Link>
 

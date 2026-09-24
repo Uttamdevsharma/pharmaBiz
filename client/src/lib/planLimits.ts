@@ -25,29 +25,13 @@ export interface PlanConfig {
   features: PlanFeatureMap;
 }
 
-export const CENTRAL_CLIENT_PLANS: Record<Tier, PlanConfig> = {
-  TRIAL: {
-    tier: "TRIAL",
-    planNumber: 0,
-    name: "Plan 0 - Free Trial",
-    badge: "7-Day Trial",
-    price: 0,
-    billingCycle: "7 Days",
-    trialDays: 7,
-    maxBranches: 1,
-    maxStaffPerBranch: 1,
-    maxTotalStaff: 1,
-    features: {
-      branches: "1 Branch (Main Branch Only)",
-      staff: "1 Staff Member",
-      inventoryTransfers: false,
-      regionalAdmin: false,
-      customAudit: false,
-      apiAccess: false,
-      branchPriceOverride: false,
-      auditReports: "Basic Audit Trail (7-Day Trial)",
-    },
-  },
+export const TIER_ORDER: Record<string, number> = {
+  STARTER: 1,
+  GROWTH: 2,
+  ENTERPRISE: 3,
+};
+
+export const CENTRAL_CLIENT_PLANS: Record<Exclude<Tier, "TRIAL">, PlanConfig> = {
   STARTER: {
     tier: "STARTER",
     planNumber: 1,
@@ -114,8 +98,8 @@ export const CENTRAL_CLIENT_PLANS: Record<Tier, PlanConfig> = {
 };
 
 export function getClientPlanConfig(tier?: string): PlanConfig {
-  const normalizedTier = (tier || "TRIAL").toUpperCase() as Tier;
-  return CENTRAL_CLIENT_PLANS[normalizedTier] || CENTRAL_CLIENT_PLANS.TRIAL;
+  const normalizedTier = (tier || "STARTER").toUpperCase() as Exclude<Tier, "TRIAL">;
+  return CENTRAL_CLIENT_PLANS[normalizedTier] || CENTRAL_CLIENT_PLANS.STARTER;
 }
 
 export function calculateRemainingTrialDays(endDate?: string | Date): number {

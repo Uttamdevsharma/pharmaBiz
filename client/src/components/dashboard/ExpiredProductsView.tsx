@@ -250,18 +250,15 @@ export function ExpiredProductsView({ selectedBranchId: propBranchId }: ExpiredP
 
       {/* Expired & Near-Expiry Table */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-        {loading ? (
-          <div className="p-16 flex flex-col items-center justify-center text-slate-400">
-            <Loader2 className="h-8 w-8 animate-spin text-brand-primary mb-2" />
-            <p className="text-xs">Analyzing branch expiry ledger...</p>
-          </div>
-        ) : filteredItems.length === 0 ? (
+        {filteredItems.length === 0 ? (
           <div className="p-16 text-center text-slate-400">
             <CheckCircle2 className="h-10 w-10 mx-auto text-emerald-500 mb-3" />
             <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
-              No expired or near-expiry batches in this branch!
+              {loading ? "Checking branch expiry records..." : "No expired or near-expiry batches in this branch!"}
             </p>
-            <p className="text-xs mt-1 text-slate-400">All medicine batches are within safe shelf-life limits.</p>
+            <p className="text-xs mt-1 text-slate-400">
+              {!loading && "All medicine batches are within safe shelf-life limits."}
+            </p>
           </div>
         ) : (
           <div className="overflow-x-auto">

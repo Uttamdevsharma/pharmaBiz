@@ -9,7 +9,7 @@ import { ArrowRight, Sparkles, CheckCircle2 } from "lucide-react";
 
 export default function Home() {
   return (
-    <div className="flex min-h-screen flex-col bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 selection:bg-emerald-500 selection:text-white">
+    <div className="flex min-h-screen flex-col bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
       {/* Dynamic 3-Item Navbar */}
       <Navbar />
 
@@ -32,7 +32,7 @@ export default function Home() {
             </h2>
 
             <p className="text-base sm:text-lg text-slate-600 dark:text-slate-300 max-w-2xl mx-auto leading-relaxed">
-              Start with our <strong>7-Day Free Trial</strong> or choose from Starter, Growth, and Enterprise plans starting at ৳500/month.
+              Choose from Starter, Growth, and Enterprise plans starting at ৳500/month.
               All plans include 100% offline POS resilience.
             </p>
 

@@ -19,6 +19,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
 } from "lucide-react";
+import { ThemeToggle } from "@/components/common/ThemeToggle";
 
 interface AdminHeaderProps {
   activeTab: string;
@@ -142,62 +143,72 @@ export function AdminHeader({
           )}
         </div>
 
-        {/* Right Nav: Profile Button with Simple Dropdown */}
-        <div className="relative" ref={dropdownRef}>
-          <button
-            onClick={() => setDropdownOpen(!dropdownOpen)}
-            className="flex items-center gap-2.5 p-1.5 sm:px-3 sm:py-1.5 rounded-2xl hover:bg-slate-100 dark:hover:bg-slate-800/80 border border-transparent hover:border-slate-200 dark:hover:border-slate-700 transition cursor-pointer"
-            aria-expanded={dropdownOpen}
-            aria-haspopup="true"
-          >
-            <div className="h-8 w-8 rounded-xl bg-brand-primary/10 text-brand-primary border border-brand-primary/20 flex items-center justify-center font-bold text-xs shrink-0">
-              {initials || <UserIcon className="h-4 w-4" />}
-            </div>
+        <div className="flex items-center gap-2 sm:gap-3">
+          {/* Quick Theme Toggle Button */}
+          <ThemeToggle />
 
-            <div className="text-left hidden sm:block">
-              <div className="text-xs font-bold text-slate-900 dark:text-white leading-tight">
-                {user?.name || user?.username || "Platform Staff"}
+          {/* Right Nav: Profile Button with Simple Dropdown */}
+          <div className="relative" ref={dropdownRef}>
+            <button
+              onClick={() => setDropdownOpen(!dropdownOpen)}
+              className="flex items-center gap-2.5 p-1.5 sm:px-3 sm:py-1.5 rounded-2xl hover:bg-slate-100 dark:hover:bg-slate-800/80 border border-transparent hover:border-slate-200 dark:hover:border-slate-700 transition cursor-pointer"
+              aria-expanded={dropdownOpen}
+              aria-haspopup="true"
+            >
+              <div className="h-8 w-8 rounded-xl bg-brand-primary/10 text-brand-primary border border-brand-primary/20 flex items-center justify-center font-bold text-xs shrink-0">
+                {initials || <UserIcon className="h-4 w-4" />}
               </div>
-              <div className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
-                {user?.role || "Staff"}
+
+              <div className="text-left hidden sm:block">
+                <div className="text-xs font-bold text-slate-900 dark:text-white leading-tight">
+                  {user?.name || user?.username || "Platform Staff"}
+                </div>
+                <div className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+                  {user?.role || "Staff"}
+                </div>
               </div>
-            </div>
 
-            <ChevronDown
-              className={`h-3.5 w-3.5 text-slate-400 transition-transform duration-200 ${
-                dropdownOpen ? "rotate-180 text-brand-primary" : ""
-              }`}
-            />
-          </button>
+              <ChevronDown
+                className={`h-3.5 w-3.5 text-slate-400 transition-transform duration-200 ${
+                  dropdownOpen ? "rotate-180 text-brand-primary" : ""
+                }`}
+              />
+            </button>
 
-          {/* Profile Dropdown Menu */}
-          {dropdownOpen && (
-            <div className="absolute right-0 mt-2 w-52 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl py-1.5 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
-              <button
-                type="button"
-                onClick={() => {
-                  setDropdownOpen(false);
-                  setPasswordModalOpen(true);
-                }}
-                className="w-full px-3.5 py-2.5 text-left text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2.5 transition cursor-pointer"
-              >
-                <KeyRound className="h-4 w-4 text-slate-400" />
-                <span>Change Password</span>
-              </button>
+            {/* Profile Dropdown Menu */}
+            {dropdownOpen && (
+              <div className="absolute right-0 mt-2 w-56 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl p-1.5 z-50 animate-in fade-in slide-in-from-top-2 duration-150 space-y-0.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDropdownOpen(false);
+                    setPasswordModalOpen(true);
+                  }}
+                  className="w-full px-3 py-2 text-left text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl flex items-center gap-2.5 transition cursor-pointer"
+                >
+                  <KeyRound className="h-4 w-4 text-slate-400" />
+                  <span>Change Password</span>
+                </button>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setDropdownOpen(false);
-                  logout();
-                }}
-                className="w-full px-3.5 py-2.5 text-left text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 flex items-center gap-2.5 transition cursor-pointer"
-              >
-                <LogOut className="h-4 w-4 text-red-500" />
-                <span>Logout</span>
-              </button>
-            </div>
-          )}
+                {/* Dark / Light Mode in dropdown */}
+                <ThemeToggle variant="dropdown-item" />
+
+                <div className="my-1 h-[1px] bg-slate-200 dark:bg-slate-800" />
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDropdownOpen(false);
+                    logout();
+                  }}
+                  className="w-full px-3 py-2 text-left text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-xl flex items-center gap-2.5 transition cursor-pointer"
+                >
+                  <LogOut className="h-4 w-4 text-red-500" />
+                  <span>Logout</span>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 

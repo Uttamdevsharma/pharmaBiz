@@ -23,6 +23,8 @@ export const createSaleSchema = z.object({
   transactionRef: z.string().optional().nullable(),
   discount: z.number().nonnegative().default(0),
   discountType: z.enum(["FIXED", "PERCENT"]).default("FIXED"),
+  subTotal: z.number().nonnegative().optional(),
+  totalAmount: z.number().nonnegative().optional(),
   tax: z.number().nonnegative().default(0),
   paidAmount: z.number().nonnegative().optional(),
   notes: z.string().optional().nullable(),
@@ -52,9 +54,24 @@ export const listSalesQuerySchema = z.object({
   startDate: z.string().optional(),
   endDate: z.string().optional(),
   search: z.string().optional(),
+  hasDue: z
+    .string()
+    .optional()
+    .transform((v) => (v === "true" || v === "1" ? true : v === "false" || v === "0" ? false : undefined)),
+  paymentStatus: z.enum(["ALL", "PAID", "DUE"]).optional(),
+});
+
+export const collectDueSchema = z.object({
+  amount: z.number().positive("Collected amount must be greater than 0"),
+  paymentMethod: z.enum(["CASH", "BKASH", "NAGAD", "BANK", "CARD", "MOBILE", "OTHER"]).default("CASH"),
+  financialAccountId: z.string().optional().nullable(),
+  bankName: z.string().optional().nullable(),
+  transactionRef: z.string().optional().nullable(),
+  notes: z.string().optional().nullable(),
 });
 
 export type CreateSaleInput = z.infer<typeof createSaleSchema>;
 export type RefundSaleInput = z.infer<typeof refundSaleSchema>;
 export type VoidSaleInput = z.infer<typeof voidSaleSchema>;
 export type ListSalesQuery = z.infer<typeof listSalesQuerySchema>;
+export type CollectDueInput = z.infer<typeof collectDueSchema>;

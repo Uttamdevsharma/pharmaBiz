@@ -77,6 +77,13 @@ interface EmployeeItem {
   };
 }
 
+// Module cache across navigations
+let cachedEmployeesList: EmployeeItem[] = [];
+
+export function setCachedEmployeesData(list: EmployeeItem[]) {
+  cachedEmployeesList = list;
+}
+
 export function EmployeeListView({
   selectedBranchId: propBranchId,
   onSelectEmployee,
@@ -95,8 +102,8 @@ export function EmployeeListView({
   const isBranchManager = user?.role === "BRANCH_MANAGER" || user?.pharmacyRoleName?.toLowerCase().includes("branch manager");
   const canSetBaseSalary = isOwner || isBranchManager;
 
-  const [employees, setEmployees] = useState<EmployeeItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [employees, setEmployees] = useState<EmployeeItem[]>(() => cachedEmployeesList);
+  const [loading, setLoading] = useState(() => cachedEmployeesList.length === 0);
   const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState<"ACTIVE" | "RESIGNED" | "ALL">("ACTIVE");
@@ -113,7 +120,7 @@ export function EmployeeListView({
 
   const loadEmployees = async () => {
     try {
-      setLoading(true);
+      if (cachedEmployeesList.length === 0) setLoading(true);
       setError(null);
       const currentMonth = new Date().toISOString().slice(0, 7);
       const queryParams = new URLSearchParams();

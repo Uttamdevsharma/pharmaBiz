@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.listSalesQuerySchema = exports.voidSaleSchema = exports.refundSaleSchema = exports.createSaleSchema = exports.saleItemInputSchema = void 0;
+exports.collectDueSchema = exports.listSalesQuerySchema = exports.voidSaleSchema = exports.refundSaleSchema = exports.createSaleSchema = exports.saleItemInputSchema = void 0;
 const zod_1 = require("zod");
 exports.saleItemInputSchema = zod_1.z.object({
     productId: zod_1.z.string().min(1, "Product ID is required"),
@@ -24,6 +24,8 @@ exports.createSaleSchema = zod_1.z.object({
     transactionRef: zod_1.z.string().optional().nullable(),
     discount: zod_1.z.number().nonnegative().default(0),
     discountType: zod_1.z.enum(["FIXED", "PERCENT"]).default("FIXED"),
+    subTotal: zod_1.z.number().nonnegative().optional(),
+    totalAmount: zod_1.z.number().nonnegative().optional(),
     tax: zod_1.z.number().nonnegative().default(0),
     paidAmount: zod_1.z.number().nonnegative().optional(),
     notes: zod_1.z.string().optional().nullable(),
@@ -50,4 +52,17 @@ exports.listSalesQuerySchema = zod_1.z.object({
     startDate: zod_1.z.string().optional(),
     endDate: zod_1.z.string().optional(),
     search: zod_1.z.string().optional(),
+    hasDue: zod_1.z
+        .string()
+        .optional()
+        .transform((v) => (v === "true" || v === "1" ? true : v === "false" || v === "0" ? false : undefined)),
+    paymentStatus: zod_1.z.enum(["ALL", "PAID", "DUE"]).optional(),
+});
+exports.collectDueSchema = zod_1.z.object({
+    amount: zod_1.z.number().positive("Collected amount must be greater than 0"),
+    paymentMethod: zod_1.z.enum(["CASH", "BKASH", "NAGAD", "BANK", "CARD", "MOBILE", "OTHER"]).default("CASH"),
+    financialAccountId: zod_1.z.string().optional().nullable(),
+    bankName: zod_1.z.string().optional().nullable(),
+    transactionRef: zod_1.z.string().optional().nullable(),
+    notes: zod_1.z.string().optional().nullable(),
 });

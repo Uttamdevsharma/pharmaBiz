@@ -11,6 +11,7 @@ export interface PaginationProps {
   onPageChange: (page: number) => void;
   className?: string;
   showDetails?: boolean;
+  alwaysShow?: boolean;
 }
 
 export function Pagination({
@@ -21,8 +22,9 @@ export function Pagination({
   onPageChange,
   className = "",
   showDetails = true,
+  alwaysShow = false,
 }: PaginationProps) {
-  if (totalPages <= 1 && (!totalItems || totalItems <= pageSize)) {
+  if (!alwaysShow && totalPages <= 1 && (!totalItems || totalItems <= pageSize)) {
     return null;
   }
 

@@ -168,6 +168,18 @@ export const PHARMACY_MODULE_PERMISSIONS: PermissionDef[] = [
     category: "Location Management",
     description: "Browse branch storage layouts, inspect bin contents, and manage physical locations.",
   },
+  {
+    id: "location.create_custom",
+    name: "Create Location",
+    category: "Location Management",
+    description: "Configure custom physical storage units (refrigerators, counter desks, floor boxes).",
+  },
+  {
+    id: "location.custom_list",
+    name: "Location List",
+    category: "Location Management",
+    description: "Browse and manage non-rack custom physical storage locations.",
+  },
 
   // 7. Supplier Management
   {
@@ -385,10 +397,12 @@ export const PERMISSION_ALIASES: Record<string, string[]> = {
   ],
 
   // Location Management
-  "location.create_rack": ["location.manage", "stock.manage", "inventory.manage"],
-  "location.rack_list": ["location.view", "location.manage", "stock.manage", "inventory.manage", "stock.stock_list"],
-  "location.manage": ["location.create_rack", "location.rack_list", "stock.manage"],
-  "location.view": ["location.rack_list", "location.manage", "stock.manage"],
+  "location.create_rack": ["location.manage", "stock.manage", "inventory.manage", "location.create_custom"],
+  "location.rack_list": ["location.view", "location.manage", "stock.manage", "inventory.manage", "stock.stock_list", "location.custom_list"],
+  "location.create_custom": ["location.create_rack", "location.manage", "stock.manage"],
+  "location.custom_list": ["location.rack_list", "location.view", "location.manage", "stock.manage"],
+  "location.manage": ["location.create_rack", "location.rack_list", "location.create_custom", "location.custom_list", "stock.manage"],
+  "location.view": ["location.rack_list", "location.custom_list", "location.manage", "stock.manage"],
 
   // Supplier Management
   "supplier.view": ["supplier.manage", "suppliers.manage"],

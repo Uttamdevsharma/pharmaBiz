@@ -26,27 +26,7 @@ export interface PlanLimitDefinition {
   features: PlanFeatureMap;
 }
 
-export const CENTRAL_PLAN_DEFINITIONS: Record<PricingTierType, PlanLimitDefinition> = {
-  TRIAL: {
-    tier: "TRIAL",
-    name: "Plan 0 - Free Trial",
-    price: 0.0,
-    billingCycle: "MONTHLY",
-    trialDays: 7,
-    maxBranches: 1,
-    maxStaffPerBranch: 1,
-    maxTotalStaff: 1,
-    features: {
-      branches: "1 Branch (Main Branch Only)",
-      staff: "1 Staff Member",
-      inventoryTransfers: false,
-      regionalAdmin: false,
-      customAudit: false,
-      apiAccess: false,
-      branchPriceOverride: false,
-      auditReports: "Basic Audit Trail (7-Day Trial)",
-    },
-  },
+export const CENTRAL_PLAN_DEFINITIONS: Record<Exclude<PricingTierType, "TRIAL">, PlanLimitDefinition> = {
   STARTER: {
     tier: "STARTER",
     name: "Plan 1 - Starter",
@@ -110,8 +90,8 @@ export const CENTRAL_PLAN_DEFINITIONS: Record<PricingTierType, PlanLimitDefiniti
  * Get plan limit definition by tier
  */
 export function getPlanConfig(tier: string): PlanLimitDefinition {
-  const normalizedTier = (tier || "TRIAL").toUpperCase() as PricingTierType;
-  return CENTRAL_PLAN_DEFINITIONS[normalizedTier] || CENTRAL_PLAN_DEFINITIONS.TRIAL;
+  const normalizedTier = (tier || "STARTER").toUpperCase() as Exclude<PricingTierType, "TRIAL">;
+  return CENTRAL_PLAN_DEFINITIONS[normalizedTier] || CENTRAL_PLAN_DEFINITIONS.STARTER;
 }
 
 /**
@@ -131,6 +111,7 @@ export function getTrialRemainingDays(endDate: Date | string): number {
 export function isSubscriptionExpired(subscription: any): boolean {
   if (!subscription) return true;
   if (subscription.status === "EXPIRED" || subscription.status === "CANCELLED") return true;
+  if (subscription.status !== "ACTIVE") return true;
   if (!subscription.endDate) return false;
   return new Date(subscription.endDate).getTime() <= Date.now();
 }

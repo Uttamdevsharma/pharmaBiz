@@ -501,25 +501,25 @@ export class SupplierService {
 
     let invoiceDiscount = 0;
     if (data.discountType === "PERCENT") {
-      invoiceDiscount = (subtotalAmount * (Number(data.discountAmount) || 0)) / 100;
+      invoiceDiscount = Math.round((subtotalAmount * (Number(data.discountAmount) || 0)) / 100);
     } else if (data.discountType === "FIXED") {
-      invoiceDiscount = Number(data.discountAmount) || 0;
+      invoiceDiscount = Math.round(Number(data.discountAmount) || 0);
     }
-    const invoiceTax = Number(data.taxAmount) || 0;
+    const invoiceTax = Math.round(Number(data.taxAmount) || 0);
 
-    const computedTotal = Math.max(0, Math.round((subtotalAmount - invoiceDiscount + invoiceTax) * 100) / 100);
+    const computedTotal = Math.max(0, Math.round(subtotalAmount - invoiceDiscount + invoiceTax));
     const totalPurchaseAmount = data.totalAmount !== undefined && data.totalAmount !== null
-      ? Number(data.totalAmount)
+      ? Math.round(Number(data.totalAmount))
       : computedTotal;
 
-    const paidAmount = Number(data.paidAmount || 0);
-    const dueAmount = Math.max(0, Math.round((totalPurchaseAmount - paidAmount) * 100) / 100);
+    const paidAmount = Math.round(Number(data.paidAmount || 0));
+    const dueAmount = Math.max(0, totalPurchaseAmount - paidAmount);
     const paymentStatus = dueAmount === 0 ? "PAID" : paidAmount > 0 ? "PARTIAL" : "DUE";
 
     const noteParts: string[] = [];
     if (data.notes) noteParts.push(data.notes);
-    if (invoiceDiscount > 0) noteParts.push(`Discount: -৳${invoiceDiscount.toFixed(2)} (${data.discountType})`);
-    if (invoiceTax > 0) noteParts.push(`Tax: +৳${invoiceTax.toFixed(2)}`);
+    if (invoiceDiscount > 0) noteParts.push(`Discount: -৳${invoiceDiscount} (${data.discountType})`);
+    if (invoiceTax > 0) noteParts.push(`Tax: +৳${invoiceTax}`);
     const finalNotes = noteParts.length > 0 ? noteParts.join(" | ") : null;
 
     const purchaseDate = data.purchaseDate ? new Date(data.purchaseDate) : new Date();

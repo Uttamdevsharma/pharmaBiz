@@ -32,17 +32,28 @@ interface SuppliersViewProps {
   onSelectSupplier?: (supplierId: string) => void;
 }
 
+// Module-level persistent cache across navigations
+let cachedSuppliersList: Supplier[] = [];
+let cachedSuppliersTotalPages = 1;
+let cachedSuppliersTotalCount = 0;
+
+export function setCachedSuppliersData(list: Supplier[], totalPages = 1, totalCount = 0) {
+  cachedSuppliersList = list;
+  cachedSuppliersTotalPages = totalPages;
+  cachedSuppliersTotalCount = totalCount;
+}
+
 export function SuppliersView({ onNavigate, onSelectSupplier }: SuppliersViewProps) {
-  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [suppliers, setSuppliers] = useState<Supplier[]>(() => cachedSuppliersList);
+  const [loading, setLoading] = useState(() => cachedSuppliersList.length === 0);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
 
   // Pagination state
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [totalPages, setTotalPages] = useState(1);
-  const [totalCount, setTotalCount] = useState(0);
+  const [totalPages, setTotalPages] = useState(() => cachedSuppliersTotalPages);
+  const [totalCount, setTotalCount] = useState(() => cachedSuppliersTotalCount);
 
   // Modal state
   const [modalOpen, setModalOpen] = useState(false);
@@ -69,7 +80,7 @@ export function SuppliersView({ onNavigate, onSelectSupplier }: SuppliersViewPro
 
   const loadSuppliers = async () => {
     try {
-      setLoading(true);
+      if (cachedSuppliersList.length === 0) setLoading(true);
       const params = new URLSearchParams();
       params.append("page", page.toString());
       params.append("limit", pageSize.toString());

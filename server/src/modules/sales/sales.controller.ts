@@ -120,4 +120,41 @@ export class SalesController {
       res.status(400).json({ success: false, message: error.message });
     }
   }
+
+  static async collectDue(req: Request, res: Response): Promise<void> {
+    try {
+      const { id } = req.params;
+      const tenantId = req.user!.tenantId;
+      const userId = req.user!.id;
+
+      const updatedSale = await SalesService.collectDue(tenantId, userId, id, req.body);
+      res.status(200).json({
+        success: true,
+        message: "Outstanding due payment collected successfully",
+        data: updatedSale,
+      });
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  }
+
+  static async getDueStats(req: Request, res: Response): Promise<void> {
+    try {
+      const tenantId = req.user!.tenantId;
+      let branchId = req.query.branchId as string | undefined;
+
+      if (!branchId && req.headers["x-branch-id"]) {
+        const headerBranch = (req.headers["x-branch-id"] as string).trim();
+        if (headerBranch && headerBranch !== "all" && headerBranch !== "all-branches") {
+          branchId = headerBranch;
+        }
+      }
+
+      const stats = await SalesService.getDueStats(tenantId, branchId);
+      res.status(200).json({ success: true, data: stats });
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
 }
+

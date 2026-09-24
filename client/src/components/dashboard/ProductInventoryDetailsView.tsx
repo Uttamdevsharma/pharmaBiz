@@ -438,11 +438,11 @@ export function ProductInventoryDetailsView({
                       </td>
 
                       <td className="py-3.5 px-4 font-mono">
-                        {b.purchasePrice ? `৳${Number(b.purchasePrice).toFixed(2)}` : "—"}
+                        {b.purchasePrice ? `৳${Math.round(Number(b.purchasePrice)).toLocaleString()}` : "—"}
                       </td>
 
                       <td className="py-3.5 px-4 font-mono font-bold text-brand-primary">
-                        ৳{Number(b.sellingPrice).toFixed(2)}
+                        ৳{Math.round(Number(b.sellingPrice)).toLocaleString()}
                       </td>
 
                       <td className="py-3.5 px-4">
@@ -450,7 +450,7 @@ export function ProductInventoryDetailsView({
                           {b.quantity.toLocaleString()} {b.unit || "tabs"}
                         </div>
                         <div className="text-[10px] text-emerald-600 font-semibold">
-                          Val: ৳{batchVal.toFixed(2)}
+                          Val: ৳{Math.round(batchVal).toLocaleString()}
                         </div>
                       </td>
 

@@ -39,6 +39,10 @@ interface TransactionHistoryViewProps {
   selectedBranchId?: string;
 }
 
+// Persistent module cache
+let cachedTransactions: TransactionItem[] = [];
+let cachedTxAccounts: any[] = [];
+
 export function TransactionHistoryView({ onNavigate: _onNavigate, selectedBranchId: propBranchId }: TransactionHistoryViewProps = {}) {
   const {
     selectedBranchId: contextBranchId,
@@ -48,8 +52,8 @@ export function TransactionHistoryView({ onNavigate: _onNavigate, selectedBranch
 
   const effectiveBranchId = propBranchId !== undefined ? propBranchId : contextBranchId;
 
-  const [transactions, setTransactions] = useState<TransactionItem[]>([]);
-  const [accounts, setAccounts] = useState<any[]>([]);
+  const [transactions, setTransactions] = useState<TransactionItem[]>(() => cachedTransactions);
+  const [accounts, setAccounts] = useState<any[]>(() => cachedTxAccounts);
   const [selectedAccountId, setSelectedAccountId] = useState<string>("");
   
   // Simple Date Preset state: "today" | "yesterday" | "7days" | "thisMonth" | "thisYear" | "custom"
@@ -57,7 +61,7 @@ export function TransactionHistoryView({ onNavigate: _onNavigate, selectedBranch
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
   const [search, setSearch] = useState<string>("");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
   const pageSize = 10;
 
@@ -323,16 +327,15 @@ export function TransactionHistoryView({ onNavigate: _onNavigate, selectedBranch
 
       {/* Transaction Table (Strictly 6 Columns: Date & Time, Description, From, To, Amount, Status) */}
       <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-        {loading ? (
-          <div className="p-16 text-center text-slate-400">
-            <Loader2 className="h-8 w-8 animate-spin mx-auto mb-3 text-emerald-600" />
-            <p className="text-xs font-bold">Querying backend transaction history...</p>
-          </div>
-        ) : filteredTransactions.length === 0 ? (
+        {filteredTransactions.length === 0 ? (
           <div className="p-16 text-center text-slate-400 space-y-2">
             <History className="h-10 w-10 mx-auto mb-2 text-slate-300 dark:text-slate-600" />
-            <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300">No Transactions Found</h3>
-            <p className="text-xs text-slate-400">No transactions match the selected filter criteria.</p>
+            <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300">
+              {loading ? "Loading transactions..." : "No Transactions Found"}
+            </h3>
+            <p className="text-xs text-slate-400">
+              {!loading && "No transactions match the selected filter criteria."}
+            </p>
           </div>
         ) : (
           <div className="overflow-x-auto">

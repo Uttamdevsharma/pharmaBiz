@@ -40,14 +40,20 @@ interface OverviewModuleProps {
 
 type PeriodFilter = "today" | "yesterday" | "7d" | "30d" | "custom";
 
+let cachedDashboardData: any = null;
+
+export function setCachedOverviewData(data: any) {
+  cachedDashboardData = data;
+}
+
 export function OverviewModule({ onNavigate, selectedBranchId: propBranchId }: OverviewModuleProps) {
   const { user } = useAuth();
   const { selectedBranchId: contextBranchId, currentBranch } = useBranchContext();
   const effectiveBranchId = propBranchId !== undefined ? propBranchId : contextBranchId;
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !cachedDashboardData);
   const [refreshing, setRefreshing] = useState(false);
-  const [dashboardData, setDashboardData] = useState<any>(null);
+  const [dashboardData, setDashboardData] = useState<any>(() => cachedDashboardData);
   
   // Date filter states
   const [period, setPeriod] = useState<PeriodFilter>("30d");
@@ -64,7 +70,7 @@ export function OverviewModule({ onNavigate, selectedBranchId: propBranchId }: O
 
   const loadDashboard = async (showFullSpinner = false) => {
     try {
-      if (showFullSpinner) setLoading(true);
+      if (showFullSpinner && !cachedDashboardData) setLoading(true);
       else setRefreshing(true);
 
       const params = new URLSearchParams();
@@ -81,6 +87,7 @@ export function OverviewModule({ onNavigate, selectedBranchId: propBranchId }: O
 
       const dashRes = await fetchApi<any>(`/reports/dashboard?${params.toString()}`);
       if (dashRes.success && dashRes.data) {
+        cachedDashboardData = dashRes.data;
         setDashboardData(dashRes.data);
       }
     } catch (err) {
@@ -100,15 +107,6 @@ export function OverviewModule({ onNavigate, selectedBranchId: propBranchId }: O
       loadDashboard(false);
     }
   };
-
-  if (loading && !dashboardData) {
-    return (
-      <div className="flex flex-col items-center justify-center py-32 text-slate-500 gap-3">
-        <Loader2 className="h-8 w-8 animate-spin text-brand-primary" />
-        <span className="text-sm font-semibold">Loading real-time branch analytics...</span>
-      </div>
-    );
-  }
 
   const summary = dashboardData?.summary || {};
   const charts = dashboardData?.charts || {};
@@ -284,7 +282,7 @@ export function OverviewModule({ onNavigate, selectedBranchId: propBranchId }: O
             <Package className="h-4 w-4 3xl:h-5 3xl:w-5 text-brand-primary shrink-0 mt-0.5" />
           </div>
           <div className="text-xl sm:text-2xl 3xl:text-3xl font-black text-slate-900 dark:text-white font-mono tracking-tight truncate">
-            ৳{Number(summary.totalStockCostValue || summary.totalInventoryValue || 0).toLocaleString("en-BD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            ৳{Math.round(Number(summary.totalStockCostValue || summary.totalInventoryValue || 0)).toLocaleString("en-BD")}
           </div>
         </div>
 
@@ -295,7 +293,7 @@ export function OverviewModule({ onNavigate, selectedBranchId: propBranchId }: O
             <TrendingUp className="h-4 w-4 3xl:h-5 3xl:w-5 shrink-0 mt-0.5" />
           </div>
           <div className="text-xl sm:text-2xl 3xl:text-3xl font-black font-mono tracking-tight truncate">
-            ৳{Number(summary.totalSalesRevenue || summary.totalRevenue || 0).toLocaleString("en-BD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            ৳{Math.round(Number(summary.totalSalesRevenue || summary.totalRevenue || 0)).toLocaleString("en-BD")}
           </div>
         </div>
 
@@ -306,7 +304,7 @@ export function OverviewModule({ onNavigate, selectedBranchId: propBranchId }: O
             <Layers className="h-4 w-4 3xl:h-5 3xl:w-5 text-indigo-500 shrink-0 mt-0.5" />
           </div>
           <div className="text-xl sm:text-2xl 3xl:text-3xl font-black text-slate-800 dark:text-slate-200 font-mono tracking-tight truncate">
-            ৳{Number(summary.totalCostOfSold || 0).toLocaleString("en-BD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            ৳{Math.round(Number(summary.totalCostOfSold || 0)).toLocaleString("en-BD")}
           </div>
         </div>
 
@@ -317,7 +315,7 @@ export function OverviewModule({ onNavigate, selectedBranchId: propBranchId }: O
             <DollarSign className="h-4 w-4 3xl:h-5 3xl:w-5 text-emerald-500 shrink-0 mt-0.5" />
           </div>
           <div className="text-xl sm:text-2xl 3xl:text-3xl font-black text-emerald-600 dark:text-emerald-400 font-mono tracking-tight truncate">
-            ৳{Number(summary.totalGrossProfit || summary.totalProfit || 0).toLocaleString("en-BD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            ৳{Math.round(Number(summary.totalGrossProfit || summary.totalProfit || 0)).toLocaleString("en-BD")}
           </div>
         </div>
 
@@ -328,7 +326,7 @@ export function OverviewModule({ onNavigate, selectedBranchId: propBranchId }: O
             <AlertTriangle className="h-4 w-4 3xl:h-5 3xl:w-5 text-amber-500 shrink-0 mt-0.5" />
           </div>
           <div className="text-xl sm:text-2xl 3xl:text-3xl font-black text-amber-600 dark:text-amber-400 font-mono tracking-tight truncate">
-            ৳{Number(summary.totalDamagedMissingLoss || 0).toLocaleString("en-BD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            ৳{Math.round(Number(summary.totalDamagedMissingLoss || 0)).toLocaleString("en-BD")}
           </div>
         </div>
 
@@ -339,7 +337,7 @@ export function OverviewModule({ onNavigate, selectedBranchId: propBranchId }: O
             <Sparkles className="h-4 w-4 3xl:h-5 3xl:w-5 shrink-0 mt-0.5" />
           </div>
           <div className="text-xl sm:text-2xl 3xl:text-3xl font-black font-mono tracking-tight truncate">
-            ৳{Number(summary.netProfitAfterLoss !== undefined ? summary.netProfitAfterLoss : (summary.totalGrossProfit || 0)).toLocaleString("en-BD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            ৳{Math.round(Number(summary.netProfitAfterLoss !== undefined ? summary.netProfitAfterLoss : (summary.totalGrossProfit || 0))).toLocaleString("en-BD")}
           </div>
         </div>
       </div>
@@ -389,28 +387,28 @@ export function OverviewModule({ onNavigate, selectedBranchId: propBranchId }: O
                       {b.stockUnits.toLocaleString()} units
                     </td>
                     <td className="py-4 px-4 font-mono font-bold text-brand-primary">
-                      ৳{Number(b.inventoryValue || 0).toFixed(2)}
+                      ৳{Math.round(Number(b.inventoryValue || 0)).toLocaleString("en-BD")}
                     </td>
                     <td className="py-4 px-4 font-mono font-bold text-slate-900 dark:text-white">
-                      ৳{Number(b.salesRevenue || 0).toFixed(2)}
+                      ৳{Math.round(Number(b.salesRevenue || 0)).toLocaleString("en-BD")}
                       <span className="block text-[10px] text-slate-400 font-normal">
                         {b.ordersCount} orders
                       </span>
                     </td>
                     <td className="py-4 px-4 font-mono text-slate-500">
-                      ৳{Number(b.costOfSold || 0).toFixed(2)}
+                      ৳{Math.round(Number(b.costOfSold || 0)).toLocaleString("en-BD")}
                     </td>
                     <td className="py-4 px-4 font-mono font-bold text-emerald-600">
-                      ৳{Number(b.grossProfit || 0).toFixed(2)}
+                      ৳{Math.round(Number(b.grossProfit || 0)).toLocaleString("en-BD")}
                       <span className="block text-[10px] text-emerald-600/80 font-normal">
                         {b.profitMargin}% margin
                       </span>
                     </td>
                     <td className="py-4 px-4 font-mono font-bold text-amber-600 dark:text-amber-400">
-                      ৳{Number(b.damagedMissingLoss || 0).toFixed(2)}
+                      ৳{Math.round(Number(b.damagedMissingLoss || 0)).toLocaleString("en-BD")}
                     </td>
                     <td className="py-4 px-4 text-right font-mono font-black text-emerald-600 dark:text-emerald-400 text-sm">
-                      ৳{Number(b.netProfit || 0).toFixed(2)}
+                      ৳{Math.round(Number(b.netProfit || 0)).toLocaleString("en-BD")}
                     </td>
                   </tr>
                 ))}
@@ -516,7 +514,7 @@ export function OverviewModule({ onNavigate, selectedBranchId: propBranchId }: O
                     <span className="font-bold text-slate-900 dark:text-white">{p.name}</span>
                   </div>
                   <div className="text-right">
-                    <span className="font-mono font-bold text-slate-900 dark:text-white">৳{Number(p.revenue || 0).toFixed(2)}</span>
+                    <span className="font-mono font-bold text-slate-900 dark:text-white">৳{Math.round(Number(p.revenue || 0)).toLocaleString("en-BD")}</span>
                     <span className="block text-[10px] text-slate-400 font-medium">{p.quantity} units sold</span>
                   </div>
                 </div>

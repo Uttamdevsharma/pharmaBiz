@@ -48,6 +48,9 @@ app.use(express_1.default.urlencoded({ limit: "25mb", extended: true }));
 // Serve uploaded images statically
 const path_1 = __importDefault(require("path"));
 app.use("/uploads", express_1.default.static(path_1.default.join(process.cwd(), "public", "uploads")));
+// Mount Swagger Documentation & Testing UI
+const docs_1 = require("./docs");
+(0, docs_1.setupSwagger)(app);
 // Health check
 app.get("/", (req, res) => {
     res.json({
@@ -108,5 +111,5 @@ if (!process.env.VERCEL) {
         subscription_expiry_service_1.SubscriptionExpiryService.initAutomatedScheduler();
     });
 }
-// Trigger backend restart for Prisma Client update
+// Trigger backend restart on free port 3000
 exports.default = app;

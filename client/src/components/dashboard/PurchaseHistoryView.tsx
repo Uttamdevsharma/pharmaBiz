@@ -33,6 +33,9 @@ interface PurchaseHistoryViewProps {
   selectedBranchId?: string;
 }
 
+// Persistent module cache
+let cachedPurchases: any[] = [];
+
 export function PurchaseHistoryView({ onNavigate, selectedBranchId: propBranchId }: PurchaseHistoryViewProps) {
   const {
     selectedBranchId: contextBranchId,
@@ -48,8 +51,8 @@ export function PurchaseHistoryView({ onNavigate, selectedBranchId: propBranchId
   const [customStartDate, setCustomStartDate] = useState<string>("");
   const [customEndDate, setCustomEndDate] = useState<string>("");
 
-  const [purchases, setPurchases] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [purchases, setPurchases] = useState<any[]>(() => cachedPurchases);
+  const [loading, setLoading] = useState(false);
 
   // Pagination states
   const [page, setPage] = useState(1);
@@ -121,6 +124,7 @@ export function PurchaseHistoryView({ onNavigate, selectedBranchId: propBranchId
       const res = await fetchApi(`/suppliers/purchases/list?${params.toString()}`);
       if (res.success && res.data) {
         setPurchases(res.data);
+        cachedPurchases = res.data;
       } else {
         setPurchases([]);
       }
@@ -315,16 +319,11 @@ export function PurchaseHistoryView({ onNavigate, selectedBranchId: propBranchId
 
       {/* Purchases Table */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-        {loading ? (
-          <div className="p-16 flex flex-col items-center justify-center text-slate-400">
-            <Loader2 className="h-8 w-8 animate-spin text-brand-primary mb-2" />
-            <p className="text-sm font-bold">Loading purchase records...</p>
-          </div>
-        ) : purchases.length === 0 ? (
+        {purchases.length === 0 ? (
           <div className="p-16 text-center text-slate-400">
             <Receipt className="h-10 w-10 mx-auto text-slate-300 dark:text-slate-700 mb-3" />
             <p className="text-base font-bold text-slate-700 dark:text-slate-300">
-              No purchases found
+              {loading ? "Loading purchase records..." : "No purchases found"}
             </p>
           </div>
         ) : (

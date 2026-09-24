@@ -166,19 +166,20 @@ class SalesService {
                 }
             }
         }
-        // 6. Discount & Tax calculations
+        // 6. Discount & Tax calculations (Auto-rounded to integer)
         let discountAmount = 0;
         if (data.discount && data.discount > 0) {
             if (data.discountType === "PERCENT") {
-                discountAmount = Math.round((calculatedSubTotal * (data.discount / 100)) * 100) / 100;
+                discountAmount = Math.round(calculatedSubTotal * (data.discount / 100));
             }
             else {
-                discountAmount = Number(data.discount);
+                discountAmount = Math.round(Number(data.discount));
             }
         }
-        const taxAmount = Number(data.tax || 0);
-        const totalAmount = Math.max(0, calculatedSubTotal - discountAmount + taxAmount);
-        const paidAmount = data.paidAmount !== undefined ? Number(data.paidAmount) : totalAmount;
+        const taxAmount = Math.round(Number(data.tax || 0));
+        const rawTotal = Math.max(0, calculatedSubTotal - discountAmount + taxAmount);
+        const totalAmount = data.totalAmount !== undefined ? Math.round(Number(data.totalAmount)) : Math.round(rawTotal);
+        const paidAmount = data.paidAmount !== undefined ? Math.round(Number(data.paidAmount)) : totalAmount;
         const dueAmount = Math.max(0, totalAmount - paidAmount);
         const changeAmount = Math.max(0, paidAmount - totalAmount);
         // Generate unique professional receipt number
@@ -199,7 +200,7 @@ class SalesService {
                     customerName: data.customerName || "Walk-in Customer",
                     customerPhone: data.customerPhone || null,
                     customerEmail: data.customerEmail || null,
-                    subTotal: calculatedSubTotal,
+                    subTotal: data.subTotal !== undefined ? Math.round(Number(data.subTotal)) : Math.round(calculatedSubTotal),
                     discount: discountAmount,
                     discountType: data.discountType || "FIXED",
                     tax: taxAmount,
@@ -420,6 +421,12 @@ class SalesService {
         }
         if (query.paymentMethod) {
             where.paymentMethod = query.paymentMethod;
+        }
+        if (query.paymentStatus === "DUE" || query.hasDue === true) {
+            where.dueAmount = { gt: 0 };
+        }
+        else if (query.paymentStatus === "PAID" || query.hasDue === false) {
+            where.dueAmount = { lte: 0 };
         }
         if (query.startDate || query.endDate) {
             where.createdAt = {};
@@ -751,6 +758,142 @@ class SalesService {
             details: { saleId, receiptNo: sale.receiptNo, reason: data.reason },
         });
         return voided;
+    }
+    /**
+     * Collect Outstanding Due Payment on an existing sale
+     */
+    static async collectDue(tenantId, userId, saleId, data) {
+        const sale = await prisma_1.prisma.sale.findFirst({
+            where: { id: saleId, tenantId },
+            include: { branch: true },
+        });
+        if (!sale) {
+            throw new Error("Sale record not found.");
+        }
+        if (sale.status !== "COMPLETED") {
+            throw new Error(`Cannot collect due on a ${sale.status} sale.`);
+        }
+        const currentDue = Number(sale.dueAmount || 0);
+        if (currentDue <= 0) {
+            throw new Error("This sale has no outstanding due balance.");
+        }
+        if (data.amount <= 0) {
+            throw new Error("Collected amount must be greater than 0.");
+        }
+        if (data.amount > currentDue + 0.01) {
+            throw new Error(`Collected amount (৳${data.amount}) cannot exceed outstanding due (৳${currentDue}).`);
+        }
+        const updatedSale = await prisma_1.prisma.$transaction(async (tx) => {
+            // Find financial account
+            let financialAccount = null;
+            if (data.financialAccountId) {
+                financialAccount = await tx.financialAccount.findFirst({
+                    where: { id: data.financialAccountId, tenantId, isActive: true },
+                });
+            }
+            if (!financialAccount && sale.branchId) {
+                const method = (data.paymentMethod || "CASH").toUpperCase();
+                financialAccount = await tx.financialAccount.findFirst({
+                    where: {
+                        tenantId,
+                        branchId: sale.branchId,
+                        isActive: true,
+                        accountType: method === "BANK" || method === "CARD"
+                            ? "BANK"
+                            : method === "BKASH" || method === "NAGAD" || method === "MOBILE"
+                                ? "MOBILE_BANKING"
+                                : "CASH",
+                    },
+                });
+                if (!financialAccount) {
+                    financialAccount = await tx.financialAccount.findFirst({
+                        where: { tenantId, branchId: sale.branchId, isActive: true },
+                    });
+                }
+            }
+            if (financialAccount) {
+                // Increment account balance atomically
+                await tx.financialAccount.update({
+                    where: { id: financialAccount.id },
+                    data: { balance: { increment: data.amount } },
+                });
+                // Create transaction entry
+                await tx.financialTransaction.create({
+                    data: {
+                        tenantId,
+                        branchId: sale.branchId,
+                        destinationAccountId: financialAccount.id,
+                        amount: data.amount,
+                        type: "SALE_PAYMENT",
+                        reference: sale.receiptNo,
+                        note: `Due payment collected for Receipt #${sale.receiptNo}${data.notes ? ` (${data.notes})` : ""}${data.transactionRef ? ` Ref: ${data.transactionRef}` : ""}`,
+                        userId,
+                    },
+                });
+            }
+            const newPaid = Number(sale.paidAmount || 0) + data.amount;
+            const newDue = Math.max(0, currentDue - data.amount);
+            const noteAddition = `[Due Payment: ৳${data.amount} via ${data.paymentMethod || "CASH"} on ${new Date().toISOString().split("T")[0]}]`;
+            const updatedNotes = sale.notes ? `${sale.notes} | ${noteAddition}` : noteAddition;
+            const updated = await tx.sale.update({
+                where: { id: sale.id },
+                data: {
+                    paidAmount: newPaid,
+                    dueAmount: newDue,
+                    notes: updatedNotes,
+                },
+                include: {
+                    branch: { select: { id: true, name: true, location: true } },
+                    user: { select: { id: true, name: true, username: true } },
+                    items: {
+                        include: {
+                            product: { select: { id: true, name: true, sku: true, unit: true, size: true } },
+                        },
+                    },
+                },
+            });
+            return updated;
+        });
+        await audit_1.AuditService.log({
+            tenantId,
+            branchId: sale.branchId,
+            userId,
+            action: "POS_DUE_COLLECTED",
+            details: {
+                saleId: sale.id,
+                receiptNo: sale.receiptNo,
+                collectedAmount: data.amount,
+                remainingDue: Number(updatedSale.dueAmount),
+                customerName: sale.customerName,
+                customerPhone: sale.customerPhone,
+            },
+        });
+        return updatedSale;
+    }
+    /**
+     * Get Due Sales aggregate summary statistics
+     */
+    static async getDueStats(tenantId, branchId) {
+        const where = { tenantId, status: "COMPLETED", dueAmount: { gt: 0 } };
+        if (branchId && branchId !== "all" && branchId !== "all-branches") {
+            where.branchId = branchId;
+        }
+        const aggregate = await prisma_1.prisma.sale.aggregate({
+            where,
+            _sum: {
+                dueAmount: true,
+                totalAmount: true,
+                paidAmount: true,
+            },
+            _count: {
+                id: true,
+            },
+        });
+        return {
+            totalDue: Number(aggregate._sum?.dueAmount || 0),
+            totalDueSalesCount: aggregate._count?.id || 0,
+            totalSalesWithDueAmount: Number(aggregate._sum?.totalAmount || 0),
+        };
     }
 }
 exports.SalesService = SalesService;

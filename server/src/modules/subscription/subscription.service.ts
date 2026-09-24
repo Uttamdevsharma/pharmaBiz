@@ -14,18 +14,22 @@ export class SubscriptionService {
    */
   static async listAvailablePlans() {
     const plans = await (prisma as any).subscriptionPlan.findMany({
-      where: { isActive: true },
+      where: {
+        isActive: true,
+        tier: { in: ["STARTER", "GROWTH", "ENTERPRISE"] },
+      },
       orderBy: { price: "asc" },
     });
 
     return plans.map((p: any) => {
       const feat = (typeof p.features === "object" && p.features !== null) ? p.features : {};
-      const fallback: any = CENTRAL_PLAN_DEFINITIONS[p.tier as PricingTierType] || CENTRAL_PLAN_DEFINITIONS.TRIAL;
+      const fallback: any = (CENTRAL_PLAN_DEFINITIONS as any)[p.tier] || CENTRAL_PLAN_DEFINITIONS.STARTER;
       return {
         ...p,
         maxStaffPerBranch: feat.maxStaffPerBranch ?? fallback.maxStaffPerBranch ?? 1,
         maxTotalStaff: feat.maxTotalStaff ?? fallback.maxTotalStaff ?? (p.maxBranches * (feat.maxStaffPerBranch ?? 1)),
-        trialDays: feat.trialDays ?? fallback.trialDays ?? 7,
+        trialDays: 0,
+        yearlyDiscountPercent: feat.yearlyDiscountPercent ?? fallback.yearlyDiscountPercent ?? (p.tier === "STARTER" ? 5 : p.tier === "GROWTH" ? 10 : p.tier === "ENTERPRISE" ? 15 : 0),
       };
     });
   }
@@ -40,12 +44,13 @@ export class SubscriptionService {
     }
 
     const feat = (typeof plan.features === "object" && plan.features !== null) ? plan.features : {};
-    const fallback: any = CENTRAL_PLAN_DEFINITIONS[plan.tier as PricingTierType] || CENTRAL_PLAN_DEFINITIONS.TRIAL;
+    const fallback: any = (CENTRAL_PLAN_DEFINITIONS as any)[plan.tier] || CENTRAL_PLAN_DEFINITIONS.STARTER;
     return {
       ...plan,
       maxStaffPerBranch: feat.maxStaffPerBranch ?? fallback.maxStaffPerBranch ?? 1,
       maxTotalStaff: feat.maxTotalStaff ?? fallback.maxTotalStaff ?? (plan.maxBranches * (feat.maxStaffPerBranch ?? 1)),
-      trialDays: feat.trialDays ?? fallback.trialDays ?? 7,
+      trialDays: 0,
+      yearlyDiscountPercent: feat.yearlyDiscountPercent ?? fallback.yearlyDiscountPercent ?? (plan.tier === "STARTER" ? 5 : plan.tier === "GROWTH" ? 10 : plan.tier === "ENTERPRISE" ? 15 : 0),
     };
   }
 
@@ -61,7 +66,7 @@ export class SubscriptionService {
         subscriptions: {
           orderBy: { createdAt: "desc" },
           include: { plan: true },
-          take: 1,
+          take: 5,
         },
       },
     });
@@ -70,14 +75,16 @@ export class SubscriptionService {
       throw new Error("Tenant not found");
     }
 
-    const currentSub = tenant.subscriptions && tenant.subscriptions[0];
-    const tier = (currentSub?.plan?.tier || tenant.tier || "TRIAL") as PricingTierType;
+    // Prioritize currently active subscription; fallback to most recent
+    const activeSub = (tenant.subscriptions || []).find((s: any) => s.status === "ACTIVE");
+    const currentSub = activeSub || (tenant.subscriptions && tenant.subscriptions[0]);
+    const tier = (currentSub?.plan?.tier || tenant.tier || "STARTER") as PricingTierType;
     const planConfig = getPlanConfig(tier);
 
-    const isTrial = tier === "TRIAL";
+    const isTrial = false;
     const isExpired = currentSub ? isSubscriptionExpired(currentSub) : true;
-    const trialDaysRemaining = isTrial && currentSub?.endDate ? getTrialRemainingDays(currentSub.endDate) : 0;
-    const isTrialExpired = isTrial && isExpired;
+    const trialDaysRemaining = 0;
+    const isTrialExpired = false;
 
     const planFeatures = (typeof currentSub?.plan?.features === "object" && currentSub?.plan?.features !== null)
       ? currentSub.plan.features
@@ -93,7 +100,7 @@ export class SubscriptionService {
       planFeatures.maxStaffPerBranch ?? (currentSub?.plan as any)?.maxStaffPerBranch ?? planConfig.maxStaffPerBranch ?? 1
     );
     const maxStaff = Number(
-      planFeatures.maxTotalStaff ?? (currentSub?.plan as any)?.maxTotalStaff ?? planConfig.maxTotalStaff ?? (isTrial ? 1 : 999)
+      planFeatures.maxTotalStaff ?? (currentSub?.plan as any)?.maxTotalStaff ?? planConfig.maxTotalStaff ?? 999
     );
 
     return {
@@ -203,6 +210,21 @@ export class SubscriptionService {
       );
     }
 
+    // Clean up any stale uncompleted PENDING subscriptions and payments for this tenant
+    const stalePending = await (prisma as any).subscription.findMany({
+      where: { tenantId, status: "PENDING" },
+      select: { id: true },
+    });
+    if (stalePending.length > 0) {
+      const staleIds = stalePending.map((s: any) => s.id);
+      await (prisma as any).payment.deleteMany({
+        where: { subscriptionId: { in: staleIds }, status: "PENDING" },
+      });
+      await (prisma as any).subscription.deleteMany({
+        where: { id: { in: staleIds } },
+      });
+    }
+
     const startDate = new Date();
     const endDate = new Date(startDate.getTime() + 30 * 24 * 60 * 60 * 1000);
 
@@ -225,13 +247,28 @@ export class SubscriptionService {
    */
   static async renewSubscription(tenantId: string) {
     const currentSub = await (prisma as any).subscription.findFirst({
-      where: { tenantId },
+      where: { tenantId, status: { in: ["ACTIVE", "EXPIRED"] } },
       orderBy: { createdAt: "desc" },
       include: { plan: true },
     });
 
     if (!currentSub) {
       throw new Error("No existing subscription found to renew");
+    }
+
+    // Clean up any existing uncompleted PENDING subscriptions and payments
+    const stalePending = await (prisma as any).subscription.findMany({
+      where: { tenantId, status: "PENDING" },
+      select: { id: true },
+    });
+    if (stalePending.length > 0) {
+      const staleIds = stalePending.map((s: any) => s.id);
+      await (prisma as any).payment.deleteMany({
+        where: { subscriptionId: { in: staleIds }, status: "PENDING" },
+      });
+      await (prisma as any).subscription.deleteMany({
+        where: { id: { in: staleIds } },
+      });
     }
 
     const durationDays = currentSub.plan.billingCycle === "YEARLY" ? 365 : 30;

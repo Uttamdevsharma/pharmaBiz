@@ -30,8 +30,10 @@ import {
   KeyRound,
   RefreshCw,
   FileCheck,
-  Image as ImageIcon,
+  EyeOff,
+  Percent,
 } from "lucide-react";
+import { ThemeToggle } from "@/components/common/ThemeToggle";
 
 interface DocumentUploadState {
   file: File | null;
@@ -431,21 +433,38 @@ function RegisterContent() {
         {/* Top Bar */}
         <div className="flex items-center justify-between">
           <Link
-            href="/#pricing"
-            className="inline-flex items-center gap-2 text-xs font-semibold text-slate-500 hover:text-brand-primary transition"
+            href="/pricing"
+            className="inline-flex items-center gap-2.5 px-5 py-2.5 rounded-xl text-sm sm:text-base font-bold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-brand-primary/50 hover:text-brand-primary dark:hover:text-brand-primary hover:-translate-x-0.5 active:scale-95 transition-all duration-200 group"
           >
-            <ArrowLeft className="h-4 w-4" />
-            Back to Pricing
+            <ArrowLeft className="h-5 w-5 text-slate-500 group-hover:text-brand-primary group-hover:-translate-x-0.5 transition-transform" />
+            <span>Back to Pricing</span>
           </Link>
 
-          <Link href="/" className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg bg-brand-primary flex items-center justify-center text-white shadow-sm">
-              <Pill className="h-4 w-4 transform -rotate-45" />
-            </div>
-            <span className="font-bold text-slate-900 dark:text-white">
-              {settings.siteName || "PharmaBiz"}
-            </span>
-          </Link>
+          <div className="flex items-center gap-3 sm:gap-4">
+            <ThemeToggle />
+
+            <Link
+              href="/"
+              className="flex items-center gap-3 px-3.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm hover:border-brand-primary/50 transition-all group"
+            >
+              {settings.logoUrl ? (
+                <div className="h-9 w-9 rounded-lg overflow-hidden bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center p-1 shadow-xs transition-transform group-hover:scale-105 shrink-0">
+                  <img
+                    src={settings.logoUrl}
+                    alt={settings.siteName || "Logo"}
+                    className="w-full h-full object-contain"
+                  />
+                </div>
+              ) : (
+                <div className="h-9 w-9 rounded-lg bg-brand-primary flex items-center justify-center text-white shadow-sm transition-transform group-hover:scale-105 shrink-0">
+                  <Pill className="h-5 w-5 transform -rotate-45" />
+                </div>
+              )}
+              <span className="text-base sm:text-lg font-bold tracking-tight text-slate-900 dark:text-white group-hover:text-brand-primary transition-colors">
+                {settings.siteName?.replace(/\s+SaaS$/i, "") || "PharmaBiz"}
+              </span>
+            </Link>
+          </div>
         </div>
 
         {/* Heading & Wizard Steps */}

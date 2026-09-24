@@ -8,9 +8,23 @@ class SubscriptionService {
      * List all available plans
      */
     static async listAvailablePlans() {
-        return await prisma_1.prisma.subscriptionPlan.findMany({
-            where: { isActive: true },
+        const plans = await prisma_1.prisma.subscriptionPlan.findMany({
+            where: {
+                isActive: true,
+                tier: { in: ["STARTER", "GROWTH", "ENTERPRISE"] },
+            },
             orderBy: { price: "asc" },
+        });
+        return plans.map((p) => {
+            const feat = (typeof p.features === "object" && p.features !== null) ? p.features : {};
+            const fallback = planLimits_1.CENTRAL_PLAN_DEFINITIONS[p.tier] || planLimits_1.CENTRAL_PLAN_DEFINITIONS.STARTER;
+            return {
+                ...p,
+                maxStaffPerBranch: feat.maxStaffPerBranch ?? fallback.maxStaffPerBranch ?? 1,
+                maxTotalStaff: feat.maxTotalStaff ?? fallback.maxTotalStaff ?? (p.maxBranches * (feat.maxStaffPerBranch ?? 1)),
+                trialDays: 0,
+                yearlyDiscountPercent: feat.yearlyDiscountPercent ?? fallback.yearlyDiscountPercent ?? (p.tier === "STARTER" ? 5 : p.tier === "GROWTH" ? 10 : p.tier === "ENTERPRISE" ? 15 : 0),
+            };
         });
     }
     static async getPlanDetails(planId) {
@@ -20,7 +34,15 @@ class SubscriptionService {
         if (!plan) {
             throw new Error("Subscription plan not found");
         }
-        return plan;
+        const feat = (typeof plan.features === "object" && plan.features !== null) ? plan.features : {};
+        const fallback = planLimits_1.CENTRAL_PLAN_DEFINITIONS[plan.tier] || planLimits_1.CENTRAL_PLAN_DEFINITIONS.STARTER;
+        return {
+            ...plan,
+            maxStaffPerBranch: feat.maxStaffPerBranch ?? fallback.maxStaffPerBranch ?? 1,
+            maxTotalStaff: feat.maxTotalStaff ?? fallback.maxTotalStaff ?? (plan.maxBranches * (feat.maxStaffPerBranch ?? 1)),
+            trialDays: 0,
+            yearlyDiscountPercent: feat.yearlyDiscountPercent ?? fallback.yearlyDiscountPercent ?? (plan.tier === "STARTER" ? 5 : plan.tier === "GROWTH" ? 10 : plan.tier === "ENTERPRISE" ? 15 : 0),
+        };
     }
     /**
      * Get current active subscription and usage for tenant
@@ -34,25 +56,31 @@ class SubscriptionService {
                 subscriptions: {
                     orderBy: { createdAt: "desc" },
                     include: { plan: true },
-                    take: 1,
+                    take: 5,
                 },
             },
         });
         if (!tenant) {
             throw new Error("Tenant not found");
         }
-        const currentSub = tenant.subscriptions && tenant.subscriptions[0];
-        const tier = (currentSub?.plan?.tier || tenant.tier || "TRIAL");
+        // Prioritize currently active subscription; fallback to most recent
+        const activeSub = (tenant.subscriptions || []).find((s) => s.status === "ACTIVE");
+        const currentSub = activeSub || (tenant.subscriptions && tenant.subscriptions[0]);
+        const tier = (currentSub?.plan?.tier || tenant.tier || "STARTER");
         const planConfig = (0, planLimits_1.getPlanConfig)(tier);
-        const isTrial = tier === "TRIAL";
+        const isTrial = false;
         const isExpired = currentSub ? (0, planLimits_1.isSubscriptionExpired)(currentSub) : true;
-        const trialDaysRemaining = isTrial && currentSub?.endDate ? (0, planLimits_1.getTrialRemainingDays)(currentSub.endDate) : 0;
-        const isTrialExpired = isTrial && isExpired;
+        const trialDaysRemaining = 0;
+        const isTrialExpired = false;
+        const planFeatures = (typeof currentSub?.plan?.features === "object" && currentSub?.plan?.features !== null)
+            ? currentSub.plan.features
+            : {};
         const branchCount = tenant.branches ? tenant.branches.length : 0;
-        const maxBranches = currentSub?.plan?.maxBranches || planConfig.maxBranches;
+        const maxBranches = currentSub?.plan?.maxBranches ?? planConfig.maxBranches;
         const nonOwnerStaff = (tenant.users || []).filter((u) => u.role !== "COMPANY_OWNER");
         const staffCount = nonOwnerStaff.length;
-        const maxStaff = isTrial ? 1 : planConfig.maxTotalStaff || 999;
+        const maxStaffPerBranch = Number(planFeatures.maxStaffPerBranch ?? currentSub?.plan?.maxStaffPerBranch ?? planConfig.maxStaffPerBranch ?? 1);
+        const maxStaff = Number(planFeatures.maxTotalStaff ?? currentSub?.plan?.maxTotalStaff ?? planConfig.maxTotalStaff ?? 999);
         return {
             tenantId: tenant.id,
             tenantName: tenant.name,
@@ -62,7 +90,15 @@ class SubscriptionService {
             isTrialExpired,
             trialDaysRemaining,
             isExpired,
-            planConfig,
+            planConfig: {
+                ...planConfig,
+                name: currentSub?.plan?.name || planConfig.name,
+                price: currentSub?.plan ? Number(currentSub.plan.price) : planConfig.price,
+                billingCycle: currentSub?.plan?.billingCycle || planConfig.billingCycle,
+                maxBranches,
+                maxStaffPerBranch,
+                maxTotalStaff: maxStaff,
+            },
             usage: {
                 currentBranches: branchCount,
                 maxBranches,
@@ -70,13 +106,14 @@ class SubscriptionService {
                 currentStaff: staffCount,
                 maxStaff,
                 remainingStaff: Math.max(0, maxStaff - staffCount),
+                maxStaffPerBranch,
             },
             features: {
-                interBranchTransfer: tier !== "STARTER" && tier !== "TRIAL",
-                regionalAdmin: tier !== "STARTER" && tier !== "TRIAL",
-                customAudit: tier === "ENTERPRISE",
-                apiAccess: tier === "ENTERPRISE",
-                branchPriceOverride: tier !== "STARTER" && tier !== "TRIAL",
+                interBranchTransfer: planFeatures.inventoryTransfers ?? (tier !== "STARTER" && tier !== "TRIAL"),
+                regionalAdmin: planFeatures.regionalAdmin ?? (tier !== "STARTER" && tier !== "TRIAL"),
+                customAudit: planFeatures.customAudit ?? (tier === "ENTERPRISE"),
+                apiAccess: planFeatures.apiAccess ?? (tier === "ENTERPRISE"),
+                branchPriceOverride: planFeatures.branchPriceOverride ?? (tier !== "STARTER" && tier !== "TRIAL"),
             },
         };
     }
@@ -138,6 +175,20 @@ class SubscriptionService {
         if (activeBranches > newPlan.maxBranches) {
             throw new Error(`Cannot change to ${newPlan.name}. You currently have ${activeBranches} active branches, but this plan allows at most ${newPlan.maxBranches}. Please deactivate extra branches first.`);
         }
+        // Clean up any stale uncompleted PENDING subscriptions and payments for this tenant
+        const stalePending = await prisma_1.prisma.subscription.findMany({
+            where: { tenantId, status: "PENDING" },
+            select: { id: true },
+        });
+        if (stalePending.length > 0) {
+            const staleIds = stalePending.map((s) => s.id);
+            await prisma_1.prisma.payment.deleteMany({
+                where: { subscriptionId: { in: staleIds }, status: "PENDING" },
+            });
+            await prisma_1.prisma.subscription.deleteMany({
+                where: { id: { in: staleIds } },
+            });
+        }
         const startDate = new Date();
         const endDate = new Date(startDate.getTime() + 30 * 24 * 60 * 60 * 1000);
         const subscription = await prisma_1.prisma.subscription.create({
@@ -157,12 +208,26 @@ class SubscriptionService {
      */
     static async renewSubscription(tenantId) {
         const currentSub = await prisma_1.prisma.subscription.findFirst({
-            where: { tenantId },
+            where: { tenantId, status: { in: ["ACTIVE", "EXPIRED"] } },
             orderBy: { createdAt: "desc" },
             include: { plan: true },
         });
         if (!currentSub) {
             throw new Error("No existing subscription found to renew");
+        }
+        // Clean up any existing uncompleted PENDING subscriptions and payments
+        const stalePending = await prisma_1.prisma.subscription.findMany({
+            where: { tenantId, status: "PENDING" },
+            select: { id: true },
+        });
+        if (stalePending.length > 0) {
+            const staleIds = stalePending.map((s) => s.id);
+            await prisma_1.prisma.payment.deleteMany({
+                where: { subscriptionId: { in: staleIds }, status: "PENDING" },
+            });
+            await prisma_1.prisma.subscription.deleteMany({
+                where: { id: { in: staleIds } },
+            });
         }
         const durationDays = currentSub.plan.billingCycle === "YEARLY" ? 365 : 30;
         const baseDate = new Date(currentSub.endDate) > new Date() ? new Date(currentSub.endDate) : new Date();

@@ -682,7 +682,7 @@ export function BatchStockDetailsView({
               <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700">
                 <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Purchase Price</p>
                 <p className="text-2xl font-black text-slate-800 dark:text-slate-100 mt-1">
-                  ৳{purchasePrice.toFixed(2)}
+                  ৳{Math.round(purchasePrice).toLocaleString()}
                 </p>
                 <p className="text-[11px] text-slate-400 mt-0.5">per lowest unit ({packConfig.unit})</p>
               </div>
@@ -690,7 +690,7 @@ export function BatchStockDetailsView({
               <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700">
                 <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Selling Price</p>
                 <p className="text-2xl font-black text-slate-800 dark:text-slate-100 mt-1">
-                  ৳{sellingPrice.toFixed(2)}
+                  ৳{Math.round(sellingPrice).toLocaleString()}
                 </p>
                 <p className="text-[11px] text-slate-400 mt-0.5">per lowest unit ({packConfig.unit})</p>
               </div>
@@ -700,7 +700,7 @@ export function BatchStockDetailsView({
                   Total Batch Value
                 </p>
                 <p className="text-2xl font-black text-emerald-800 dark:text-emerald-200 mt-1">
-                  ৳{batchValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  ৳{Math.round(batchValue).toLocaleString("en-BD")}
                 </p>
                 <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-0.5">
                   total cost based on current stock

@@ -442,26 +442,26 @@ class SupplierService {
         });
         let invoiceDiscount = 0;
         if (data.discountType === "PERCENT") {
-            invoiceDiscount = (subtotalAmount * (Number(data.discountAmount) || 0)) / 100;
+            invoiceDiscount = Math.round((subtotalAmount * (Number(data.discountAmount) || 0)) / 100);
         }
         else if (data.discountType === "FIXED") {
-            invoiceDiscount = Number(data.discountAmount) || 0;
+            invoiceDiscount = Math.round(Number(data.discountAmount) || 0);
         }
-        const invoiceTax = Number(data.taxAmount) || 0;
-        const computedTotal = Math.max(0, Math.round((subtotalAmount - invoiceDiscount + invoiceTax) * 100) / 100);
+        const invoiceTax = Math.round(Number(data.taxAmount) || 0);
+        const computedTotal = Math.max(0, Math.round(subtotalAmount - invoiceDiscount + invoiceTax));
         const totalPurchaseAmount = data.totalAmount !== undefined && data.totalAmount !== null
-            ? Number(data.totalAmount)
+            ? Math.round(Number(data.totalAmount))
             : computedTotal;
-        const paidAmount = Number(data.paidAmount || 0);
-        const dueAmount = Math.max(0, Math.round((totalPurchaseAmount - paidAmount) * 100) / 100);
+        const paidAmount = Math.round(Number(data.paidAmount || 0));
+        const dueAmount = Math.max(0, totalPurchaseAmount - paidAmount);
         const paymentStatus = dueAmount === 0 ? "PAID" : paidAmount > 0 ? "PARTIAL" : "DUE";
         const noteParts = [];
         if (data.notes)
             noteParts.push(data.notes);
         if (invoiceDiscount > 0)
-            noteParts.push(`Discount: -৳${invoiceDiscount.toFixed(2)} (${data.discountType})`);
+            noteParts.push(`Discount: -৳${invoiceDiscount} (${data.discountType})`);
         if (invoiceTax > 0)
-            noteParts.push(`Tax: +৳${invoiceTax.toFixed(2)}`);
+            noteParts.push(`Tax: +৳${invoiceTax}`);
         const finalNotes = noteParts.length > 0 ? noteParts.join(" | ") : null;
         const purchaseDate = data.purchaseDate ? new Date(data.purchaseDate) : new Date();
         // 4. Execute atomic transaction
@@ -775,29 +775,55 @@ class SupplierService {
         const newPaid = Number(supplier.totalPaid) + payAmount;
         const paymentDate = data.paymentDate ? new Date(data.paymentDate) : new Date();
         // Reduce due amounts on open purchases for this supplier
-        const openPurchases = await prisma_1.prisma.purchase.findMany({
-            where: { tenantId, supplierId, dueAmount: { gt: 0 } },
-            orderBy: { purchaseDate: "asc" },
-        });
         let remainingPay = payAmount;
-        for (const p of openPurchases) {
-            if (remainingPay <= 0)
-                break;
-            const pDue = Number(p.dueAmount || 0);
-            const pPaid = Number(p.paidAmount || 0);
-            const chunk = Math.min(pDue, remainingPay);
-            const nextDue = pDue - chunk;
-            const nextPaid = pPaid + chunk;
-            const status = nextDue === 0 ? "PAID" : "PARTIAL";
-            await prisma_1.prisma.purchase.update({
-                where: { id: p.id },
-                data: {
-                    dueAmount: nextDue,
-                    paidAmount: nextPaid,
-                    paymentStatus: status,
-                },
+        if (data.purchaseId) {
+            // 1. Specific invoice settlement requested
+            const specificPurchase = await prisma_1.prisma.purchase.findFirst({
+                where: { id: data.purchaseId, tenantId, supplierId },
             });
-            remainingPay -= chunk;
+            if (specificPurchase) {
+                const pDue = Number(specificPurchase.dueAmount || 0);
+                const pPaid = Number(specificPurchase.paidAmount || 0);
+                const chunk = Math.min(pDue, remainingPay);
+                const nextDue = Math.max(0, pDue - chunk);
+                const nextPaid = pPaid + chunk;
+                const status = nextDue === 0 ? "PAID" : "PARTIAL";
+                await prisma_1.prisma.purchase.update({
+                    where: { id: specificPurchase.id },
+                    data: {
+                        dueAmount: nextDue,
+                        paidAmount: nextPaid,
+                        paymentStatus: status,
+                    },
+                });
+                remainingPay -= chunk;
+            }
+        }
+        // 2. If general payment (no purchaseId specified), distribute across open purchases FIFO
+        if (remainingPay > 0 && !data.purchaseId) {
+            const openPurchases = await prisma_1.prisma.purchase.findMany({
+                where: { tenantId, supplierId, dueAmount: { gt: 0 } },
+                orderBy: { purchaseDate: "asc" },
+            });
+            for (const p of openPurchases) {
+                if (remainingPay <= 0)
+                    break;
+                const pDue = Number(p.dueAmount || 0);
+                const pPaid = Number(p.paidAmount || 0);
+                const chunk = Math.min(pDue, remainingPay);
+                const nextDue = pDue - chunk;
+                const nextPaid = pPaid + chunk;
+                const status = nextDue === 0 ? "PAID" : "PARTIAL";
+                await prisma_1.prisma.purchase.update({
+                    where: { id: p.id },
+                    data: {
+                        dueAmount: nextDue,
+                        paidAmount: nextPaid,
+                        paymentStatus: status,
+                    },
+                });
+                remainingPay -= chunk;
+            }
         }
         // Atomic update of supplier dues, supplierPayment record & financial account balance
         const [updated, paymentRecord] = await prisma_1.prisma.$transaction(async (tx) => {

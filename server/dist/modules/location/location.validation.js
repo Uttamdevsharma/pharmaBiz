@@ -30,9 +30,11 @@ exports.UpdateBinSchema = zod_1.z.object({
     isActive: zod_1.z.boolean().optional(),
 });
 exports.QuickCreateRackSchema = zod_1.z.object({
-    name: zod_1.z.string().min(1, "Rack name/code is required").max(50, "Rack name is too long"),
+    name: zod_1.z.string().min(1, "Storage unit name/code is required").max(60, "Name is too long"),
     branchId: zod_1.z.string().optional(),
-    numberOfShelves: zod_1.z.coerce.number().int().min(1, "At least 1 shelf is required").max(50, "Maximum 50 shelves allowed"),
-    binsPerShelf: zod_1.z.coerce.number().int().min(1, "At least 1 bin per shelf is required").max(50, "Maximum 50 bins per shelf allowed"),
+    shelfPrefix: zod_1.z.string().max(30).optional().default("Shelf"),
+    numberOfShelves: zod_1.z.coerce.number().int().min(0, "Shelves cannot be negative").max(50, "Maximum 50 shelves allowed").default(0),
+    binPrefix: zod_1.z.string().max(30).optional().default("Bin"),
+    binsPerShelf: zod_1.z.coerce.number().int().min(0, "Bins cannot be negative").max(50, "Maximum 50 bins per shelf allowed").default(0),
     isActive: zod_1.z.boolean().optional(),
 });

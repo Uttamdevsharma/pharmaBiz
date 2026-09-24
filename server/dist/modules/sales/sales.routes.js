@@ -15,9 +15,12 @@ router.use(authenticate_1.authenticate, planLimiter_1.requireActiveSubscription)
 router.post("/", (0, requirePermission_1.requirePermission)("pos.manage"), (0, validate_1.validateRequest)({ body: sales_validation_1.createSaleSchema }), sales_controller_1.SalesController.createSale);
 // Sales Listing & Details
 router.get("/", (0, requirePermission_1.requirePermission)("pos.history"), (0, validate_1.validateRequest)({ query: sales_validation_1.listSalesQuerySchema }), sales_controller_1.SalesController.listSales);
+router.get("/due-stats", (0, requirePermission_1.requirePermission)("pos.history"), sales_controller_1.SalesController.getDueStats);
 router.get("/customers", (0, requirePermission_1.requirePermission)("pos.manage"), sales_controller_1.SalesController.getCustomers);
 router.get("/:id", (0, requirePermission_1.requirePermission)("pos.history"), sales_controller_1.SalesController.getSaleById);
 router.get("/:id/receipt", (0, requirePermission_1.requirePermission)("pos.history"), sales_controller_1.SalesController.getReceipt);
+// Due Collection
+router.post("/:id/collect-due", (0, requirePermission_1.requirePermission)("pos.manage"), (0, validate_1.validateRequest)({ body: sales_validation_1.collectDueSchema }), sales_controller_1.SalesController.collectDue);
 // Refund & Void
 router.post("/:id/refund", (0, requirePermission_1.requirePermission)("pos.manage"), (0, validate_1.validateRequest)({ body: sales_validation_1.refundSaleSchema }), sales_controller_1.SalesController.refundSale);
 router.post("/:id/void", (0, requirePermission_1.requirePermission)("pos.manage"), (0, validate_1.validateRequest)({ body: sales_validation_1.voidSaleSchema }), sales_controller_1.SalesController.voidSale);

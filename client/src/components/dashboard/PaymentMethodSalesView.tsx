@@ -32,6 +32,9 @@ interface PaymentMethodSalesViewProps {
   selectedBranchId?: string;
 }
 
+// Persistent module cache
+let cachedPaymentMethodData: any = null;
+
 export function PaymentMethodSalesView({ onNavigate: _onNavigate, selectedBranchId: propBranchId }: PaymentMethodSalesViewProps = {}) {
   const { selectedBranchId: contextBranchId, currentBranch, isAllBranches } = useBranchContext();
   const effectiveBranchId = propBranchId !== undefined ? propBranchId : contextBranchId;
@@ -45,8 +48,8 @@ export function PaymentMethodSalesView({ onNavigate: _onNavigate, selectedBranch
   const [accounts, setAccounts] = useState<FinancialAccount[]>([]);
 
   // Telemetry Data
-  const [dailyData, setDailyData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [dailyData, setDailyData] = useState<any>(() => cachedPaymentMethodData);
+  const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedMethodFilter, setSelectedMethodFilter] = useState<string>("ALL");
@@ -83,6 +86,7 @@ export function PaymentMethodSalesView({ onNavigate: _onNavigate, selectedBranch
 
       if (res.success && res.data) {
         setDailyData(res.data);
+        cachedPaymentMethodData = res.data;
       }
     } catch (err) {
       console.error("Failed to load payment method sales", err);
@@ -291,9 +295,8 @@ export function PaymentMethodSalesView({ onNavigate: _onNavigate, selectedBranch
         </div>
       </div>
 
-      {loading ? (
-        <div className="flex flex-col items-center justify-center py-20 text-slate-500 gap-3">
-          <Loader2 className="h-8 w-8 animate-spin text-emerald-600" />
+      {!dailyData && loading ? (
+        <div className="flex flex-col items-center justify-center py-20 text-slate-500 gap-2">
           <span className="text-xs font-bold">Querying payment method telemetry...</span>
         </div>
       ) : (

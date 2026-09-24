@@ -42,14 +42,18 @@ interface PayBillViewProps {
   preSelectedBill?: BillTypeConfig | null;
 }
 
+// Persistent module cache
+let cachedBillTypes: BillTypeConfig[] = [];
+let cachedAccounts: RealFinancialAccount[] = [];
+
 export function PayBillView({
   selectedBranchId,
   onNavigate,
   preSelectedBill,
 }: PayBillViewProps) {
-  const [billTypes, setBillTypes] = useState<BillTypeConfig[]>([]);
-  const [accounts, setAccounts] = useState<RealFinancialAccount[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [billTypes, setBillTypes] = useState<BillTypeConfig[]>(() => cachedBillTypes);
+  const [accounts, setAccounts] = useState<RealFinancialAccount[]>(() => cachedAccounts);
+  const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
@@ -90,6 +94,7 @@ export function PayBillView({
 
       if (billsRes.success && billsRes.data) {
         setBillTypes(billsRes.data);
+        cachedBillTypes = billsRes.data;
         if (preSelectedBill) {
           const matched = billsRes.data.find((b) => b.id === preSelectedBill.id);
           if (matched) setSelectedBillId(matched.id);
@@ -103,6 +108,7 @@ export function PayBillView({
         // Filter to active financial accounts created for this branch
         const realAccs = accountsRes.data.filter((acc) => acc.isActive);
         setAccounts(realAccs);
+        cachedAccounts = realAccs;
 
         // Pre-select default account or first available account
         const def = realAccs.find((a) => a.isDefault) || realAccs[0];
@@ -312,20 +318,17 @@ export function PayBillView({
         </div>
       )}
 
-      {loading ? (
-        <div className="flex flex-col items-center justify-center p-20 text-slate-400 gap-3">
-          <Loader2 className="w-8 h-8 animate-spin text-emerald-600" />
-          <span className="text-xs font-bold">Loading payment accounts & bill options...</span>
-        </div>
-      ) : billTypes.length === 0 ? (
+      {billTypes.length === 0 ? (
         <div className="bg-white dark:bg-slate-900 border border-dashed border-slate-300 dark:border-slate-800 rounded-3xl p-12 text-center space-y-4">
           <div className="w-12 h-12 bg-amber-500/10 text-amber-600 rounded-2xl flex items-center justify-center mx-auto">
             <AlertCircle className="w-6 h-6" />
           </div>
           <div>
-            <h3 className="text-base font-black text-slate-900 dark:text-white">No bill types configured yet</h3>
+            <h3 className="text-base font-black text-slate-900 dark:text-white">
+              {loading ? "Loading payment options..." : "No bill types configured yet"}
+            </h3>
             <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-              You must configure at least one bill type in your Bill List before recording payments.
+              {!loading && "You must configure at least one bill type in your Bill List before recording payments."}
             </p>
           </div>
           {onNavigate && (

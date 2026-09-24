@@ -460,8 +460,7 @@ export function EmployeeDetailsView({ employeeId, selectedBranchId, onBack }: Em
 
   if (loading) {
     return (
-      <div className="p-16 text-center text-slate-400 flex flex-col items-center justify-center gap-3">
-        <Loader2 className="h-8 w-8 animate-spin text-emerald-600" />
+      <div className="p-16 text-center text-slate-400 flex flex-col items-center justify-center gap-2">
         <span className="text-sm font-semibold">Loading employee profile & records...</span>
       </div>
     );

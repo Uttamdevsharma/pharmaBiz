@@ -3,11 +3,13 @@ import { z } from "zod";
 export const CreateRackSchema = z.object({
   name: z.string().min(1, "Rack name is required"),
   branchId: z.string().optional(),
+  type: z.string().optional().default("RACK"),
   isActive: z.boolean().optional(),
 });
 
 export const UpdateRackSchema = z.object({
   name: z.string().min(1, "Name cannot be empty").optional(),
+  type: z.string().optional(),
   isActive: z.boolean().optional(),
 });
 
@@ -34,10 +36,13 @@ export const UpdateBinSchema = z.object({
 });
 
 export const QuickCreateRackSchema = z.object({
-  name: z.string().min(1, "Rack name/code is required").max(50, "Rack name is too long"),
+  name: z.string().min(1, "Storage unit name/code is required").max(60, "Name is too long"),
   branchId: z.string().optional(),
-  numberOfShelves: z.coerce.number().int().min(1, "At least 1 shelf is required").max(50, "Maximum 50 shelves allowed"),
-  binsPerShelf: z.coerce.number().int().min(1, "At least 1 bin per shelf is required").max(50, "Maximum 50 bins per shelf allowed"),
+  type: z.string().optional().default("RACK"),
+  shelfPrefix: z.string().max(30).optional().default("Shelf"),
+  numberOfShelves: z.coerce.number().int().min(0, "Shelves cannot be negative").max(50, "Maximum 50 shelves allowed").default(0),
+  binPrefix: z.string().max(30).optional().default("Bin"),
+  binsPerShelf: z.coerce.number().int().min(0, "Bins cannot be negative").max(50, "Maximum 50 bins per shelf allowed").default(0),
   isActive: z.boolean().optional(),
 });
 

@@ -58,16 +58,24 @@ class LocationService {
             for (const s of rack.shelves || []) {
                 numberOfBins += s.bins ? s.bins.length : 0;
             }
-            // Collect distinct bin IDs that have active stock
-            const usedBinIds = new Set();
+            // Collect distinct locations that have active stock
+            const usedLocationKeys = new Set();
             let totalStockUnits = 0;
             for (const loc of rack.inventoryLocations || []) {
-                if (loc.binId)
-                    usedBinIds.add(loc.binId);
+                if (loc.binId) {
+                    usedLocationKeys.add(`bin:${loc.binId}`);
+                }
+                else if (loc.shelfId) {
+                    usedLocationKeys.add(`shelf:${loc.shelfId}`);
+                }
+                else if (loc.rackId) {
+                    usedLocationKeys.add(`rack:${loc.rackId}`);
+                }
                 totalStockUnits += loc.quantity || 0;
             }
-            const usedLocations = usedBinIds.size;
-            const emptyLocations = Math.max(0, numberOfBins - usedLocations);
+            const usedLocations = usedLocationKeys.size;
+            const totalCapacitySlots = numberOfBins > 0 ? numberOfBins : (numberOfShelves > 0 ? numberOfShelves : 1);
+            const emptyLocations = Math.max(0, totalCapacitySlots - usedLocations);
             return {
                 ...rack,
                 numberOfShelves,
@@ -80,8 +88,10 @@ class LocationService {
     }
     static async quickCreateRack(branchId, data) {
         const rackName = data.name.trim();
-        const numberOfShelves = Math.max(1, Math.min(50, data.numberOfShelves));
-        const binsPerShelf = Math.max(1, Math.min(50, data.binsPerShelf));
+        const numberOfShelves = Math.max(0, Math.min(50, data.numberOfShelves ?? 0));
+        const binsPerShelf = Math.max(0, Math.min(50, data.binsPerShelf ?? 0));
+        const shelfPrefix = (data.shelfPrefix || "Shelf").trim();
+        const binPrefix = (data.binPrefix || "Bin").trim();
         const isActive = data.isActive ?? true;
         // 1. Check for duplicate rack name in this branch
         const existing = await prisma_1.prisma.rack.findFirst({
@@ -91,37 +101,53 @@ class LocationService {
             },
         });
         if (existing) {
-            throw new Error(`A rack with name "${rackName}" already exists in this branch. Please choose a different name.`);
+            throw new Error(`A storage unit with name "${rackName}" already exists in this branch. Please choose a different name.`);
         }
-        // 2. Prepare atomic nested structure: Rack -> Shelves -> Bins
-        const shelvesData = Array.from({ length: numberOfShelves }, (_, s) => {
-            const sIdx = s + 1;
-            const shelfNum = sIdx < 10 ? `S0${sIdx}` : `S${sIdx}`;
-            return {
-                name: shelfNum,
-                isActive,
-                bins: {
-                    create: Array.from({ length: binsPerShelf }, (_, b) => {
-                        const bIdx = b + 1;
-                        const binNum = bIdx < 10 ? `B0${bIdx}` : `B${bIdx}`;
-                        return {
-                            name: binNum,
-                            isActive,
-                        };
-                    }),
-                },
-            };
-        });
+        // Helper for naming items
+        const formatName = (prefix, index) => {
+            if (prefix.length <= 2 && /^[a-zA-Z]+$/.test(prefix)) {
+                return index < 10 ? `${prefix}0${index}` : `${prefix}${index}`;
+            }
+            return `${prefix} ${index}`;
+        };
+        // 2. Prepare atomic nested structure: Unit -> Shelves -> Bins
+        let shelvesData = undefined;
+        if (numberOfShelves > 0) {
+            shelvesData = Array.from({ length: numberOfShelves }, (_, s) => {
+                const sIdx = s + 1;
+                const shelfName = formatName(shelfPrefix, sIdx);
+                const shelfObj = {
+                    name: shelfName,
+                    isActive,
+                };
+                if (binsPerShelf > 0) {
+                    shelfObj.bins = {
+                        create: Array.from({ length: binsPerShelf }, (_, b) => {
+                            const bIdx = b + 1;
+                            const binName = formatName(binPrefix, bIdx);
+                            return {
+                                name: binName,
+                                isActive,
+                            };
+                        }),
+                    };
+                }
+                return shelfObj;
+            });
+        }
         // 3. Atomically create the entire hierarchy in a single relational query
+        const rackCreateData = {
+            branchId,
+            name: rackName,
+            isActive,
+        };
+        if (shelvesData && shelvesData.length > 0) {
+            rackCreateData.shelves = {
+                create: shelvesData,
+            };
+        }
         const rack = await prisma_1.prisma.rack.create({
-            data: {
-                branchId,
-                name: rackName,
-                isActive,
-                shelves: {
-                    create: shelvesData,
-                },
-            },
+            data: rackCreateData,
             include: {
                 shelves: {
                     include: {

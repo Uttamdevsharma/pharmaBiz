@@ -11,6 +11,7 @@ export const MODULE_TO_PATH: Record<OwnerModule, string> = {
   pos: "/dashboard/pos",
   pos_sale: "/dashboard/pos",
   pos_history: "/dashboard/pos/history",
+  pos_due_sales: "/dashboard/pos/dues",
   pos_vat: "/dashboard/pos/vat",
 
   // Accounts & Finance
@@ -65,6 +66,8 @@ export const MODULE_TO_PATH: Record<OwnerModule, string> = {
   // Racks & Locations
   loc_create_rack: "/dashboard/locations/create-rack",
   loc_rack_list: "/dashboard/locations/racks",
+  loc_create_custom: "/dashboard/locations/create-custom",
+  loc_custom_list: "/dashboard/locations/custom-list",
 
   // Suppliers & Procurement
   sup_create_supplier: "/dashboard/suppliers/create",
@@ -74,6 +77,7 @@ export const MODULE_TO_PATH: Record<OwnerModule, string> = {
 
   // Branches & Staff & Permissions
   branches: "/dashboard/branches",
+  branch_create: "/dashboard/branches/create",
   staff: "/dashboard/staff",
   staff_create: "/dashboard/staff/create",
   create_role: "/dashboard/staff/roles/create",
@@ -84,6 +88,8 @@ export const MODULE_TO_PATH: Record<OwnerModule, string> = {
   reports: "/dashboard/reports",
   profile: "/dashboard/profile",
   subscription: "/dashboard/subscription",
+  subscription_plans: "/dashboard/subscription/plans",
+  subscription_history: "/dashboard/subscription/history",
   settings: "/dashboard/settings",
   change_password: "/dashboard/settings/password",
 };

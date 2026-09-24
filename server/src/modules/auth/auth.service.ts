@@ -23,6 +23,10 @@ export class AuthService {
     const user = await (prisma as any).user.findFirst({
       where: {
         OR: [
+          { username: { equals: identifier, mode: "insensitive" } },
+          { email: { equals: identifier, mode: "insensitive" } },
+          { username: identifier.toLowerCase() },
+          { email: identifier.toLowerCase() },
           { username: identifier },
           { email: identifier },
         ],

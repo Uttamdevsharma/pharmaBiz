@@ -32,19 +32,135 @@ class SyncService {
                     });
                     continue;
                 }
-                // Additive sync: insert sale and deduct stock
+                // Additive sync: insert sale, record payments, accounting, and deduct stock
                 const sale = await prisma_1.prisma.$transaction(async (tx) => {
+                    const totalAmt = Number(saleEvent.totalAmount);
+                    const paidAmt = saleEvent.paidAmount !== undefined ? Number(saleEvent.paidAmount) : totalAmt;
+                    const actualPaid = Math.min(paidAmt, totalAmt);
+                    const dueAmt = saleEvent.dueAmount !== undefined ? Number(saleEvent.dueAmount) : Math.max(0, totalAmt - paidAmt);
+                    const changeAmt = saleEvent.changeAmount !== undefined ? Number(saleEvent.changeAmount) : Math.max(0, paidAmt - totalAmt);
+                    // Find products and inventory batches for purchase price / COGS fallback
+                    const productIds = saleEvent.items.map((it) => it.productId);
+                    const [productsInDb, inventoriesInDb] = await Promise.all([
+                        tx.product.findMany({
+                            where: { id: { in: productIds } },
+                            select: { id: true, basePrice: true },
+                        }),
+                        tx.inventory.findMany({
+                            where: { branchId, productId: { in: productIds } },
+                            select: { id: true, productId: true, purchasePrice: true, sellingPrice: true },
+                            orderBy: { createdAt: "desc" },
+                        }),
+                    ]);
+                    const productPriceMap = new Map(productsInDb.map((p) => [p.id, Number(p.basePrice || 0)]));
+                    const inventoryPriceMap = new Map(inventoriesInDb.map((inv) => [inv.productId, Number(inv.purchasePrice || 0)]));
+                    const preparedSaleItems = saleEvent.items.map((item) => {
+                        const mult = Number(item.unitMultiplier) || 1;
+                        const itemQty = Number(item.quantity) || 1;
+                        const lowestUnits = Number(item.lowestUnitQuantity) || itemQty * mult;
+                        const pPrice = item.purchasePrice !== undefined && item.purchasePrice !== null && Number(item.purchasePrice) > 0
+                            ? Number(item.purchasePrice)
+                            : inventoryPriceMap.get(item.productId) || productPriceMap.get(item.productId) || 0;
+                        return {
+                            productId: item.productId,
+                            inventoryId: item.inventoryId || null,
+                            inventoryLocationId: item.inventoryLocationId || null,
+                            batchNumber: item.batchNumber || null,
+                            unitType: item.unitType || "PIECE",
+                            unitMultiplier: mult,
+                            quantity: itemQty,
+                            lowestUnitQuantity: lowestUnits,
+                            unitPrice: Number(item.unitPrice),
+                            purchasePrice: pPrice,
+                            subTotal: Number(item.subTotal),
+                        };
+                    });
+                    // Resolve financial account
+                    let financialAccount = null;
+                    if (saleEvent.financialAccountId) {
+                        financialAccount = await tx.financialAccount.findFirst({
+                            where: { id: saleEvent.financialAccountId, tenantId, isActive: true },
+                        });
+                    }
+                    if (!financialAccount) {
+                        const pMethod = String(saleEvent.paymentMethod).toUpperCase();
+                        const notesLower = (saleEvent.notes || "").toLowerCase();
+                        if (pMethod === "BKASH" || (pMethod === "MOBILE" && notesLower.includes("bkash"))) {
+                            financialAccount = await tx.financialAccount.findFirst({
+                                where: {
+                                    tenantId,
+                                    branchId,
+                                    isActive: true,
+                                    OR: [{ type: "BKASH" }, { name: { contains: "bkash", mode: "insensitive" } }],
+                                },
+                            });
+                        }
+                        else if (pMethod === "NAGAD" || (pMethod === "MOBILE" && notesLower.includes("nagad"))) {
+                            financialAccount = await tx.financialAccount.findFirst({
+                                where: {
+                                    tenantId,
+                                    branchId,
+                                    isActive: true,
+                                    OR: [{ type: "NAGAD" }, { name: { contains: "nagad", mode: "insensitive" } }],
+                                },
+                            });
+                        }
+                        else if (pMethod === "BANK" || pMethod === "CARD") {
+                            financialAccount = await tx.financialAccount.findFirst({
+                                where: {
+                                    tenantId,
+                                    branchId,
+                                    type: "BANK",
+                                    isActive: true,
+                                },
+                                orderBy: { isDefault: "desc" },
+                            });
+                        }
+                        if (!financialAccount) {
+                            financialAccount = await tx.financialAccount.findFirst({
+                                where: {
+                                    tenantId,
+                                    branchId,
+                                    type: "CASH",
+                                    isActive: true,
+                                },
+                                orderBy: { isDefault: "desc" },
+                            });
+                        }
+                        if (!financialAccount) {
+                            financialAccount = await tx.financialAccount.findFirst({
+                                where: { tenantId, branchId, isActive: true },
+                            });
+                        }
+                    }
+                    let resolvedPaymentMethod = saleEvent.paymentMethod;
+                    const pMethodUpper = String(saleEvent.paymentMethod || "").toUpperCase();
+                    const notesText = `${saleEvent.notes || ""} ${financialAccount?.name || ""}`.toLowerCase();
+                    if (pMethodUpper === "MOBILE") {
+                        if (notesText.includes("bkash") || financialAccount?.type === "BKASH") {
+                            resolvedPaymentMethod = "BKASH";
+                        }
+                        else if (notesText.includes("nagad") || financialAccount?.type === "NAGAD") {
+                            resolvedPaymentMethod = "NAGAD";
+                        }
+                    }
                     const createdSale = await tx.sale.create({
                         data: {
                             tenantId,
                             branchId,
                             userId: saleEvent.userId,
                             receiptNo: saleEvent.receiptNo,
+                            financialAccountId: financialAccount ? financialAccount.id : saleEvent.financialAccountId || null,
+                            customerName: saleEvent.customerName || "Walk-in Customer",
+                            customerPhone: saleEvent.customerPhone || null,
                             subTotal: saleEvent.subTotal,
                             discount: saleEvent.discount,
                             tax: saleEvent.tax,
-                            totalAmount: saleEvent.totalAmount,
-                            paymentMethod: saleEvent.paymentMethod,
+                            totalAmount: totalAmt,
+                            paidAmount: actualPaid,
+                            dueAmount: dueAmt,
+                            changeAmount: changeAmt,
+                            paymentMethod: resolvedPaymentMethod,
                             status: saleEvent.status,
                             notes: saleEvent.notes || null,
                             managerApprovedBy: saleEvent.managerApprovedBy || null,
@@ -52,12 +168,7 @@ class SyncService {
                             localCreatedAt: new Date(saleEvent.localCreatedAt),
                             syncedAt: new Date(),
                             items: {
-                                create: saleEvent.items.map(item => ({
-                                    productId: item.productId,
-                                    quantity: item.quantity,
-                                    unitPrice: item.unitPrice,
-                                    subTotal: item.subTotal,
-                                })),
+                                create: preparedSaleItems,
                             },
                         },
                     });
@@ -72,15 +183,36 @@ class SyncService {
                                 data: { quantity: Math.max(0, inv.quantity - item.quantity) },
                             });
                         }
+                        const itemPurchasePrice = preparedSaleItems.find((i) => i.productId === item.productId)?.purchasePrice || 0;
                         await tx.stockMovement.create({
                             data: {
                                 branchId,
                                 productId: item.productId,
                                 type: "SALE",
                                 quantity: -item.quantity,
+                                unitPrice: itemPurchasePrice,
                                 reason: `Offline Sync POS Sale #${saleEvent.receiptNo}`,
                                 referenceId: createdSale.id,
                                 performedBy: saleEvent.userId,
+                            },
+                        });
+                    }
+                    // Update financial account balance and add transaction ledger
+                    if (financialAccount && actualPaid > 0) {
+                        await tx.financialAccount.update({
+                            where: { id: financialAccount.id },
+                            data: { balance: { increment: actualPaid } },
+                        });
+                        await tx.financialTransaction.create({
+                            data: {
+                                tenantId,
+                                branchId,
+                                destinationAccountId: financialAccount.id,
+                                amount: actualPaid,
+                                type: "SALE_PAYMENT",
+                                reference: saleEvent.receiptNo,
+                                note: `Offline Sync POS Sale Receipt #${saleEvent.receiptNo} via ${financialAccount.name}`,
+                                userId: saleEvent.userId,
                             },
                         });
                     }

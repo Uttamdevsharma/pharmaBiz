@@ -11,7 +11,6 @@ import {
   CheckCircle2,
   AlertCircle,
   Loader2,
-  Layers,
   Edit2,
   Lock,
   Pill,
@@ -41,6 +40,7 @@ export function AddProductView({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+
   type PackagingModel = "TABLET" | "BOTTLE" | "PIECE" | "VIAL";
 
   const [packagingType, setPackagingType] = useState<PackagingModel>("TABLET");
@@ -390,55 +390,60 @@ export function AddProductView({
   };
 
   return (
-    <div className="space-y-6 w-full">
+    <div className="max-w-5xl 2xl:max-w-6xl mx-auto space-y-6 sm:space-y-8 pb-16 px-2 sm:px-4">
       {/* Top Header & Breadcrumb */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-slate-200 dark:border-slate-800">
         <div>
-          <div className="flex items-center gap-2 text-xs font-bold text-slate-400 mb-1">
+          <div className="flex items-center gap-2 text-xs sm:text-sm font-bold text-slate-400 mb-1.5">
             <span>Inventory</span>
             <span>/</span>
             <span className="text-brand-primary">
               {isEditing ? "Edit Product" : "Add Product"}
             </span>
           </div>
-          <h2 className="text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2.5">
-            <Package className="h-7 w-7 text-brand-primary" />
-            {isEditing ? `Edit Product: ${editingProduct?.name}` : "Create New Catalog Product"}
+          <h2 className="text-2xl sm:text-3xl xl:text-4xl font-black text-slate-900 dark:text-white flex items-center gap-3">
+            <Package className="h-7 w-7 xl:h-8 xl:w-8 text-brand-primary shrink-0" />
+            <span>{isEditing ? `Edit Product: ${editingProduct?.name}` : "Create New Product"}</span>
           </h2>
+          <p className="text-xs sm:text-sm xl:text-base text-slate-500 dark:text-slate-400 mt-1.5 font-medium">
+            {isEditing
+              ? "Update product information and packaging configuration."
+              : "Enter the product details below to add it to your inventory."}
+          </p>
         </div>
 
         <div className="flex items-center gap-3">
           <button
             type="button"
             onClick={() => onNavigate("inv_product_list")}
-            className="h-11 px-5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-xl text-sm font-bold transition flex items-center gap-2"
+            className="h-11 sm:h-12 px-4 sm:px-5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs sm:text-sm xl:text-base font-bold transition flex items-center gap-2"
           >
             <ArrowLeft className="h-4 w-4" />
-            Back to Product List
+            Back to Products
           </button>
         </div>
       </div>
 
       {/* Success Notification Banner */}
       {success && (
-        <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 rounded-2xl flex items-center justify-between animate-in fade-in">
-          <div className="flex items-center gap-3">
-            <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+        <div className="p-4 sm:p-5 bg-emerald-50 dark:bg-emerald-950/40 border-2 border-emerald-200 dark:border-emerald-900 rounded-2xl flex items-center justify-between animate-in fade-in">
+          <div className="flex items-center gap-3 sm:gap-4">
+            <CheckCircle2 className="h-6 w-6 text-emerald-600 dark:text-emerald-400 shrink-0" />
             <div>
-              <div className="font-bold text-xs text-emerald-900 dark:text-emerald-200">
+              <div className="font-bold text-sm sm:text-base text-emerald-900 dark:text-emerald-200">
                 Product saved successfully!
               </div>
-              <div className="text-[11px] text-emerald-700 dark:text-emerald-400">
-                Redirecting to Product List...
+              <div className="text-xs sm:text-sm text-emerald-700 dark:text-emerald-400 mt-0.5">
+                Redirecting to product list...
               </div>
             </div>
           </div>
           <button
             type="button"
             onClick={handleResetForNew}
-            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1"
+            className="px-3.5 sm:px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs sm:text-sm font-bold transition flex items-center gap-1.5"
           >
-            <Sparkles className="h-3.5 w-3.5" />
+            <Sparkles className="h-4 w-4" />
             Add Another Product
           </button>
         </div>
@@ -446,83 +451,109 @@ export function AddProductView({
 
       {/* Error Alert */}
       {error && (
-        <div className="p-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-2xl flex items-center gap-3 text-rose-700 dark:text-rose-300 text-xs">
+        <div className="p-4 sm:p-5 bg-rose-50 dark:bg-rose-950/40 border-2 border-rose-200 dark:border-rose-900 rounded-2xl flex items-center gap-3 text-rose-700 dark:text-rose-300 text-xs sm:text-sm xl:text-base font-semibold">
           <AlertCircle className="h-5 w-5 shrink-0 text-rose-600" />
           <span>{error}</span>
         </div>
       )}
 
-      {/* Main Full-Page Form */}
-      <form onSubmit={handleSave} className="space-y-6 w-full">
-        {/* Section 1: Basic Formulation */}
-        <div className="bg-white dark:bg-slate-900 p-6 lg:p-7 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-5">
-          <div className="font-black text-base text-slate-900 dark:text-white flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
-            <Package className="h-5 w-5 text-brand-primary" />
-            1. Product Formulation & Brand Identity
+      {/* Main Form */}
+      <form onSubmit={handleSave} className="space-y-6 sm:space-y-8">
+        {/* Section 1: Basic Information */}
+        <div className="bg-white dark:bg-slate-900 p-5 sm:p-7 xl:p-8 rounded-2xl border-2 border-slate-200/90 dark:border-slate-800 shadow-xs space-y-5 sm:space-y-6">
+          <div className="flex items-center gap-2.5 pb-4 border-b border-slate-100 dark:border-slate-800">
+            <Package className="h-5 w-5 xl:h-6 xl:w-6 text-brand-primary" />
+            <h3 className="font-black text-base sm:text-lg xl:text-xl text-slate-900 dark:text-white">
+              1. Basic Information
+            </h3>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6">
+            {/* Product Name */}
             <div>
-              <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-2">
-                Product Brand Name *
+              <label className="block text-sm sm:text-base xl:text-lg font-bold text-slate-800 dark:text-slate-200 mb-2">
+                Product Name <span className="text-rose-500">*</span>
               </label>
               <input
                 type="text"
                 required
-                placeholder="e.g. Napa Extra, Seclo 20, Ciprocin, ORS"
+                placeholder="e.g. Napa Extra, Seclo 20, ORS"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full h-12 px-4 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-base font-bold text-slate-900 dark:text-white outline-none focus:border-brand-primary"
+                className="w-full h-12 sm:h-12 xl:h-13 px-4 bg-slate-50/70 hover:bg-slate-50 dark:bg-slate-800/60 dark:hover:bg-slate-800/80 focus:bg-white dark:focus:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-sm sm:text-base xl:text-lg font-semibold text-slate-900 dark:text-white placeholder:text-xs sm:placeholder:text-sm xl:placeholder:text-base placeholder:font-normal placeholder:text-slate-400 dark:placeholder:text-slate-500 outline-none focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20 transition-all"
               />
             </div>
 
+            {/* Generic Name */}
             <div>
-              <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-2">
-                Generic Name (Active Ingredient)
+              <label className="block text-sm sm:text-base xl:text-lg font-bold text-slate-800 dark:text-slate-200 mb-2">
+                Generic Name
               </label>
               <input
                 type="text"
-                placeholder="e.g. Paracetamol + Caffeine, Omeprazole Magnesium"
+                placeholder="e.g. Paracetamol, Omeprazole"
                 value={formData.genericName}
                 onChange={(e) => setFormData({ ...formData, genericName: e.target.value })}
-                className="w-full h-12 px-4 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-base font-bold text-slate-900 dark:text-white outline-none focus:border-brand-primary"
+                className="w-full h-12 sm:h-12 xl:h-13 px-4 bg-slate-50/70 hover:bg-slate-50 dark:bg-slate-800/60 dark:hover:bg-slate-800/80 focus:bg-white dark:focus:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-sm sm:text-base xl:text-lg font-semibold text-slate-900 dark:text-white placeholder:text-xs sm:placeholder:text-sm xl:placeholder:text-base placeholder:font-normal placeholder:text-slate-400 dark:placeholder:text-slate-500 outline-none focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20 transition-all"
               />
             </div>
 
+            {/* Strength / Size */}
             <div>
-              <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-2">
-                Strength / Size (e.g. 500mg, 20mg, 100ml, 500ml)
+              <label className="block text-sm sm:text-base xl:text-lg font-bold text-slate-800 dark:text-slate-200 mb-2">
+                Strength / Size
               </label>
               <input
                 type="text"
-                placeholder="e.g. 500mg + 65mg, 100ml, Standard"
+                placeholder="e.g. 500mg, 20mg, 100ml"
                 value={formData.size}
                 onChange={(e) => setFormData({ ...formData, size: e.target.value })}
-                className="w-full h-12 px-4 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-base font-bold text-slate-900 dark:text-white outline-none focus:border-brand-primary"
+                className="w-full h-12 sm:h-12 xl:h-13 px-4 bg-slate-50/70 hover:bg-slate-50 dark:bg-slate-800/60 dark:hover:bg-slate-800/80 focus:bg-white dark:focus:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-sm sm:text-base xl:text-lg font-semibold text-slate-900 dark:text-white placeholder:text-xs sm:placeholder:text-sm xl:placeholder:text-base placeholder:font-normal placeholder:text-slate-400 dark:placeholder:text-slate-500 outline-none focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20 transition-all"
               />
+            </div>
+
+            {/* Doctor Prescription Rx Checkbox */}
+            <div className="flex flex-col justify-end">
+              <label className="h-12 sm:h-12 xl:h-13 px-4 bg-slate-50/70 hover:bg-slate-50 dark:bg-slate-800/60 dark:hover:bg-slate-800/80 border-2 border-slate-200 dark:border-slate-700 rounded-xl flex items-center justify-between cursor-pointer transition">
+                <span className="text-sm sm:text-base xl:text-lg font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2.5">
+                  <span className="px-2 py-0.5 bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 rounded-md text-xs sm:text-sm font-black">
+                    Rx
+                  </span>
+                  Requires Prescription
+                </span>
+                <input
+                  type="checkbox"
+                  checked={formData.requiresPrescription}
+                  onChange={(e) => setFormData({ ...formData, requiresPrescription: e.target.checked })}
+                  className="h-5 w-5 text-brand-primary rounded accent-brand-primary cursor-pointer"
+                />
+              </label>
             </div>
           </div>
         </div>
 
-        {/* Section 2: Main Category & Subcategory */}
-        <div className="bg-white dark:bg-slate-900 p-6 lg:p-7 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-5">
-          <div className="font-black text-base text-slate-900 dark:text-white flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
-            <Layers className="h-5 w-5 text-brand-primary" />
-            2. Main Category & Subcategory
+        {/* Section 2: Category */}
+        <div className="bg-white dark:bg-slate-900 p-5 sm:p-7 xl:p-8 rounded-2xl border-2 border-slate-200/90 dark:border-slate-800 shadow-xs space-y-5 sm:space-y-6">
+          <div className="flex items-center gap-2.5 pb-4 border-b border-slate-100 dark:border-slate-800">
+            <FolderTree className="h-5 w-5 xl:h-6 xl:w-6 text-brand-primary" />
+            <h3 className="font-black text-base sm:text-lg xl:text-xl text-slate-900 dark:text-white">
+              2. Category
+            </h3>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6">
+            {/* Category */}
             <div>
-              <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-2">
-                Main Category *
+              <label className="block text-sm sm:text-base xl:text-lg font-bold text-slate-800 dark:text-slate-200 mb-2">
+                Category <span className="text-rose-500">*</span>
               </label>
               <select
                 required
                 value={formData.categoryId}
                 onChange={(e) => handleCategoryChange(e.target.value)}
-                className="w-full h-12 px-4 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-base font-bold text-slate-900 dark:text-white outline-none focus:border-brand-primary"
+                className="w-full h-12 sm:h-12 xl:h-13 px-4 bg-slate-50/70 hover:bg-slate-50 dark:bg-slate-800/60 dark:hover:bg-slate-800/80 focus:bg-white dark:focus:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-sm sm:text-base xl:text-lg font-semibold text-slate-900 dark:text-white outline-none focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20 transition-all"
               >
-                <option value="">-- Choose Main Category --</option>
+                <option value="">-- Select Category --</option>
                 {categories.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
@@ -531,24 +562,25 @@ export function AddProductView({
               </select>
             </div>
 
+            {/* Subcategory */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                <label className="text-sm sm:text-base xl:text-lg font-bold text-slate-800 dark:text-slate-200">
                   Subcategory (Optional)
                 </label>
                 <button
                   type="button"
                   onClick={() => setQuickSubModalOpen(true)}
-                  className="text-xs text-brand-primary hover:underline font-bold flex items-center gap-1"
+                  className="text-xs sm:text-sm xl:text-base text-brand-primary hover:underline font-bold flex items-center gap-1"
                 >
                   <Plus className="h-3.5 w-3.5" />
-                  New
+                  Add New
                 </button>
               </div>
               <select
                 value={formData.subcategoryId}
                 onChange={(e) => setFormData({ ...formData, subcategoryId: e.target.value })}
-                className="w-full h-12 px-4 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-base font-bold text-slate-900 dark:text-white outline-none focus:border-brand-primary"
+                className="w-full h-12 sm:h-12 xl:h-13 px-4 bg-slate-50/70 hover:bg-slate-50 dark:bg-slate-800/60 dark:hover:bg-slate-800/80 focus:bg-white dark:focus:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-sm sm:text-base xl:text-lg font-semibold text-slate-900 dark:text-white outline-none focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20 transition-all"
               >
                 <option value="">-- None / General --</option>
                 {availableSubcategories.map((sub) => (
@@ -561,76 +593,67 @@ export function AddProductView({
           </div>
         </div>
 
-        {/* Section 3: Packaging & Dispensing Units */}
-        <div className="bg-white dark:bg-slate-900 p-6 lg:p-7 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-5">
-          <div className="font-black text-base text-slate-900 dark:text-white flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
-            <span className="flex items-center gap-2">
-              <Package className="h-5 w-5 text-brand-primary" />
-              3. Packaging & Dispensing Units
-            </span>
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-bold px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1.5">
-                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                {packagingType === "TABLET"
-                  ? `Full Box • ${formData.stripsPerBox || 10} Strips per Box • ${formData.tabletsPerStrip || 10} Tablets per Strip`
-                  : packagingType === "BOTTLE"
-                  ? `${itemsPerBox > 1 ? `1 Carton = ${itemsPerBox} Bottles` : "Single Bottle"}`
-                  : packagingType === "VIAL"
-                  ? `1 Box = ${itemsPerBox} Vials / Ampoules`
-                  : `${itemsPerBox > 1 ? `1 Box/Pack = ${itemsPerBox} Pieces` : "Single Piece / Unit"}`}
-              </span>
-              <button
-                type="button"
-                onClick={() => setIsPackagingEditing(!isPackagingEditing)}
-                className={`text-xs font-bold px-4 py-2 rounded-xl transition flex items-center gap-1.5 border shadow-xs ${
-                  isPackagingEditing
-                    ? "bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800"
-                    : "bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 dark:border-slate-700"
-                }`}
-              >
-                {isPackagingEditing ? (
-                  <>
-                    <Lock className="h-3.5 w-3.5 text-amber-700 dark:text-amber-400" />
-                    <span>Lock Config</span>
-                  </>
-                ) : (
-                  <>
-                    <Edit2 className="h-3.5 w-3.5 text-slate-600 dark:text-slate-400" />
-                    <span>Edit Packaging</span>
-                  </>
-                )}
-              </button>
+        {/* Section 3: Packaging Type */}
+        <div className="bg-white dark:bg-slate-900 p-5 sm:p-7 xl:p-8 rounded-2xl border-2 border-slate-200/90 dark:border-slate-800 shadow-xs space-y-5 sm:space-y-6">
+          <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
+            <div className="flex items-center gap-2.5">
+              <Pill className="h-5 w-5 xl:h-6 xl:w-6 text-brand-primary" />
+              <h3 className="font-black text-base sm:text-lg xl:text-xl text-slate-900 dark:text-white">
+                3. Packaging Type
+              </h3>
             </div>
+            <button
+              type="button"
+              onClick={() => setIsPackagingEditing(!isPackagingEditing)}
+              className={`text-xs sm:text-sm xl:text-base font-bold px-3.5 sm:px-4 py-2 rounded-xl transition flex items-center gap-2 border-2 ${
+                isPackagingEditing
+                  ? "bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800"
+                  : "bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 dark:border-slate-700"
+              }`}
+            >
+              {isPackagingEditing ? (
+                <>
+                  <Lock className="h-3.5 w-3.5 xl:h-4 xl:w-4 text-amber-700 dark:text-amber-400" />
+                  <span>Lock Settings</span>
+                </>
+              ) : (
+                <>
+                  <Edit2 className="h-3.5 w-3.5 xl:h-4 xl:w-4 text-slate-600 dark:text-slate-400" />
+                  <span>Edit Settings</span>
+                </>
+              )}
+            </button>
           </div>
 
           {/* Packaging Form Type Selector */}
           <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-sm font-bold text-slate-800 dark:text-slate-200">
-                Select Packaging Model / Form *
-              </label>
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <label className="block text-sm sm:text-base xl:text-lg font-bold text-slate-800 dark:text-slate-200 mb-2.5">
+              Select Packaging Type <span className="text-rose-500">*</span>
+            </label>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
               {/* Option 1: Strip & Tablet */}
               <button
                 type="button"
                 disabled={!isPackagingEditing}
                 onClick={() => handleSelectPackagingType("TABLET")}
-                className={`p-3.5 rounded-xl border-2 text-left transition flex flex-col gap-1 disabled:opacity-80 ${
+                className={`p-3.5 sm:p-4 xl:p-5 rounded-2xl border-2 text-left transition flex flex-col gap-1.5 disabled:opacity-75 ${
                   packagingType === "TABLET"
-                    ? "bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-500 text-emerald-950 dark:text-emerald-200 shadow-xs"
-                    : "bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600"
+                    ? "bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-500 text-emerald-950 dark:text-emerald-200 ring-2 ring-emerald-500/20 shadow-sm"
+                    : "bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-slate-300"
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 font-black text-sm">
-                    <Pill className="h-4 w-4 text-emerald-600" />
-                    <span>Strip & Tablet</span>
+                  <div className="flex items-center gap-2 font-black text-sm sm:text-base xl:text-lg">
+                    <Pill className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-600 shrink-0" />
+                    <span>Tablet / Capsule</span>
                   </div>
                   {packagingType === "TABLET" && (
                     <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
                   )}
                 </div>
+                <span className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-medium">
+                  Box & Strips
+                </span>
               </button>
 
               {/* Option 2: Bottle / Liquid */}
@@ -638,21 +661,24 @@ export function AddProductView({
                 type="button"
                 disabled={!isPackagingEditing}
                 onClick={() => handleSelectPackagingType("BOTTLE")}
-                className={`p-3.5 rounded-xl border-2 text-left transition flex flex-col gap-1 disabled:opacity-80 ${
+                className={`p-3.5 sm:p-4 xl:p-5 rounded-2xl border-2 text-left transition flex flex-col gap-1.5 disabled:opacity-75 ${
                   packagingType === "BOTTLE"
-                    ? "bg-blue-50/70 dark:bg-blue-950/30 border-blue-500 text-blue-950 dark:text-blue-200 shadow-xs"
-                    : "bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600"
+                    ? "bg-blue-50/80 dark:bg-blue-950/30 border-blue-500 text-blue-950 dark:text-blue-200 ring-2 ring-blue-500/20 shadow-sm"
+                    : "bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-slate-300"
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 font-black text-sm">
-                    <Droplets className="h-4 w-4 text-blue-600" />
-                    <span>Bottle / Liquid</span>
+                  <div className="flex items-center gap-2 font-black text-sm sm:text-base xl:text-lg">
+                    <Droplets className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 shrink-0" />
+                    <span>Syrup / Bottle</span>
                   </div>
                   {packagingType === "BOTTLE" && (
                     <span className="h-2.5 w-2.5 rounded-full bg-blue-500" />
                   )}
                 </div>
+                <span className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-medium">
+                  Bottles / Liquid
+                </span>
               </button>
 
               {/* Option 3: Piece / Equipment */}
@@ -660,21 +686,24 @@ export function AddProductView({
                 type="button"
                 disabled={!isPackagingEditing}
                 onClick={() => handleSelectPackagingType("PIECE")}
-                className={`p-3.5 rounded-xl border-2 text-left transition flex flex-col gap-1 disabled:opacity-80 ${
+                className={`p-3.5 sm:p-4 xl:p-5 rounded-2xl border-2 text-left transition flex flex-col gap-1.5 disabled:opacity-75 ${
                   packagingType === "PIECE"
-                    ? "bg-purple-50/70 dark:bg-purple-950/30 border-purple-500 text-purple-950 dark:text-purple-200 shadow-xs"
-                    : "bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600"
+                    ? "bg-purple-50/80 dark:bg-purple-950/30 border-purple-500 text-purple-950 dark:text-purple-200 ring-2 ring-purple-500/20 shadow-sm"
+                    : "bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-slate-300"
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 font-black text-sm">
-                    <Package className="h-4 w-4 text-purple-600" />
+                  <div className="flex items-center gap-2 font-black text-sm sm:text-base xl:text-lg">
+                    <Package className="h-4 w-4 sm:h-5 sm:w-5 text-purple-600 shrink-0" />
                     <span>Piece / Unit</span>
                   </div>
                   {packagingType === "PIECE" && (
                     <span className="h-2.5 w-2.5 rounded-full bg-purple-500" />
                   )}
                 </div>
+                <span className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-medium">
+                  Single item or pack
+                </span>
               </button>
 
               {/* Option 4: Vial / Injection */}
@@ -682,43 +711,34 @@ export function AddProductView({
                 type="button"
                 disabled={!isPackagingEditing}
                 onClick={() => handleSelectPackagingType("VIAL")}
-                className={`p-3.5 rounded-xl border-2 text-left transition flex flex-col gap-1 disabled:opacity-80 ${
+                className={`p-3.5 sm:p-4 xl:p-5 rounded-2xl border-2 text-left transition flex flex-col gap-1.5 disabled:opacity-75 ${
                   packagingType === "VIAL"
-                    ? "bg-amber-50/70 dark:bg-amber-950/30 border-amber-500 text-amber-950 dark:text-amber-200 shadow-xs"
-                    : "bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600"
+                    ? "bg-amber-50/80 dark:bg-amber-950/30 border-amber-500 text-amber-950 dark:text-amber-200 ring-2 ring-amber-500/20 shadow-sm"
+                    : "bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-slate-300"
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 font-black text-sm">
-                    <Syringe className="h-4 w-4 text-amber-600" />
+                  <div className="flex items-center gap-2 font-black text-sm sm:text-base xl:text-lg">
+                    <Syringe className="h-4 w-4 sm:h-5 sm:w-5 text-amber-600 shrink-0" />
                     <span>Injection / Vial</span>
                   </div>
                   {packagingType === "VIAL" && (
                     <span className="h-2.5 w-2.5 rounded-full bg-amber-500" />
                   )}
                 </div>
+                <span className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-medium">
+                  Ampoule / Vial
+                </span>
               </button>
             </div>
           </div>
 
-          {/* Dynamic Unit Inputs by Packaging Type */}
+          {/* Unit Quantity Inputs */}
           {packagingType === "TABLET" && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-3 border-t border-slate-100 dark:border-slate-800">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 pt-3">
               <div>
-                <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
-                  Default Sales Unit
-                </label>
-                <div className="w-full h-12 px-4 bg-slate-100 dark:bg-slate-800/50 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-base text-slate-800 dark:text-slate-200 font-bold flex items-center justify-between">
-                  <span>Full Box</span>
-                  <span className="text-xs text-emerald-700 dark:text-emerald-400 font-bold px-2.5 py-0.5 bg-emerald-100 dark:bg-emerald-950/50 rounded-full">
-                    Box / Strip / Tablet
-                  </span>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
-                  Strips per Box *
+                <label className="block text-sm sm:text-base xl:text-lg font-bold text-slate-800 dark:text-slate-200 mb-2">
+                  Strips per Box <span className="text-rose-500">*</span>
                 </label>
                 <input
                   type="number"
@@ -729,13 +749,13 @@ export function AddProductView({
                   onChange={(e) =>
                     setFormData({ ...formData, stripsPerBox: parseInt(e.target.value) || 1 })
                   }
-                  className="w-full h-12 px-4 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-base font-bold text-slate-900 dark:text-white outline-none focus:border-brand-primary disabled:opacity-75 disabled:bg-slate-100 dark:disabled:bg-slate-800/40"
+                  className="w-full h-12 sm:h-12 xl:h-13 px-4 bg-slate-50/70 hover:bg-slate-50 dark:bg-slate-800/60 dark:hover:bg-slate-800/80 focus:bg-white dark:focus:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-sm sm:text-base xl:text-lg font-semibold text-slate-900 dark:text-white outline-none focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20 transition-all disabled:opacity-60"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
-                  Tablets / Capsules per Strip *
+                <label className="block text-sm sm:text-base xl:text-lg font-bold text-slate-800 dark:text-slate-200 mb-2">
+                  Tablets per Strip <span className="text-rose-500">*</span>
                 </label>
                 <input
                   type="number"
@@ -746,29 +766,17 @@ export function AddProductView({
                   onChange={(e) =>
                     setFormData({ ...formData, tabletsPerStrip: parseInt(e.target.value) || 1 })
                   }
-                  className="w-full h-12 px-4 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-base font-bold text-slate-900 dark:text-white outline-none focus:border-brand-primary disabled:opacity-75 disabled:bg-slate-100 dark:disabled:bg-slate-800/40"
+                  className="w-full h-12 sm:h-12 xl:h-13 px-4 bg-slate-50/70 hover:bg-slate-50 dark:bg-slate-800/60 dark:hover:bg-slate-800/80 focus:bg-white dark:focus:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-sm sm:text-base xl:text-lg font-semibold text-slate-900 dark:text-white outline-none focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20 transition-all disabled:opacity-60"
                 />
               </div>
             </div>
           )}
 
           {packagingType === "BOTTLE" && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-3 border-t border-slate-100 dark:border-slate-800">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 pt-3">
               <div>
-                <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
-                  Default Sales Unit
-                </label>
-                <div className="w-full h-12 px-4 bg-slate-100 dark:bg-slate-800/50 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-base text-slate-800 dark:text-slate-200 font-bold flex items-center justify-between">
-                  <span>Single Bottle</span>
-                  <span className="text-xs text-blue-700 dark:text-blue-400 font-bold px-2.5 py-0.5 bg-blue-100 dark:bg-blue-950/50 rounded-full">
-                    Bottle
-                  </span>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
-                  Bottles per Carton
+                <label className="block text-sm sm:text-base xl:text-lg font-bold text-slate-800 dark:text-slate-200 mb-2">
+                  Bottles per Carton <span className="text-rose-500">*</span>
                 </label>
                 <input
                   type="number"
@@ -777,43 +785,26 @@ export function AddProductView({
                   disabled={!isPackagingEditing}
                   value={itemsPerBox}
                   onChange={(e) => setItemsPerBox(parseInt(e.target.value) || 1)}
-                  className="w-full h-12 px-4 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-base font-bold text-slate-900 dark:text-white outline-none focus:border-brand-primary disabled:opacity-75 disabled:bg-slate-100 dark:disabled:bg-slate-800/40"
+                  className="w-full h-12 sm:h-12 xl:h-13 px-4 bg-slate-50/70 hover:bg-slate-50 dark:bg-slate-800/60 dark:hover:bg-slate-800/80 focus:bg-white dark:focus:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-sm sm:text-base xl:text-lg font-semibold text-slate-900 dark:text-white outline-none focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20 transition-all disabled:opacity-60"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
-                  Volume / Net Content
+                <label className="block text-sm sm:text-base xl:text-lg font-bold text-slate-800 dark:text-slate-200 mb-2">
+                  Sales Unit
                 </label>
-                <input
-                  type="text"
-                  disabled={!isPackagingEditing}
-                  placeholder="e.g. 100ml, 200ml, 60ml"
-                  value={formData.size || ""}
-                  onChange={(e) => setFormData({ ...formData, size: e.target.value })}
-                  className="w-full h-12 px-4 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-base font-bold text-slate-900 dark:text-white outline-none focus:border-brand-primary disabled:opacity-75 disabled:bg-slate-100 dark:disabled:bg-slate-800/40"
-                />
+                <div className="w-full h-12 sm:h-12 xl:h-13 px-4 bg-slate-100 dark:bg-slate-800/60 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-sm sm:text-base xl:text-lg font-bold text-slate-700 dark:text-slate-300 flex items-center">
+                  Single Bottle
+                </div>
               </div>
             </div>
           )}
 
           {packagingType === "PIECE" && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-3 border-t border-slate-100 dark:border-slate-800">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 pt-3">
               <div>
-                <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
-                  Default Sales Unit
-                </label>
-                <div className="w-full h-12 px-4 bg-slate-100 dark:bg-slate-800/50 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-base text-slate-800 dark:text-slate-200 font-bold flex items-center justify-between">
-                  <span>Single Piece / Item</span>
-                  <span className="text-xs text-purple-700 dark:text-purple-400 font-bold px-2.5 py-0.5 bg-purple-100 dark:bg-purple-950/50 rounded-full">
-                    Piece (Pcs)
-                  </span>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
-                  Pieces per Box / Pack
+                <label className="block text-sm sm:text-base xl:text-lg font-bold text-slate-800 dark:text-slate-200 mb-2">
+                  Pieces per Box / Pack <span className="text-rose-500">*</span>
                 </label>
                 <input
                   type="number"
@@ -822,43 +813,26 @@ export function AddProductView({
                   disabled={!isPackagingEditing}
                   value={itemsPerBox}
                   onChange={(e) => setItemsPerBox(parseInt(e.target.value) || 1)}
-                  className="w-full h-12 px-4 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-base font-bold text-slate-900 dark:text-white outline-none focus:border-brand-primary disabled:opacity-75 disabled:bg-slate-100 dark:disabled:bg-slate-800/40"
+                  className="w-full h-12 sm:h-12 xl:h-13 px-4 bg-slate-50/70 hover:bg-slate-50 dark:bg-slate-800/60 dark:hover:bg-slate-800/80 focus:bg-white dark:focus:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-sm sm:text-base xl:text-lg font-semibold text-slate-900 dark:text-white outline-none focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20 transition-all disabled:opacity-60"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
-                  Item Specification / Size
+                <label className="block text-sm sm:text-base xl:text-lg font-bold text-slate-800 dark:text-slate-200 mb-2">
+                  Sales Unit
                 </label>
-                <input
-                  type="text"
-                  disabled={!isPackagingEditing}
-                  placeholder="e.g. 5ml, Large, Standard, 10cm"
-                  value={formData.size || ""}
-                  onChange={(e) => setFormData({ ...formData, size: e.target.value })}
-                  className="w-full h-12 px-4 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-base font-bold text-slate-900 dark:text-white outline-none focus:border-brand-primary disabled:opacity-75 disabled:bg-slate-100 dark:disabled:bg-slate-800/40"
-                />
+                <div className="w-full h-12 sm:h-12 xl:h-13 px-4 bg-slate-100 dark:bg-slate-800/60 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-sm sm:text-base xl:text-lg font-bold text-slate-700 dark:text-slate-300 flex items-center">
+                  Single Piece / Unit
+                </div>
               </div>
             </div>
           )}
 
           {packagingType === "VIAL" && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-3 border-t border-slate-100 dark:border-slate-800">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 pt-3">
               <div>
-                <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
-                  Default Sales Unit
-                </label>
-                <div className="w-full h-12 px-4 bg-slate-100 dark:bg-slate-800/50 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-base text-slate-800 dark:text-slate-200 font-bold flex items-center justify-between">
-                  <span>Single Vial / Ampoule</span>
-                  <span className="text-xs text-amber-700 dark:text-amber-400 font-bold px-2.5 py-0.5 bg-amber-100 dark:bg-amber-950/50 rounded-full">
-                    Vial / Ampoule
-                  </span>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
-                  Vials / Ampoules per Box *
+                <label className="block text-sm sm:text-base xl:text-lg font-bold text-slate-800 dark:text-slate-200 mb-2">
+                  Vials / Ampoules per Box <span className="text-rose-500">*</span>
                 </label>
                 <input
                   type="number"
@@ -867,103 +841,70 @@ export function AddProductView({
                   disabled={!isPackagingEditing}
                   value={itemsPerBox}
                   onChange={(e) => setItemsPerBox(parseInt(e.target.value) || 1)}
-                  className="w-full h-12 px-4 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-base font-bold text-slate-900 dark:text-white outline-none focus:border-brand-primary disabled:opacity-75 disabled:bg-slate-100 dark:disabled:bg-slate-800/40"
+                  className="w-full h-12 sm:h-12 xl:h-13 px-4 bg-slate-50/70 hover:bg-slate-50 dark:bg-slate-800/60 dark:hover:bg-slate-800/80 focus:bg-white dark:focus:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-sm sm:text-base xl:text-lg font-semibold text-slate-900 dark:text-white outline-none focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20 transition-all disabled:opacity-60"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
-                  Strength / Dosage
+                <label className="block text-sm sm:text-base xl:text-lg font-bold text-slate-800 dark:text-slate-200 mb-2">
+                  Sales Unit
                 </label>
-                <input
-                  type="text"
-                  disabled={!isPackagingEditing}
-                  placeholder="e.g. 1g, 500mg/2ml, 40IU"
-                  value={formData.size || ""}
-                  onChange={(e) => setFormData({ ...formData, size: e.target.value })}
-                  className="w-full h-12 px-4 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-base font-bold text-slate-900 dark:text-white outline-none focus:border-brand-primary disabled:opacity-75 disabled:bg-slate-100 dark:disabled:bg-slate-800/40"
-                />
+                <div className="w-full h-12 sm:h-12 xl:h-13 px-4 bg-slate-100 dark:bg-slate-800/60 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-sm sm:text-base xl:text-lg font-bold text-slate-700 dark:text-slate-300 flex items-center">
+                  Single Vial / Ampoule
+                </div>
               </div>
             </div>
           )}
 
-          {/* Multiplier Info Banner */}
-          <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-slate-700 dark:text-slate-300">
-            💡 <strong>Automatic Multiplier:</strong>{" "}
+          {/* Quick Summary Pill */}
+          <div className="p-4 bg-slate-50 dark:bg-slate-800/40 border-2 border-slate-200/80 dark:border-slate-700/80 rounded-xl text-xs sm:text-sm xl:text-base font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2">
+            <span className="font-bold text-slate-900 dark:text-white">Summary:</span>
             {packagingType === "TABLET" && (
-              <>
-                1 Box = {formData.stripsPerBox || 10} Strips ={" "}
-                <strong className="text-brand-primary">
-                  {(formData.stripsPerBox || 10) * (formData.tabletsPerStrip || 10)} Tablets/Capsules
-                </strong>
-                . Stock Receiving & POS can dispense by Full Box, Strip, or single Tablet.
-              </>
+              <span>
+                1 Box = {formData.stripsPerBox || 10} Strips ({Number(formData.stripsPerBox || 10) * Number(formData.tabletsPerStrip || 10)} Tablets total)
+              </span>
             )}
             {packagingType === "BOTTLE" && (
-              <>
-                1 Master Carton/Box ={" "}
-                <strong className="text-brand-primary">{itemsPerBox || 1} Bottles</strong>. Counter
-                POS dispenses and bills per Single Bottle.
-              </>
+              <span>
+                1 Carton = {itemsPerBox || 12} Bottles (dispensed per single bottle)
+              </span>
             )}
             {packagingType === "PIECE" && (
-              <>
-                1 Box/Pack ={" "}
-                <strong className="text-brand-primary">{itemsPerBox || 1} Pieces</strong>. Stock
-                receiving & sales are tracked per Piece.
-              </>
+              <span>
+                1 Box = {itemsPerBox || 1} Pieces
+              </span>
             )}
             {packagingType === "VIAL" && (
-              <>
-                1 Box ={" "}
-                <strong className="text-brand-primary">{itemsPerBox || 1} Vials / Ampoules</strong>.
-                Counter POS can dispense single Vial or Full Box.
-              </>
+              <span>
+                1 Box = {itemsPerBox || 10} Vials / Ampoules
+              </span>
             )}
           </div>
         </div>
 
-        {/* Section 4: Doctor Prescription (Rx) */}
-        <div className="bg-white dark:bg-slate-900 p-6 lg:p-7 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
-          <label className="p-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl flex items-center justify-between cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition">
-            <div className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2.5">
-              <span className="px-2 py-0.5 bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 rounded font-black text-xs">
-                Rx
-              </span>
-              Requires Doctor Prescription (Rx)
-            </div>
-            <input
-              type="checkbox"
-              checked={formData.requiresPrescription}
-              onChange={(e) => setFormData({ ...formData, requiresPrescription: e.target.checked })}
-              className="h-5 w-5 text-brand-primary rounded accent-brand-primary"
-            />
-          </label>
-        </div>
-
-        {/* Submit Bar */}
-        <div className="flex items-center justify-end gap-3 pt-2">
+        {/* Action Buttons */}
+        <div className="flex items-center justify-end gap-3 sm:gap-4 pt-3">
           <button
             type="button"
             onClick={() => onNavigate("inv_product_list")}
-            className="h-12 px-6 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl text-sm font-black transition"
+            className="h-11 sm:h-12 xl:h-13 px-5 sm:px-6 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-sm sm:text-base xl:text-lg font-bold transition"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={saving}
-            className="h-12 px-7 bg-brand-primary hover:bg-brand-primary-hover text-white rounded-xl text-sm font-black transition flex items-center gap-2 shadow-sm disabled:opacity-50"
+            className="h-11 sm:h-12 xl:h-13 px-6 sm:px-8 bg-brand-primary hover:bg-brand-primary-hover text-white rounded-xl text-sm sm:text-base xl:text-lg font-bold transition flex items-center gap-2.5 shadow-sm disabled:opacity-50"
           >
             {saving ? (
               <>
                 <Loader2 className="h-5 w-5 animate-spin" />
-                Saving Product...
+                <span>Saving...</span>
               </>
             ) : (
               <>
                 <Save className="h-5 w-5" />
-                {isEditing ? "Update Product" : "Save Product"}
+                <span>{isEditing ? "Update Product" : "Save Product"}</span>
               </>
             )}
           </button>
@@ -973,17 +914,17 @@ export function AddProductView({
       {/* Quick Add Subcategory Modal */}
       {quickSubModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full p-6 border border-slate-200 dark:border-slate-800 shadow-2xl space-y-5 animate-in fade-in zoom-in-95">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full p-6 border-2 border-slate-200 dark:border-slate-800 shadow-2xl space-y-5 animate-in fade-in zoom-in-95">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2.5">
                 <FolderTree className="h-5 w-5 text-brand-primary" />
-                <h3 className="text-xl font-black text-slate-900 dark:text-white">
+                <h4 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white">
                   Add Subcategory
-                </h3>
+                </h4>
               </div>
               <button
                 onClick={() => setQuickSubModalOpen(false)}
-                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg"
+                className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -991,17 +932,17 @@ export function AddProductView({
 
             <form onSubmit={handleQuickCreateSubcategory} className="space-y-4">
               <div>
-                <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
-                  Subcategory Name *
+                <label className="block text-sm sm:text-base font-bold text-slate-800 dark:text-slate-200 mb-2">
+                  Subcategory Name <span className="text-rose-500">*</span>
                 </label>
                 <input
                   type="text"
                   required
                   autoFocus
-                  placeholder="e.g. Antibiotics, Antipyretics, Eye Drops"
+                  placeholder="e.g. Antibiotics, Antipyretics"
                   value={quickSubName}
                   onChange={(e) => setQuickSubName(e.target.value)}
-                  className="w-full h-12 px-4 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-base font-bold text-slate-900 dark:text-white outline-none focus:border-brand-primary"
+                  className="w-full h-11 sm:h-12 px-4 bg-slate-50 hover:bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-sm sm:text-base font-semibold text-slate-900 dark:text-white placeholder:text-xs sm:placeholder:text-sm placeholder:text-slate-400 outline-none focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20 transition-all"
                 />
               </div>
 
@@ -1009,17 +950,17 @@ export function AddProductView({
                 <button
                   type="button"
                   onClick={() => setQuickSubModalOpen(false)}
-                  className="h-11 px-5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl text-sm font-bold transition"
+                  className="h-10 sm:h-11 px-5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl text-sm sm:text-base font-bold transition"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={quickSubSaving || !quickSubName.trim()}
-                  className="h-11 px-6 bg-brand-primary hover:bg-brand-primary-hover text-white rounded-xl text-sm font-black transition flex items-center gap-2 shadow-sm disabled:opacity-50"
+                  className="h-10 sm:h-11 px-5 bg-brand-primary hover:bg-brand-primary-hover text-white rounded-xl text-sm sm:text-base font-bold transition flex items-center gap-2 disabled:opacity-50"
                 >
                   {quickSubSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                  Create & Select
+                  Create
                 </button>
               </div>
             </form>

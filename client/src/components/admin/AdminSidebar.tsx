@@ -21,6 +21,8 @@ import {
   PanelLeftOpen,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { ThemeToggle } from "@/components/common/ThemeToggle";
+import { loadingProgress } from "@/lib/loadingProgress";
 
 export type AdminTab =
   | "overview"
@@ -60,6 +62,7 @@ export function AdminSidebar({
   const isCollapsed = collapsed && !mobileOpen;
 
   const handleTabClick = (tab: AdminTab) => {
+    loadingProgress.triggerQuick(240);
     onTabChange(tab);
     if (onCloseMobile) {
       onCloseMobile();
@@ -524,12 +527,21 @@ export function AdminSidebar({
         )}
 
         {/* Desktop Collapse / Expand Toggle Footer */}
-        {onToggleCollapse && (
-          <div className="hidden lg:flex p-2.5 border-t border-slate-200 dark:border-slate-800 shrink-0 bg-slate-50/50 dark:bg-slate-900/50">
+        <div className="p-2.5 border-t border-slate-200 dark:border-slate-800 shrink-0 bg-slate-50/50 dark:bg-slate-900/50 space-y-2">
+          {/* Theme Switcher */}
+          {isCollapsed ? (
+            <div className="flex justify-center">
+              <ThemeToggle className="h-9 w-9" />
+            </div>
+          ) : (
+            <ThemeToggle variant="sidebar" />
+          )}
+
+          {onToggleCollapse && (
             <button
               type="button"
               onClick={onToggleCollapse}
-              className={`w-full flex items-center ${isCollapsed ? "justify-center" : "justify-between px-3"} py-2.5 rounded-xl hover:bg-slate-200/60 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white transition duration-150 group relative cursor-pointer`}
+              className={`w-full hidden lg:flex items-center ${isCollapsed ? "justify-center" : "justify-between px-3"} py-2 rounded-xl hover:bg-slate-200/60 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white transition duration-150 group relative cursor-pointer`}
               title={isCollapsed ? "Expand Sidebar (Ctrl+B)" : "Collapse Sidebar (Ctrl+B)"}
             >
               {isCollapsed ? (
@@ -551,8 +563,8 @@ export function AdminSidebar({
                 </>
               )}
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </aside>
     </>
   );

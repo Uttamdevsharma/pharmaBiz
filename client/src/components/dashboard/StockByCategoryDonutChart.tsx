@@ -120,7 +120,7 @@ export function StockByCategoryDonutChart({
           <div>
             <span className="text-slate-400 font-medium mr-1">Total Valuation:</span>
             <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
-              ৳{calculatedTotalValue.toLocaleString("en-BD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              ৳{Math.round(calculatedTotalValue).toLocaleString("en-BD")}
             </span>
           </div>
         </div>
@@ -265,7 +265,7 @@ export function StockByCategoryDonutChart({
                     <div className="text-right">
                       <span className="text-[10px] text-slate-400 font-medium block">Cost Value</span>
                       <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                        ৳{item.stockValue.toLocaleString("en-BD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        ৳{Math.round(item.stockValue).toLocaleString("en-BD")}
                       </span>
                     </div>
                   </div>

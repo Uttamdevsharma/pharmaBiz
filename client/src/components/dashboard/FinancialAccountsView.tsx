@@ -64,6 +64,9 @@ const COMMON_BANKS = [
   "Sonali Bank",
 ];
 
+// Persistent module cache
+let cachedFinancialAccounts: FinancialAccount[] = [];
+
 export function FinancialAccountsView({ onNavigate, selectedBranchId: propBranchId }: FinancialAccountsViewProps) {
   const {
     branches,
@@ -74,9 +77,9 @@ export function FinancialAccountsView({ onNavigate, selectedBranchId: propBranch
 
   const effectiveBranchId = propBranchId !== undefined ? propBranchId : contextBranchId;
 
-  const [accounts, setAccounts] = useState<FinancialAccount[]>([]);
+  const [accounts, setAccounts] = useState<FinancialAccount[]>(() => cachedFinancialAccounts);
   const [targetFormBranchId, setTargetFormBranchId] = useState<string>("");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("ALL");
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -123,6 +126,7 @@ export function FinancialAccountsView({ onNavigate, selectedBranchId: propBranch
       const res = await fetchApi<FinancialAccount[]>(url);
       if (res.success && res.data) {
         setAccounts(res.data);
+        cachedFinancialAccounts = res.data;
       }
     } catch (err: any) {
       setError(err.message || "Failed to load accounts");
@@ -551,19 +555,16 @@ export function FinancialAccountsView({ onNavigate, selectedBranchId: propBranch
       </div>
 
       {/* Accounts Grid */}
-      {loading ? (
-        <div className="flex flex-col items-center justify-center p-16 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 text-slate-500">
-          <Loader2 className="h-8 w-8 animate-spin text-emerald-600 mb-3" />
-          <p className="text-xs font-bold">Synchronizing financial accounts & live balances...</p>
-        </div>
-      ) : filteredAccounts.length === 0 ? (
+      {filteredAccounts.length === 0 ? (
         <div className="text-center p-16 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 space-y-3">
           <Wallet className="h-12 w-12 text-slate-300 dark:text-slate-600 mx-auto" />
-          <h3 className="text-base font-bold text-slate-800 dark:text-slate-200">No Financial Accounts Found</h3>
+          <h3 className="text-base font-bold text-slate-800 dark:text-slate-200">
+            {loading ? "Loading Financial Accounts..." : "No Financial Accounts Found"}
+          </h3>
           <p className="text-xs text-slate-400 max-w-md mx-auto">
-            {search || typeFilter !== "ALL"
+            {!loading && (search || typeFilter !== "ALL"
               ? "No accounts match your current search or filter criteria."
-              : "Get started by creating your pharmacy financial accounts (Cash, bKash, Nagad, DBBL, City Bank, BRAC Bank, etc.)."}
+              : "Get started by creating your pharmacy financial accounts (Cash, bKash, Nagad, DBBL, City Bank, BRAC Bank, etc.).")}
           </p>
           <button
             onClick={handleOpenCreate}

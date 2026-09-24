@@ -80,6 +80,7 @@ export class SuperAdminService {
       ...(data.maxStaffPerBranch !== undefined && { maxStaffPerBranch: data.maxStaffPerBranch }),
       ...(data.maxTotalStaff !== undefined && { maxTotalStaff: data.maxTotalStaff }),
       ...(data.trialDays !== undefined && { trialDays: data.trialDays }),
+      ...(data.yearlyDiscountPercent !== undefined && { yearlyDiscountPercent: data.yearlyDiscountPercent }),
     };
 
     return await (prisma as any).subscriptionPlan.create({
@@ -107,12 +108,13 @@ export class SuperAdminService {
 
     return plans.map((p: any) => {
       const feat = (typeof p.features === "object" && p.features !== null) ? p.features : {};
-      const fallback: any = CENTRAL_PLAN_DEFINITIONS[p.tier as PricingTierType] || CENTRAL_PLAN_DEFINITIONS.TRIAL;
+      const fallback: any = (CENTRAL_PLAN_DEFINITIONS as any)[p.tier] || CENTRAL_PLAN_DEFINITIONS.STARTER;
       return {
         ...p,
         maxStaffPerBranch: feat.maxStaffPerBranch ?? fallback.maxStaffPerBranch ?? 1,
         maxTotalStaff: feat.maxTotalStaff ?? fallback.maxTotalStaff ?? (p.maxBranches * (feat.maxStaffPerBranch ?? 1)),
-        trialDays: feat.trialDays ?? fallback.trialDays ?? 7,
+        trialDays: 0,
+        yearlyDiscountPercent: feat.yearlyDiscountPercent ?? 0,
       };
     });
   }
@@ -138,12 +140,13 @@ export class SuperAdminService {
     }
 
     const feat = (typeof plan.features === "object" && plan.features !== null) ? plan.features : {};
-    const fallback: any = CENTRAL_PLAN_DEFINITIONS[plan.tier as PricingTierType] || CENTRAL_PLAN_DEFINITIONS.TRIAL;
+    const fallback: any = (CENTRAL_PLAN_DEFINITIONS as any)[plan.tier] || CENTRAL_PLAN_DEFINITIONS.STARTER;
     return {
       ...plan,
       maxStaffPerBranch: feat.maxStaffPerBranch ?? fallback.maxStaffPerBranch ?? 1,
       maxTotalStaff: feat.maxTotalStaff ?? fallback.maxTotalStaff ?? (plan.maxBranches * (feat.maxStaffPerBranch ?? 1)),
-      trialDays: feat.trialDays ?? fallback.trialDays ?? 7,
+      trialDays: 0,
+      yearlyDiscountPercent: feat.yearlyDiscountPercent ?? 0,
     };
   }
 
@@ -160,6 +163,7 @@ export class SuperAdminService {
       ...(data.maxStaffPerBranch !== undefined && { maxStaffPerBranch: data.maxStaffPerBranch }),
       ...(data.maxTotalStaff !== undefined && { maxTotalStaff: data.maxTotalStaff }),
       ...(data.trialDays !== undefined && { trialDays: data.trialDays }),
+      ...(data.yearlyDiscountPercent !== undefined && { yearlyDiscountPercent: data.yearlyDiscountPercent }),
     };
 
     return await (prisma as any).subscriptionPlan.update({

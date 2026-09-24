@@ -25,6 +25,7 @@ interface PlanFeatures {
   customAudit: boolean;
   apiAccess: boolean;
   branchPriceOverride: boolean;
+  yearlyDiscountPercent?: number;
   [key: string]: any;
 }
 
@@ -34,6 +35,7 @@ interface PlanItem {
   tier: "TRIAL" | "STARTER" | "GROWTH" | "ENTERPRISE";
   price: number | string;
   billingCycle: string;
+  yearlyDiscountPercent?: number;
   maxBranches: number;
   maxStaffPerBranch: number;
   maxTotalStaff: number;
@@ -59,6 +61,7 @@ export function PlansTab() {
     tier: "STARTER" as "TRIAL" | "STARTER" | "GROWTH" | "ENTERPRISE",
     price: 500,
     billingCycle: "MONTHLY",
+    yearlyDiscountPercent: 5,
     maxBranches: 2,
     maxStaffPerBranch: 1,
     maxTotalStaff: 2,
@@ -100,6 +103,7 @@ export function PlansTab() {
       tier: "STARTER",
       price: 500,
       billingCycle: "MONTHLY",
+      yearlyDiscountPercent: 5,
       maxBranches: 2,
       maxStaffPerBranch: 1,
       maxTotalStaff: 2,
@@ -127,6 +131,7 @@ export function PlansTab() {
       tier: plan.tier,
       price: Number(plan.price),
       billingCycle: plan.billingCycle || "MONTHLY",
+      yearlyDiscountPercent: Number(plan.yearlyDiscountPercent ?? feat.yearlyDiscountPercent ?? (plan.tier === "STARTER" ? 5 : plan.tier === "GROWTH" ? 10 : plan.tier === "ENTERPRISE" ? 15 : 0)),
       maxBranches: plan.maxBranches ?? 2,
       maxStaffPerBranch: plan.maxStaffPerBranch ?? (feat.maxStaffPerBranch ?? 1),
       maxTotalStaff: plan.maxTotalStaff ?? (feat.maxTotalStaff ?? 2),
@@ -155,12 +160,14 @@ export function PlansTab() {
         tier: formData.tier,
         price: Number(formData.price),
         billingCycle: formData.billingCycle,
+        yearlyDiscountPercent: Number(formData.yearlyDiscountPercent || 0),
         maxBranches: Number(formData.maxBranches),
         maxStaffPerBranch: Number(formData.maxStaffPerBranch),
         maxTotalStaff: Number(formData.maxTotalStaff),
         trialDays: Number(formData.trialDays),
         features: {
           ...formData.features,
+          yearlyDiscountPercent: Number(formData.yearlyDiscountPercent || 0),
           maxStaffPerBranch: Number(formData.maxStaffPerBranch),
           maxTotalStaff: Number(formData.maxTotalStaff),
           trialDays: Number(formData.trialDays),
@@ -314,6 +321,16 @@ export function PlansTab() {
                         Total Staff Cap: <strong>{totalStaff >= 999 ? "Unlimited" : `${totalStaff} Total`}</strong>
                       </span>
                     </div>
+
+                    {/* Annual Discount Badge */}
+                    {Number(plan.yearlyDiscountPercent ?? feat.yearlyDiscountPercent ?? 0) > 0 && (
+                      <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/40 text-xs font-semibold text-emerald-800 dark:text-emerald-300 flex items-center gap-2.5">
+                        <Sparkles className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                        <span>
+                          Annual Discount: <strong>{plan.yearlyDiscountPercent ?? feat.yearlyDiscountPercent}% Off</strong> (৳{Math.round(Number(plan.price) * 12 * (1 - Number(plan.yearlyDiscountPercent ?? feat.yearlyDiscountPercent) / 100)).toLocaleString()}/yr)
+                        </span>
+                      </div>
+                    )}
 
                     {/* If TRIAL, show duration */}
                     {plan.tier === "TRIAL" && (
@@ -520,6 +537,35 @@ export function PlansTab() {
                       <option value="MONTHLY">Monthly (Per Month)</option>
                       <option value="YEARLY">Yearly (Per Year)</option>
                     </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                      Yearly Discount (% ছাড়)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="1"
+                        value={formData.yearlyDiscountPercent}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            yearlyDiscountPercent: Math.max(0, Math.min(100, parseFloat(e.target.value) || 0)),
+                          })
+                        }
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70 font-semibold focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                        placeholder="e.g. 5"
+                      />
+                      <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">%</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      {formData.yearlyDiscountPercent > 0
+                        ? `Monthly ৳${Number(formData.price).toLocaleString()} হলে বার্ষিক ৳${(Number(formData.price) * 12).toLocaleString()} এর বদলে ${(formData.yearlyDiscountPercent)}% ছাড়ে ৳${Math.round(Number(formData.price) * 12 * (1 - formData.yearlyDiscountPercent / 100)).toLocaleString()}/বছর`
+                        : "বার্ষিক প্ল্যানের ক্ষেত্রে স্পেশাল ডিসকাউন্ট শতাংশ (যেমন 5%, 10%)"}
+                    </p>
                   </div>
                 </div>
               </div>
