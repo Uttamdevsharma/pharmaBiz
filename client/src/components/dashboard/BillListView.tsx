@@ -49,20 +49,13 @@ interface BillListViewProps {
   onSelectForPayment?: (bill: BillTypeConfig) => void;
 }
 
-// Module cache
-let cachedBillsList: BillTypeConfig[] = [];
-
-export function setCachedBillsData(list: BillTypeConfig[]) {
-  cachedBillsList = list;
-}
-
 export function BillListView({
   selectedBranchId,
   onNavigate,
   onSelectForPayment,
 }: BillListViewProps) {
-  const [bills, setBills] = useState<BillTypeConfig[]>(() => cachedBillsList);
-  const [loading, setLoading] = useState(() => cachedBillsList.length === 0);
+  const [bills, setBills] = useState<BillTypeConfig[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"ALL" | "ACTIVE" | "INACTIVE">("ALL");
   const [error, setError] = useState<string | null>(null);
@@ -87,7 +80,7 @@ export function BillListView({
   const loadBillTypes = async () => {
     if (!selectedBranchId) return;
     try {
-      if (cachedBillsList.length === 0) setLoading(true);
+      setLoading(true);
       setError(null);
       const res = await fetchApi<BillTypeConfig[]>(
         `/accounting/recurring-expenses?branchId=${selectedBranchId}&includeInactive=true`

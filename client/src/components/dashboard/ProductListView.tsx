@@ -32,18 +32,6 @@ let cachedCategoriesList: Category[] = [];
 let cachedTotalPages = 1;
 let cachedTotalItems = 0;
 
-export function setCachedProductData(
-  products: Product[],
-  categories: Category[] = [],
-  totalPages = 1,
-  totalCount = 0
-) {
-  cachedProductsList = products;
-  if (categories.length > 0) cachedCategoriesList = categories;
-  cachedTotalPages = totalPages;
-  cachedTotalItems = totalCount;
-}
-
 export function ProductListView({ onNavigate, onEditProduct }: ProductListViewProps) {
   const [products, setProducts] = useState<Product[]>(() => cachedProductsList);
   const [categories, setCategories] = useState<Category[]>(() => cachedCategoriesList);
@@ -77,10 +65,7 @@ export function ProductListView({ onNavigate, onEditProduct }: ProductListViewPr
   const loadVariants = useCallback(async () => {
     try {
       const catsRes = await fetchApi("/products/variants/categories");
-      if (catsRes.success && catsRes.data) {
-        setCategories(catsRes.data);
-        cachedCategoriesList = catsRes.data;
-      }
+      if (catsRes.success && catsRes.data) setCategories(catsRes.data);
     } catch (err) {
       console.error("Failed to load catalog variants", err);
     }
@@ -88,7 +73,7 @@ export function ProductListView({ onNavigate, onEditProduct }: ProductListViewPr
 
   const loadProducts = useCallback(async () => {
     try {
-      if (cachedProductsList.length === 0) setLoading(true);
+      setLoading(true);
       const params = new URLSearchParams();
       params.append("page", page.toString());
       params.append("limit", "10");

@@ -88,27 +88,13 @@ let cachedDueSales: SaleRecord[] = [];
 let cachedDueTotalPages = 1;
 let cachedDueTotalCount = 0;
 
-export function setCachedDueSalesData(records: SaleRecord[], totalPages = 1, totalCount = 0) {
-  cachedDueSales = records;
-  cachedDueTotalPages = totalPages;
-  cachedDueTotalCount = totalCount;
-}
-
-export function getCachedDueSalesData() {
-  return {
-    sales: cachedDueSales,
-    totalPages: cachedDueTotalPages,
-    totalCount: cachedDueTotalCount,
-  };
-}
-
 export function DueSalesView({ selectedBranchId: propBranchId, onNavigate }: DueSalesViewProps = {}) {
   const { user: authUser } = useAuth();
   const { selectedBranchId: contextBranchId, currentBranch, isAllBranches } = useBranchContext();
   const effectiveBranchId = propBranchId !== undefined ? propBranchId : contextBranchId;
 
   const [sales, setSales] = useState<SaleRecord[]>(() => cachedDueSales);
-  const [loading, setLoading] = useState(() => cachedDueSales.length === 0);
+  const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   // Filters
@@ -123,8 +109,8 @@ export function DueSalesView({ selectedBranchId: propBranchId, onNavigate }: Due
   // Pagination
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
-  const [totalPages, setTotalPages] = useState(() => cachedDueTotalPages);
-  const [totalCount, setTotalCount] = useState(() => cachedDueTotalCount);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
 
   // Selected Sale for View Invoice Modal
   const [selectedSale, setSelectedSale] = useState<SaleRecord | null>(null);
@@ -159,7 +145,7 @@ export function DueSalesView({ selectedBranchId: propBranchId, onNavigate }: Due
   const loadDueSales = async (isManual = false) => {
     try {
       if (isManual) setRefreshing(true);
-      else if (cachedDueSales.length === 0) setLoading(true);
+      else setLoading(true);
 
       const params = new URLSearchParams();
       params.append("page", page.toString());

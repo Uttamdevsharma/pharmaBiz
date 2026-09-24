@@ -84,20 +84,6 @@ let cachedSalesRecords: SaleRecord[] = [];
 let cachedSalesTotalPages = 1;
 let cachedSalesTotalCount = 0;
 
-export function setCachedSalesData(records: SaleRecord[], totalPages = 1, totalCount = 0) {
-  cachedSalesRecords = records;
-  cachedSalesTotalPages = totalPages;
-  cachedSalesTotalCount = totalCount;
-}
-
-export function getCachedSalesData() {
-  return {
-    sales: cachedSalesRecords,
-    totalPages: cachedSalesTotalPages,
-    totalCount: cachedSalesTotalCount,
-  };
-}
-
 export function SalesHistoryView({ selectedBranchId: propBranchId, onNavigate }: SalesHistoryViewProps = {}) {
   const { user: authUser } = useAuth();
   const { selectedBranchId: contextBranchId, currentBranch, isAllBranches } = useBranchContext();
@@ -128,8 +114,8 @@ export function SalesHistoryView({ selectedBranchId: propBranchId, onNavigate }:
   // Pagination
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
-  const [totalPages, setTotalPages] = useState(() => cachedSalesTotalPages);
-  const [totalCount, setTotalCount] = useState(() => cachedSalesTotalCount);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
 
   // Selected Sale for View/Print Modal
   const [selectedSale, setSelectedSale] = useState<SaleRecord | null>(null);
@@ -180,7 +166,7 @@ export function SalesHistoryView({ selectedBranchId: propBranchId, onNavigate }:
   const loadSales = async (isManual = false) => {
     try {
       if (isManual) setRefreshing(true);
-      else if (cachedSalesRecords.length === 0) setLoading(true);
+      else setLoading(true);
 
       const params = new URLSearchParams();
       params.append("page", page.toString());

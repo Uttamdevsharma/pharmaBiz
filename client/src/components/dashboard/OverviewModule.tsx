@@ -42,10 +42,6 @@ type PeriodFilter = "today" | "yesterday" | "7d" | "30d" | "custom";
 
 let cachedDashboardData: any = null;
 
-export function setCachedOverviewData(data: any) {
-  cachedDashboardData = data;
-}
-
 export function OverviewModule({ onNavigate, selectedBranchId: propBranchId }: OverviewModuleProps) {
   const { user } = useAuth();
   const { selectedBranchId: contextBranchId, currentBranch } = useBranchContext();

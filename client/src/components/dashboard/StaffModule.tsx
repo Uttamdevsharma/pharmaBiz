@@ -39,19 +39,13 @@ let cachedStaff: any[] = [];
 let cachedStaffRoles: PharmacyRole[] = [];
 let cachedStaffBranches: any[] = [];
 
-export function setCachedStaffData(staff: any[], roles: PharmacyRole[] = [], branches: any[] = []) {
-  cachedStaff = staff;
-  if (roles.length > 0) cachedStaffRoles = roles;
-  if (branches.length > 0) cachedStaffBranches = branches;
-}
-
 export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
   const { user } = useAuth();
   const [staff, setStaff] = useState<any[]>(() => cachedStaff);
   const [roles, setRoles] = useState<PharmacyRole[]>(() => cachedStaffRoles);
   const [branches, setBranches] = useState<any[]>(() => cachedStaffBranches);
   const [profile, setProfile] = useState<any>(null);
-  const [loading, setLoading] = useState(() => cachedStaff.length === 0);
+  const [loading, setLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingStaff, setEditingStaff] = useState<any>(null);
   const [saving, setSaving] = useState(false);
@@ -75,7 +69,7 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
 
   const loadData = async () => {
     try {
-      if (cachedStaff.length === 0) setLoading(true);
+      setLoading(true);
       const params = new URLSearchParams();
       if (isManager && user?.branchId) {
         params.append("branchId", user.branchId);

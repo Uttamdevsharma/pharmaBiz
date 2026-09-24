@@ -32,19 +32,10 @@ interface BranchModuleProps {
   onNavigate?: (module: any) => void;
 }
 
-// Module cache
-let cachedBranchList: any[] = [];
-let cachedBranchProfile: any = null;
-
-export function setCachedBranchData(branches: any[], profile: any = null) {
-  cachedBranchList = branches;
-  if (profile) cachedBranchProfile = profile;
-}
-
 export function BranchModule({ onNavigate }: BranchModuleProps) {
-  const [branches, setBranches] = useState<any[]>(() => cachedBranchList);
-  const [profile, setProfile] = useState<any>(() => cachedBranchProfile);
-  const [loading, setLoading] = useState(() => cachedBranchList.length === 0);
+  const [branches, setBranches] = useState<any[]>([]);
+  const [profile, setProfile] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
   // Search & Filter State
   const [searchTerm, setSearchTerm] = useState("");
@@ -76,20 +67,14 @@ export function BranchModule({ onNavigate }: BranchModuleProps) {
 
   const loadData = async () => {
     try {
-      if (cachedBranchList.length === 0) setLoading(true);
+      setLoading(true);
       const [bRes, pRes] = await Promise.all([
         fetchApi("/branches"),
         fetchApi("/tenant/profile"),
       ]);
 
-      if (bRes.success) {
-        setBranches(bRes.data || []);
-        cachedBranchList = bRes.data || [];
-      }
-      if (pRes.success) {
-        setProfile(pRes.data);
-        cachedBranchProfile = pRes.data;
-      }
+      if (bRes.success) setBranches(bRes.data || []);
+      if (pRes.success) setProfile(pRes.data);
     } catch (err) {
       console.error("Failed to load branches", err);
     } finally {

@@ -45,10 +45,6 @@ interface StockListViewProps {
 
 let cachedStockList: InventoryItem[] = [];
 
-export function setCachedStockData(stock: InventoryItem[]) {
-  cachedStockList = stock;
-}
-
 export function StockListView({ onNavigate, selectedBranchId: propBranchId }: StockListViewProps) {
   const {
     selectedBranchId: contextBranchId,

@@ -5,7 +5,6 @@ import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { fetchApi } from "@/lib/api";
 import { loadingProgress } from "@/lib/loadingProgress";
-import { preloadModuleData } from "@/lib/modulePreloader";
 import { CENTRAL_CLIENT_PLANS, calculateRemainingTrialDays } from "@/lib/planLimits";
 import { useBranchContext } from "@/context/BranchContext";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
@@ -111,16 +110,7 @@ export default function RoleBasedDashboard() {
     const currentPath = typeof window !== "undefined" ? window.location.pathname : pathname;
     return getModuleFromPathname(currentPath, user?.role);
   });
-  const [pendingModule, setPendingModule] = useState<OwnerModule | null>(null);
-  const navIdRef = useRef<number>(0);
-
-  // Global Branch Context
-  const {
-    branches,
-    selectedBranchId,
-    setSelectedBranchId,
-  } = useBranchContext();
-
+  const navTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [preselectedBatchId, setPreselectedBatchId] = useState<string>("");
@@ -166,21 +156,11 @@ export default function RoleBasedDashboard() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  // Deferred seamless page transition:
-  // Stays on the previous page while the topbar loading bar crawls slowly, preloading destination data.
-  // When ready, mounts destination page populated directly without skeleton or blank state.
-  const handleNavigate = async (mod: OwnerModule) => {
-    if (mod === displayedModule && !pendingModule) return;
+  // Deferred seamless page transition: keeps previous page visible while top progress bar animates
+  const handleNavigate = (mod: OwnerModule) => {
+    if (mod === activeModule && mod === displayedModule) return;
 
-    const currentNavId = ++navIdRef.current;
-
-    // Immediately reflect active menu & pending spinner in sidebar
-    setActiveModule(mod);
-    setPendingModule(mod);
-
-    // Start slow creeping top progress bar
-    loadingProgress.startSlowCrawl();
-
+    loadingProgress.start();
     if (mod !== "inv_add_product") {
       setEditingProduct(null);
     }
@@ -192,67 +172,75 @@ export default function RoleBasedDashboard() {
       if (user?.role === "COMPANY_OWNER") {
         if (mod === "subscription" || mod === "subscription_plans" || mod === "subscription_history") {
           setShowOwnerExpiryModal(false);
+          setActiveModule(mod);
+          const targetPath = getPathFromModule(mod);
+          if (navTimerRef.current) clearTimeout(navTimerRef.current);
+          navTimerRef.current = setTimeout(() => {
+            React.startTransition(() => {
+              setDisplayedModule(mod);
+            });
+            if (typeof window !== "undefined" && window.location.pathname !== targetPath) {
+              window.history.pushState({ module: mod }, "", targetPath);
+            }
+            loadingProgress.done();
+          }, 180);
+          return;
         } else {
           setShowOwnerExpiryModal(true);
-          loadingProgress.finishCrawl();
-          setPendingModule(null);
+          loadingProgress.done();
           return;
         }
       } else {
         setShowStaffExpiryModal(true);
-        loadingProgress.finishCrawl();
-        setPendingModule(null);
+        loadingProgress.done();
         return;
       }
     }
 
-    const MIN_ANIMATION_MS = 380; // Smooth visual crawl time so user sees progress bar moving
-    const MAX_TIMEOUT_MS = 4500;  // Safety timeout
-
-    try {
-      const preloadPromise = preloadModuleData(mod, selectedBranchId);
-      const minDelayPromise = new Promise((resolve) => setTimeout(resolve, MIN_ANIMATION_MS));
-
-      await Promise.race([
-        Promise.all([preloadPromise, minDelayPromise]),
-        new Promise((resolve) => setTimeout(resolve, MAX_TIMEOUT_MS)),
-      ]);
-    } catch (err) {
-      console.warn("Navigation preload error:", err);
-    }
-
-    // If another menu was clicked during preloading, cancel this navigation
-    if (navIdRef.current !== currentNavId) {
-      return;
-    }
-
-    // Seamlessly transition to the destination module
+    // Immediately reflect active menu in sidebar
+    setActiveModule(mod);
     const targetPath = getPathFromModule(mod);
-    React.startTransition(() => {
-      setDisplayedModule(mod);
-    });
 
-    if (typeof window !== "undefined" && window.location.pathname !== targetPath) {
-      window.history.pushState({ module: mod }, "", targetPath);
-    }
-
-    loadingProgress.finishCrawl();
-    setPendingModule(null);
+    // Keep previous page visible while top loader crawls, then mount destination cleanly
+    if (navTimerRef.current) clearTimeout(navTimerRef.current);
+    navTimerRef.current = setTimeout(() => {
+      React.startTransition(() => {
+        setDisplayedModule(mod);
+      });
+      if (typeof window !== "undefined" && window.location.pathname !== targetPath) {
+        window.history.pushState({ module: mod }, "", targetPath);
+      }
+      loadingProgress.done();
+    }, 180);
   };
 
-  // Handle browser Back / Forward buttons with the same smooth deferred transition
+  // Handle browser Back / Forward buttons instantly without full page reload or unmount
   useEffect(() => {
     const handlePopState = () => {
       const currentPath = window.location.pathname;
       const resolved = getModuleFromPathname(currentPath, user?.role);
-      handleNavigate(resolved);
+      loadingProgress.start();
+      setActiveModule(resolved);
+      if (navTimerRef.current) clearTimeout(navTimerRef.current);
+      navTimerRef.current = setTimeout(() => {
+        setDisplayedModule(resolved);
+        loadingProgress.done();
+      }, 200);
     };
 
     window.addEventListener("popstate", handlePopState);
     return () => {
       window.removeEventListener("popstate", handlePopState);
+      if (navTimerRef.current) clearTimeout(navTimerRef.current);
     };
-  }, [user?.role, selectedBranchId, isExpired]);
+  }, [user?.role]);
+
+  // Global Branch Context
+  const {
+    branches,
+    selectedBranchId,
+    setSelectedBranchId,
+  } = useBranchContext();
 
   const [selectedSupplierDetailId, setSelectedSupplierDetailId] = useState<string | null>(null);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("");
@@ -466,7 +454,6 @@ export default function RoleBasedDashboard() {
         {/* Role-Aware Sidebar */}
         <DashboardSidebar
           activeModule={activeModule}
-          pendingModule={pendingModule}
           userRole={user?.role}
           mobileOpen={mobileSidebarOpen}
           onCloseMobile={() => setMobileSidebarOpen(false)}
