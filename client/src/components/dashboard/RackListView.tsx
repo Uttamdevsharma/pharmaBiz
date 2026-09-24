@@ -387,7 +387,56 @@ export function RackListView({ selectedBranchId, onNavigate }: RackListViewProps
       {/* Racks Table */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-xs">
         {loading ? (
-          <div className="p-12 text-center text-slate-400 text-sm font-bold">Loading racks...</div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-slate-50 dark:bg-slate-800/60 text-xs font-black uppercase tracking-wider text-slate-500 border-b border-slate-200 dark:border-slate-800">
+                <tr>
+                  <th className="py-4 px-4">Rack Name / Code</th>
+                  <th className="py-4 px-4 text-center">Shelves</th>
+                  <th className="py-4 px-4 text-center">Bins</th>
+                  <th className="py-4 px-4 text-center">Used Locations</th>
+                  <th className="py-4 px-4 text-center">Empty Locations</th>
+                  <th className="py-4 px-4 text-center">Status</th>
+                  <th className="py-4 px-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 animate-pulse">
+                {[...Array(6)].map((_, i) => (
+                  <tr key={i} className="h-16">
+                    <td className="py-3.5 px-4">
+                      <div className="flex items-center gap-2">
+                        <div className="h-4 w-4 bg-slate-200 dark:bg-slate-800 rounded shrink-0" />
+                        <div className="h-4 w-28 bg-slate-200 dark:bg-slate-800 rounded" />
+                        <div className="h-4 w-16 bg-slate-200 dark:bg-slate-800 rounded-full" />
+                      </div>
+                    </td>
+                    <td className="py-3.5 px-4 text-center">
+                      <div className="h-4 w-8 bg-slate-200 dark:bg-slate-800 rounded mx-auto" />
+                    </td>
+                    <td className="py-3.5 px-4 text-center">
+                      <div className="h-4 w-8 bg-slate-200 dark:bg-slate-800 rounded mx-auto" />
+                    </td>
+                    <td className="py-3.5 px-4 text-center">
+                      <div className="h-6 w-12 bg-slate-200 dark:bg-slate-800 rounded-lg mx-auto" />
+                    </td>
+                    <td className="py-3.5 px-4 text-center">
+                      <div className="h-6 w-12 bg-slate-200 dark:bg-slate-800 rounded-lg mx-auto" />
+                    </td>
+                    <td className="py-3.5 px-4 text-center">
+                      <div className="h-6 w-16 bg-slate-200 dark:bg-slate-800 rounded-full mx-auto" />
+                    </td>
+                    <td className="py-3.5 px-4 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <div className="h-8 w-16 bg-slate-200 dark:bg-slate-800 rounded-lg" />
+                        <div className="h-8 w-8 bg-slate-200 dark:bg-slate-800 rounded-lg" />
+                        <div className="h-8 w-8 bg-slate-200 dark:bg-slate-800 rounded-lg" />
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         ) : filteredRacks.length === 0 ? (
           <div className="p-12 text-center text-slate-400 text-xs space-y-2">
             <Archive className="h-8 w-8 mx-auto text-slate-300 dark:text-slate-700" />

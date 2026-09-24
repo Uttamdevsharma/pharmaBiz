@@ -267,32 +267,67 @@ export function DamagedProductsView({ onNavigate, selectedBranchId: propBranchId
 
       {/* Table */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
-        {damagedData.data.length === 0 ? (
-          <div className="py-20 text-center text-xs text-slate-400 space-y-2">
-            <Package className="h-10 w-10 mx-auto text-slate-300 dark:text-slate-700" />
-            <p className="font-bold text-slate-600 dark:text-slate-400">
-              {loading ? "Loading damaged products records..." : "No damaged or missing items recorded."}
-            </p>
-            <p className="text-[11px]">
-              When destination branch managers mark damaged or missing units during shipment intake, they will appear here with full cost accounting.
-            </p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 dark:bg-slate-800/60 uppercase font-bold text-slate-500 border-b border-slate-200 dark:border-slate-800">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-slate-50 dark:bg-slate-800/60 uppercase font-bold text-slate-500 border-b border-slate-200 dark:border-slate-800">
+              <tr>
+                <th className="py-3.5 px-4">Medication & Batch</th>
+                <th className="py-3.5 px-4">Route (From → To)</th>
+                <th className="py-3.5 px-4">Damage / Loss Qty</th>
+                <th className="py-3.5 px-4">Cost Price (৳)</th>
+                <th className="py-3.5 px-4">Total Loss Value (৳)</th>
+                <th className="py-3.5 px-4">Transfer Ref</th>
+                <th className="py-3.5 px-4">Intake Date</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
+              {loading ? (
+                Array.from({ length: 6 }).map((_, idx) => (
+                  <tr key={`skeleton-${idx}`} className="animate-pulse">
+                    <td className="py-3.5 px-4">
+                      <div className="space-y-1">
+                        <div className="h-4 w-32 bg-slate-200 dark:bg-slate-700 rounded" />
+                        <div className="h-3 w-20 bg-slate-100 dark:bg-slate-800 rounded" />
+                      </div>
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <div className="flex items-center gap-1.5">
+                        <div className="h-4 w-20 bg-slate-200 dark:bg-slate-700 rounded" />
+                        <div className="h-3 w-3 bg-slate-200 dark:bg-slate-700 rounded" />
+                        <div className="h-4 w-20 bg-slate-200 dark:bg-slate-700 rounded" />
+                      </div>
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <div className="h-5 w-24 bg-slate-200 dark:bg-slate-700 rounded" />
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <div className="h-4 w-16 bg-slate-200 dark:bg-slate-700 rounded" />
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <div className="h-4 w-16 bg-slate-200 dark:bg-slate-700 rounded" />
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <div className="h-4 w-14 bg-slate-200 dark:bg-slate-700 rounded" />
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <div className="h-3.5 w-20 bg-slate-200 dark:bg-slate-700 rounded" />
+                    </td>
+                  </tr>
+                ))
+              ) : damagedData.data.length === 0 ? (
                 <tr>
-                  <th className="py-3.5 px-4">Medication & Batch</th>
-                  <th className="py-3.5 px-4">Route (From → To)</th>
-                  <th className="py-3.5 px-4">Damage / Loss Qty</th>
-                  <th className="py-3.5 px-4">Cost Price (৳)</th>
-                  <th className="py-3.5 px-4">Total Loss Value (৳)</th>
-                  <th className="py-3.5 px-4">Transfer Ref</th>
-                  <th className="py-3.5 px-4">Intake Date</th>
+                  <td colSpan={7} className="py-20 text-center text-xs text-slate-400 space-y-2">
+                    <Package className="h-10 w-10 mx-auto text-slate-300 dark:text-slate-700 mb-2" />
+                    <p className="font-bold text-slate-600 dark:text-slate-400">
+                      No damaged or missing items recorded.
+                    </p>
+                    <p className="text-[11px] mt-1">
+                      When destination branch managers mark damaged or missing units during shipment intake, they will appear here with full cost accounting.
+                    </p>
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
-                {damagedData.data.map((item: any) => {
+              ) : (
+                damagedData.data.map((item: any) => {
                   const hasDamage = (item.damagedQuantity || 0) > 0;
                   const hasMissing = (item.missingQuantity || 0) > 0;
                   const totalLineLoss = (Number(item.damagedValue) || 0) + (Number(item.missingValue) || 0);
@@ -366,11 +401,11 @@ export function DamagedProductsView({ onNavigate, selectedBranchId: propBranchId
                       </td>
                     </tr>
                   );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

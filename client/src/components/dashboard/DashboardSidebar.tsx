@@ -45,6 +45,7 @@ import {
   CalendarCheck,
   Archive,
   Layers,
+  Box,
   MapPin,
   Pill,
   X,
@@ -173,7 +174,7 @@ export function DashboardSidebar({
   const isCategoryActive = activeModule.startsWith("cat_");
   const isLocationActive = activeModule.startsWith("loc_");
   const isInventoryActive = activeModule.startsWith("inv_");
-  const isBranchActive = activeModule === "branches";
+  const isBranchActive = activeModule === "branches" || activeModule === "branch_create";
   const isStockActive = activeModule.startsWith("stock_");
   const isStaffActive =
     activeModule === "staff" ||
@@ -242,6 +243,8 @@ export function DashboardSidebar({
   const [openSubgroups, setOpenSubgroups] = useState<Record<string, boolean>>({
     allocate_product_group: true,
     role_management_group: false,
+    rack_management_group: true,
+    other_location_group: true,
   });
 
   const toggleSubgroup = (subgroupId: string) => {
@@ -295,6 +298,12 @@ export function DashboardSidebar({
     }
     if (activeModule === "create_role" || activeModule === "permission_assignment" || activeModule === "roles") {
       setOpenSubgroups((prev) => ({ ...prev, role_management_group: true }));
+    }
+    if (activeModule === "loc_create_rack" || activeModule === "loc_rack_list") {
+      setOpenSubgroups((prev) => ({ ...prev, rack_management_group: true }));
+    }
+    if (activeModule === "loc_create_custom" || activeModule === "loc_custom_list") {
+      setOpenSubgroups((prev) => ({ ...prev, other_location_group: true }));
     }
   }, [
     activeModule,
@@ -351,31 +360,66 @@ export function DashboardSidebar({
   const categoryChildren: SubMenuItem[] = [
     {
       id: "cat_create" as OwnerModule,
-      label: "Manage Categories",
+      label: "Create Category",
       icon: PlusCircle,
       visible: isOwner || hasPermission("category.manage"),
     },
     {
       id: "cat_list" as OwnerModule,
-      label: "Manage Subcategories",
+      label: "Category List",
       icon: List,
       visible: isOwner || hasPermission("category.subcategories") || hasPermission("category.manage"),
     },
   ].filter((item) => item.visible);
 
-  // 3. Location Management Section
+  // 3. Location Management Section (Rack Management & Others)
+  const hasRackPerm = isOwner || hasPermission("location.create_rack") || hasPermission("location.rack_list");
+  const hasCustomPerm =
+    isOwner ||
+    hasPermission("location.create_custom") ||
+    hasPermission("location.custom_list") ||
+    hasPermission("location.rack_list");
+
   const locationChildren: SubMenuItem[] = [
     {
-      id: "loc_create_rack" as OwnerModule,
-      label: "Create Rack",
-      icon: PlusCircle,
-      visible: isOwner || hasPermission("location.create_rack"),
+      id: "rack_management_group",
+      label: "Rack Management",
+      icon: Layers,
+      visible: hasRackPerm,
+      children: [
+        {
+          id: "loc_create_rack" as OwnerModule,
+          label: "Create Rack",
+          icon: PlusCircle,
+          visible: isOwner || hasPermission("location.create_rack"),
+        },
+        {
+          id: "loc_rack_list" as OwnerModule,
+          label: "Rack List",
+          icon: List,
+          visible: isOwner || hasPermission("location.rack_list"),
+        },
+      ].filter((item) => item.visible),
     },
     {
-      id: "loc_rack_list" as OwnerModule,
-      label: "Rack List",
-      icon: List,
-      visible: isOwner || hasPermission("location.rack_list"),
+      id: "other_location_group",
+      label: "Others",
+      icon: Box,
+      visible: hasCustomPerm,
+      children: [
+        {
+          id: "loc_create_custom" as OwnerModule,
+          label: "Create Location",
+          icon: PlusCircle,
+          visible: isOwner || hasPermission("location.create_custom") || hasPermission("location.create_rack"),
+        },
+        {
+          id: "loc_custom_list" as OwnerModule,
+          label: "Location List",
+          icon: List,
+          visible: isOwner || hasPermission("location.custom_list") || hasPermission("location.rack_list"),
+        },
+      ].filter((item) => item.visible),
     },
   ].filter((item) => item.visible);
 
@@ -397,6 +441,12 @@ export function DashboardSidebar({
 
   // 5. Branch Management Section
   const branchChildren: SubMenuItem[] = [
+    {
+      id: "branch_create" as OwnerModule,
+      label: "Create Branch",
+      icon: PlusCircle,
+      visible: isOwner || hasPermission("branches.manage"),
+    },
     {
       id: "branches" as OwnerModule,
       label: "Branch List",
@@ -859,6 +909,8 @@ export function DashboardSidebar({
                     onClick={() => {
                       if (section.moduleId) {
                         handleModuleSelect(section.moduleId);
+                      } else if (section.children[0]?.children?.[0]?.id) {
+                        handleModuleSelect(section.children[0].children[0].id as OwnerModule);
                       } else if (section.children[0]?.id) {
                         handleModuleSelect(section.children[0].id as OwnerModule);
                       }

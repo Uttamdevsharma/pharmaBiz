@@ -401,8 +401,45 @@ export function ProductListView({ onNavigate, onEditProduct }: ProductListViewPr
       {/* Product Catalog Table */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
         {loading && products.length === 0 ? (
-          <div className="p-16 text-center text-slate-400">
-            <p className="text-sm font-semibold">Loading product catalog...</p>
+          <div className="table-responsive-container">
+            <table className="w-full min-w-[800px] text-left text-sm border-collapse">
+              <thead>
+                <tr className="bg-slate-50/75 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 uppercase tracking-wider font-black text-xs">
+                  <th className="py-4 px-4 w-12 text-center">#</th>
+                  <th className="py-4 px-5">Product Name &amp; Strength</th>
+                  <th className="py-4 px-5">Generic Name</th>
+                  <th className="py-4 px-4 text-center">Category</th>
+                  <th className="py-4 px-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 animate-pulse">
+                {[...Array(6)].map((_, i) => (
+                  <tr key={i} className="h-16">
+                    <td className="py-4 px-4 text-center">
+                      <div className="h-4 w-4 bg-slate-200 dark:bg-slate-800 rounded mx-auto" />
+                    </td>
+                    <td className="py-4 px-5">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <div className="h-5 w-40 bg-slate-200 dark:bg-slate-800 rounded" />
+                        <div className="h-5 w-14 bg-slate-200 dark:bg-slate-800 rounded-lg" />
+                      </div>
+                    </td>
+                    <td className="py-4 px-5">
+                      <div className="h-4 w-32 bg-slate-200 dark:bg-slate-800 rounded" />
+                    </td>
+                    <td className="py-4 px-4 text-center">
+                      <div className="h-6 w-24 bg-slate-200 dark:bg-slate-800 rounded-lg mx-auto" />
+                    </td>
+                    <td className="py-4 px-4 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <div className="h-8 w-8 bg-slate-200 dark:bg-slate-800 rounded-lg" />
+                        <div className="h-8 w-8 bg-slate-200 dark:bg-slate-800 rounded-lg" />
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         ) : products.length === 0 ? (
           <div className="p-16 text-center text-slate-400">

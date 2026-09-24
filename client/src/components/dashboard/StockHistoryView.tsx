@@ -243,36 +243,59 @@ export function StockHistoryView({ selectedBranchId: propBranchId }: StockHistor
 
       {/* Stock Receiving Table */}
       <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
-        {loading ? (
-          <div className="p-16 flex flex-col items-center justify-center text-slate-400 gap-2">
-            <Loader2 className="h-8 w-8 animate-spin text-brand-primary" />
-            <p className="text-xs sm:text-sm font-semibold">Loading stock history...</p>
-          </div>
-        ) : records.length === 0 ? (
-          <div className="p-16 text-center text-slate-400">
-            <Boxes className="h-10 w-10 mx-auto text-slate-300 dark:text-slate-700 mb-3" />
-            <p className="text-sm sm:text-base font-bold text-slate-700 dark:text-slate-300">
-              No stock history records found
-            </p>
-            <p className="text-xs text-slate-400 mt-1">
-              Stock intake and purchase receipt logs will appear here.
-            </p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead className="bg-slate-50 dark:bg-slate-800/60 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead className="bg-slate-50 dark:bg-slate-800/60 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800">
+              <tr>
+                <th className="py-4 px-4 font-bold">Date & Time</th>
+                <th className="py-4 px-4 font-bold">Product</th>
+                <th className="py-4 px-4 font-bold">Batch #</th>
+                <th className="py-4 px-4 font-bold">Supplier / Source</th>
+                <th className="py-4 px-4 font-bold">Received Quantity</th>
+                <th className="py-4 px-4 font-bold text-right">Purchase Value</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              {loading ? (
+                Array.from({ length: 6 }).map((_, idx) => (
+                  <tr key={`skeleton-${idx}`} className="animate-pulse">
+                    <td className="py-4 px-4">
+                      <div className="h-4 w-28 bg-slate-200 dark:bg-slate-700 rounded" />
+                    </td>
+                    <td className="py-4 px-4">
+                      <div className="space-y-1">
+                        <div className="h-4 w-36 bg-slate-200 dark:bg-slate-700 rounded" />
+                        <div className="h-3 w-24 bg-slate-100 dark:bg-slate-800 rounded" />
+                      </div>
+                    </td>
+                    <td className="py-4 px-4">
+                      <div className="h-6 w-20 bg-slate-200 dark:bg-slate-700 rounded-lg" />
+                    </td>
+                    <td className="py-4 px-4">
+                      <div className="h-4 w-32 bg-slate-200 dark:bg-slate-700 rounded" />
+                    </td>
+                    <td className="py-4 px-4">
+                      <div className="h-4 w-20 bg-slate-200 dark:bg-slate-700 rounded" />
+                    </td>
+                    <td className="py-4 px-4 text-right">
+                      <div className="h-4 w-20 bg-slate-200 dark:bg-slate-700 rounded ml-auto" />
+                    </td>
+                  </tr>
+                ))
+              ) : records.length === 0 ? (
                 <tr>
-                  <th className="py-4 px-4 font-bold">Date & Time</th>
-                  <th className="py-4 px-4 font-bold">Product</th>
-                  <th className="py-4 px-4 font-bold">Batch #</th>
-                  <th className="py-4 px-4 font-bold">Supplier / Source</th>
-                  <th className="py-4 px-4 font-bold">Received Quantity</th>
-                  <th className="py-4 px-4 font-bold text-right">Purchase Value</th>
+                  <td colSpan={6} className="p-16 text-center text-slate-400">
+                    <Boxes className="h-10 w-10 mx-auto text-slate-300 dark:text-slate-700 mb-3" />
+                    <p className="text-sm sm:text-base font-bold text-slate-700 dark:text-slate-300">
+                      No stock history records found
+                    </p>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Stock intake and purchase receipt logs will appear here.
+                    </p>
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {records.map((r) => {
+              ) : (
+                records.map((r) => {
                   const dateStr = r.receivedDate || r.createdAt;
                   const formattedDate = dateStr
                     ? new Date(dateStr).toLocaleString("en-GB", {
@@ -353,11 +376,11 @@ export function StockHistoryView({ selectedBranchId: propBranchId }: StockHistor
                       </td>
                     </tr>
                   );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
 
         {/* Always-Visible Pagination Controls */}
         <div className="px-5 py-4 bg-slate-50 dark:bg-slate-800/60 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">

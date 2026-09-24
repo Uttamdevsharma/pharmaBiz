@@ -302,29 +302,53 @@ export function StockAllocationHistoryView({
 
       {/* Allocation History Table */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl overflow-hidden shadow-xs">
-        {loading ? (
-          <div className="p-16 text-center text-slate-400 text-xs sm:text-sm font-semibold">
-            Loading allocation history records...
-          </div>
-        ) : filteredMovements.length === 0 ? (
-          <div className="p-16 text-center text-slate-400 text-xs sm:text-sm font-semibold">
-            No allocation history records found matching your filters.
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead className="bg-slate-50 dark:bg-slate-800/60 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead className="bg-slate-50 dark:bg-slate-800/60 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800">
+              <tr>
+                <th className="py-4 px-4 font-bold">Date & Time</th>
+                <th className="py-4 px-4 font-bold">Product</th>
+                <th className="py-4 px-4 font-bold">Batch</th>
+                <th className="py-4 px-4 font-bold">Source Type</th>
+                <th className="py-4 px-4 font-bold">Quantity Placed</th>
+                <th className="py-4 px-4 font-bold">Location (Rack → Shelf → Bin)</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              {loading ? (
+                Array.from({ length: 6 }).map((_, idx) => (
+                  <tr key={`skeleton-${idx}`} className="animate-pulse">
+                    <td className="py-4 px-4">
+                      <div className="h-4 w-28 bg-slate-200 dark:bg-slate-700 rounded" />
+                    </td>
+                    <td className="py-4 px-4">
+                      <div className="h-4 w-36 bg-slate-200 dark:bg-slate-700 rounded" />
+                    </td>
+                    <td className="py-4 px-4">
+                      <div className="h-4 w-20 bg-slate-200 dark:bg-slate-700 rounded" />
+                    </td>
+                    <td className="py-4 px-4">
+                      <div className="h-6 w-24 bg-slate-200 dark:bg-slate-700 rounded-lg" />
+                    </td>
+                    <td className="py-4 px-4">
+                      <div className="h-4 w-24 bg-slate-200 dark:bg-slate-700 rounded" />
+                    </td>
+                    <td className="py-4 px-4">
+                      <div className="flex items-center gap-1.5">
+                        <div className="h-4 w-4 bg-slate-200 dark:bg-slate-700 rounded-full shrink-0" />
+                        <div className="h-4 w-32 bg-slate-200 dark:bg-slate-700 rounded" />
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              ) : filteredMovements.length === 0 ? (
                 <tr>
-                  <th className="py-4 px-4 font-bold">Date & Time</th>
-                  <th className="py-4 px-4 font-bold">Product</th>
-                  <th className="py-4 px-4 font-bold">Batch</th>
-                  <th className="py-4 px-4 font-bold">Source Type</th>
-                  <th className="py-4 px-4 font-bold">Quantity Placed</th>
-                  <th className="py-4 px-4 font-bold">Location (Rack → Shelf → Bin)</th>
+                  <td colSpan={6} className="p-16 text-center text-slate-400 text-xs sm:text-sm font-semibold">
+                    No allocation history records found matching your filters.
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {filteredMovements.map((m) => (
+              ) : (
+                filteredMovements.map((m) => (
                   <tr
                     key={m.id}
                     className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition"
@@ -365,11 +389,11 @@ export function StockAllocationHistoryView({
                       </div>
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

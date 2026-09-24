@@ -323,9 +323,47 @@ export function CustomLocationListView({
 
       {/* Simplified, Clean Table */}
       {loading ? (
-        <div className="py-20 text-center text-slate-400 flex flex-col items-center gap-3">
-          <Loader2 className="h-8 w-8 animate-spin text-brand-primary" />
-          <p className="text-sm font-bold">Loading locations...</p>
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-2xs">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead className="bg-slate-50 dark:bg-slate-850 text-xs font-black uppercase tracking-wider text-slate-500 border-b border-slate-200 dark:border-slate-800 select-none">
+                <tr>
+                  <th className="py-4 px-5 w-16 text-center">#</th>
+                  <th className="py-4 px-6 text-base font-black">Location Name</th>
+                  <th className="py-4 px-6 text-sm font-bold">Shelves &amp; Bins</th>
+                  <th className="py-4 px-6 text-right text-sm font-bold">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 animate-pulse">
+                {[...Array(5)].map((_, i) => (
+                  <tr key={i} className="h-16">
+                    <td className="py-4 px-5 text-center">
+                      <div className="h-4 w-4 bg-slate-200 dark:bg-slate-800 rounded mx-auto" />
+                    </td>
+                    <td className="py-4 px-6">
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-xl bg-slate-200 dark:bg-slate-800 shrink-0" />
+                        <div className="space-y-1.5">
+                          <div className="h-4 w-36 bg-slate-200 dark:bg-slate-800 rounded" />
+                          <div className="h-3 w-20 bg-slate-200 dark:bg-slate-800 rounded" />
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-4 px-6">
+                      <div className="h-6 w-28 bg-slate-200 dark:bg-slate-800 rounded-lg" />
+                    </td>
+                    <td className="py-4 px-6 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <div className="h-8 w-20 bg-slate-200 dark:bg-slate-800 rounded-lg" />
+                        <div className="h-8 w-8 bg-slate-200 dark:bg-slate-800 rounded-lg" />
+                        <div className="h-8 w-8 bg-slate-200 dark:bg-slate-800 rounded-lg" />
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       ) : filteredLocations.length === 0 ? (
         <div className="py-16 text-center bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-8 space-y-3">

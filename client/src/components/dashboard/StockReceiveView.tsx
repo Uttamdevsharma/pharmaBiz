@@ -237,37 +237,63 @@ export function StockReceiveView({ onNavigate, onInspectTransfer }: StockReceive
 
       {/* Incoming Transfers & History Table */}
       <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
-        {loading ? (
-          <div className="p-16 flex flex-col items-center justify-center text-slate-400 text-xs gap-2">
-            <Loader2 className="h-7 w-7 animate-spin text-brand-primary" />
-            <span>Loading receiving history...</span>
-          </div>
-        ) : incomingTransfers.length === 0 ? (
-          <div className="p-16 text-center text-slate-400 text-xs space-y-2">
-            <Inbox className="h-10 w-10 mx-auto text-slate-300 dark:text-slate-700" />
-            <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
-              No shipments found in history for this branch
-            </p>
-            <p className="text-xs">
-              When peer branches dispatch stock to this location, they will appear here ready for inspection.
-            </p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 dark:bg-slate-800/60 uppercase font-bold text-slate-500 border-b border-slate-200 dark:border-slate-800 text-[11px]">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-slate-50 dark:bg-slate-800/60 uppercase font-bold text-slate-500 border-b border-slate-200 dark:border-slate-800 text-[11px]">
+              <tr>
+                <th className="py-4 px-4">Transfer Date</th>
+                <th className="py-4 px-4">Source Branch</th>
+                <th className="py-4 px-4">Destination Branch</th>
+                <th className="py-4 px-4">Products Included</th>
+                <th className="py-4 px-4">Sent Cost Value</th>
+                <th className="py-4 px-4">Status</th>
+                <th className="py-4 px-4 text-right">Intake Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
+              {loading ? (
+                Array.from({ length: 6 }).map((_, idx) => (
+                  <tr key={`skeleton-${idx}`} className="animate-pulse">
+                    <td className="py-4 px-4">
+                      <div className="h-3.5 w-24 bg-slate-200 dark:bg-slate-700 rounded" />
+                    </td>
+                    <td className="py-4 px-4">
+                      <div className="h-4 w-32 bg-slate-200 dark:bg-slate-700 rounded" />
+                    </td>
+                    <td className="py-4 px-4">
+                      <div className="h-4 w-32 bg-slate-200 dark:bg-slate-700 rounded" />
+                    </td>
+                    <td className="py-4 px-4">
+                      <div className="space-y-1">
+                        <div className="h-3.5 w-28 bg-slate-200 dark:bg-slate-700 rounded" />
+                        <div className="h-3 w-36 bg-slate-100 dark:bg-slate-800 rounded" />
+                      </div>
+                    </td>
+                    <td className="py-4 px-4">
+                      <div className="h-4 w-16 bg-slate-200 dark:bg-slate-700 rounded" />
+                    </td>
+                    <td className="py-4 px-4">
+                      <div className="h-5 w-20 bg-slate-200 dark:bg-slate-700 rounded-full" />
+                    </td>
+                    <td className="py-4 px-4 text-right">
+                      <div className="h-7 w-20 bg-slate-200 dark:bg-slate-700 rounded-lg ml-auto" />
+                    </td>
+                  </tr>
+                ))
+              ) : incomingTransfers.length === 0 ? (
                 <tr>
-                  <th className="py-4 px-4">Transfer Date</th>
-                  <th className="py-4 px-4">Source Branch</th>
-                  <th className="py-4 px-4">Destination Branch</th>
-                  <th className="py-4 px-4">Products Included</th>
-                  <th className="py-4 px-4">Sent Cost Value</th>
-                  <th className="py-4 px-4">Status</th>
-                  <th className="py-4 px-4 text-right">Intake Action</th>
+                  <td colSpan={7} className="p-16 text-center text-slate-400 text-xs">
+                    <Inbox className="h-10 w-10 mx-auto text-slate-300 dark:text-slate-700 mb-2" />
+                    <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                      No shipments found in history for this branch
+                    </p>
+                    <p className="text-xs mt-1">
+                      When peer branches dispatch stock to this location, they will appear here ready for inspection.
+                    </p>
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
-                {incomingTransfers.map((t) => {
+              ) : (
+                incomingTransfers.map((t) => {
                   const isAwaitingReceive =
                     t.status === "IN_TRANSIT" || t.status === "PENDING" || t.status === "APPROVED";
                   const sentValue = Number(t.sentTotalValue || t.totalValue || 0);
@@ -348,11 +374,11 @@ export function StockReceiveView({ onNavigate, onInspectTransfer }: StockReceive
                       </td>
                     </tr>
                   );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Courier Logistics Modal */}

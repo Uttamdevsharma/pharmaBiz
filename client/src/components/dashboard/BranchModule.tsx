@@ -347,35 +347,65 @@ export function BranchModule({ onNavigate }: BranchModuleProps) {
 
       {/* Branches Table with Branch Name, Address, Staff Assigned, and Actions */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-        {loading ? (
-          <div className="py-20 flex flex-col items-center justify-center text-slate-400">
-            <Loader2 className="h-8 w-8 animate-spin text-brand-primary mb-2" />
-            <p className="text-sm font-semibold">Loading branch locations...</p>
-          </div>
-        ) : filteredBranches.length === 0 ? (
-          <div className="py-20 text-center text-slate-400">
-            <Store className="h-12 w-12 mx-auto text-slate-300 dark:text-slate-700 mb-3" />
-            <p className="text-base font-bold text-slate-700 dark:text-slate-300">No branches found</p>
-            <p className="text-xs text-slate-500 mt-1">
-              {searchTerm || statusFilter !== "ALL"
-                ? "Try clearing your search or status filter."
-                : "Click 'Create Branch' above to register your first branch store."}
-            </p>
-          </div>
-        ) : (
-          <div className="table-responsive-container">
-            <table className="w-full min-w-[750px] text-left text-sm border-collapse">
-              <thead>
-                <tr className="bg-slate-50/75 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 uppercase tracking-wider font-black text-xs">
-                  <th className="py-4 px-4 w-12 text-center">#</th>
-                  <th className="py-4 px-5">Branch Name</th>
-                  <th className="py-4 px-5">Address</th>
-                  <th className="py-4 px-4 text-center">Staff Assigned</th>
-                  <th className="py-4 px-5 text-right">Actions</th>
+        <div className="table-responsive-container">
+          <table className="w-full min-w-[750px] text-left text-sm border-collapse">
+            <thead>
+              <tr className="bg-slate-50/75 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 uppercase tracking-wider font-black text-xs">
+                <th className="py-4 px-4 w-12 text-center">#</th>
+                <th className="py-4 px-5">Branch Name</th>
+                <th className="py-4 px-5">Address</th>
+                <th className="py-4 px-4 text-center">Staff Assigned</th>
+                <th className="py-4 px-5 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium text-slate-700 dark:text-slate-300">
+              {loading ? (
+                Array.from({ length: 6 }).map((_, idx) => (
+                  <tr key={`skeleton-${idx}`} className="animate-pulse">
+                    <td className="py-4 px-4 text-center">
+                      <div className="h-4 w-6 bg-slate-200 dark:bg-slate-700 rounded mx-auto" />
+                    </td>
+                    <td className="py-4 px-5">
+                      <div className="flex items-center gap-3">
+                        <div className="h-9 w-9 rounded-xl bg-slate-200 dark:bg-slate-700 shrink-0" />
+                        <div className="space-y-1.5 flex-1">
+                          <div className="h-4 w-32 bg-slate-200 dark:bg-slate-700 rounded" />
+                          <div className="h-3 w-20 bg-slate-100 dark:bg-slate-800 rounded" />
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-4 px-5">
+                      <div className="flex items-center gap-1.5">
+                        <div className="h-4 w-4 bg-slate-200 dark:bg-slate-700 rounded-full shrink-0" />
+                        <div className="h-4 w-40 bg-slate-200 dark:bg-slate-700 rounded" />
+                      </div>
+                    </td>
+                    <td className="py-4 px-4 text-center">
+                      <div className="h-6 w-20 bg-slate-200 dark:bg-slate-700 rounded-full mx-auto" />
+                    </td>
+                    <td className="py-4 px-5 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <div className="h-8 w-16 bg-slate-200 dark:bg-slate-700 rounded-xl" />
+                        <div className="h-8 w-14 bg-slate-200 dark:bg-slate-700 rounded-xl" />
+                        <div className="h-8 w-20 bg-slate-200 dark:bg-slate-700 rounded-xl" />
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              ) : filteredBranches.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="py-20 text-center text-slate-400">
+                    <Store className="h-12 w-12 mx-auto text-slate-300 dark:text-slate-700 mb-3" />
+                    <p className="text-base font-bold text-slate-700 dark:text-slate-300">No branches found</p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      {searchTerm || statusFilter !== "ALL"
+                        ? "Try clearing your search or status filter."
+                        : "Click 'Create Branch' above to register your first branch store."}
+                    </p>
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium text-slate-700 dark:text-slate-300">
-                {paginatedBranches.map((b, index) => {
+              ) : (
+                paginatedBranches.map((b, index) => {
                   const serialNo = (currentPage - 1) * pageSize + index + 1;
 
                   return (
@@ -464,11 +494,11 @@ export function BranchModule({ onNavigate }: BranchModuleProps) {
                       </td>
                     </tr>
                   );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
 
         {/* Branch List Pagination */}
         <Pagination

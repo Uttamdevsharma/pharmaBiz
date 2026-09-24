@@ -290,33 +290,70 @@ export function TransferHistoryView({ onNavigate }: TransferHistoryViewProps) {
 
       {/* Transfers Ledger Table */}
       <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
-        {filteredTransfers.length === 0 ? (
-          <div className="p-16 text-center text-slate-400 text-xs">
-            <ArrowLeftRight className="h-10 w-10 mx-auto text-slate-300 dark:text-slate-700 mb-2" />
-            <p className="text-sm font-bold text-slate-600 dark:text-slate-400">
-              {loading ? "Loading transfer transactions..." : "No stock transfers recorded"}
-            </p>
-            <p className="mt-0.5">
-              {!loading && "Click \"New Transfer Request\" above to initiate a transfer between branches."}
-            </p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 dark:bg-slate-800/60 uppercase font-bold text-slate-500 border-b border-slate-200 dark:border-slate-800">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-slate-50 dark:bg-slate-800/60 uppercase font-bold text-slate-500 border-b border-slate-200 dark:border-slate-800">
+              <tr>
+                <th className="py-3.5 px-4">Transfer Date</th>
+                <th className="py-3.5 px-4">From → To Branch</th>
+                <th className="py-3.5 px-4">Medications Included</th>
+                <th className="py-3.5 px-4">Sent Value</th>
+                <th className="py-3.5 px-4">Received Usable Value</th>
+                <th className="py-3.5 px-4">Transit Loss</th>
+                <th className="py-3.5 px-4">Status</th>
+                <th className="py-3.5 px-4 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
+              {loading ? (
+                Array.from({ length: 6 }).map((_, idx) => (
+                  <tr key={`skeleton-${idx}`} className="animate-pulse">
+                    <td className="py-3.5 px-4">
+                      <div className="h-3.5 w-24 bg-slate-200 dark:bg-slate-700 rounded" />
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <div className="space-y-1">
+                        <div className="h-4 w-32 bg-slate-200 dark:bg-slate-700 rounded" />
+                        <div className="h-3 w-20 bg-slate-100 dark:bg-slate-800 rounded" />
+                      </div>
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <div className="space-y-1">
+                        <div className="h-3.5 w-28 bg-slate-200 dark:bg-slate-700 rounded" />
+                        <div className="h-3 w-40 bg-slate-100 dark:bg-slate-800 rounded" />
+                      </div>
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <div className="h-4 w-16 bg-slate-200 dark:bg-slate-700 rounded" />
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <div className="h-4 w-16 bg-slate-200 dark:bg-slate-700 rounded" />
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <div className="h-4 w-16 bg-slate-200 dark:bg-slate-700 rounded" />
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <div className="h-5 w-20 bg-slate-200 dark:bg-slate-700 rounded-full" />
+                    </td>
+                    <td className="py-3.5 px-4 text-right">
+                      <div className="h-7 w-16 bg-slate-200 dark:bg-slate-700 rounded-lg ml-auto" />
+                    </td>
+                  </tr>
+                ))
+              ) : filteredTransfers.length === 0 ? (
                 <tr>
-                  <th className="py-3.5 px-4">Transfer Date</th>
-                  <th className="py-3.5 px-4">From → To Branch</th>
-                  <th className="py-3.5 px-4">Medications Included</th>
-                  <th className="py-3.5 px-4">Sent Value</th>
-                  <th className="py-3.5 px-4">Received Usable Value</th>
-                  <th className="py-3.5 px-4">Transit Loss</th>
-                  <th className="py-3.5 px-4">Status</th>
-                  <th className="py-3.5 px-4 text-right">Actions</th>
+                  <td colSpan={8} className="p-16 text-center text-slate-400 text-xs">
+                    <ArrowLeftRight className="h-10 w-10 mx-auto text-slate-300 dark:text-slate-700 mb-2" />
+                    <p className="text-sm font-bold text-slate-600 dark:text-slate-400">
+                      No stock transfers recorded
+                    </p>
+                    <p className="mt-0.5">
+                      Click &quot;New Transfer Request&quot; above to initiate a transfer between branches.
+                    </p>
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
-                {paginatedTransfers.map((t) => {
+              ) : (
+                paginatedTransfers.map((t) => {
                   const sentVal = Number(t.sentTotalValue || t.totalValue || 0);
                   const receivedVal = Number(t.receivedTotalValue || 0);
                   const lossVal = Number(t.damagedTotalValue || 0) + Number(t.missingTotalValue || 0);
@@ -399,11 +436,11 @@ export function TransferHistoryView({ onNavigate }: TransferHistoryViewProps) {
                       </td>
                     </tr>
                   );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
 
         <Pagination
           currentPage={page}
