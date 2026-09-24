@@ -29,14 +29,74 @@ interface ContactRow {
 interface CreateSupplierViewProps {
   onNavigate: (module: any, extra?: any) => void;
   onSupplierCreated?: (supplierId: string) => void;
+  loading?: boolean;
 }
 
-export function CreateSupplierView({ onNavigate, onSupplierCreated }: CreateSupplierViewProps) {
+export function CreateSupplierView({ onNavigate, onSupplierCreated, loading = false }: CreateSupplierViewProps) {
   const [name, setName] = useState("");
   const [company, setCompany] = useState("");
   const [address, setAddress] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
+
+  if (loading) {
+    return (
+      <div className="space-y-6 max-w-4xl mx-auto animate-pulse">
+        {/* Top Header */}
+        <div className="pb-4 border-b border-slate-200 dark:border-slate-800 space-y-2">
+          <div className="h-4 w-28 bg-slate-200 dark:bg-slate-800 rounded" />
+          <div className="h-8 w-56 bg-slate-200 dark:bg-slate-800 rounded" />
+        </div>
+
+        {/* Section 1: Company Profile */}
+        <div className="bg-white dark:bg-slate-900 p-6 sm:p-7 rounded-2xl border-2 border-slate-200 dark:border-slate-800 shadow-sm space-y-5">
+          <div className="h-6 w-44 bg-slate-200 dark:bg-slate-800 rounded" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+            <div className="sm:col-span-2 space-y-2">
+              <div className="h-4 w-28 bg-slate-200 dark:bg-slate-800 rounded" />
+              <div className="h-12 w-full bg-slate-200 dark:bg-slate-800 rounded-xl" />
+            </div>
+            <div className="space-y-2">
+              <div className="h-4 w-20 bg-slate-200 dark:bg-slate-800 rounded" />
+              <div className="h-12 w-full bg-slate-200 dark:bg-slate-800 rounded-xl" />
+            </div>
+            <div className="space-y-2">
+              <div className="h-4 w-20 bg-slate-200 dark:bg-slate-800 rounded" />
+              <div className="h-12 w-full bg-slate-200 dark:bg-slate-800 rounded-xl" />
+            </div>
+            <div className="sm:col-span-2 space-y-2">
+              <div className="h-4 w-28 bg-slate-200 dark:bg-slate-800 rounded" />
+              <div className="h-12 w-full bg-slate-200 dark:bg-slate-800 rounded-xl" />
+            </div>
+          </div>
+        </div>
+
+        {/* Section 2: Contact Persons */}
+        <div className="bg-white dark:bg-slate-900 p-6 sm:p-7 rounded-2xl border-2 border-slate-200 dark:border-slate-800 shadow-sm space-y-5">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+            <div className="h-6 w-52 bg-slate-200 dark:bg-slate-800 rounded" />
+            <div className="h-8 w-32 bg-slate-200 dark:bg-slate-800 rounded-xl" />
+          </div>
+          <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="space-y-2">
+                  <div className="h-3.5 w-20 bg-slate-200 dark:bg-slate-800 rounded" />
+                  <div className="h-10 w-full bg-slate-200 dark:bg-slate-800 rounded-xl" />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex items-center justify-end gap-3 pt-2">
+          <div className="h-12 w-24 bg-slate-200 dark:bg-slate-800 rounded-xl" />
+          <div className="h-12 w-44 bg-slate-200 dark:bg-slate-800 rounded-xl" />
+        </div>
+      </div>
+    );
+  }
 
   const [contacts, setContacts] = useState<ContactRow[]>([
     { name: "", phone: "", email: "", designation: "Sales Representative (SR)" },

@@ -7,7 +7,6 @@ import {
   Receipt,
   Truck,
   Plus,
-  Loader2,
   CreditCard,
   FileText,
   X,
@@ -52,7 +51,7 @@ export function PurchaseHistoryView({ onNavigate, selectedBranchId: propBranchId
   const [customEndDate, setCustomEndDate] = useState<string>("");
 
   const [purchases, setPurchases] = useState<any[]>(() => cachedPurchases);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(() => cachedPurchases.length === 0);
 
   // Pagination states
   const [page, setPage] = useState(1);
@@ -206,30 +205,46 @@ export function PurchaseHistoryView({ onNavigate, selectedBranchId: propBranchId
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
           <span className="text-slate-400 text-xs font-black uppercase tracking-wider">Invoices</span>
-          <div className="text-3xl font-black font-mono text-slate-900 dark:text-white mt-1">
-            {purchases.length}
-          </div>
+          {loading && purchases.length === 0 ? (
+            <div className="h-9 w-16 bg-slate-200 dark:bg-slate-800 rounded animate-pulse mt-1" />
+          ) : (
+            <div className="text-3xl font-black font-mono text-slate-900 dark:text-white mt-1">
+              {purchases.length}
+            </div>
+          )}
         </div>
 
         <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
           <span className="text-slate-400 text-xs font-black uppercase tracking-wider">Total Purchase</span>
-          <div className="text-3xl font-black font-mono text-slate-900 dark:text-white mt-1">
-            ৳{totals.total.toFixed(2)}
-          </div>
+          {loading && purchases.length === 0 ? (
+            <div className="h-9 w-28 bg-slate-200 dark:bg-slate-800 rounded animate-pulse mt-1" />
+          ) : (
+            <div className="text-3xl font-black font-mono text-slate-900 dark:text-white mt-1">
+              ৳{totals.total.toFixed(2)}
+            </div>
+          )}
         </div>
 
         <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
           <span className="text-slate-400 text-xs font-black uppercase tracking-wider">Total Paid</span>
-          <div className="text-3xl font-black font-mono text-emerald-600 dark:text-emerald-400 mt-1">
-            ৳{totals.paid.toFixed(2)}
-          </div>
+          {loading && purchases.length === 0 ? (
+            <div className="h-9 w-28 bg-slate-200 dark:bg-slate-800 rounded animate-pulse mt-1" />
+          ) : (
+            <div className="text-3xl font-black font-mono text-emerald-600 dark:text-emerald-400 mt-1">
+              ৳{totals.paid.toFixed(2)}
+            </div>
+          )}
         </div>
 
         <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
           <span className="text-slate-400 text-xs font-black uppercase tracking-wider">Total Due</span>
-          <div className="text-3xl font-black font-mono text-rose-600 dark:text-rose-400 mt-1">
-            ৳{totals.due.toFixed(2)}
-          </div>
+          {loading && purchases.length === 0 ? (
+            <div className="h-9 w-28 bg-slate-200 dark:bg-slate-800 rounded animate-pulse mt-1" />
+          ) : (
+            <div className="text-3xl font-black font-mono text-rose-600 dark:text-rose-400 mt-1">
+              ৳{totals.due.toFixed(2)}
+            </div>
+          )}
         </div>
       </div>
 
@@ -319,12 +334,66 @@ export function PurchaseHistoryView({ onNavigate, selectedBranchId: propBranchId
 
       {/* Purchases Table */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-        {purchases.length === 0 ? (
+        {loading && purchases.length === 0 ? (
+          <div className="table-responsive-container">
+            <table className="w-full min-w-[750px] text-left text-sm border-collapse">
+              <thead>
+                <tr className="bg-slate-50/75 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 text-slate-500 uppercase tracking-wider font-black text-xs">
+                  <th className="py-4 px-4">Date</th>
+                  <th className="py-4 px-4">Branch</th>
+                  <th className="py-4 px-4">Supplier</th>
+                  <th className="py-4 px-4">Contact</th>
+                  <th className="py-4 px-4">Total</th>
+                  <th className="py-4 px-4">Paid</th>
+                  <th className="py-4 px-4">Due</th>
+                  <th className="py-4 px-4 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 animate-pulse">
+                {[...Array(6)].map((_, i) => (
+                  <tr key={i} className="h-16">
+                    <td className="py-3.5 px-4">
+                      <div className="space-y-1">
+                        <div className="h-4 w-24 bg-slate-200 dark:bg-slate-800 rounded" />
+                        <div className="h-3 w-16 bg-slate-200 dark:bg-slate-800 rounded" />
+                      </div>
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <div className="h-4 w-24 bg-slate-200 dark:bg-slate-800 rounded" />
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <div className="h-4 w-32 bg-slate-200 dark:bg-slate-800 rounded" />
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <div className="space-y-1">
+                        <div className="h-4 w-28 bg-slate-200 dark:bg-slate-800 rounded" />
+                        <div className="h-3 w-20 bg-slate-200 dark:bg-slate-800 rounded" />
+                      </div>
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <div className="h-4 w-16 bg-slate-200 dark:bg-slate-800 rounded font-mono" />
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <div className="h-4 w-16 bg-slate-200 dark:bg-slate-800 rounded font-mono" />
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <div className="h-4 w-14 bg-slate-200 dark:bg-slate-800 rounded font-mono" />
+                    </td>
+                    <td className="py-3.5 px-4 text-right">
+                      <div className="h-7 w-16 bg-slate-200 dark:bg-slate-800 rounded-xl ml-auto" />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : purchases.length === 0 ? (
           <div className="p-16 text-center text-slate-400">
             <Receipt className="h-10 w-10 mx-auto text-slate-300 dark:text-slate-700 mb-3" />
             <p className="text-base font-bold text-slate-700 dark:text-slate-300">
-              {loading ? "Loading purchase records..." : "No purchases found"}
+              No purchases found
             </p>
+            <p className="text-xs text-slate-400 mt-1">Try adjusting your date range or supplier filter.</p>
           </div>
         ) : (
           <div>

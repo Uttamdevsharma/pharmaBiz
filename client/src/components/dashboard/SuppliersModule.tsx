@@ -25,6 +25,8 @@ interface SuppliersModuleProps {
   subAction?: string;
 }
 
+let cachedSuppliers: Supplier[] = [];
+
 export function SuppliersModule({ subAction }: SuppliersModuleProps = {}) {
   const { user } = useAuth();
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -325,13 +327,65 @@ export function SuppliersModule({ subAction }: SuppliersModuleProps = {}) {
 
       {/* Supplier List */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-        {suppliers.length === 0 ? (
+        {loading && suppliers.length === 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-50/75 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 uppercase tracking-wider font-bold text-[10px]">
+                  <th className="py-3.5 px-4">Supplier & Company</th>
+                  <th className="py-3.5 px-4">Contact Info</th>
+                  <th className="py-3.5 px-4">Total Purchases</th>
+                  <th className="py-3.5 px-4">Total Paid</th>
+                  <th className="py-3.5 px-4">Due Balance</th>
+                  <th className="py-3.5 px-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 animate-pulse">
+                {[...Array(5)].map((_, i) => (
+                  <tr key={i} className="h-16">
+                    <td className="py-3.5 px-4">
+                      <div className="flex items-center gap-3">
+                        <div className="h-9 w-9 rounded-xl bg-slate-200 dark:bg-slate-800 shrink-0" />
+                        <div className="space-y-1.5">
+                          <div className="h-4 w-32 bg-slate-200 dark:bg-slate-800 rounded" />
+                          <div className="h-3 w-20 bg-slate-200 dark:bg-slate-800 rounded" />
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <div className="space-y-1">
+                        <div className="h-3 w-24 bg-slate-200 dark:bg-slate-800 rounded" />
+                        <div className="h-3 w-32 bg-slate-200 dark:bg-slate-800 rounded" />
+                      </div>
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <div className="h-4 w-16 bg-slate-200 dark:bg-slate-800 rounded" />
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <div className="h-4 w-16 bg-slate-200 dark:bg-slate-800 rounded" />
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <div className="h-4 w-14 bg-slate-200 dark:bg-slate-800 rounded" />
+                    </td>
+                    <td className="py-3.5 px-4 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <div className="h-6 w-16 bg-slate-200 dark:bg-slate-800 rounded-lg" />
+                        <div className="h-6 w-6 bg-slate-200 dark:bg-slate-800 rounded-lg" />
+                        <div className="h-6 w-6 bg-slate-200 dark:bg-slate-800 rounded-lg" />
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : suppliers.length === 0 ? (
           <div className="p-16 text-center text-slate-400">
             <Truck className="h-10 w-10 mx-auto text-slate-300 dark:text-slate-700 mb-3" />
             <p className="text-sm font-bold text-slate-600 dark:text-slate-400">
-              {loading ? "Loading supplier directory..." : "No suppliers registered"}
+              No suppliers registered
             </p>
-            {!loading && <p className="text-xs mt-1">Add your medicine vendors and distributors to track batch purchases.</p>}
+            <p className="text-xs mt-1">Add your medicine vendors and distributors to track batch purchases.</p>
           </div>
         ) : (
           <div className="overflow-x-auto">

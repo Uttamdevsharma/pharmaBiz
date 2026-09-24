@@ -18,7 +18,6 @@ import {
   Edit2,
   CheckCircle2,
   AlertCircle,
-  Loader2,
   Briefcase,
   X,
   FileText,
@@ -365,9 +364,100 @@ export function SupplierDetailsView({ supplierId, onBack, onNavigate }: Supplier
 
   if (loading && !supplier) {
     return (
-      <div className="py-24 flex flex-col items-center justify-center text-slate-400 gap-3">
-        <Loader2 className="h-8 w-8 animate-spin text-brand-primary" />
-        <p className="text-xs font-bold">Loading supplier profile & purchase history...</p>
+      <div className="space-y-6 max-w-6xl mx-auto animate-pulse">
+        {/* Top Navigation Skeleton */}
+        <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+          <div className="h-5 w-32 bg-slate-200 dark:bg-slate-800 rounded" />
+        </div>
+
+        {/* Section 1: Hero Grid (Company Profile + Sales Representatives) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+          {/* Company Profile Card Skeleton */}
+          <div className="lg:col-span-5 bg-white dark:bg-slate-900 p-5 sm:p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-5">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="h-4 w-36 bg-slate-200 dark:bg-slate-800 rounded" />
+              <div className="h-4 w-20 bg-slate-200 dark:bg-slate-800 rounded" />
+            </div>
+            <div className="flex items-center gap-3.5 pt-1">
+              <div className="h-12 w-12 rounded-2xl bg-slate-200 dark:bg-slate-800 shrink-0" />
+              <div className="space-y-2 flex-1">
+                <div className="h-5 w-48 bg-slate-200 dark:bg-slate-800 rounded" />
+                <div className="h-3 w-24 bg-slate-200 dark:bg-slate-800 rounded" />
+              </div>
+            </div>
+            <div className="space-y-3 pt-2">
+              <div className="h-4 w-40 bg-slate-200 dark:bg-slate-800 rounded" />
+              <div className="h-4 w-52 bg-slate-200 dark:bg-slate-800 rounded" />
+              <div className="h-4 w-64 bg-slate-200 dark:bg-slate-800 rounded" />
+            </div>
+          </div>
+
+          {/* Contact Representatives Card Skeleton */}
+          <div className="lg:col-span-7 bg-white dark:bg-slate-900 p-5 sm:p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="h-4 w-44 bg-slate-200 dark:bg-slate-800 rounded" />
+              <div className="h-7 w-28 bg-slate-200 dark:bg-slate-800 rounded-xl" />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              {[...Array(2)].map((_, i) => (
+                <div key={i} className="p-3.5 rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 space-y-2">
+                  <div className="h-4 w-28 bg-slate-200 dark:bg-slate-800 rounded" />
+                  <div className="h-3 w-20 bg-slate-200 dark:bg-slate-800 rounded" />
+                  <div className="h-3 w-32 bg-slate-200 dark:bg-slate-800 rounded" />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Section 2: 3 KPI Financial Summary Cards Skeleton */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="bg-white dark:bg-slate-900 p-5 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
+              <div className="h-3.5 w-28 bg-slate-200 dark:bg-slate-800 rounded" />
+              <div className="h-8 w-36 bg-slate-200 dark:bg-slate-800 rounded" />
+              <div className="h-3 w-24 bg-slate-200 dark:bg-slate-800 rounded" />
+            </div>
+          ))}
+        </div>
+
+        {/* Section 3: Purchase Invoices Table Skeleton */}
+        <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden p-5 sm:p-6 space-y-4">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+            <div className="h-5 w-40 bg-slate-200 dark:bg-slate-800 rounded" />
+            <div className="h-4 w-24 bg-slate-200 dark:bg-slate-800 rounded" />
+          </div>
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+            <table className="w-full min-w-[750px] text-left border-collapse">
+              <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 uppercase font-bold text-xs tracking-wider border-b border-slate-200 dark:border-slate-800">
+                <tr>
+                  <th className="py-4 px-4">Date</th>
+                  <th className="py-4 px-4">Branch</th>
+                  <th className="py-4 px-4">Contact Person</th>
+                  <th className="py-4 px-4 text-right">Total Amount</th>
+                  <th className="py-4 px-4 text-right">Paid</th>
+                  <th className="py-4 px-4 text-right">Due</th>
+                  <th className="py-4 px-4 text-center">Status</th>
+                  <th className="py-4 px-4 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {[...Array(4)].map((_, i) => (
+                  <tr key={i} className="h-14">
+                    <td className="py-3.5 px-4"><div className="h-4 w-20 bg-slate-200 dark:bg-slate-800 rounded" /></td>
+                    <td className="py-3.5 px-4"><div className="h-4 w-24 bg-slate-200 dark:bg-slate-800 rounded" /></td>
+                    <td className="py-3.5 px-4"><div className="h-4 w-28 bg-slate-200 dark:bg-slate-800 rounded" /></td>
+                    <td className="py-3.5 px-4 text-right"><div className="h-4 w-16 bg-slate-200 dark:bg-slate-800 rounded ml-auto" /></td>
+                    <td className="py-3.5 px-4 text-right"><div className="h-4 w-16 bg-slate-200 dark:bg-slate-800 rounded ml-auto" /></td>
+                    <td className="py-3.5 px-4 text-right"><div className="h-4 w-14 bg-slate-200 dark:bg-slate-800 rounded ml-auto" /></td>
+                    <td className="py-3.5 px-4 text-center"><div className="h-6 w-16 bg-slate-200 dark:bg-slate-800 rounded-full mx-auto" /></td>
+                    <td className="py-3.5 px-4 text-right"><div className="h-7 w-16 bg-slate-200 dark:bg-slate-800 rounded-xl ml-auto" /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     );
   }
@@ -852,7 +942,40 @@ export function SupplierDetailsView({ supplierId, onBack, onNavigate }: Supplier
         </div>
 
         {/* Purchases Table */}
-        {purchases.length === 0 ? (
+        {loading ? (
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+            <div className="table-responsive-container">
+              <table className="w-full min-w-[750px] text-left border-collapse">
+                <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 uppercase font-bold text-xs tracking-wider border-b border-slate-200 dark:border-slate-800">
+                  <tr>
+                    <th className="py-4 px-4">Date</th>
+                    <th className="py-4 px-4">Branch</th>
+                    <th className="py-4 px-4">Contact Person</th>
+                    <th className="py-4 px-4 text-right">Total Amount</th>
+                    <th className="py-4 px-4 text-right">Paid</th>
+                    <th className="py-4 px-4 text-right">Due</th>
+                    <th className="py-4 px-4 text-center">Status</th>
+                    <th className="py-4 px-4 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800 animate-pulse">
+                  {[...Array(4)].map((_, i) => (
+                    <tr key={i} className="h-16">
+                      <td className="py-4 px-4"><div className="h-4 w-20 bg-slate-200 dark:bg-slate-800 rounded" /></td>
+                      <td className="py-4 px-4"><div className="h-4 w-24 bg-slate-200 dark:bg-slate-800 rounded" /></td>
+                      <td className="py-4 px-4"><div className="h-4 w-28 bg-slate-200 dark:bg-slate-800 rounded" /></td>
+                      <td className="py-4 px-4 text-right"><div className="h-4 w-16 bg-slate-200 dark:bg-slate-800 rounded ml-auto font-mono" /></td>
+                      <td className="py-4 px-4 text-right"><div className="h-4 w-16 bg-slate-200 dark:bg-slate-800 rounded ml-auto font-mono" /></td>
+                      <td className="py-4 px-4 text-right"><div className="h-4 w-14 bg-slate-200 dark:bg-slate-800 rounded ml-auto font-mono" /></td>
+                      <td className="py-4 px-4 text-center"><div className="h-6 w-16 bg-slate-200 dark:bg-slate-800 rounded-full mx-auto" /></td>
+                      <td className="py-4 px-4 text-right"><div className="h-7 w-16 bg-slate-200 dark:bg-slate-800 rounded-xl ml-auto" /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : purchases.length === 0 ? (
           <div className="py-12 text-center text-slate-400">
             <Receipt className="h-8 w-8 mx-auto text-slate-300 dark:text-slate-700 mb-2" />
             <p className="text-xs sm:text-sm font-bold text-slate-600 dark:text-slate-400">No purchase records found for this period</p>

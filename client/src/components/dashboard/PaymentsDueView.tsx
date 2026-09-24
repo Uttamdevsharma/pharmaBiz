@@ -384,9 +384,42 @@ export function PaymentsDueView({ onNavigate: _onNavigate, selectedBranchId: pro
 
           {/* Supplier Table: Supplier | Total Due | Details Button */}
           {loadingSuppliers ? (
-            <div className="py-20 flex flex-col items-center justify-center text-slate-400 gap-2">
-              <Loader2 className="h-8 w-8 animate-spin text-brand-primary" />
-              <p className="text-xs sm:text-sm font-bold">Loading pending due suppliers...</p>
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+              <div className="table-responsive-container">
+                <table className="w-full min-w-[600px] text-left border-collapse">
+                  <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 uppercase font-bold text-xs tracking-wider border-b border-slate-200 dark:border-slate-800">
+                    <tr>
+                      <th className="py-4 px-4">Supplier</th>
+                      <th className="py-4 px-4 text-right">Total Due</th>
+                      <th className="py-4 px-4 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800 animate-pulse">
+                    {[...Array(5)].map((_, i) => (
+                      <tr key={i} className="h-16">
+                        <td className="py-4 px-4">
+                          <div className="flex items-center gap-3">
+                            <div className="h-10 w-10 rounded-xl bg-slate-200 dark:bg-slate-800 shrink-0" />
+                            <div className="space-y-1.5">
+                              <div className="h-4 w-36 bg-slate-200 dark:bg-slate-800 rounded" />
+                              <div className="h-3 w-24 bg-slate-200 dark:bg-slate-800 rounded" />
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-4 px-4 text-right">
+                          <div className="h-6 w-24 bg-slate-200 dark:bg-slate-800 rounded-lg ml-auto" />
+                        </td>
+                        <td className="py-4 px-4 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <div className="h-9 w-24 bg-slate-200 dark:bg-slate-800 rounded-xl" />
+                            <div className="h-9 w-20 bg-slate-200 dark:bg-slate-800 rounded-xl" />
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           ) : filteredDueSuppliers.length === 0 ? (
             <div className="py-16 text-center text-slate-400">
@@ -657,9 +690,45 @@ export function PaymentsDueView({ onNavigate: _onNavigate, selectedBranchId: pro
 
           {/* Pending Invoices Table */}
           {loadingPurchases ? (
-            <div className="py-16 flex flex-col items-center justify-center text-slate-400 gap-2">
-              <Loader2 className="h-8 w-8 animate-spin text-brand-primary" />
-              <p className="text-xs sm:text-sm font-bold">Loading purchase records...</p>
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+              <div className="table-responsive-container">
+                <table className="w-full min-w-[700px] text-left border-collapse">
+                  <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 uppercase font-bold text-xs tracking-wider border-b border-slate-200 dark:border-slate-800">
+                    <tr>
+                      <th className="py-4 px-4">Purchase Date</th>
+                      <th className="py-4 px-4 text-right">Total Bill</th>
+                      <th className="py-4 px-4 text-right">Paid Amount</th>
+                      <th className="py-4 px-4 text-right">Pending Due</th>
+                      <th className="py-4 px-4 text-center">Purchased Items</th>
+                      <th className="py-4 px-4 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800 animate-pulse">
+                    {[...Array(5)].map((_, i) => (
+                      <tr key={i} className="h-16">
+                        <td className="py-4 px-4">
+                          <div className="h-4 w-24 bg-slate-200 dark:bg-slate-800 rounded" />
+                        </td>
+                        <td className="py-4 px-4 text-right">
+                          <div className="h-4 w-16 bg-slate-200 dark:bg-slate-800 rounded ml-auto font-mono" />
+                        </td>
+                        <td className="py-4 px-4 text-right">
+                          <div className="h-4 w-16 bg-slate-200 dark:bg-slate-800 rounded ml-auto font-mono" />
+                        </td>
+                        <td className="py-4 px-4 text-right">
+                          <div className="h-6 w-20 bg-slate-200 dark:bg-slate-800 rounded-xl ml-auto" />
+                        </td>
+                        <td className="py-4 px-4 text-center">
+                          <div className="h-8 w-28 bg-slate-200 dark:bg-slate-800 rounded-xl mx-auto" />
+                        </td>
+                        <td className="py-4 px-4 text-right">
+                          <div className="h-8 w-16 bg-slate-200 dark:bg-slate-800 rounded-xl ml-auto" />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           ) : supplierPurchases.length === 0 ? (
             <div className="py-16 text-center text-slate-400">
