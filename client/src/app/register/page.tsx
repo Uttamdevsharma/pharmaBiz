@@ -32,6 +32,11 @@ import {
   FileCheck,
   EyeOff,
   Percent,
+  X,
+  ExternalLink,
+  Info,
+  ShieldAlert,
+  Database,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/common/ThemeToggle";
 
@@ -194,8 +199,16 @@ function RegisterContent() {
     maxBranches: 1,
   };
 
+  const INITIAL_LICENSE_FEE = 5000;
+  const DATA_RETENTION_FEE = 3000;
+  const DATA_RETENTION_DAYS = 90;
+
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [showTermsModal, setShowTermsModal] = useState(false);
+
   const basePrice = Number(selectedPlan.price || 0);
-  const totalPrice = billingCycle === "YEARLY" ? Math.round(basePrice * 12 * 0.85) : basePrice;
+  const planPrice = billingCycle === "YEARLY" ? Math.round(basePrice * 12 * 0.85) : basePrice;
+  const totalPrice = INITIAL_LICENSE_FEE + planPrice;
 
   // File Converter helper
   const handleFileChange = (
@@ -314,6 +327,15 @@ function RegisterContent() {
     if (step2Err) {
       setCurrentStep(2);
       setError(step2Err);
+      return;
+    }
+
+    if (!agreedToTerms) {
+      setFieldErrors((prev) => ({
+        ...prev,
+        terms: "You must agree to the Terms & Conditions and Data Retention Policy before submitting.",
+      }));
+      setError("Please read and accept the Terms & Conditions and Data Retention Policy.");
       return;
     }
 
@@ -1084,6 +1106,106 @@ function RegisterContent() {
                 </div>
               </div>
 
+              {/* Initial Investment & License Fee Breakdown Card */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-slate-50 to-brand-primary/5 dark:from-slate-800/60 dark:to-brand-primary/10 border border-brand-primary/20 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="h-4 w-4 text-brand-primary" />
+                    <span className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                      Initial Registration Investment
+                    </span>
+                  </div>
+                  <span className="text-[11px] font-semibold text-brand-primary bg-brand-primary/10 px-2.5 py-0.5 rounded-full">
+                    Transparent Pricing
+                  </span>
+                </div>
+
+                <div className="space-y-2 text-xs sm:text-sm">
+                  <div className="flex items-center justify-between text-slate-600 dark:text-slate-300">
+                    <div className="flex items-center gap-1.5">
+                      <FileCheck className="h-3.5 w-3.5 text-brand-primary shrink-0" />
+                      <span>One-Time Software License Fee:</span>
+                    </div>
+                    <span className="font-bold text-slate-900 dark:text-white font-mono">৳5,000</span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-slate-600 dark:text-slate-300">
+                    <div className="flex items-center gap-1.5">
+                      <Sparkles className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                      <span>
+                        {selectedPlan.name} ({billingCycle === "YEARLY" ? "Yearly - 15% Off" : "Monthly"}):
+                      </span>
+                    </div>
+                    <span className="font-bold text-slate-900 dark:text-white font-mono">৳{planPrice.toLocaleString()}</span>
+                  </div>
+
+                  <div className="border-t border-slate-200 dark:border-slate-700/80 pt-2.5 flex items-center justify-between">
+                    <div>
+                      <div className="font-extrabold text-sm sm:text-base text-slate-900 dark:text-white">
+                        Total Payable Upon Approval:
+                      </div>
+                      <div className="text-[11px] text-slate-400">
+                        License fee (৳5,000) + Selected Plan (৳{planPrice.toLocaleString()})
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-xl sm:text-2xl font-black text-brand-primary font-mono">
+                        ৳{totalPrice.toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Mandatory Terms & Policy Checkbox */}
+              <div
+                className={`p-4 rounded-2xl border-2 transition ${
+                  fieldErrors.terms
+                    ? "border-rose-500 bg-rose-50/60 dark:bg-rose-950/20"
+                    : "border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/40"
+                }`}
+              >
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={agreedToTerms}
+                    onChange={(e) => {
+                      setAgreedToTerms(e.target.checked);
+                      if (e.target.checked && fieldErrors.terms) {
+                        setFieldErrors((prev) => {
+                          const next = { ...prev };
+                          delete next.terms;
+                          return next;
+                        });
+                      }
+                    }}
+                    className="h-4 w-4 rounded border-slate-300 text-brand-primary focus:ring-brand-primary cursor-pointer shrink-0"
+                  />
+                  <span className="text-xs sm:text-sm text-slate-700 dark:text-slate-300 select-none">
+                    I have read and agree to the{" "}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setShowTermsModal(true);
+                      }}
+                      className="text-brand-primary font-bold underline hover:opacity-80 inline-flex items-center gap-1 cursor-pointer"
+                    >
+                      <span>Terms & Conditions and Data Retention Policy</span>
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </button>
+                    <span className="text-rose-500 font-bold ml-1">*</span>
+                  </span>
+                </label>
+                {fieldErrors.terms && (
+                  <p className="text-xs text-rose-500 font-semibold mt-2 pl-7 flex items-center gap-1">
+                    <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                    <span>{fieldErrors.terms}</span>
+                  </p>
+                )}
+              </div>
+
               <div className="pt-4 flex items-center justify-between border-t border-slate-100 dark:border-slate-800">
                 <button
                   type="button"
@@ -1143,7 +1265,7 @@ function RegisterContent() {
                     3
                   </div>
                   <div className="text-sm">
-                    <strong className="text-slate-900 dark:text-white">Approval & Payment:</strong> Receive approval email and complete payment (৳{totalPrice.toLocaleString()}) to activate your pharmacy.
+                    <strong className="text-slate-900 dark:text-white">Approval & Payment:</strong> Receive approval email and complete payment (৳{totalPrice.toLocaleString()} &mdash; includes ৳5,000 license fee + ৳{planPrice.toLocaleString()} plan) to activate your pharmacy.
                   </div>
                 </div>
               </div>
@@ -1322,6 +1444,127 @@ function RegisterContent() {
           </div>
         )}
       </div>
+
+      {/* ================= TERMS & CONDITIONS AND DATA RETENTION POLICY MODAL ================= */}
+      {showTermsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="relative w-full max-w-2xl max-h-[90vh] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-brand-primary/10 text-brand-primary flex items-center justify-center">
+                  <ShieldCheck className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-base sm:text-lg text-slate-900 dark:text-white">
+                    Terms & Conditions & Data Retention Policy
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    PharmaBiz Software Licensing, Cloud Hosting & Expiration Terms
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowTermsModal(false)}
+                className="h-8 w-8 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center transition"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto space-y-4 text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+              {/* Section 1 */}
+              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/80 space-y-1.5">
+                <div className="flex items-center gap-2 font-bold text-slate-900 dark:text-white text-sm">
+                  <span className="h-6 w-6 rounded-full bg-brand-primary text-white text-xs flex items-center justify-center shrink-0">
+                    1
+                  </span>
+                  <span>One-Time Software License Fee (৳5,000)</span>
+                </div>
+                <p className="text-xs text-slate-600 dark:text-slate-400 pl-8">
+                  Upon initial registration, a mandatory one-time software license and cloud server provisioning fee of <strong>৳5,000</strong> is required in addition to your chosen subscription plan.
+                </p>
+              </div>
+
+              {/* Section 2 */}
+              <div className="p-4 rounded-2xl bg-emerald-500/10 dark:bg-emerald-950/20 border border-emerald-500/30 space-y-1.5">
+                <div className="flex items-center gap-2 font-bold text-emerald-900 dark:text-emerald-200 text-sm">
+                  <span className="h-6 w-6 rounded-full bg-emerald-600 text-white text-xs flex items-center justify-center shrink-0">
+                    2
+                  </span>
+                  <span>30-Day Free Renewal Grace Period (Days 1–30)</span>
+                </div>
+                <p className="text-xs text-emerald-900/90 dark:text-emerald-200/90 pl-8">
+                  If your subscription expires, you have up to <strong>30 days</strong> to renew or select a new plan with <strong>zero extra fee</strong> (regular plan renewal price only). All data remains active.
+                </p>
+              </div>
+
+              {/* Section 3 */}
+              <div className="p-4 rounded-2xl bg-amber-500/10 dark:bg-amber-950/20 border border-amber-500/30 space-y-1.5">
+                <div className="flex items-center gap-2 font-bold text-amber-900 dark:text-amber-200 text-sm">
+                  <span className="h-6 w-6 rounded-full bg-amber-600 text-white text-xs flex items-center justify-center shrink-0">
+                    3
+                  </span>
+                  <span>Data Retention & Reactivation Fee (Days 31–90)</span>
+                </div>
+                <p className="text-xs text-amber-900/90 dark:text-amber-200/90 pl-8">
+                  Between day 31 and day 90 after expiration, your complete store data is securely preserved on our cloud servers. Renewing during this window requires a <strong>৳2,000 Data Retention Fee</strong> + your selected subscription plan.
+                </p>
+              </div>
+
+              {/* Section 4 */}
+              <div className="p-4 rounded-2xl bg-rose-500/10 dark:bg-rose-950/20 border border-rose-500/30 space-y-1.5">
+                <div className="flex items-center gap-2 font-bold text-rose-900 dark:text-rose-200 text-sm">
+                  <span className="h-6 w-6 rounded-full bg-rose-600 text-white text-xs flex items-center justify-center shrink-0">
+                    4
+                  </span>
+                  <span>Permanent Data Purge & New Registration (After 90 Days)</span>
+                </div>
+                <p className="text-xs text-rose-900/90 dark:text-rose-200/90 pl-8">
+                  After <strong>90 continuous days (3 months)</strong> of expiration, historical pharmacy data cannot be restored and is permanently deleted. To use the software again, a new pharmacy registration with the initial ৳5,000 license fee + plan price is required.
+                </p>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-5 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="text-xs text-slate-500 flex items-center gap-1.5">
+                <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                <span>Please accept the terms to complete your application.</span>
+              </div>
+
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={() => setShowTermsModal(false)}
+                  className="flex-1 sm:flex-initial px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAgreedToTerms(true);
+                    setFieldErrors((prev) => {
+                      const next = { ...prev };
+                      delete next.terms;
+                      return next;
+                    });
+                    setShowTermsModal(false);
+                  }}
+                  className="flex-1 sm:flex-initial px-5 py-2.5 rounded-xl bg-brand-primary text-white text-xs font-bold shadow-md hover:opacity-90 transition active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Check className="h-4 w-4" />
+                  <span>I Agree & Accept Terms</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

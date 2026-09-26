@@ -3,6 +3,8 @@ import { CreatePlanInput, UpdatePlanInput, ListTenantsQuery } from "./super-admi
 import { PlatformAnalyticsResponse, PharmacyGrowthPoint, SubscriptionByPlanData } from "./super-admin.types";
 import { EmailService } from "../../app/lib/email.service";
 import { CENTRAL_PLAN_DEFINITIONS, PricingTierType } from "../../app/lib/planLimits";
+import jwt from "jsonwebtoken";
+import bcrypt from "bcryptjs";
 
 export class SuperAdminService {
   /**
@@ -1600,7 +1602,9 @@ export class SuperAdminService {
     const endDate = new Date(startDate.getTime() + durationDays * 24 * 60 * 60 * 1000);
 
     const basePrice = Number(plan.price);
-    const amount = billingCycle === "YEARLY" ? Math.round(basePrice * 12 * 0.85) : basePrice;
+    const planAmount = billingCycle === "YEARLY" ? Math.round(basePrice * 12 * 0.85) : basePrice;
+    const INITIAL_LICENSE_FEE = 5000;
+    const amount = planAmount + INITIAL_LICENSE_FEE;
 
     // Update Tenant to APPROVED_PENDING_PAYMENT
     const updatedTenant = await (prisma as any).tenant.update({
@@ -1642,11 +1646,37 @@ export class SuperAdminService {
       });
     }
 
-    // Build payment checkout URL
-    const clientUrl = process.env.CLIENT_URL || "http://localhost:3001";
-    const paymentUrl = `${clientUrl}/verification-status?tenantId=${tenant.id}&email=${encodeURIComponent(owner.email || tenant.email || "")}`;
+    // Resolve registered password or assign a secure temporary password
+    let plainPassword = tenant.tempPassword;
+    if (!plainPassword) {
+      plainPassword = `Pharma@${Math.floor(1000 + Math.random() * 9000)}`;
+      const passwordHash = await bcrypt.hash(plainPassword, 10);
+      await (prisma as any).user.update({
+        where: { id: owner.id },
+        data: { passwordHash },
+      });
+    }
 
-    // Send Approval Email
+    // Generate Magic Login Token for the owner (valid for 30 days)
+    const clientUrl = process.env.CLIENT_URL || "http://localhost:3001";
+    const secret = process.env.JWT_SECRET || "default_secret";
+    const magicPayload = {
+      id: owner.id,
+      tenantId: tenant.id,
+      branchId: owner.branchId || null,
+      role: owner.role,
+      permissions: ["*"],
+      username: owner.username,
+      name: owner.name,
+      email: owner.email,
+      verificationStatus: "APPROVED_PENDING_PAYMENT",
+    };
+    const magicToken = jwt.sign(magicPayload, secret, { expiresIn: "30d" });
+
+    // Build payment checkout URL with magic token for 1-click access
+    const paymentUrl = `${clientUrl}/verification-status?tenantId=${tenant.id}&email=${encodeURIComponent(owner.email || tenant.email || "")}&token=${encodeURIComponent(magicToken)}`;
+
+    // Send Approval Email with credentials and 1-click login URL
     const emailRecipient = owner.email || tenant.email;
     if (emailRecipient) {
       await EmailService.sendApprovalEmail({
@@ -1658,6 +1688,7 @@ export class SuperAdminService {
         billingCycle,
         price: amount,
         paymentUrl,
+        password: plainPassword,
       });
     }
 

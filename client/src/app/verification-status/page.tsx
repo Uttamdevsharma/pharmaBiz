@@ -35,6 +35,30 @@ function VerificationStatusContent() {
 
   const emailParam = searchParams.get("email") || "";
   const tenantIdParam = searchParams.get("tenantId") || "";
+  const tokenParam = searchParams.get("token") || "";
+
+  // 1-Click Magic Login handler when arriving from approval email
+  useEffect(() => {
+    if (tokenParam) {
+      try {
+        localStorage.setItem("token", tokenParam);
+        const base64Url = tokenParam.split(".")[1];
+        const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+        const jsonPayload = decodeURIComponent(
+          atob(base64)
+            .split("")
+            .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+            .join("")
+        );
+        const payload = JSON.parse(jsonPayload);
+        if (payload && payload.id) {
+          localStorage.setItem("user", JSON.stringify(payload));
+        }
+      } catch (err) {
+        console.error("Magic login token parsing error:", err);
+      }
+    }
+  }, [tokenParam]);
 
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<any>(null);
@@ -357,31 +381,50 @@ function VerificationStatusContent() {
                   )}
 
                   {/* Plan Price Card */}
-                  {plan && (
-                    <div className="p-4 rounded-xl bg-white dark:bg-slate-800 border border-emerald-200 dark:border-emerald-700/60 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                      <div>
-                        <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-600">
-                          Approved Plan
-                        </div>
-                        <div className="font-bold text-lg text-slate-900 dark:text-white">
-                          {plan.name} ({plan.tier})
-                        </div>
-                        <div className="text-xs text-slate-500">
-                          Billing: {data?.billingCycle || "MONTHLY"} &bull; Branches: Up to {plan.maxBranches} store(s)
-                        </div>
-                      </div>
+                  {plan && (() => {
+                    const basePlanPrice = data?.billingCycle === "YEARLY"
+                      ? Math.round(Number(plan.price) * 12 * 0.85)
+                      : Number(plan.price);
+                    const licenseFee = 5000;
+                    const totalPayable = basePlanPrice + licenseFee;
 
-                      <div className="text-right">
-                        <div className="text-[10px] text-slate-400 font-bold uppercase">Payable Amount</div>
-                        <div className="text-2xl font-black font-mono text-brand-primary">
-                          ৳
-                          {data?.billingCycle === "YEARLY"
-                            ? Math.round(Number(plan.price) * 12 * 0.85).toLocaleString()
-                            : Number(plan.price).toLocaleString()}
+                    return (
+                      <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-800 border border-emerald-200 dark:border-emerald-700/60 space-y-3">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-700 pb-3">
+                          <div>
+                            <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-600">
+                              Approved Plan & License
+                            </div>
+                            <div className="font-bold text-lg text-slate-900 dark:text-white">
+                              {plan.name} ({plan.tier})
+                            </div>
+                            <div className="text-xs text-slate-500">
+                              Billing: {data?.billingCycle || "MONTHLY"} &bull; Branches: Up to {plan.maxBranches} store(s)
+                            </div>
+                          </div>
+
+                          <div className="sm:text-right">
+                            <div className="text-[10px] text-slate-400 font-bold uppercase">Total Payable</div>
+                            <div className="text-2xl font-black font-mono text-brand-primary">
+                              ৳{totalPayable.toLocaleString()}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Fee Breakdown */}
+                        <div className="space-y-1.5 text-xs text-slate-600 dark:text-slate-300">
+                          <div className="flex justify-between">
+                            <span>One-Time Software License Fee:</span>
+                            <span className="font-bold font-mono text-slate-900 dark:text-white">৳5,000</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>{plan.name} ({data?.billingCycle || "MONTHLY"}):</span>
+                            <span className="font-bold font-mono text-slate-900 dark:text-white">৳{basePlanPrice.toLocaleString()}</span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
 
                   <button
                     onClick={handleProceedPayment}

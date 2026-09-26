@@ -90,6 +90,8 @@ import {
   RefreshCw,
   History,
   Check,
+  AlertCircle,
+  ShieldCheck,
 } from "lucide-react";
 
 // Persistent in-memory cache across dashboard transitions to prevent full-screen loaders
@@ -315,6 +317,20 @@ export default function RoleBasedDashboard() {
   }, [isAuthenticated, isSuperAdmin, isPlatformStaff, authLoading, user?.role, user?.branchId, router]);
 
   const handleInitiateUpgrade = async (targetPlanId: string) => {
+    const subEnd = currentSub?.endDate ? new Date(currentSub.endDate) : null;
+    const calcDaysExpired = subEnd && isExpired ? Math.max(0, Math.floor((Date.now() - subEnd.getTime()) / (1000 * 3600 * 24))) : 0;
+    
+    if (isExpired && calcDaysExpired > 90) {
+      if (
+        confirm(
+          "Your subscription has been expired for over 90 days. Per our data retention policy, previous store records have been purged. Please register as a new pharmacy to continue using the platform. Would you like to proceed to the registration page?"
+        )
+      ) {
+        window.location.href = "/register";
+      }
+      return;
+    }
+
     try {
       setInitiatingPay(true);
       // 1. Change plan / create subscription
@@ -373,6 +389,10 @@ export default function RoleBasedDashboard() {
   const endDate = currentSub?.endDate ? new Date(currentSub.endDate) : null;
   const paidDaysRemaining = endDate ? Math.ceil((endDate.getTime() - Date.now()) / (1000 * 3600 * 24)) : null;
   const isExpiringSoon = !isExpired && paidDaysRemaining !== null && paidDaysRemaining <= 5 && paidDaysRemaining >= 0;
+  const daysExpired = endDate && isExpired ? Math.max(0, Math.floor((Date.now() - endDate.getTime()) / (1000 * 3600 * 24))) : 0;
+  const isFreeGrace = isExpired && daysExpired <= 30;
+  const isWithinRetentionGrace = isExpired && daysExpired > 30 && daysExpired <= 90;
+  const isPastRetentionLimit = isExpired && daysExpired > 90;
 
   return (
     <div className="h-screen max-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col text-slate-900 dark:text-slate-100 overflow-hidden">
@@ -385,7 +405,7 @@ export default function RoleBasedDashboard() {
               <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white" />
             </span>
             <span>
-              <strong>সাবস্ক্রিপশনের মেয়াদ শেষ:</strong> আপনার ফার্মেসির সাবস্ক্রিপশন মেয়াদ শেষ হয়ে গেছে। পূর্ণ সেবা সচল করতে অনুগ্রহ করে রিনিউ অথবা আপগ্রেড করুন।
+              <strong>Subscription Expired:</strong> Your pharmacy subscription has expired. Please renew or upgrade to restore full operations.
             </span>
           </div>
 
@@ -397,13 +417,13 @@ export default function RoleBasedDashboard() {
                 className="px-3.5 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white font-bold backdrop-blur-sm transition flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
               >
                 <Sparkles className="h-3.5 w-3.5 text-amber-300" />
-                <span>রিনিউ অথবা আপগ্রেড করুন</span>
+                <span>Renew or Upgrade Plan</span>
                 <ArrowRight className="h-3 w-3" />
               </button>
             </div>
           ) : (
             <span className="text-[11px] text-amber-100 font-bold">
-              দয়া করে আপনার ফার্মেসি ওনার (Pharmacy Owner) এর সাথে যোগাযোগ করুন
+              Please contact your Pharmacy Owner to renew the subscription.
             </span>
           )}
         </div>
@@ -510,13 +530,76 @@ export default function RoleBasedDashboard() {
                   Subscription Expired
                 </div>
                 <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
-                  আপনার সাবস্ক্রিপশনের মেয়াদ শেষ হয়ে গেছে!
+                  Subscription Expired!
                 </h2>
                 <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
-                  আপনার ফার্মেসি <strong className="text-slate-800 dark:text-slate-200">{tenantProfile?.name || "Your Pharmacy"}</strong>-এর সাবস্ক্রিপশনের মেয়াদ শেষ। ড্যাশবোর্ড ও কাউন্টার সেলস সচল করতে নিচের যে কোনো প্ল্যান রিনিউ অথবা আপগ্রেড করুন।
+                  Your pharmacy <strong className="text-slate-800 dark:text-slate-200">{tenantProfile?.name || "Your Pharmacy"}</strong> subscription has expired. Select a plan below to renew or upgrade and restore counter sales and dashboard access.
                 </p>
               </div>
             </div>
+
+            {/* 90-Day Retention Notice Banner */}
+            {isPastRetentionLimit && (
+              <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border-2 border-rose-400 dark:border-rose-800 text-rose-900 dark:text-rose-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="font-bold text-sm text-rose-950 dark:text-rose-100 flex items-center gap-1.5">
+                    <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" />
+                    <span>Subscription Expired Over 90 Days ({daysExpired} days)</span>
+                  </div>
+                  <p className="text-xs text-rose-800 dark:text-rose-300">
+                    Under our data retention policy, store data is held for up to 90 days following expiration. Because 90 days have elapsed, historical data has been permanently deleted. To use the software again, please register a new pharmacy account (one-time ৳5,000 Software License Fee + subscription plan).
+                  </p>
+                </div>
+                <a
+                  href="/register"
+                  className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-md transition shrink-0 text-center"
+                >
+                  Register New Pharmacy &rarr;
+                </a>
+              </div>
+            )}
+
+            {isWithinRetentionGrace && (
+              <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border-2 border-amber-400 dark:border-amber-700 text-amber-950 dark:text-amber-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="font-bold text-sm text-amber-950 dark:text-amber-100 flex items-center gap-2">
+                    <ShieldCheck className="h-4 w-4 shrink-0 text-amber-600" />
+                    <span>Data Retention Period Active (Expired {daysExpired} days ago)</span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-200 dark:bg-amber-900 text-amber-900 dark:text-amber-200">
+                      {Math.max(0, 90 - daysExpired)} days remaining
+                    </span>
+                  </div>
+                  <p className="text-xs text-amber-800 dark:text-amber-300">
+                    Your store records (medicines, inventory, customers, and sales) are securely kept on our cloud servers. A ৳2,000 cloud maintenance and data retention fee applies to restore your records upon renewal.
+                  </p>
+                </div>
+                <div className="text-right shrink-0">
+                  <span className="text-[10px] font-bold uppercase text-amber-700 dark:text-amber-300 block">Data Retention Fee</span>
+                  <span className="text-base font-black font-mono text-amber-900 dark:text-amber-200">+৳2,000</span>
+                </div>
+              </div>
+            )}
+
+            {isFreeGrace && (
+              <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border-2 border-emerald-400 dark:border-emerald-700 text-emerald-950 dark:text-emerald-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="font-bold text-sm text-emerald-950 dark:text-emerald-100 flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+                    <span>Standard Renewal Grace Period (Expired {daysExpired} days ago)</span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-200 dark:bg-emerald-900 text-emerald-900 dark:text-emerald-200">
+                      {Math.max(0, 30 - daysExpired)} days left for ৳0 extra fee
+                    </span>
+                  </div>
+                  <p className="text-xs text-emerald-800 dark:text-emerald-300">
+                    You are within the 30-day renewal grace period. Renew now at the standard plan price with ৳0 extra fee.
+                  </p>
+                </div>
+                <div className="text-right shrink-0">
+                  <span className="text-[10px] font-bold uppercase text-emerald-700 dark:text-emerald-300 block">Extra Fee</span>
+                  <span className="text-base font-black font-mono text-emerald-900 dark:text-emerald-200">৳0</span>
+                </div>
+              </div>
+            )}
 
             {/* 3 Plans Selection Grid */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
@@ -526,6 +609,8 @@ export default function RoleBasedDashboard() {
                 const isCurrent = plan.tier === currentSub?.plan?.tier || plan.tier === tenantProfile?.tier;
                 const isHigher = planRank > currentRank;
                 const isGrowth = plan.tier === "GROWTH";
+                const basePlanPrice = Number(plan.price);
+                const totalCost = isWithinRetentionGrace ? basePlanPrice + 2000 : basePlanPrice;
 
                 return (
                   <div
@@ -552,9 +637,19 @@ export default function RoleBasedDashboard() {
                       <div className="text-xs font-bold text-slate-400 uppercase">{plan.tier} Tier</div>
                       <div className="text-base font-black text-slate-900 dark:text-white">{plan.name}</div>
                       <div className="text-2xl font-black text-brand-primary">
-                        ৳{Number(plan.price).toLocaleString()}
+                        ৳{basePlanPrice.toLocaleString()}
                         <span className="text-xs text-slate-400 font-normal ml-1">/ month</span>
                       </div>
+                      {isWithinRetentionGrace && (
+                        <div className="text-[11px] text-amber-700 dark:text-amber-400 font-medium">
+                          + ৳2,000 Data Retention Fee (Total ৳{totalCost.toLocaleString()})
+                        </div>
+                      )}
+                      {isFreeGrace && (
+                        <div className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+                          ৳0 Extra Fee (Regular Plan Price)
+                        </div>
+                      )}
 
                       <ul className="text-xs text-slate-600 dark:text-slate-400 space-y-1.5 pt-2 border-t border-slate-200 dark:border-slate-700">
                         <li className="flex items-center gap-1.5">
@@ -576,10 +671,18 @@ export default function RoleBasedDashboard() {
 
                     <button
                       type="button"
-                      onClick={() => handleInitiateUpgrade(plan.id)}
+                      onClick={() => {
+                        if (isPastRetentionLimit) {
+                          window.location.href = "/register";
+                          return;
+                        }
+                        handleInitiateUpgrade(plan.id);
+                      }}
                       disabled={initiatingPay}
                       className={`w-full py-3 px-3 rounded-xl font-bold text-xs sm:text-sm shadow-md transition active:scale-95 flex items-center justify-center gap-2 cursor-pointer ${
-                        isCurrent
+                        isPastRetentionLimit
+                          ? "bg-rose-600 hover:bg-rose-700 text-white"
+                          : isCurrent
                           ? "bg-amber-600 hover:bg-amber-500 text-white"
                           : isHigher
                           ? "bg-brand-primary hover:opacity-90 text-white"
@@ -588,6 +691,8 @@ export default function RoleBasedDashboard() {
                     >
                       {initiatingPay ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : isPastRetentionLimit ? (
+                        <AlertCircle className="h-4 w-4" />
                       ) : isCurrent ? (
                         <RefreshCw className="h-4 w-4" />
                       ) : isHigher ? (
@@ -596,11 +701,13 @@ export default function RoleBasedDashboard() {
                         <ArrowRight className="h-4 w-4" />
                       )}
                       <span>
-                        {isCurrent
-                          ? `রিনিউ করুন (Renew)`
+                        {isPastRetentionLimit
+                          ? "Expired >90 Days (Register New)"
+                          : isCurrent
+                          ? `Renew Plan (৳${totalCost.toLocaleString()})`
                           : isHigher
-                          ? `আপগ্রেড করুন (Upgrade)`
-                          : `সুইচ করুন (Switch)`}
+                          ? `Upgrade Plan (৳${totalCost.toLocaleString()})`
+                          : `Switch Plan (৳${totalCost.toLocaleString()})`}
                       </span>
                     </button>
                   </div>
@@ -612,7 +719,7 @@ export default function RoleBasedDashboard() {
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-slate-100 dark:border-slate-800">
               <div className="text-xs text-slate-500 flex items-center gap-2">
                 <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
-                <span>SSLCOMMERZ পেমেন্ট সম্পন্ন হওয়ামাত্রই ড্যাশবোর্ড তৎক্ষণাৎ আনলক হবে।</span>
+                <span>Your dashboard will unlock immediately upon successful SSLCOMMERZ checkout.</span>
               </div>
 
               <div className="flex items-center gap-2 shrink-0">
@@ -625,7 +732,7 @@ export default function RoleBasedDashboard() {
                   className="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 text-slate-700 dark:text-slate-300 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer"
                 >
                   <History className="h-3.5 w-3.5 text-brand-primary" />
-                  <span>পেমেন্ট হিস্ট্রি দেখুন</span>
+                  <span>View Payment History</span>
                 </button>
                 <button
                   type="button"
@@ -635,7 +742,7 @@ export default function RoleBasedDashboard() {
                   }}
                   className="px-3.5 py-2 rounded-xl bg-brand-primary/10 text-brand-primary hover:bg-brand-primary/20 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer"
                 >
-                  <span>সব প্ল্যান দেখুন</span>
+                  <span>View All Plans</span>
                   <ArrowRight className="h-3 w-3" />
                 </button>
               </div>
@@ -665,13 +772,13 @@ export default function RoleBasedDashboard() {
                 Subscription Expired
               </div>
               <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
-                সাবস্ক্রিপশনের মেয়াদ শেষ হয়ে গেছে
+                Subscription Expired
               </h2>
               <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
-                আপনার ফার্মেসি <strong>{tenantProfile?.name || "your pharmacy"}</strong>-এর সাবস্ক্রিপশন বিলিং মেয়াদ শেষ হয়ে গেছে।
+                Your pharmacy <strong>{tenantProfile?.name || "your pharmacy"}</strong> subscription billing period has expired.
               </p>
               <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-xs font-bold text-amber-800 dark:text-amber-300">
-                অনুগ্রহ করে আপনার ফার্মেসি ওনার (Pharmacy Owner) এর সাথে যোগাযোগ করুন যাতে তিনি সাবস্ক্রিপশন প্ল্যান রিনিউ করেন।
+                Please contact your Pharmacy Owner to renew the subscription so system access can be restored.
               </div>
             </div>
 
@@ -680,7 +787,7 @@ export default function RoleBasedDashboard() {
               onClick={logout}
               className="w-full py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-sm transition cursor-pointer shadow-md"
             >
-              সাইন আউট করুন
+              Sign Out
             </button>
           </div>
         </div>

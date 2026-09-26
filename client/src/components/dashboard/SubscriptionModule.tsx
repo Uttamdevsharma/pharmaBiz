@@ -19,6 +19,7 @@ import {
   Users,
   ShieldCheck,
   Zap,
+  AlertCircle,
 } from "lucide-react";
 import { getClientPlanConfig, calculateRemainingTrialDays } from "@/lib/planLimits";
 
@@ -83,6 +84,17 @@ export function SubscriptionModule({ onNavigate }: SubscriptionModuleProps = {})
   }, []);
 
   const handleUpgradeOrRenew = async (targetPlanId: string) => {
+    if (isPastRetentionLimit) {
+      if (
+        confirm(
+          "Your subscription has expired more than 90 days ago. Under our data retention policy, previous store data is not recoverable. To continue using the software, please register as a new pharmacy. Would you like to proceed to registration?"
+        )
+      ) {
+        window.location.href = "/register";
+      }
+      return;
+    }
+
     try {
       setUpgradingPlanId(targetPlanId);
       // 1. Change plan
@@ -135,6 +147,11 @@ export function SubscriptionModule({ onNavigate }: SubscriptionModuleProps = {})
 
   const currentMonthlyPrice = Number(currentSub?.plan?.price ?? planConfig.price ?? 500);
   const isExpired = Boolean(subDetails?.isExpired);
+  const subEndDate = currentSub?.endDate ? new Date(currentSub.endDate) : null;
+  const daysExpired = subEndDate && isExpired ? Math.max(0, Math.floor((Date.now() - subEndDate.getTime()) / (1000 * 3600 * 24))) : 0;
+  const isFreeGrace = isExpired && daysExpired <= 30;
+  const isWithinRetentionGrace = isExpired && daysExpired > 30 && daysExpired <= 90;
+  const isPastRetentionLimit = isExpired && daysExpired > 90;
 
   // Helper to calculate pricing based on billingCycle and dynamic discount percentage
   const calculatePlanPricing = (baseMonthlyPrice: number, discountPercent: number = 0) => {
@@ -177,8 +194,18 @@ export function SubscriptionModule({ onNavigate }: SubscriptionModuleProps = {})
     // Current Plan
     if (currentRank === targetRank) {
       if (isExpired) {
+        if (isPastRetentionLimit) {
+          return {
+            text: `Expired >90 Days (Register New)`,
+            disabled: false,
+            className:
+              "w-full py-3.5 sm:py-4 rounded-2xl bg-rose-600 hover:bg-rose-500 text-white text-sm sm:text-base font-bold shadow-lg transition active:scale-95 flex items-center justify-center gap-2.5 cursor-pointer",
+            Icon: AlertCircle,
+          };
+        }
+        const totalRenewPrice = isWithinRetentionGrace ? calculatedPrice + 2000 : calculatedPrice;
         return {
-          text: `Renew Plan ${targetPlanNum} (৳${calculatedPrice.toLocaleString()})`,
+          text: `Renew Plan ${targetPlanNum} (৳${totalRenewPrice.toLocaleString()})`,
           disabled: false,
           className:
             "w-full py-3.5 sm:py-4 rounded-2xl bg-amber-600 hover:bg-amber-500 text-white text-sm sm:text-base font-bold shadow-lg transition active:scale-95 flex items-center justify-center gap-2.5 cursor-pointer",
@@ -196,8 +223,9 @@ export function SubscriptionModule({ onNavigate }: SubscriptionModuleProps = {})
 
     // Higher Plan -> Upgrade
     if (targetRank > currentRank) {
+      const payableUpgrade = isWithinRetentionGrace ? calculatedPrice + 2000 : calculatedPrice;
       return {
-        text: `Upgrade to Plan ${targetPlanNum} (৳${calculatedPrice.toLocaleString()})`,
+        text: `Upgrade to Plan ${targetPlanNum} (৳${payableUpgrade.toLocaleString()})`,
         disabled: false,
         className:
           "w-full py-3.5 sm:py-4 rounded-2xl bg-brand-primary hover:opacity-90 text-white text-sm sm:text-base font-bold shadow-xl transition active:scale-95 flex items-center justify-center gap-2.5 cursor-pointer",
@@ -206,8 +234,9 @@ export function SubscriptionModule({ onNavigate }: SubscriptionModuleProps = {})
     }
 
     // Lower Plan -> Switch
+    const payableSwitch = isWithinRetentionGrace ? calculatedPrice + 2000 : calculatedPrice;
     return {
-      text: `Switch to Plan ${targetPlanNum} (৳${calculatedPrice.toLocaleString()})`,
+      text: `Switch to Plan ${targetPlanNum} (৳${payableSwitch.toLocaleString()})`,
       disabled: false,
       className:
         "w-full py-3.5 sm:py-4 rounded-2xl bg-slate-800 hover:bg-slate-700 dark:bg-slate-700 dark:hover:bg-slate-600 text-white text-sm sm:text-base font-bold shadow-md transition active:scale-95 flex items-center justify-center gap-2.5 cursor-pointer",
@@ -322,7 +351,7 @@ export function SubscriptionModule({ onNavigate }: SubscriptionModuleProps = {})
             <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
             <span>
               {isExpired
-                ? "মেয়াদ শেষ হয়ে গেছে: নিচে রিনিউ অথবা আপগ্রেড বাটনে ক্লিক করে SSLCOMMERZ পেমেন্ট সম্পন্ন করুন।"
+                ? "Subscription expired: Select a plan below to renew or upgrade via SSLCOMMERZ checkout."
                 : "Instant renewal and upgrades powered by SSLCOMMERZ checkout."}
             </span>
           </div>
@@ -376,6 +405,85 @@ export function SubscriptionModule({ onNavigate }: SubscriptionModuleProps = {})
             </button>
           </div>
         </div>
+
+        {/* 90-Day Data Retention Policy Notification Banner */}
+        {isExpired && isPastRetentionLimit && (
+          <div className="p-4 sm:p-5 rounded-2xl bg-rose-50 dark:bg-rose-950/30 border-2 border-rose-400 dark:border-rose-800 text-rose-900 dark:text-rose-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className="h-10 w-10 rounded-xl bg-rose-600 text-white flex items-center justify-center shrink-0">
+                <AlertCircle className="h-5 w-5" />
+              </div>
+              <div className="space-y-1">
+                <h4 className="font-extrabold text-sm sm:text-base text-rose-950 dark:text-rose-100">
+                  Subscription Expired Over 90 Days ({daysExpired} days)
+                </h4>
+                <p className="text-xs text-rose-800 dark:text-rose-300 leading-relaxed">
+                  Under our data retention policy, store data is preserved for 90 days following expiration. Because more than 90 days have elapsed, previous data cannot be recovered. To use the software again, please register a new pharmacy account (one-time ৳5,000 Software License Fee + subscription plan).
+                </p>
+              </div>
+            </div>
+            <a
+              href="/register"
+              className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-md transition active:scale-95 shrink-0 text-center"
+            >
+              Register New Pharmacy &rarr;
+            </a>
+          </div>
+        )}
+
+        {isExpired && isWithinRetentionGrace && (
+          <div className="p-4 sm:p-5 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border-2 border-amber-400 dark:border-amber-700/80 text-amber-950 dark:text-amber-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className="h-10 w-10 rounded-xl bg-amber-600 text-white flex items-center justify-center shrink-0">
+                <ShieldCheck className="h-5 w-5" />
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <h4 className="font-extrabold text-sm sm:text-base text-amber-950 dark:text-amber-100">
+                    Data Retention Period Active (Expired {daysExpired} days ago)
+                  </h4>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-200 dark:bg-amber-900 text-amber-900 dark:text-amber-200">
+                    {Math.max(0, 90 - daysExpired)} days remaining
+                  </span>
+                </div>
+                <p className="text-xs text-amber-800 dark:text-amber-300 leading-relaxed">
+                  Your store records (medicines, inventory, customers, and sales) are securely kept on our cloud servers. A ৳2,000 cloud maintenance and data retention fee applies to restore your records upon renewal.
+                </p>
+              </div>
+            </div>
+            <div className="text-right shrink-0">
+              <span className="text-[11px] font-bold uppercase text-amber-700 dark:text-amber-300 block">Data Retention Fee</span>
+              <span className="text-lg font-black font-mono text-amber-900 dark:text-amber-200">+৳2,000</span>
+            </div>
+          </div>
+        )}
+
+        {isExpired && isFreeGrace && (
+          <div className="p-4 sm:p-5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 border-2 border-emerald-400 dark:border-emerald-700/80 text-emerald-950 dark:text-emerald-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className="h-10 w-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0">
+                <CheckCircle2 className="h-5 w-5" />
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <h4 className="font-extrabold text-sm sm:text-base text-emerald-950 dark:text-emerald-100">
+                    Standard Renewal Grace Period (Expired {daysExpired} days ago)
+                  </h4>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-200 dark:bg-emerald-900 text-emerald-900 dark:text-emerald-200">
+                    {Math.max(0, 30 - daysExpired)} days left for ৳0 extra fee
+                  </span>
+                </div>
+                <p className="text-xs text-emerald-800 dark:text-emerald-300 leading-relaxed">
+                  You are within the 30-day renewal grace period. Renew now at the standard plan price with ৳0 extra fee.
+                </p>
+              </div>
+            </div>
+            <div className="text-right shrink-0">
+              <span className="text-[11px] font-bold uppercase text-emerald-700 dark:text-emerald-300 block">Extra Fee</span>
+              <span className="text-lg font-black font-mono text-emerald-900 dark:text-emerald-200">৳0</span>
+            </div>
+          </div>
+        )}
 
         {/* 3 Plans Grid */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8">

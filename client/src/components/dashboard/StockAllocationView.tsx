@@ -21,7 +21,13 @@ import {
   X,
   Layers,
   Building,
+  Snowflake,
+  Plus,
+  Minus,
+  Check,
+  Sparkles,
 } from "lucide-react";
+import { SmartLocationSelector, isRefrigeratorOrColdUnit } from "./SmartLocationSelector";
 
 interface StockAllocationViewProps {
   selectedBranchId: string;
@@ -551,6 +557,28 @@ export function StockAllocationView({
     boxesPerCarton,
   ]);
 
+  // Detect if medicine is temperature-sensitive
+  const isColdSensitive = useMemo(() => {
+    if (!selectedBatch) return false;
+    const text = (
+      (selectedBatch.productName || "") + " " +
+      (selectedBatch.genericName || "") + " " +
+      (selectedBatch.category || "")
+    ).toLowerCase();
+    return (
+      text.includes("insulin") ||
+      text.includes("vaccin") ||
+      text.includes("cold chain") ||
+      text.includes("refrigerat") ||
+      text.includes("eye drop") ||
+      text.includes("erythropoietin") ||
+      text.includes("toxoid") ||
+      text.includes("oxytocin") ||
+      text.includes("2-8") ||
+      text.includes("2°c")
+    );
+  }, [selectedBatch]);
+
   // Submit Handler: Place Stock in Rack
   const handlePlaceStockInRack = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -563,7 +591,12 @@ export function StockAllocationView({
       return;
     }
     if (!rackId) {
-      setErrorMsg("Please select a destination Rack.");
+      setErrorMsg("Please select a destination storage location.");
+      return;
+    }
+    // Only require shelf if the chosen location actually has shelves configured!
+    if (availableShelves.length > 0 && !shelfId) {
+      setErrorMsg(`Please select a shelf within "${selectedRack?.name || "Rack"}".`);
       return;
     }
 
@@ -635,7 +668,11 @@ export function StockAllocationView({
       return;
     }
     if (!destRackId) {
-      setErrorMsg("Please select a destination Rack.");
+      setErrorMsg("Please select a destination storage location.");
+      return;
+    }
+    if (availableDestShelves.length > 0 && !destShelfId) {
+      setErrorMsg(`Please select a shelf within destination "${selectedDestRack?.name || "Rack"}".`);
       return;
     }
 
@@ -1138,40 +1175,140 @@ export function StockAllocationView({
                     </div>
                   )}
 
+                  {/* Cold Storage Alert for sensitive medicines */}
+                  {isColdSensitive && (
+                    <div className="p-3.5 bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 rounded-2xl flex items-center gap-2.5 text-xs text-sky-800 dark:text-sky-300 font-bold">
+                      <Snowflake className="h-4 w-4 text-sky-500 shrink-0 animate-pulse" />
+                      <span>
+                        Recommended: This medicine typically requires cold storage (2°C - 8°C). Storing in a Refrigerator is recommended.
+                      </span>
+                    </div>
+                  )}
+
                   {/* Quantity to Allocate */}
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
                       <label className="text-sm font-bold text-slate-700 dark:text-slate-300">
                         Quantity to Allocate ({allocationCalc.packagingUnitLabel})
                       </label>
                       {allocationCalc.maxAvailable > 0 && (
                         <span className="text-xs text-slate-500 dark:text-slate-400 font-bold">
-                          Available: {allocationCalc.maxAvailable.toLocaleString()} {allocationCalc.packagingUnitLabel}s
+                          Available: <strong className="text-slate-900 dark:text-white font-mono">{allocationCalc.maxAvailable.toLocaleString()}</strong> {allocationCalc.packagingUnitLabel}s
                         </span>
                       )}
                     </div>
-                    <div className="flex items-center gap-3">
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setQuantityInput(Math.max(1, (quantityInput || 1) - 1))}
+                        disabled={quantityInput <= 1}
+                        className="h-12 w-12 rounded-xl border-2 border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition disabled:opacity-40 cursor-pointer"
+                        title="Decrease by 1"
+                      >
+                        <Minus className="h-4 w-4" />
+                      </button>
+
                       <input
                         type="number"
                         min="1"
                         max={Math.max(1, allocationCalc.maxAvailable)}
                         value={quantityInput}
                         onChange={(e) => setQuantityInput(parseInt(e.target.value, 10) || 1)}
-                        className={`w-full h-12 text-lg font-black px-4 rounded-xl border-2 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary ${
+                        className={`w-full h-12 text-lg font-black px-4 text-center rounded-xl border-2 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary ${
                           allocationCalc.hasError && quantityInput > 0
                             ? "border-rose-400 dark:border-rose-700 ring-2 ring-rose-500/20"
                             : "border-slate-200 dark:border-slate-700"
                         }`}
                       />
+
+                      <button
+                        type="button"
+                        onClick={() => setQuantityInput(Math.min(allocationCalc.maxAvailable, (quantityInput || 1) + 1))}
+                        disabled={quantityInput >= allocationCalc.maxAvailable}
+                        className="h-12 w-12 rounded-xl border-2 border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition disabled:opacity-40 cursor-pointer"
+                        title="Increase by 1"
+                      >
+                        <Plus className="h-4 w-4" />
+                      </button>
+
                       <button
                         type="button"
                         onClick={() => setQuantityInput(Math.max(1, allocationCalc.maxAvailable))}
                         disabled={allocationCalc.maxAvailable <= 0}
-                        className="h-12 px-5 text-sm font-black rounded-xl border-2 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 whitespace-nowrap transition cursor-pointer disabled:opacity-50"
+                        className="h-12 px-4 text-xs font-black rounded-xl border-2 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 whitespace-nowrap transition cursor-pointer disabled:opacity-50"
                       >
                         Max ({allocationCalc.maxAvailable})
                       </button>
                     </div>
+
+                    {/* Quick Preset Buttons */}
+                    <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                      <span className="text-xs font-semibold text-slate-400 mr-1">Quick:</span>
+                      <button
+                        type="button"
+                        onClick={() => setQuantityInput(1)}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition cursor-pointer ${
+                          quantityInput === 1
+                            ? "bg-brand-primary text-white border-brand-primary"
+                            : "border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300"
+                        }`}
+                      >
+                        1 {allocationCalc.packagingUnitLabel}
+                      </button>
+                      {allocationCalc.maxAvailable >= 5 && (
+                        <button
+                          type="button"
+                          onClick={() => setQuantityInput(5)}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition cursor-pointer ${
+                            quantityInput === 5
+                              ? "bg-brand-primary text-white border-brand-primary"
+                              : "border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300"
+                          }`}
+                        >
+                          5 {allocationCalc.packagingUnitLabel}s
+                        </button>
+                      )}
+                      {allocationCalc.maxAvailable >= 10 && (
+                        <button
+                          type="button"
+                          onClick={() => setQuantityInput(10)}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition cursor-pointer ${
+                            quantityInput === 10
+                              ? "bg-brand-primary text-white border-brand-primary"
+                              : "border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300"
+                          }`}
+                        >
+                          10 {allocationCalc.packagingUnitLabel}s
+                        </button>
+                      )}
+                      {allocationCalc.maxAvailable > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => setQuantityInput(Math.max(1, Math.floor(allocationCalc.maxAvailable / 2)))}
+                          className="px-2.5 py-1 rounded-lg text-xs font-bold border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition cursor-pointer"
+                        >
+                          Half (50%)
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setQuantityInput(Math.max(1, allocationCalc.maxAvailable))}
+                        className="px-2.5 py-1 rounded-lg text-xs font-bold border border-brand-primary/40 bg-brand-primary/10 text-brand-primary hover:bg-brand-primary/20 transition cursor-pointer"
+                      >
+                        All Remaining (100%)
+                      </button>
+                    </div>
+
+                    {/* Unit conversion summary */}
+                    <div className="flex items-center gap-2 text-xs font-semibold text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/40 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800">
+                      <Sparkles className="h-3.5 w-3.5 text-brand-primary shrink-0" />
+                      <span>
+                        Placing: <strong className="text-slate-900 dark:text-white">{allocationCalc.packagingDisplay}</strong> ={" "}
+                        <strong className="text-brand-primary font-mono">{allocationCalc.baseUnits.toLocaleString()} {packConfig.unit}s</strong>
+                      </span>
+                    </div>
+
                     {allocationCalc.hasError && allocationCalc.validationMsg && (
                       <p className="text-xs font-bold text-rose-600 dark:text-rose-400 mt-2 flex items-center gap-1.5 animate-in fade-in">
                         <AlertCircle className="h-4 w-4 shrink-0" />
@@ -1180,87 +1317,20 @@ export function StockAllocationView({
                     )}
                   </div>
 
-                  {/* Destination Location: Rack → Shelf → Bin */}
-                  <div>
-                    <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 flex items-center gap-2">
-                      <MapPin className="h-4 w-4 text-brand-primary" />
-                      Destination Location
-                    </label>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-                      <div>
-                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">
-                          Rack <span className="text-rose-500">*</span>
-                        </label>
-                        <select
-                          value={rackId}
-                          onChange={(e) => setRackId(e.target.value)}
-                          required
-                          className="w-full h-12 text-sm px-3.5 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-semibold"
-                        >
-                          <option value="">-- Select Rack --</option>
-                          {racks.map((r) => (
-                            <option key={r.id} value={r.id}>
-                              {r.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">
-                          Shelf / Section
-                        </label>
-                        <select
-                          value={shelfId}
-                          onChange={(e) => setShelfId(e.target.value)}
-                          disabled={!rackId || availableShelves.length === 0}
-                          className="w-full h-12 text-sm px-3.5 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-semibold disabled:opacity-50"
-                        >
-                          {availableShelves.length === 0 ? (
-                            <option value="">
-                              {rackId ? "No Shelves (Direct in Unit)" : "-- Select Location First --"}
-                            </option>
-                          ) : (
-                            <>
-                              <option value="">-- Select Shelf --</option>
-                              {availableShelves.map((s: any) => (
-                                <option key={s.id} value={s.id}>
-                                  {s.name}
-                                </option>
-                              ))}
-                            </>
-                          )}
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">
-                          Bin / Khop (Optional)
-                        </label>
-                        <select
-                          value={binId}
-                          onChange={(e) => setBinId(e.target.value)}
-                          disabled={!shelfId || availableBins.length === 0}
-                          className="w-full h-12 text-sm px-3.5 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-semibold disabled:opacity-50"
-                        >
-                          {availableBins.length === 0 ? (
-                            <option value="">
-                              {shelfId ? "No Bins (Direct in Shelf)" : "-- Bin (Optional) --"}
-                            </option>
-                          ) : (
-                            <>
-                              <option value="">-- Select Bin --</option>
-                              {availableBins.map((b: any) => (
-                                <option key={b.id} value={b.id}>
-                                  {b.name}
-                                </option>
-                              ))}
-                            </>
-                          )}
-                        </select>
-                      </div>
-                    </div>
-                  </div>
+                  {/* Destination Location: Smart Searchable & Dynamic Hierarchy */}
+                  <SmartLocationSelector
+                    racks={racks}
+                    selectedRackId={rackId}
+                    selectedShelfId={shelfId}
+                    selectedBinId={binId}
+                    onSelect={(rId, sId, bId) => {
+                      setRackId(rId);
+                      setShelfId(sId);
+                      setBinId(bId);
+                    }}
+                    label="Destination Location (Rack / Refrigerator / Shelf)"
+                    required={true}
+                  />
 
                   {/* Submit Button */}
                   <button
@@ -1369,69 +1439,19 @@ export function StockAllocationView({
               </div>
             </div>
 
-            <div className="p-5 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-3.5">
-              <label className="block text-sm font-bold text-slate-700 dark:text-slate-300">
-                Destination Location
-              </label>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-                <select
-                  value={destRackId}
-                  onChange={(e) => setDestRackId(e.target.value)}
-                  className="w-full h-12 text-sm px-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-semibold"
-                >
-                  <option value="">-- Choose Rack --</option>
-                  {racks.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.name}
-                    </option>
-                  ))}
-                </select>
-
-                <select
-                  value={destShelfId}
-                  onChange={(e) => setDestShelfId(e.target.value)}
-                  disabled={!destRackId || availableDestShelves.length === 0}
-                  className="w-full h-12 text-sm px-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-semibold disabled:opacity-50"
-                >
-                  {availableDestShelves.length === 0 ? (
-                    <option value="">
-                      {destRackId ? "No Shelves (Direct in Unit)" : "-- Choose Shelf --"}
-                    </option>
-                  ) : (
-                    <>
-                      <option value="">-- Choose Shelf --</option>
-                      {availableDestShelves.map((s: any) => (
-                        <option key={s.id} value={s.id}>
-                          {s.name}
-                        </option>
-                      ))}
-                    </>
-                  )}
-                </select>
-
-                <select
-                  value={destBinId}
-                  onChange={(e) => setDestBinId(e.target.value)}
-                  disabled={!destShelfId || availableDestBins.length === 0}
-                  className="w-full h-12 text-sm px-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-semibold disabled:opacity-50"
-                >
-                  {availableDestBins.length === 0 ? (
-                    <option value="">
-                      {destShelfId ? "No Bins (Direct in Shelf)" : "-- Bin (Optional) --"}
-                    </option>
-                  ) : (
-                    <>
-                      <option value="">-- Bin (Optional) --</option>
-                      {availableDestBins.map((b: any) => (
-                        <option key={b.id} value={b.id}>
-                          {b.name}
-                        </option>
-                      ))}
-                    </>
-                  )}
-                </select>
-              </div>
-            </div>
+            <SmartLocationSelector
+              racks={racks}
+              selectedRackId={destRackId}
+              selectedShelfId={destShelfId}
+              selectedBinId={destBinId}
+              onSelect={(rId, sId, bId) => {
+                setDestRackId(rId);
+                setDestShelfId(sId);
+                setDestBinId(bId);
+              }}
+              label="Destination Location"
+              required={true}
+            />
 
             <button
               type="submit"

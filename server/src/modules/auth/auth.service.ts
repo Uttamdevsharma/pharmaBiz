@@ -394,6 +394,7 @@ export class AuthService {
           // Pending Plan Selection
           pendingPlanId: plan?.id,
           pendingBillingCycle: data.billingCycle || "MONTHLY",
+          tempPassword: data.password,
         },
       });
 

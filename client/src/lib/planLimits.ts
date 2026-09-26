@@ -31,6 +31,15 @@ export const TIER_ORDER: Record<string, number> = {
   ENTERPRISE: 3,
 };
 
+// One-time software license and setup fee upon initial registration
+export const INITIAL_LICENSE_FEE = 5000;
+// Grace period in days where expired subscriptions can renew with zero extra fee
+export const DATA_RETENTION_GRACE_DAYS = 30;
+// Data retention fee applied when renewing between day 31 and day 90
+export const DATA_RETENTION_FEE = 2000;
+// Maximum continuous days expired data is held before permanent deletion
+export const DATA_RETENTION_MAX_DAYS = 90;
+
 export const CENTRAL_CLIENT_PLANS: Record<Exclude<Tier, "TRIAL">, PlanConfig> = {
   STARTER: {
     tier: "STARTER",

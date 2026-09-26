@@ -54,6 +54,7 @@ model Tenant {
   otpCode                   String?
   otpExpiresAt              DateTime?
   otpVerifiedAt             DateTime?
+  tempPassword              String?
 
   // Super Admin Review & Approval History
   approvedAt                DateTime?
