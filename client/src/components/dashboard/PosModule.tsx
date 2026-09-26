@@ -31,6 +31,9 @@ interface CartItem {
   unitType: string;
   unitMultiplier: number;
   quantity: number;
+  boxCount?: number;
+  stripCount?: number;
+  tabletCount?: number;
   unitPrice: number;
   basePrice: number;
   stripsPerBox: number;
@@ -480,6 +483,175 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
       return new Date(a.batch.expiryDate).getTime() - new Date(b.batch.expiryDate).getTime();
     }).slice(0, 30);
   }, [products, search]);
+
+  // Direct Add Product to Cart without location popup modal
+  const handleSelectProduct = (prod: any, batch: any) => {
+    if (!prod) return;
+
+    if (batch?.expiryDate && new Date(batch.expiryDate) <= new Date()) {
+      showToast("Cannot sell expired batches.", "error");
+      return;
+    }
+
+    const model = getProductPackagingModel(prod);
+    const isMed = model === "MEDICINE";
+
+    const baseSellingPrice = getProductUnitPrice(prod, batch);
+    const stripsPerBox = Number(prod.stripsPerBox) || 10;
+    const tabletsPerStrip = Number(prod.tabletsPerStrip) || 10;
+    const tabletsPerBox = stripsPerBox * tabletsPerStrip;
+    const stock = batch?.quantity ?? (prod.currentStock !== undefined && prod.currentStock !== null ? Number(prod.currentStock) : Number(prod.stock || 0));
+
+    setCart((prev) => {
+      const existingIdx = prev.findIndex(
+        (item) => item.productId === prod.id && item.inventoryId === (batch?.id || null)
+      );
+
+      if (existingIdx >= 0) {
+        const existing = prev[existingIdx];
+        if (isMed) {
+          const currentTabs = (existing.tabletCount || 0) + 1;
+          const totalUnits = ((existing.boxCount || 0) * tabletsPerBox) + ((existing.stripCount || 0) * tabletsPerStrip) + currentTabs;
+          if (totalUnits > existing.availableBaseStock) {
+            showToast(`Stock limit reached (${existing.availableBaseStock} max available).`, "warning");
+            return prev;
+          }
+          const copy = [...prev];
+          copy[existingIdx] = {
+            ...existing,
+            tabletCount: currentTabs,
+            quantity: totalUnits,
+          };
+          return copy;
+        } else {
+          const newQty = existing.quantity + 1;
+          if (newQty > existing.availableBaseStock) {
+            showToast(`Stock limit reached (${existing.availableBaseStock} max available).`, "warning");
+            return prev;
+          }
+          const copy = [...prev];
+          copy[existingIdx] = {
+            ...existing,
+            quantity: newQty,
+          };
+          return copy;
+        }
+      } else {
+        const newItem: CartItem = {
+          productId: prod.id,
+          name: prod.name,
+          genericName: prod.genericName || null,
+          sku: prod.sku,
+          barcode: prod.barcode || batch?.barcode || null,
+          size: prod.size,
+          productType: model,
+          unitType: isMed ? "TABLET" : (model === "BOTTLE" ? "BOTTLE" : model === "VIAL" ? "VIAL" : "PIECE"),
+          unitMultiplier: 1,
+          quantity: 1,
+          boxCount: 0,
+          stripCount: 0,
+          tabletCount: isMed ? 1 : 0,
+          unitPrice: baseSellingPrice,
+          basePrice: baseSellingPrice,
+          stripsPerBox,
+          tabletsPerStrip,
+          tabletsPerBox,
+          availableBaseStock: stock > 0 ? stock : 99999,
+          batchNumber: batch?.batchNumber || "Default",
+          expiryDate: batch?.expiryDate || null,
+          inventoryId: batch?.id || null,
+          inventoryLocationId: null,
+          shelfLocation: null,
+          locationLabel: undefined,
+          isControlled: prod.isControlled,
+          requiresPrescription: prod.requiresPrescription,
+          purchasePrice: batch?.purchasePrice || null,
+        };
+        return [...prev, newItem];
+      }
+    });
+
+    showToast(`Added ${prod.name} to cart`, "success");
+    setSearch("");
+    setSearchFocused(false);
+    setTimeout(() => {
+      searchInputRef.current?.focus();
+    }, 50);
+  };
+
+  // Update Medicine Packaging Qty (Box, Strip, Tablet)
+  const updateMedicineQty = (idx: number, unitType: "box" | "strip" | "tablet", delta: number) => {
+    setCart((prev) => {
+      const copy = [...prev];
+      const item = copy[idx];
+      if (!item) return prev;
+
+      let boxC = item.boxCount || 0;
+      let stripC = item.stripCount || 0;
+      let tabC = item.tabletCount || 0;
+
+      if (unitType === "box") boxC = Math.max(0, boxC + delta);
+      else if (unitType === "strip") stripC = Math.max(0, stripC + delta);
+      else if (unitType === "tablet") tabC = Math.max(0, tabC + delta);
+
+      const totalBaseUnits = (boxC * item.tabletsPerBox) + (stripC * item.tabletsPerStrip) + tabC;
+
+      if (totalBaseUnits === 0) {
+        return prev.filter((_, i) => i !== idx);
+      }
+
+      if (totalBaseUnits > item.availableBaseStock) {
+        showToast(`Stock limit reached (${item.availableBaseStock} max available).`, "warning");
+        return prev;
+      }
+
+      copy[idx] = {
+        ...item,
+        boxCount: boxC,
+        stripCount: stripC,
+        tabletCount: tabC,
+        quantity: totalBaseUnits,
+      };
+
+      return copy;
+    });
+  };
+
+  // Direct Input set for Medicine Packaging Qty (Box, Strip, Tablet)
+  const updateMedicineDirectQty = (idx: number, unitType: "box" | "strip" | "tablet", newQty: number) => {
+    setCart((prev) => {
+      const copy = [...prev];
+      const item = copy[idx];
+      if (!item) return prev;
+
+      let boxC = item.boxCount || 0;
+      let stripC = item.stripCount || 0;
+      let tabC = item.tabletCount || 0;
+
+      const val = Math.max(0, isNaN(newQty) ? 0 : newQty);
+
+      if (unitType === "box") boxC = val;
+      else if (unitType === "strip") stripC = val;
+      else if (unitType === "tablet") tabC = val;
+
+      const totalBaseUnits = (boxC * item.tabletsPerBox) + (stripC * item.tabletsPerStrip) + tabC;
+
+      if (totalBaseUnits > item.availableBaseStock) {
+        showToast(`Stock limit reached (${item.availableBaseStock} max available).`, "warning");
+        return prev;
+      }
+
+      copy[idx] = {
+        ...item,
+        boxCount: boxC,
+        stripCount: stripC,
+        tabletCount: tabC,
+        quantity: totalBaseUnits,
+      };
+
+      return copy;
+    });
+  };
 
   // Open Location Selector Dialog - Instant opening without blocking spinner
   const openLocationSelector = async (prod: any, batch: any) => {
@@ -988,8 +1160,26 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
   }, [customersList, customerPhone]);
 
   // Financial calculations (Auto-rounded to integer, e.g. 275.80 -> 276)
-  const totalCartUnits = cart.reduce((acc, item) => acc + item.quantity, 0);
-  const rawSubTotal = cart.reduce((acc, item) => acc + item.unitPrice * item.quantity, 0);
+  const totalCartUnits = cart.reduce((acc, item) => {
+    if (item.productType === "MEDICINE") {
+      const b = item.boxCount || 0;
+      const s = item.stripCount || 0;
+      const t = item.tabletCount || 0;
+      return acc + (b * item.tabletsPerBox) + (s * item.tabletsPerStrip) + t;
+    }
+    return acc + item.quantity;
+  }, 0);
+
+  const rawSubTotal = cart.reduce((acc, item) => {
+    if (item.productType === "MEDICINE") {
+      const b = item.boxCount || 0;
+      const s = item.stripCount || 0;
+      const t = item.tabletCount || 0;
+      const totalUnits = (b * item.tabletsPerBox) + (s * item.tabletsPerStrip) + t;
+      return acc + (totalUnits * item.basePrice);
+    }
+    return acc + (item.unitPrice * item.quantity);
+  }, 0);
   const subTotal = Math.round(rawSubTotal);
   const rawTax = taxPercent > 0 ? (rawSubTotal * (taxPercent / 100)) : 0;
   const taxAmount = Math.round(rawTax);
@@ -1047,16 +1237,23 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
         paidAmount: numericPaid,
         prescriptionRef: prescriptionRef.trim() || null,
         managerApprovedBy: managerPin.trim() || null,
-        items: cart.map((item) => ({
-          productId: item.productId,
-          inventoryId: item.inventoryId || null,
-          inventoryLocationId: item.inventoryLocationId || null,
-          batchNumber: item.batchNumber || null,
-          unitType: item.unitType,
-          unitMultiplier: item.unitMultiplier,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-        })),
+        items: cart.map((item) => {
+          const isMed = item.productType === "MEDICINE";
+          const b = item.boxCount || 0;
+          const s = item.stripCount || 0;
+          const t = item.tabletCount || 0;
+          const totalUnits = isMed ? (b * item.tabletsPerBox) + (s * item.tabletsPerStrip) + t : item.quantity;
+          return {
+            productId: item.productId,
+            inventoryId: item.inventoryId || null,
+            inventoryLocationId: item.inventoryLocationId || null,
+            batchNumber: item.batchNumber || null,
+            unitType: isMed ? "TABLET" : item.unitType,
+            unitMultiplier: 1,
+            quantity: totalUnits,
+            unitPrice: item.basePrice || item.unitPrice,
+          };
+        }),
       };
 
       let receiptNumber = `INV-${currentOrderId}`;
@@ -1118,27 +1315,40 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
           notes: finalNotes,
           prescriptionRef: prescriptionRef.trim() || null,
           managerApprovedBy: managerPin.trim() || null,
-          items: cart.map((it) => ({
-            productId: it.productId,
-            inventoryId: it.inventoryId || null,
-            inventoryLocationId: it.inventoryLocationId || null,
-            batchNumber: it.batchNumber || null,
-            unitType: it.unitType,
-            unitMultiplier: it.unitMultiplier,
-            quantity: it.quantity,
-            unitPrice: it.unitPrice,
-            purchasePrice: it.purchasePrice ?? it.basePrice ?? null,
-            subTotal: it.unitPrice * it.quantity,
-            name: it.name,
-            barcode: it.barcode || undefined,
-          })),
+          items: cart.map((it) => {
+            const isMed = it.productType === "MEDICINE";
+            const b = it.boxCount || 0;
+            const s = it.stripCount || 0;
+            const t = it.tabletCount || 0;
+            const totalUnits = isMed ? (b * it.tabletsPerBox) + (s * it.tabletsPerStrip) + t : it.quantity;
+            const itemTotal = isMed ? totalUnits * (it.basePrice || it.unitPrice) : it.unitPrice * it.quantity;
+            return {
+              productId: it.productId,
+              inventoryId: it.inventoryId || null,
+              inventoryLocationId: it.inventoryLocationId || null,
+              batchNumber: it.batchNumber || null,
+              unitType: isMed ? "TABLET" : it.unitType,
+              unitMultiplier: 1,
+              quantity: totalUnits,
+              unitPrice: it.basePrice || it.unitPrice,
+              purchasePrice: it.purchasePrice ?? it.basePrice ?? null,
+              subTotal: itemTotal,
+              name: it.name,
+              barcode: it.barcode || undefined,
+            };
+          }),
           localCreatedAt: new Date().toISOString(),
           syncStatus: "PENDING",
         });
 
         // Decrement local stock in IndexedDB
         for (const it of cart) {
-          await offlineDb.updateProductStockLocally(it.productId, it.quantity);
+          const isMed = it.productType === "MEDICINE";
+          const b = it.boxCount || 0;
+          const s = it.stripCount || 0;
+          const t = it.tabletCount || 0;
+          const totalUnits = isMed ? (b * it.tabletsPerBox) + (s * it.tabletsPerStrip) + t : it.quantity;
+          await offlineDb.updateProductStockLocally(it.productId, totalUnits);
         }
 
         // Decrement in local React state
@@ -1146,10 +1356,15 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
           prev.map((p) => {
             const match = cart.find((ci) => ci.productId === p.id);
             if (!match) return p;
+            const isMed = match.productType === "MEDICINE";
+            const b = match.boxCount || 0;
+            const s = match.stripCount || 0;
+            const t = match.tabletCount || 0;
+            const totalUnits = isMed ? (b * match.tabletsPerBox) + (s * match.tabletsPerStrip) + t : match.quantity;
             const curStock = typeof p.currentStock === "number" ? p.currentStock : ((p as any).stock ?? 0);
             return {
               ...p,
-              currentStock: Math.max(0, curStock - match.quantity),
+              currentStock: Math.max(0, curStock - totalUnits),
             };
           })
         );
@@ -1195,14 +1410,32 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
           cashier: user?.name || "Akash Mahmud",
           customerName: customerName.trim() || "WALK-IN CUSTOMER",
           customerPhone: customerPhone.trim() || "—",
-          items: cart.map((item) => ({
-            name: item.name,
-            barcode: item.barcode || "37000035058697",
-            unitType: item.unitType,
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-            subTotal: item.unitPrice * item.quantity,
-          })),
+          items: cart.map((item) => {
+            const isMed = item.productType === "MEDICINE";
+            const b = item.boxCount || 0;
+            const s = item.stripCount || 0;
+            const t = item.tabletCount || 0;
+            const totalUnits = isMed ? (b * item.tabletsPerBox) + (s * item.tabletsPerStrip) + t : item.quantity;
+            const itemTotal = isMed ? totalUnits * (item.basePrice || item.unitPrice) : item.unitPrice * item.quantity;
+
+            let unitDesc = item.unitType;
+            if (isMed) {
+              const parts = [];
+              if (b > 0) parts.push(`${b} Box`);
+              if (s > 0) parts.push(`${s} Strip`);
+              if (t > 0) parts.push(`${t} Tab`);
+              unitDesc = parts.join(", ") || "1 Tab";
+            }
+
+            return {
+              name: item.name,
+              barcode: item.barcode || "—",
+              unitType: unitDesc,
+              quantity: isMed ? totalUnits : item.quantity,
+              unitPrice: item.basePrice || item.unitPrice,
+              subTotal: itemTotal,
+            };
+          }),
           totalQuantity: totalCartUnits,
           subTotal,
           discount: 0,
@@ -1405,7 +1638,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                       e.preventDefault();
                       if (searchResults.length > 0) {
                         const target = searchResults[selectedSearchIndex] || searchResults[0];
-                        if (target) openLocationSelector(target.product, target.batch);
+                        if (target) handleSelectProduct(target.product, target.batch);
                       }
                     } else if (e.key === "Escape") {
                       setSearchFocused(false);
@@ -1451,7 +1684,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                     return (
                       <div
                         key={`${product.id}-${batch?.id || idx}`}
-                        onClick={() => openLocationSelector(product, batch)}
+                        onClick={() => handleSelectProduct(product, batch)}
                         onMouseEnter={() => setSelectedSearchIndex(idx)}
                         className={`p-3.5 cursor-pointer transition flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 ${
                           isKeySelected
@@ -1541,120 +1774,182 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                   <tr>
                     <th className="py-3.5 px-4 whitespace-nowrap">Barcode</th>
                     <th className="py-3.5 px-4">Product Name</th>
-                    <th className="py-3.5 px-4 whitespace-nowrap">Batch & Expiry</th>
-                    <th className="py-3.5 px-4 whitespace-nowrap">Location</th>
-                    <th className="py-3.5 px-3 text-center whitespace-nowrap">Unit</th>
                     <th className="py-3.5 px-4 text-right whitespace-nowrap">Price</th>
-                    <th className="py-3.5 px-4 text-center whitespace-nowrap">Qty</th>
+                    <th className="py-3.5 px-4 text-center whitespace-nowrap">Quantity & Packaging</th>
                     <th className="py-3.5 px-4 text-right whitespace-nowrap">Total</th>
                     <th className="py-3.5 px-2 text-center w-9"></th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-slate-800 dark:text-slate-200">
+                <tbody className="divide-y divide-slate-200 dark:divide-slate-800 text-slate-900 dark:text-slate-100">
                   {cart.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="py-14 sm:py-18 text-center text-slate-400">
+                      <td colSpan={6} className="py-14 sm:py-18 text-center text-slate-400">
                         <Barcode className="h-10 w-10 mx-auto text-slate-300 dark:text-slate-600 mb-2" />
-                        <p className="text-sm font-bold text-slate-700 dark:text-slate-300">Sale cart is empty</p>
-                        <p className="text-xs text-slate-400 mt-1">Click the search bar above to view products or scan barcode.</p>
+                        <p className="text-base font-black text-slate-700 dark:text-slate-300">Sale cart is empty</p>
+                        <p className="text-xs text-slate-400 mt-1 font-semibold">Click the search bar above to view products or scan barcode.</p>
                       </td>
                     </tr>
                   ) : (
-                    cart.map((item, idx) => (
-                      <tr key={`${item.productId}-${item.inventoryId}-${item.inventoryLocationId}-${item.unitType}-${idx}`} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition">
-                        {/* Barcode */}
-                        <td className="py-3 px-3.5 font-mono text-slate-500 dark:text-slate-400 font-bold text-xs whitespace-nowrap">
-                          {item.barcode || item.sku || "—"}
-                        </td>
+                    cart.map((item, idx) => {
+                      const isMed = item.productType === "MEDICINE";
+                      const b = item.boxCount || 0;
+                      const s = item.stripCount || 0;
+                      const t = item.tabletCount || 0;
+                      const totalBaseUnits = isMed ? (b * item.tabletsPerBox) + (s * item.tabletsPerStrip) + t : item.quantity;
+                      const lineTotal = isMed ? totalBaseUnits * (item.basePrice || item.unitPrice) : item.unitPrice * item.quantity;
 
-                        {/* Product Name */}
-                        <td className="py-3 px-3.5 font-bold text-slate-900 dark:text-white max-w-[240px]">
-                          <div className="truncate text-[14.5px] font-extrabold leading-snug">{item.name}</div>
-                          {item.genericName && (
-                            <div className="text-xs text-emerald-600 dark:text-emerald-400 truncate font-semibold mt-0.5">{item.genericName}</div>
-                          )}
-                        </td>
+                      return (
+                        <tr key={`${item.productId}-${idx}`} className="hover:bg-slate-50 dark:hover:bg-slate-800/60 transition">
+                          {/* Barcode */}
+                          <td className="py-3.5 px-3.5 font-mono text-slate-600 dark:text-slate-300 font-extrabold text-sm whitespace-nowrap">
+                            {item.barcode || item.sku || "—"}
+                          </td>
 
-                        {/* Batch & Expiry */}
-                        <td className="py-3 px-3.5 font-mono text-xs text-slate-700 dark:text-slate-300 whitespace-nowrap">
-                          <div className="font-bold">{item.batchNumber || "—"}</div>
-                          {item.expiryDate && (
-                            <div className="text-[11px] text-slate-400 font-sans mt-0.5">
-                              Exp: {new Date(item.expiryDate).toLocaleDateString("en-GB")}
-                            </div>
-                          )}
-                        </td>
+                          {/* Product Name */}
+                          <td className="py-3.5 px-3.5 font-black text-slate-900 dark:text-white max-w-[260px]">
+                            <div className="truncate text-base font-black leading-snug">{item.name}</div>
+                            {item.genericName && (
+                              <div className="text-xs text-emerald-600 dark:text-emerald-400 truncate font-bold mt-0.5">{item.genericName}</div>
+                            )}
+                          </td>
 
-                        {/* Location */}
-                        <td className="py-3 px-3.5 whitespace-nowrap">
-                          <span className="text-xs px-2.5 py-1 rounded-md bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 font-bold inline-flex items-center gap-1.5">
-                            <MapPin className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                            <span>{item.locationLabel || item.shelfLocation || "Shelf"}</span>
-                          </span>
-                        </td>
+                          {/* Price */}
+                          <td className="py-3.5 px-3.5 text-right font-mono font-black text-slate-900 dark:text-slate-100 text-base whitespace-nowrap">
+                            ৳{Math.round(item.basePrice || item.unitPrice).toLocaleString()}
+                            {isMed && <span className="text-xs text-slate-400 font-sans block font-medium">/ tab</span>}
+                          </td>
 
-                        {/* Unit */}
-                        <td className="py-3 px-3 text-center whitespace-nowrap">
-                          {item.productType === "MEDICINE" ? (
-                            <select
-                              value={item.unitType}
-                              onChange={(e) => handleCartUnitChange(idx, e.target.value)}
-                              className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold outline-none cursor-pointer"
-                            >
-                              <option value="TABLET">Tab</option>
-                              <option value="STRIP">Strip ({item.tabletsPerStrip})</option>
-                              <option value="BOX">Box ({item.tabletsPerBox})</option>
-                            </select>
-                          ) : (
-                            <span className="text-xs font-bold text-slate-600 dark:text-slate-400 px-2.5 py-1 bg-slate-100 dark:bg-slate-800 rounded">{item.unitType}</span>
-                          )}
-                        </td>
+                          {/* Quantity & Packaging Controls (Direct Text Input + Buttons) */}
+                          <td className="py-3.5 px-3.5 text-center whitespace-nowrap">
+                            {isMed ? (
+                              <div className="flex items-center justify-center gap-2 py-0.5">
+                                {/* Box Input */}
+                                <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-2 py-1 shadow-xs" title={`1 Box = ${item.tabletsPerBox} tabs`}>
+                                  <span className="text-xs font-black text-slate-600 dark:text-slate-300 uppercase">Box</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => updateMedicineQty(idx, "box", -1)}
+                                    className="h-7 w-7 flex items-center justify-center text-slate-800 dark:text-slate-100 bg-white dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-lg font-black text-sm cursor-pointer active:scale-95 border border-slate-300 dark:border-slate-600"
+                                  >
+                                    -
+                                  </button>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    value={b}
+                                    onFocus={(e) => e.target.select()}
+                                    onChange={(e) => updateMedicineDirectQty(idx, "box", parseInt(e.target.value) || 0)}
+                                    className="w-12 h-7 text-center font-black text-base font-mono text-slate-900 dark:text-white bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/30"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => updateMedicineQty(idx, "box", 1)}
+                                    className="h-7 w-7 flex items-center justify-center text-slate-800 dark:text-slate-100 bg-white dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-lg font-black text-sm cursor-pointer active:scale-95 border border-slate-300 dark:border-slate-600"
+                                  >
+                                    +
+                                  </button>
+                                </div>
 
-                        {/* Price */}
-                        <td className="py-3 px-3.5 text-right font-mono font-bold text-slate-800 dark:text-slate-200 text-sm whitespace-nowrap">
-                          ৳{Math.round(item.unitPrice).toLocaleString()}
-                        </td>
+                                {/* Strip Input */}
+                                <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-2 py-1 shadow-xs" title={`1 Strip = ${item.tabletsPerStrip} tabs`}>
+                                  <span className="text-xs font-black text-slate-600 dark:text-slate-300 uppercase">Strip</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => updateMedicineQty(idx, "strip", -1)}
+                                    className="h-7 w-7 flex items-center justify-center text-slate-800 dark:text-slate-100 bg-white dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-lg font-black text-sm cursor-pointer active:scale-95 border border-slate-300 dark:border-slate-600"
+                                  >
+                                    -
+                                  </button>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    value={s}
+                                    onFocus={(e) => e.target.select()}
+                                    onChange={(e) => updateMedicineDirectQty(idx, "strip", parseInt(e.target.value) || 0)}
+                                    className="w-12 h-7 text-center font-black text-base font-mono text-slate-900 dark:text-white bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/30"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => updateMedicineQty(idx, "strip", 1)}
+                                    className="h-7 w-7 flex items-center justify-center text-slate-800 dark:text-slate-100 bg-white dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-lg font-black text-sm cursor-pointer active:scale-95 border border-slate-300 dark:border-slate-600"
+                                  >
+                                    +
+                                  </button>
+                                </div>
 
-                        {/* Qty Counter */}
-                        <td className="py-3 px-3.5 text-center whitespace-nowrap">
-                          <div className="inline-flex items-center gap-1 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-1">
+                                {/* Tablet Input */}
+                                <div className="flex items-center gap-1 bg-emerald-50 dark:bg-emerald-950/60 border-2 border-emerald-400 dark:border-emerald-700 rounded-xl px-2 py-1 shadow-xs" title="Single Tablet">
+                                  <span className="text-xs font-black text-emerald-800 dark:text-emerald-400 uppercase">Tab</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => updateMedicineQty(idx, "tablet", -1)}
+                                    className="h-7 w-7 flex items-center justify-center text-emerald-900 dark:text-emerald-200 bg-white dark:bg-emerald-900/60 hover:bg-emerald-100 dark:hover:bg-emerald-800 rounded-lg font-black text-sm cursor-pointer active:scale-95 border border-emerald-300 dark:border-emerald-700"
+                                  >
+                                    -
+                                  </button>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    value={t}
+                                    onFocus={(e) => e.target.select()}
+                                    onChange={(e) => updateMedicineDirectQty(idx, "tablet", parseInt(e.target.value) || 0)}
+                                    className="w-12 h-7 text-center font-black text-base font-mono text-emerald-950 dark:text-white bg-white dark:bg-slate-900 border border-emerald-400 dark:border-emerald-600 rounded-lg outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/30"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => updateMedicineQty(idx, "tablet", 1)}
+                                    className="h-7 w-7 flex items-center justify-center text-emerald-900 dark:text-emerald-200 bg-white dark:bg-emerald-900/60 hover:bg-emerald-100 dark:hover:bg-emerald-800 rounded-lg font-black text-sm cursor-pointer active:scale-95 border border-emerald-300 dark:border-emerald-700"
+                                  >
+                                    +
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="inline-flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-xl p-1.5 shadow-xs">
+                                <button
+                                  type="button"
+                                  onClick={() => updateCartQuantity(idx, item.quantity - 1)}
+                                  className="h-7 w-7 flex items-center justify-center text-slate-800 dark:text-slate-100 bg-white dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-lg font-black text-sm cursor-pointer active:scale-95 border border-slate-300 dark:border-slate-600"
+                                >
+                                  <Minus className="h-4 w-4" />
+                                </button>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  value={item.quantity}
+                                  onFocus={(e) => e.target.select()}
+                                  onChange={(e) => updateCartQuantity(idx, parseInt(e.target.value) || 0)}
+                                  className="w-14 h-7 text-center font-black text-base font-mono text-slate-900 dark:text-white bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/30"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => updateCartQuantity(idx, item.quantity + 1)}
+                                  className="h-7 w-7 flex items-center justify-center text-slate-800 dark:text-slate-100 bg-white dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-lg font-black text-sm cursor-pointer active:scale-95 border border-slate-300 dark:border-slate-600"
+                                >
+                                  <Plus className="h-4 w-4" />
+                                </button>
+                              </div>
+                            )}
+                          </td>
+
+                          {/* Line Total */}
+                          <td className="py-3.5 px-3.5 text-right font-mono font-black text-emerald-600 dark:text-emerald-400 text-lg whitespace-nowrap">
+                            ৳{Math.round(lineTotal).toLocaleString()}
+                          </td>
+
+                          {/* Delete Button */}
+                          <td className="py-3.5 px-2 text-center whitespace-nowrap">
                             <button
                               type="button"
-                              onClick={() => updateCartQuantity(idx, item.quantity - 1)}
-                              className="h-6 w-6 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white rounded hover:bg-slate-200 dark:hover:bg-slate-700 transition cursor-pointer"
+                              onClick={() => updateCartQuantity(idx, 0)}
+                              className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition cursor-pointer"
                             >
-                              <Minus className="h-3.5 w-3.5" />
+                              <Trash2 className="h-5 w-5" />
                             </button>
-                            <span className="w-8 text-center font-black text-[13px] font-mono text-slate-900 dark:text-white">
-                              {item.quantity}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => updateCartQuantity(idx, item.quantity + 1)}
-                              className="h-6 w-6 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white rounded hover:bg-slate-200 dark:hover:bg-slate-700 transition cursor-pointer"
-                            >
-                              <Plus className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        </td>
-
-                        {/* Line Total */}
-                        <td className="py-3 px-3.5 text-right font-mono font-black text-emerald-600 dark:text-emerald-400 text-[15px] whitespace-nowrap">
-                          ৳{Math.round(item.unitPrice * item.quantity).toLocaleString()}
-                        </td>
-
-                        {/* Delete Button */}
-                        <td className="py-3 px-2 text-center whitespace-nowrap">
-                          <button
-                            type="button"
-                            onClick={() => updateCartQuantity(idx, 0)}
-                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition cursor-pointer"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
