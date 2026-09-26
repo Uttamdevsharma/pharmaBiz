@@ -37,7 +37,58 @@ class PaymentService {
         const basePrice = Number(subscription.plan.price);
         const durationDays = (new Date(subscription.endDate).getTime() - new Date(subscription.startDate).getTime()) / (1000 * 60 * 60 * 24);
         const isYearly = durationDays > 45;
-        const amount = isYearly ? Math.round(basePrice * 12 * 0.85) : basePrice;
+        const planPrice = isYearly ? Math.round(basePrice * 12 * 0.85) : basePrice;
+        // Determine License & Data Retention Fees based on lifecycle
+        const validatedPaymentsCount = await prisma_1.prisma.payment.count({
+            where: {
+                tenantId: subscription.tenantId,
+                status: "VALIDATED",
+            },
+        });
+        const isInitialRegistration = validatedPaymentsCount === 0 ||
+            subscription.tenant?.verificationStatus === "APPROVED_PENDING_PAYMENT";
+        let extraFee = 0;
+        let feeLabel = "";
+        let productName = `${subscription.plan.name} Subscription Plan`;
+        if (isInitialRegistration) {
+            // Rule 1: Initial pharmacy registration requires ৳5,000 Software License Fee + Plan Price
+            extraFee = 5000;
+            feeLabel = "One-Time Software License Fee (৳5,000)";
+            productName = `${subscription.plan.name} + License Fee (৳5,000)`;
+        }
+        else {
+            // Existing subscriber: check expiration status on their most recent active/expired subscription
+            const priorSub = await prisma_1.prisma.subscription.findFirst({
+                where: {
+                    tenantId: subscription.tenantId,
+                    id: { not: subscription.id },
+                    status: { in: ["ACTIVE", "EXPIRED"] },
+                },
+                orderBy: { endDate: "desc" },
+            });
+            const now = new Date();
+            if (priorSub && new Date(priorSub.endDate).getTime() < now.getTime()) {
+                const msExpired = now.getTime() - new Date(priorSub.endDate).getTime();
+                const daysExpired = Math.floor(msExpired / (1000 * 60 * 60 * 24));
+                if (daysExpired > 90) {
+                    // Rule: Past 90 days (3 months) - Historical data cannot be restored. Must register anew.
+                    throw new Error(`Your previous subscription expired ${daysExpired} days ago (exceeding the 90-day / 3-month data retention grace period). Under the terms of service, historical data cannot be restored. Please register a new pharmacy account with the initial ৳5,000 license fee.`);
+                }
+                else if (daysExpired > 30) {
+                    // Rule: Between day 31 and day 90 - Data preserved on server; ৳2,000 Data Retention & Reactivation Fee applies
+                    extraFee = 2000;
+                    feeLabel = `Server Data Retention & Reactivation Fee (৳2,000 - expired ${daysExpired} day(s) ago)`;
+                    productName = `${subscription.plan.name} + Data Retention Fee (৳2,000)`;
+                }
+                else {
+                    // Rule: Within 30 days of expiration (Day 1 - 30) - Standard renewal with zero extra fee
+                    extraFee = 0;
+                    feeLabel = `Subscription Renewal (Within 30-Day Grace Period - expired ${daysExpired} day(s) ago)`;
+                    productName = `${subscription.plan.name} Subscription Renewal`;
+                }
+            }
+        }
+        const amount = planPrice + extraFee;
         // Save pending payment record in DB (ALWAYS linked to subscription.tenantId)
         const payment = await prisma_1.prisma.payment.create({
             data: {
@@ -59,11 +110,11 @@ class PaymentService {
             customerPhone: data.customerPhone || subscription.tenant.phone || "01700000000",
             customerAddress: data.customerAddress || subscription.tenant.address || "Bangladesh",
             customerCity: data.customerCity || "Dhaka",
-            productName: `${subscription.plan.name} Subscription Plan`,
+            productName: productName,
             productCategory: "SaaS Subscription",
             valueA: subscription.tenantId,
             valueB: subscription.id,
-            valueC: "SUBSCRIBE",
+            valueC: feeLabel || "SUBSCRIBE",
         });
         if (sslcommerzResponse.status !== "SUCCESS" && !sslcommerzResponse.GatewayPageURL) {
             // Mark as failed if gateway rejected

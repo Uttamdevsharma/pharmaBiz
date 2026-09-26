@@ -9,7 +9,7 @@ export const createPlanSchema = z.object({
   maxBranches: z.number().int().positive("Max branches must be at least 1"),
   maxStaffPerBranch: z.number().int().positive().optional(),
   maxTotalStaff: z.number().int().positive().optional(),
-  trialDays: z.number().int().positive().optional(),
+  trialDays: z.number().int().min(0).optional(),
   features: z.record(z.string(), z.any()).optional(),
   isActive: z.boolean().default(true),
 });
@@ -22,7 +22,7 @@ export const updatePlanSchema = z.object({
   maxBranches: z.number().int().positive().optional(),
   maxStaffPerBranch: z.number().int().positive().optional(),
   maxTotalStaff: z.number().int().positive().optional(),
-  trialDays: z.number().int().positive().optional(),
+  trialDays: z.number().int().min(0).optional(),
   features: z.record(z.string(), z.any()).optional(),
   isActive: z.boolean().optional(),
 });

@@ -33,6 +33,7 @@ import {
   ZoomOut,
   RotateCw,
 } from "lucide-react";
+import { PharmacyBillingLedger } from "./PharmacyBillingLedger";
 
 interface PharmacyDetailsViewProps {
   tenantId: string;
@@ -54,10 +55,6 @@ export function PharmacyDetailsView({
   const [statusLoading, setStatusLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<ActiveTab>("overview");
 
-  // Subscription Date Filter State
-  const [subDateFilter, setSubDateFilter] = useState<DatePreset>("ALL");
-  const [subCustomStartDate, setSubCustomStartDate] = useState("");
-  const [subCustomEndDate, setSubCustomEndDate] = useState("");
 
   // Document Preview Modal State
   const [viewingDoc, setViewingDoc] = useState<{
@@ -216,66 +213,6 @@ export function PharmacyDetailsView({
     },
   ];
 
-  const isDateInPreset = (
-    dateStr: string,
-    preset: DatePreset,
-    customStart?: string,
-    customEnd?: string
-  ) => {
-    if (preset === "ALL") return true;
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return true;
-
-    const now = new Date();
-    const startOfDay = (date: Date) =>
-      new Date(date.getFullYear(), date.getMonth(), date.getDate());
-
-    const target = startOfDay(d);
-    const today = startOfDay(now);
-
-    if (preset === "TODAY") {
-      return target.getTime() === today.getTime();
-    }
-    if (preset === "YESTERDAY") {
-      const yesterday = new Date(today);
-      yesterday.setDate(yesterday.getDate() - 1);
-      return target.getTime() === yesterday.getTime();
-    }
-    if (preset === "THIS_MONTH") {
-      return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
-    }
-    if (preset === "LAST_MONTH") {
-      const lastMonthYear = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
-      const lastMonth = now.getMonth() === 0 ? 11 : now.getMonth() - 1;
-      return d.getFullYear() === lastMonthYear && d.getMonth() === lastMonth;
-    }
-    if (preset === "THIS_YEAR") {
-      return d.getFullYear() === now.getFullYear();
-    }
-    if (preset === "CUSTOM") {
-      if (customStart && customEnd) {
-        const s = startOfDay(new Date(customStart));
-        const e = startOfDay(new Date(customEnd));
-        return target.getTime() >= s.getTime() && target.getTime() <= e.getTime();
-      }
-      if (customStart) {
-        const s = startOfDay(new Date(customStart));
-        return target.getTime() >= s.getTime();
-      }
-      if (customEnd) {
-        const e = startOfDay(new Date(customEnd));
-        return target.getTime() <= e.getTime();
-      }
-      return true;
-    }
-    return true;
-  };
-
-  const filteredSubscriptions = subscriptionsList.filter((sub: any) => {
-    const dateToCheck = sub.startDate || sub.createdAt;
-    if (!dateToCheck) return true;
-    return isDateInPreset(dateToCheck, subDateFilter, subCustomStartDate, subCustomEndDate);
-  });
 
   return (
     <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-200">
@@ -721,213 +658,14 @@ export function PharmacyDetailsView({
       {/* TAB 3: SUBSCRIPTIONS & BILLING */}
       {activeTab === "subscriptions" && (
         <div className="space-y-6 animate-in fade-in duration-150">
-          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-xs">
-            {/* Header & Date Filtering Toolbar */}
-            <div className="p-5 sm:p-6 border-b border-slate-100 dark:border-slate-800 space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="p-2 rounded-xl bg-brand-primary/10 text-brand-primary">
-                    <History className="h-4 w-4" />
-                  </div>
-                  <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
-                    Billing History
-                  </h2>
-                </div>
-
-                <div className="flex items-center gap-2 self-start sm:self-auto">
-                  <span className="px-3 py-1 rounded-xl text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200/60 dark:border-slate-700/60">
-                    {filteredSubscriptions.length} of {subscriptionsList.length} Record{subscriptionsList.length === 1 ? "" : "s"}
-                  </span>
-                </div>
-              </div>
-
-              {/* Date Filter Buttons */}
-              <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80 flex flex-wrap items-center gap-2">
-                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mr-1 flex items-center gap-1.5">
-                  <Calendar className="h-3.5 w-3.5 text-slate-400" />
-                  Filter by Date:
-                </span>
-
-                {(
-                  [
-                    { key: "ALL", label: "All Time" },
-                    { key: "TODAY", label: "Today" },
-                    { key: "YESTERDAY", label: "Yesterday" },
-                    { key: "THIS_MONTH", label: "This Month" },
-                    { key: "LAST_MONTH", label: "Last Month" },
-                    { key: "THIS_YEAR", label: "This Year" },
-                    { key: "CUSTOM", label: "Custom Range" },
-                  ] as const
-                ).map((preset) => {
-                  const isActive = subDateFilter === preset.key;
-                  return (
-                    <button
-                      key={preset.key}
-                      type="button"
-                      onClick={() => setSubDateFilter(preset.key)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                        isActive
-                          ? "bg-brand-primary text-white shadow-xs"
-                          : "bg-slate-100 hover:bg-slate-200/80 text-slate-600 dark:bg-slate-800 dark:hover:bg-slate-750 dark:text-slate-300"
-                      }`}
-                    >
-                      {preset.label}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Custom Date Range Inputs */}
-              {subDateFilter === "CUSTOM" && (
-                <div className="pt-2 flex flex-wrap items-center gap-3 animate-in fade-in slide-in-from-top-1 duration-150">
-                  <div className="flex items-center gap-2">
-                    <label className="text-xs font-bold text-slate-500 dark:text-slate-400">
-                      From:
-                    </label>
-                    <input
-                      type="date"
-                      value={subCustomStartDate}
-                      onChange={(e) => setSubCustomStartDate(e.target.value)}
-                      className="px-3 py-1.5 text-xs font-medium bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                    />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <label className="text-xs font-bold text-slate-500 dark:text-slate-400">
-                      To:
-                    </label>
-                    <input
-                      type="date"
-                      value={subCustomEndDate}
-                      onChange={(e) => setSubCustomEndDate(e.target.value)}
-                      className="px-3 py-1.5 text-xs font-medium bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                    />
-                  </div>
-                  {(subCustomStartDate || subCustomEndDate) && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSubCustomStartDate("");
-                        setSubCustomEndDate("");
-                      }}
-                      className="text-xs font-bold text-rose-500 hover:text-rose-600 underline cursor-pointer"
-                    >
-                      Reset Range
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {filteredSubscriptions.length === 0 ? (
-              <div className="py-16 text-center space-y-3">
-                <p className="text-slate-400 text-sm sm:text-base font-medium">
-                  {subscriptionsList.length === 0
-                    ? "No subscription transactions found."
-                    : "No subscription records found for the selected date filter."}
-                </p>
-                {subscriptionsList.length > 0 && subDateFilter !== "ALL" && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSubDateFilter("ALL");
-                      setSubCustomStartDate("");
-                      setSubCustomEndDate("");
-                    }}
-                    className="px-4 py-2 text-xs font-bold rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition cursor-pointer"
-                  >
-                    Clear Filter
-                  </button>
-                )}
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left">
-                  <thead className="bg-slate-50 dark:bg-slate-850/80 border-b border-slate-200 dark:border-slate-800 text-xs font-black uppercase tracking-wider text-slate-500 select-none">
-                    <tr>
-                      <th className="py-4 px-6">Plan & Cycle</th>
-                      <th className="py-4 px-6">Validity Period</th>
-                      <th className="py-4 px-6">Amount</th>
-                      <th className="py-4 px-6">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium text-sm sm:text-base">
-                    {filteredSubscriptions.map((sub: any) => {
-                      const plan = sub.plan || {};
-                      const payment = sub.payments?.[0];
-                      const price = payment?.amount ?? plan.price ?? 0;
-                      const status = (sub.status || "ACTIVE").toUpperCase();
-
-                      const startDate = sub.startDate
-                        ? new Date(sub.startDate).toLocaleDateString("en-US", {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                          })
-                        : "N/A";
-                      const endDate = sub.endDate
-                        ? new Date(sub.endDate).toLocaleDateString("en-US", {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                          })
-                        : "Lifetime";
-
-                      return (
-                        <tr
-                          key={sub.id}
-                          className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition"
-                        >
-                          {/* 1. Plan & Billing Cycle */}
-                          <td className="py-4 px-6">
-                            <div className="flex items-center gap-2">
-                              <span className="text-slate-900 dark:text-white font-bold text-sm sm:text-base">
-                                {plan.name || sub.tier || "Plan"}
-                              </span>
-                              <span className="px-2 py-0.5 rounded-md text-[11px] font-black uppercase tracking-wide bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                                {sub.billingCycle || "MONTHLY"}
-                              </span>
-                            </div>
-                            <span className="text-xs text-slate-400 font-mono mt-0.5 block">
-                              #{sub.id.substring(0, 8).toUpperCase()}
-                            </span>
-                          </td>
-
-                          {/* 2. Validity Period */}
-                          <td className="py-4 px-6 whitespace-nowrap text-slate-800 dark:text-slate-200 text-xs sm:text-sm">
-                            <span className="font-semibold">{startDate}</span>
-                            <span className="mx-2 text-slate-400 font-normal">to</span>
-                            <span className="font-semibold">{endDate}</span>
-                          </td>
-
-                          {/* 3. Amount */}
-                          <td className="py-4 px-6 whitespace-nowrap font-mono font-bold text-brand-primary text-sm sm:text-base">
-                            ৳{Number(price).toLocaleString()}
-                          </td>
-
-                          {/* 4. Status */}
-                          <td className="py-4 px-6 whitespace-nowrap">
-                            <span
-                              className={`px-3 py-1 rounded-full text-xs font-bold border ${
-                                status === "ACTIVE"
-                                  ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
-                                  : status === "PENDING"
-                                  ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
-                                  : "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20"
-                              }`}
-                            >
-                              {status}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
+          <PharmacyBillingLedger
+            tenant={tenant}
+            ownerUser={ownerUser}
+            onRefresh={loadTenantDetails}
+          />
         </div>
       )}
+
 
       {/* TAB 4: BRANCHES & STAFF */}
       {activeTab === "branches" && (

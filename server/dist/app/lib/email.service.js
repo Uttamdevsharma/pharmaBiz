@@ -132,7 +132,7 @@ class EmailService {
      * Send Approval Notification Email with instructions to log in using registration credentials and complete payment to unlock dashboard
      */
     static async sendApprovalEmail(payload) {
-        const { to, name, companyName, planName, planTier, billingCycle, price, paymentUrl } = payload;
+        const { to, name, companyName, planName, planTier, billingCycle, price, paymentUrl, password } = payload;
         const recipientEmail = (to || "").trim().toLowerCase();
         const senderEmail = getSenderAddress();
         const subject = `[PharmaBiz] Your Pharmacy Registration Has Been Approved - ${companyName}`;
@@ -152,8 +152,9 @@ class EmailService {
             .header h1 { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.5px; }
             .header p { margin: 6px 0 0 0; font-size: 13px; opacity: 0.95; }
             .body { padding: 32px; }
-            .highlight-msg { font-size: 15px; font-weight: 600; line-height: 1.6; color: #0f172a; background: #f0fdf4; border-left: 4px solid #10b981; border-radius: 0 12px 12px 0; padding: 16px 20px; margin: 18px 0; }
-            .plan-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 14px; padding: 20px; margin: 20px 0; }
+            .highlight-msg { font-size: 14px; font-weight: 600; line-height: 1.6; color: #0f172a; background: #f0fdf4; border-left: 4px solid #10b981; border-radius: 0 12px 12px 0; padding: 14px 18px; margin: 16px 0; }
+            .cred-box { background: #f8fafc; border: 2px dashed #0284c7; border-radius: 14px; padding: 18px 20px; margin: 18px 0; }
+            .plan-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 14px; padding: 18px 20px; margin: 18px 0; }
             .btn { display: inline-block; background: #0284c7; color: #ffffff !important; font-size: 15px; font-weight: 700; text-decoration: none; padding: 14px 32px; border-radius: 12px; margin-top: 10px; box-shadow: 0 4px 10px -2px rgba(2, 132, 199, 0.3); }
             .footer { padding: 24px; text-align: center; font-size: 11px; color: #64748b; background: #f8fafc; border-top: 1px solid #e2e8f0; }
           </style>
@@ -168,25 +169,46 @@ class EmailService {
               <p style="font-size: 15px; margin-top: 0;">Dear <strong>${name || "Pharmacy Owner"}</strong>,</p>
               
               <div class="highlight-msg">
-                Your pharmacy registration for <strong>${companyName}</strong> has been approved. Please login using the email (<strong>${to}</strong>) and password you provided during registration. Complete the required payment first; after successful payment, you will get access to your dashboard.
+                Your pharmacy registration for <strong>${companyName}</strong> has been approved by our compliance team. Use your login credentials below or click the <strong>1-Click Login</strong> button to access your workspace and complete payment.
+              </div>
+
+              <!-- Login Credentials Card -->
+              <div class="cred-box">
+                <div style="font-size: 12px; font-weight: 800; color: #0369a1; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px;">
+                  🔐 Your Account Login Credentials
+                </div>
+                <div style="font-size: 14px; color: #334155; margin-bottom: 6px;">
+                  Registered Email: <strong style="color: #0f172a; font-family: monospace; font-size: 15px; background: #e2e8f0; padding: 2px 8px; border-radius: 6px;">${recipientEmail}</strong>
+                </div>
+                ${password ? `
+                <div style="font-size: 14px; color: #334155; margin-bottom: 8px;">
+                  Account Password: <strong style="color: #0f172a; font-family: monospace; font-size: 15px; background: #e2e8f0; padding: 2px 8px; border-radius: 6px;">${password}</strong>
+                </div>
+                ` : ""}
+                <div style="font-size: 11px; color: #64748b; line-height: 1.4; margin-top: 8px;">
+                  ⚡ <strong>1-Click Access:</strong> You can click the button below to log in directly without typing your password. Please save your password securely for future logins.
+                </div>
               </div>
 
               <div class="plan-box">
                 <div style="font-size: 11px; font-weight: 700; color: #166534; text-transform: uppercase; margin-bottom: 4px;">Approved Subscription Details</div>
                 <div style="font-size: 18px; font-weight: 800; color: #0f172a;">${planName} (${planTier})</div>
                 <div style="font-size: 13px; color: #475569; margin-top: 6px;">
-                  Billing Cycle: <strong>${billingCycle}</strong> &bull; Total Payable: <strong style="font-size: 16px; color: #059669;">৳${price.toLocaleString()}</strong>
+                  Billing Cycle: <strong>${billingCycle}</strong> &bull; Plan Price: <strong>৳${Math.max(0, price - 5000).toLocaleString()}</strong> &bull; One-Time License Fee: <strong>৳5,000</strong>
+                </div>
+                <div style="font-size: 15px; color: #059669; font-weight: 800; margin-top: 8px;">
+                  Total Payable: ৳${price.toLocaleString()}
                 </div>
               </div>
 
-              <div style="text-align: center; margin: 28px 0 16px 0;">
+              <div style="text-align: center; margin: 26px 0 16px 0;">
                 <a href="${paymentUrl}" class="btn" target="_blank">
-                  Login & Complete Payment (৳${price.toLocaleString()}) &rarr;
+                  1-Click Login & Complete Payment (৳${price.toLocaleString()}) &rarr;
                 </a>
               </div>
 
               <p style="font-size: 12px; color: #64748b; line-height: 1.5; margin-top: 24px;">
-                Direct Link: <br />
+                Direct 1-Click Access Link: <br />
                 <a href="${paymentUrl}" style="color: #0284c7; word-break: break-all;">${paymentUrl}</a>
               </p>
             </div>

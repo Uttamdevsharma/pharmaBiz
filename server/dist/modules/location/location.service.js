@@ -8,10 +8,22 @@ class LocationService {
      * If includeInactive is false, only active items are returned.
      * Also computes usedLocations, emptyLocations, and active stock counts.
      */
-    static async getRacks(branchId, includeInactive = false) {
+    static async getRacks(branchId, includeInactive = false, type) {
         const where = { branchId };
         if (!includeInactive) {
             where.isActive = true;
+        }
+        if (type && type !== "ALL") {
+            const upperType = type.toUpperCase();
+            if (upperType === "RACK") {
+                where.type = "RACK";
+            }
+            else if (upperType === "CUSTOM" || upperType === "OTHER") {
+                where.type = { not: "RACK" };
+            }
+            else {
+                where.type = type;
+            }
         }
         const shelfWhere = {};
         if (!includeInactive) {
@@ -139,6 +151,7 @@ class LocationService {
         const rackCreateData = {
             branchId,
             name: rackName,
+            type: data.type?.trim() || "RACK",
             isActive,
         };
         if (shelvesData && shelvesData.length > 0) {
@@ -184,6 +197,7 @@ class LocationService {
             data: {
                 branchId,
                 name: rackName,
+                type: data.type?.trim() || "RACK",
                 isActive: data.isActive ?? true,
             },
             include: {
@@ -197,6 +211,8 @@ class LocationService {
         const updateData = {};
         if (data.name !== undefined)
             updateData.name = data.name.trim();
+        if (data.type !== undefined)
+            updateData.type = data.type;
         if (data.isActive !== undefined)
             updateData.isActive = data.isActive;
         return prisma_1.prisma.rack.update({

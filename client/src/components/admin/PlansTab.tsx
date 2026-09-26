@@ -9,23 +9,18 @@ import {
   Users,
   Clock,
   ShieldCheck,
-  Check,
   X,
   Loader2,
   Sparkles,
-  ArrowRightLeft,
   CheckCircle2,
-  XCircle,
   AlertCircle
 } from "lucide-react";
 
 interface PlanFeatures {
-  inventoryTransfers: boolean;
-  regionalAdmin: boolean;
-  customAudit: boolean;
-  apiAccess: boolean;
-  branchPriceOverride: boolean;
   yearlyDiscountPercent?: number;
+  maxStaffPerBranch?: number;
+  maxTotalStaff?: number;
+  trialDays?: number;
   [key: string]: any;
 }
 
@@ -66,13 +61,6 @@ export function PlansTab() {
     maxStaffPerBranch: 1,
     maxTotalStaff: 2,
     trialDays: 7,
-    features: {
-      inventoryTransfers: false,
-      regionalAdmin: false,
-      customAudit: false,
-      apiAccess: false,
-      branchPriceOverride: false,
-    },
     isActive: true,
   });
 
@@ -108,13 +96,6 @@ export function PlansTab() {
       maxStaffPerBranch: 1,
       maxTotalStaff: 2,
       trialDays: 7,
-      features: {
-        inventoryTransfers: false,
-        regionalAdmin: false,
-        customAudit: false,
-        apiAccess: false,
-        branchPriceOverride: false,
-      },
       isActive: true,
     });
     setModalOpen(true);
@@ -125,7 +106,11 @@ export function PlansTab() {
     setErrorMessage(null);
     setSuccessMessage(null);
     const feat = (typeof plan.features === "object" && plan.features !== null) ? plan.features : {} as PlanFeatures;
-    
+    const isTrial = plan.tier === "TRIAL";
+    const trialDaysVal = isTrial
+      ? (plan.trialDays && plan.trialDays > 0 ? plan.trialDays : (feat.trialDays && feat.trialDays > 0 ? feat.trialDays : 7))
+      : 0;
+
     setFormData({
       name: plan.name,
       tier: plan.tier,
@@ -135,14 +120,7 @@ export function PlansTab() {
       maxBranches: plan.maxBranches ?? 2,
       maxStaffPerBranch: plan.maxStaffPerBranch ?? (feat.maxStaffPerBranch ?? 1),
       maxTotalStaff: plan.maxTotalStaff ?? (feat.maxTotalStaff ?? 2),
-      trialDays: plan.trialDays ?? (feat.trialDays ?? 7),
-      features: {
-        inventoryTransfers: Boolean(feat.inventoryTransfers),
-        regionalAdmin: Boolean(feat.regionalAdmin),
-        customAudit: Boolean(feat.customAudit),
-        apiAccess: Boolean(feat.apiAccess),
-        branchPriceOverride: Boolean(feat.branchPriceOverride),
-      },
+      trialDays: trialDaysVal,
       isActive: plan.isActive,
     });
     setModalOpen(true);
@@ -155,6 +133,7 @@ export function PlansTab() {
 
     try {
       setFormLoading(true);
+      const trialDaysNum = formData.tier === "TRIAL" ? Number(formData.trialDays || 7) : 0;
       const payload = {
         name: formData.name.trim(),
         tier: formData.tier,
@@ -164,13 +143,13 @@ export function PlansTab() {
         maxBranches: Number(formData.maxBranches),
         maxStaffPerBranch: Number(formData.maxStaffPerBranch),
         maxTotalStaff: Number(formData.maxTotalStaff),
-        trialDays: Number(formData.trialDays),
+        trialDays: trialDaysNum,
         features: {
-          ...formData.features,
+          ...(editingPlan?.features || {}),
           yearlyDiscountPercent: Number(formData.yearlyDiscountPercent || 0),
           maxStaffPerBranch: Number(formData.maxStaffPerBranch),
           maxTotalStaff: Number(formData.maxTotalStaff),
-          trialDays: Number(formData.trialDays),
+          trialDays: trialDaysNum,
         },
         isActive: formData.isActive,
       };
@@ -227,7 +206,7 @@ export function PlansTab() {
             Subscription Plans & Limits Management
           </h2>
           <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mt-1">
-            Super Admin control: Edit plan names, branch quotas, staff limits per branch, pricing, and feature permissions dynamically.
+            Super Admin control: Edit plan names, branch quotas, staff limits per branch, pricing, and trial periods.
           </p>
         </div>
 
@@ -342,68 +321,6 @@ export function PlansTab() {
                       </div>
                     )}
                   </div>
-
-                  {/* Dynamic Feature Rules */}
-                  <div className="pt-2 text-xs text-slate-600 dark:text-slate-300 space-y-2">
-                    <div className="font-bold text-slate-900 dark:text-white uppercase tracking-wider text-[11px]">
-                      Feature Privileges:
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      {feat.inventoryTransfers ? (
-                        <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
-                      ) : (
-                        <XCircle className="h-4 w-4 text-slate-300 dark:text-slate-600 shrink-0" />
-                      )}
-                      <span className={feat.inventoryTransfers ? "font-medium" : "text-slate-400 line-through"}>
-                        Inter-Branch Inventory Transfers
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      {feat.regionalAdmin ? (
-                        <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
-                      ) : (
-                        <XCircle className="h-4 w-4 text-slate-300 dark:text-slate-600 shrink-0" />
-                      )}
-                      <span className={feat.regionalAdmin ? "font-medium" : "text-slate-400 line-through"}>
-                        Regional Admin Multi-Branch Access
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      {feat.branchPriceOverride ? (
-                        <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
-                      ) : (
-                        <XCircle className="h-4 w-4 text-slate-300 dark:text-slate-600 shrink-0" />
-                      )}
-                      <span className={feat.branchPriceOverride ? "font-medium" : "text-slate-400 line-through"}>
-                        Branch Custom Price Override
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      {feat.customAudit ? (
-                        <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
-                      ) : (
-                        <XCircle className="h-4 w-4 text-slate-300 dark:text-slate-600 shrink-0" />
-                      )}
-                      <span className={feat.customAudit ? "font-medium" : "text-slate-400 line-through"}>
-                        Custom Audit & VAT MIS Export
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      {feat.apiAccess ? (
-                        <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
-                      ) : (
-                        <XCircle className="h-4 w-4 text-slate-300 dark:text-slate-600 shrink-0" />
-                      )}
-                      <span className={feat.apiAccess ? "font-medium" : "text-slate-400 line-through"}>
-                        External Developer API & Webhooks
-                      </span>
-                    </div>
-                  </div>
                 </div>
 
                 {/* Card Actions */}
@@ -435,15 +352,16 @@ export function PlansTab() {
 
       {/* Create / Edit Plan Modal */}
       {modalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="max-w-2xl w-full rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 sm:p-7 space-y-6 shadow-2xl my-8">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-hidden">
+          <div className="max-w-2xl w-full max-h-[90vh] flex flex-col rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 sm:p-7 shadow-2xl overflow-hidden">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4 shrink-0">
               <div>
                 <h3 className="text-xl font-black text-slate-900 dark:text-white">
                   {editingPlan ? `Edit ${editingPlan.name}` : "Create New Subscription Plan"}
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Update plan name, pricing, branch limits, staff limits per branch, and features dynamically.
+                  Update plan name, pricing, branch limits, staff limits per branch, and trial duration.
                 </p>
               </div>
               <button
@@ -455,311 +373,203 @@ export function PlansTab() {
               </button>
             </div>
 
+            {/* Alerts */}
             {errorMessage && (
-              <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-xs font-semibold text-rose-700 dark:text-rose-300 flex items-center gap-2">
+              <div className="mt-4 p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-xs font-semibold text-rose-700 dark:text-rose-300 flex items-center gap-2 shrink-0">
                 <AlertCircle className="h-4 w-4 shrink-0" />
                 <span>{errorMessage}</span>
               </div>
             )}
 
             {successMessage && (
-              <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-xs font-semibold text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
+              <div className="mt-4 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-xs font-semibold text-emerald-700 dark:text-emerald-300 flex items-center gap-2 shrink-0">
                 <CheckCircle2 className="h-4 w-4 shrink-0" />
                 <span>{successMessage}</span>
               </div>
             )}
 
-            <form onSubmit={handleSavePlan} className="space-y-6 text-sm">
-              {/* Section 1: Basic Information */}
-              <div className="space-y-4">
-                <div className="text-xs font-black tracking-wider uppercase text-slate-400 dark:text-slate-500">
-                  1. Plan Identity & Pricing
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                      Plan Display Name <span className="text-rose-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      placeholder="e.g. Plan 2 - Growth"
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70 font-semibold focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                    />
+            {/* Scrollable Form Content */}
+            <form onSubmit={handleSavePlan} className="flex flex-col min-h-0 flex-1 mt-4">
+              <div className="flex-1 overflow-y-auto pr-1 sm:pr-2 space-y-6">
+                {/* Section 1: Basic Information */}
+                <div className="space-y-4">
+                  <div className="text-xs font-black tracking-wider uppercase text-slate-400 dark:text-slate-500">
+                    1. Plan Identity & Pricing
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                      Pricing Tier System Key
-                    </label>
-                    <select
-                      disabled={!!editingPlan}
-                      value={formData.tier}
-                      onChange={(e) => setFormData({ ...formData, tier: e.target.value as any })}
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70 font-semibold focus:outline-none disabled:opacity-60"
-                    >
-                      <option value="TRIAL">Plan 0 - TRIAL (Free Trial)</option>
-                      <option value="STARTER">Plan 1 - STARTER</option>
-                      <option value="GROWTH">Plan 2 - GROWTH</option>
-                      <option value="ENTERPRISE">Plan 3 - ENTERPRISE</option>
-                    </select>
-                  </div>
-                </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                        Plan Display Name <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={formData.name}
+                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                        placeholder="e.g. Plan 2 - Growth"
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70 font-semibold focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                      />
+                    </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                      Price (BDT ৳) <span className="text-rose-500">*</span>
-                    </label>
-                    <input
-                      type="number"
-                      required
-                      min="0"
-                      step="0.01"
-                      value={formData.price}
-                      onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })}
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70 font-semibold focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                      Billing Cycle
-                    </label>
-                    <select
-                      value={formData.billingCycle}
-                      onChange={(e) => setFormData({ ...formData, billingCycle: e.target.value })}
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70 font-semibold focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                    >
-                      <option value="MONTHLY">Monthly (Per Month)</option>
-                      <option value="YEARLY">Yearly (Per Year)</option>
-                    </select>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                        Pricing Tier System Key
+                      </label>
+                      <select
+                        disabled={!!editingPlan}
+                        value={formData.tier}
+                        onChange={(e) => setFormData({ ...formData, tier: e.target.value as any })}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70 font-semibold focus:outline-none disabled:opacity-60"
+                      >
+                        <option value="TRIAL">Plan 0 - TRIAL (Free Trial)</option>
+                        <option value="STARTER">Plan 1 - STARTER</option>
+                        <option value="GROWTH">Plan 2 - GROWTH</option>
+                        <option value="ENTERPRISE">Plan 3 - ENTERPRISE</option>
+                      </select>
+                    </div>
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                      Yearly Discount (% ছাড়)
-                    </label>
-                    <div className="relative">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                        Price (BDT ৳) <span className="text-rose-500">*</span>
+                      </label>
                       <input
                         type="number"
+                        required
                         min="0"
-                        max="100"
-                        step="1"
-                        value={formData.yearlyDiscountPercent}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            yearlyDiscountPercent: Math.max(0, Math.min(100, parseFloat(e.target.value) || 0)),
-                          })
-                        }
+                        step="0.01"
+                        value={formData.price}
+                        onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })}
                         className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70 font-semibold focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                        placeholder="e.g. 5"
                       />
-                      <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">%</span>
                     </div>
-                    <p className="text-[11px] text-slate-400 mt-1">
-                      {formData.yearlyDiscountPercent > 0
-                        ? `Monthly ৳${Number(formData.price).toLocaleString()} হলে বার্ষিক ৳${(Number(formData.price) * 12).toLocaleString()} এর বদলে ${(formData.yearlyDiscountPercent)}% ছাড়ে ৳${Math.round(Number(formData.price) * 12 * (1 - formData.yearlyDiscountPercent / 100)).toLocaleString()}/বছর`
-                        : "বার্ষিক প্ল্যানের ক্ষেত্রে স্পেশাল ডিসকাউন্ট শতাংশ (যেমন 5%, 10%)"}
-                    </p>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                        Billing Cycle
+                      </label>
+                      <select
+                        value={formData.billingCycle}
+                        onChange={(e) => setFormData({ ...formData, billingCycle: e.target.value })}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70 font-semibold focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                      >
+                        <option value="MONTHLY">Monthly (Per Month)</option>
+                        <option value="YEARLY">Yearly (Per Year)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                        Yearly Discount (% ছাড়)
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="1"
+                          value={formData.yearlyDiscountPercent}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              yearlyDiscountPercent: Math.max(0, Math.min(100, parseFloat(e.target.value) || 0)),
+                            })
+                          }
+                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70 font-semibold focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                          placeholder="e.g. 5"
+                        />
+                        <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">%</span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-1">
+                        {formData.yearlyDiscountPercent > 0
+                          ? `Monthly ৳${Number(formData.price).toLocaleString()} হলে বার্ষিক ৳${(Number(formData.price) * 12).toLocaleString()} এর বদলে ${(formData.yearlyDiscountPercent)}% ছাড়ে ৳${Math.round(Number(formData.price) * 12 * (1 - formData.yearlyDiscountPercent / 100)).toLocaleString()}/বছর`
+                          : "বার্ষিক প্ল্যানের ক্ষেত্রে স্পেশাল ডিসকাউন্ট শতাংশ (যেমন 5%, 10%)"}
+                      </p>
+                    </div>
                   </div>
+                </div>
+
+                {/* Section 2: Dynamic Limits & Quotas */}
+                <div className="space-y-4 pt-3 border-t border-slate-100 dark:border-slate-800">
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs font-black tracking-wider uppercase text-slate-400 dark:text-slate-500">
+                      2. Capacity & Store Limits (Dynamic Rules)
+                    </div>
+                    <span className="text-[11px] text-slate-400 font-medium">Use 999 for Unlimited</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                        Max Branches Limit
+                      </label>
+                      <input
+                        type="number"
+                        required
+                        min="1"
+                        value={formData.maxBranches}
+                        onChange={(e) => setFormData({ ...formData, maxBranches: parseInt(e.target.value, 10) || 1 })}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70 font-semibold focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                      />
+                      <p className="text-[11px] text-slate-400 mt-1">Stores a pharmacy can open</p>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                        Staff Limit (1 Branch e)
+                      </label>
+                      <input
+                        type="number"
+                        required
+                        min="1"
+                        value={formData.maxStaffPerBranch}
+                        onChange={(e) => setFormData({ ...formData, maxStaffPerBranch: parseInt(e.target.value, 10) || 1 })}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70 font-semibold focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                      />
+                      <p className="text-[11px] text-slate-400 mt-1">Allowed staff per branch</p>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                        Total Staff Account Cap
+                      </label>
+                      <input
+                        type="number"
+                        required
+                        min="1"
+                        value={formData.maxTotalStaff}
+                        onChange={(e) => setFormData({ ...formData, maxTotalStaff: parseInt(e.target.value, 10) || 1 })}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70 font-semibold focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                      />
+                      <p className="text-[11px] text-slate-400 mt-1">Max users across all branches</p>
+                    </div>
+                  </div>
+
+                  {/* Trial days input if TRIAL tier */}
+                  {formData.tier === "TRIAL" && (
+                    <div>
+                      <label className="block text-xs font-bold text-amber-700 dark:text-amber-400 mb-1.5">
+                        Trial Duration Period (Days)
+                      </label>
+                      <input
+                        type="number"
+                        required
+                        min="1"
+                        max="365"
+                        value={formData.trialDays}
+                        onChange={(e) => setFormData({ ...formData, trialDays: parseInt(e.target.value, 10) || 7 })}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-amber-200 dark:border-amber-900/60 bg-amber-50/50 dark:bg-amber-950/20 font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500"
+                      />
+                      <p className="text-[11px] text-slate-400 mt-1">Free trial duration before renewal is mandated (default 7 days)</p>
+                    </div>
+                  )}
                 </div>
               </div>
 
-              {/* Section 2: Dynamic Limits & Quotas */}
-              <div className="space-y-4 pt-3 border-t border-slate-100 dark:border-slate-800">
-                <div className="flex items-center justify-between">
-                  <div className="text-xs font-black tracking-wider uppercase text-slate-400 dark:text-slate-500">
-                    2. Capacity & Store Limits (Dynamic Rules)
-                  </div>
-                  <span className="text-[11px] text-slate-400 font-medium">Use 999 for Unlimited</span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                      Max Branches Limit
-                    </label>
-                    <input
-                      type="number"
-                      required
-                      min="1"
-                      value={formData.maxBranches}
-                      onChange={(e) => setFormData({ ...formData, maxBranches: parseInt(e.target.value, 10) || 1 })}
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70 font-semibold focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                    />
-                    <p className="text-[11px] text-slate-400 mt-1">Stores a pharmacy can open</p>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                      Staff Limit (1 Branch e)
-                    </label>
-                    <input
-                      type="number"
-                      required
-                      min="1"
-                      value={formData.maxStaffPerBranch}
-                      onChange={(e) => setFormData({ ...formData, maxStaffPerBranch: parseInt(e.target.value, 10) || 1 })}
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70 font-semibold focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                    />
-                    <p className="text-[11px] text-slate-400 mt-1">Allowed staff per branch</p>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                      Total Staff Account Cap
-                    </label>
-                    <input
-                      type="number"
-                      required
-                      min="1"
-                      value={formData.maxTotalStaff}
-                      onChange={(e) => setFormData({ ...formData, maxTotalStaff: parseInt(e.target.value, 10) || 1 })}
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70 font-semibold focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                    />
-                    <p className="text-[11px] text-slate-400 mt-1">Max users across all branches</p>
-                  </div>
-                </div>
-
-                {/* Trial days input */}
-                {formData.tier === "TRIAL" && (
-                  <div>
-                    <label className="block text-xs font-bold text-amber-700 dark:text-amber-400 mb-1.5">
-                      Trial Duration Period (Days)
-                    </label>
-                    <input
-                      type="number"
-                      required
-                      min="1"
-                      max="365"
-                      value={formData.trialDays}
-                      onChange={(e) => setFormData({ ...formData, trialDays: parseInt(e.target.value, 10) || 7 })}
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-amber-200 dark:border-amber-900/60 bg-amber-50/50 dark:bg-amber-950/20 font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500"
-                    />
-                    <p className="text-[11px] text-slate-400 mt-1">Free trial duration before renewal is mandated (default 7 days)</p>
-                  </div>
-                )}
-              </div>
-
-              {/* Section 3: Feature Toggles */}
-              <div className="space-y-3 pt-3 border-t border-slate-100 dark:border-slate-800">
-                <div className="text-xs font-black tracking-wider uppercase text-slate-400 dark:text-slate-500">
-                  3. Feature Entitlements & Permissions
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <label className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition">
-                    <input
-                      type="checkbox"
-                      checked={formData.features.inventoryTransfers}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          features: { ...formData.features, inventoryTransfers: e.target.checked },
-                        })
-                      }
-                      className="h-4 w-4 text-brand-primary rounded border-slate-300 focus:ring-brand-primary"
-                    />
-                    <div>
-                      <div className="text-xs font-bold text-slate-900 dark:text-white">Inter-Branch Stock Transfers</div>
-                      <div className="text-[11px] text-slate-400">Transfer medicine stock between branches</div>
-                    </div>
-                  </label>
-
-                  <label className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition">
-                    <input
-                      type="checkbox"
-                      checked={formData.features.regionalAdmin}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          features: { ...formData.features, regionalAdmin: e.target.checked },
-                        })
-                      }
-                      className="h-4 w-4 text-brand-primary rounded border-slate-300 focus:ring-brand-primary"
-                    />
-                    <div>
-                      <div className="text-xs font-bold text-slate-900 dark:text-white">Regional Admin Roles</div>
-                      <div className="text-[11px] text-slate-400">Manage multiple designated branches</div>
-                    </div>
-                  </label>
-
-                  <label className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition">
-                    <input
-                      type="checkbox"
-                      checked={formData.features.branchPriceOverride}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          features: { ...formData.features, branchPriceOverride: e.target.checked },
-                        })
-                      }
-                      className="h-4 w-4 text-brand-primary rounded border-slate-300 focus:ring-brand-primary"
-                    />
-                    <div>
-                      <div className="text-xs font-bold text-slate-900 dark:text-white">Branch Custom Price Override</div>
-                      <div className="text-[11px] text-slate-400">Branches can customize retail prices</div>
-                    </div>
-                  </label>
-
-                  <label className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition">
-                    <input
-                      type="checkbox"
-                      checked={formData.features.customAudit}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          features: { ...formData.features, customAudit: e.target.checked },
-                        })
-                      }
-                      className="h-4 w-4 text-brand-primary rounded border-slate-300 focus:ring-brand-primary"
-                    />
-                    <div>
-                      <div className="text-xs font-bold text-slate-900 dark:text-white">Custom Audit & VAT Export</div>
-                      <div className="text-[11px] text-slate-400">Advanced MIS compliance export</div>
-                    </div>
-                  </label>
-
-                  <label className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition">
-                    <input
-                      type="checkbox"
-                      checked={formData.features.apiAccess}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          features: { ...formData.features, apiAccess: e.target.checked },
-                        })
-                      }
-                      className="h-4 w-4 text-brand-primary rounded border-slate-300 focus:ring-brand-primary"
-                    />
-                    <div>
-                      <div className="text-xs font-bold text-slate-900 dark:text-white">External API & Webhooks</div>
-                      <div className="text-[11px] text-slate-400">Integrate external developer endpoints</div>
-                    </div>
-                  </label>
-
-                  <label className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition">
-                    <input
-                      type="checkbox"
-                      checked={formData.isActive}
-                      onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
-                      className="h-4 w-4 text-brand-primary rounded border-slate-300 focus:ring-brand-primary"
-                    />
-                    <div>
-                      <div className="text-xs font-bold text-slate-900 dark:text-white">Active for Purchase</div>
-                      <div className="text-[11px] text-slate-400">Visible to pharmacy owners</div>
-                    </div>
-                  </label>
-                </div>
-              </div>
-
-              {/* Modal Buttons */}
-              <div className="flex items-center justify-end gap-3 pt-5 border-t border-slate-100 dark:border-slate-800">
+              {/* Fixed Modal Footer */}
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800 shrink-0 mt-4">
                 <button
                   type="button"
                   onClick={() => setModalOpen(false)}

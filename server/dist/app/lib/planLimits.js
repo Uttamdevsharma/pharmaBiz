@@ -1,12 +1,20 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.CENTRAL_PLAN_DEFINITIONS = void 0;
+exports.CENTRAL_PLAN_DEFINITIONS = exports.DATA_RETENTION_MAX_DAYS = exports.DATA_RETENTION_FEE = exports.DATA_RETENTION_GRACE_DAYS = exports.INITIAL_LICENSE_FEE = void 0;
 exports.getPlanConfig = getPlanConfig;
 exports.getTrialRemainingDays = getTrialRemainingDays;
 exports.isSubscriptionExpired = isSubscriptionExpired;
 exports.checkCanAddBranch = checkCanAddBranch;
 exports.checkCanAddStaff = checkCanAddStaff;
 const prisma_1 = require("./prisma");
+// One-time software license and server provisioning fee upon initial registration
+exports.INITIAL_LICENSE_FEE = 5000;
+// Grace period in days where expired subscriptions can renew with zero extra fee
+exports.DATA_RETENTION_GRACE_DAYS = 30;
+// Data retention fee applied when renewing between day 31 and day 90
+exports.DATA_RETENTION_FEE = 2000;
+// Maximum continuous days expired data is safely held before permanent deletion
+exports.DATA_RETENTION_MAX_DAYS = 90;
 exports.CENTRAL_PLAN_DEFINITIONS = {
     STARTER: {
         tier: "STARTER",

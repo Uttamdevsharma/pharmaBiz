@@ -40,7 +40,7 @@ class BranchService {
             include: {
                 _count: {
                     select: {
-                        users: { where: { isActive: true } },
+                        users: { where: { isActive: true, role: { notIn: ["COMPANY_OWNER", "SUPER_ADMIN"] } } },
                         inventories: true,
                         sales: true,
                     },
@@ -53,13 +53,18 @@ class BranchService {
             where: { id: branchId, tenantId },
             include: {
                 users: {
-                    where: { isActive: true },
+                    where: { isActive: true, role: { notIn: ["COMPANY_OWNER", "SUPER_ADMIN"] } },
                     select: {
                         id: true,
                         name: true,
                         username: true,
                         email: true,
+                        phone: true,
                         role: true,
+                        pharmacyRoleName: true,
+                        customRoleName: true,
+                        isActive: true,
+                        createdAt: true,
                     },
                 },
                 _count: {

@@ -11,7 +11,7 @@ exports.createPlanSchema = zod_1.z.object({
     maxBranches: zod_1.z.number().int().positive("Max branches must be at least 1"),
     maxStaffPerBranch: zod_1.z.number().int().positive().optional(),
     maxTotalStaff: zod_1.z.number().int().positive().optional(),
-    trialDays: zod_1.z.number().int().positive().optional(),
+    trialDays: zod_1.z.number().int().min(0).optional(),
     features: zod_1.z.record(zod_1.z.string(), zod_1.z.any()).optional(),
     isActive: zod_1.z.boolean().default(true),
 });
@@ -23,7 +23,7 @@ exports.updatePlanSchema = zod_1.z.object({
     maxBranches: zod_1.z.number().int().positive().optional(),
     maxStaffPerBranch: zod_1.z.number().int().positive().optional(),
     maxTotalStaff: zod_1.z.number().int().positive().optional(),
-    trialDays: zod_1.z.number().int().positive().optional(),
+    trialDays: zod_1.z.number().int().min(0).optional(),
     features: zod_1.z.record(zod_1.z.string(), zod_1.z.any()).optional(),
     isActive: zod_1.z.boolean().optional(),
 });

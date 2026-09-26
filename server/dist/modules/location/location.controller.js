@@ -20,7 +20,8 @@ class LocationController {
                 return res.json({ success: true, data: [] });
             }
             const includeInactive = req.query.includeInactive === "true" || req.query.includeInactive === "1";
-            const racks = await location_service_1.LocationService.getRacks(branchId, includeInactive);
+            const type = req.query.type;
+            const racks = await location_service_1.LocationService.getRacks(branchId, includeInactive, type);
             return res.json({ success: true, data: racks });
         }
         catch (error) {

@@ -115,7 +115,7 @@ export class SuperAdminService {
         ...p,
         maxStaffPerBranch: feat.maxStaffPerBranch ?? fallback.maxStaffPerBranch ?? 1,
         maxTotalStaff: feat.maxTotalStaff ?? fallback.maxTotalStaff ?? (p.maxBranches * (feat.maxStaffPerBranch ?? 1)),
-        trialDays: 0,
+        trialDays: feat.trialDays ?? (p.tier === "TRIAL" ? 7 : 0),
         yearlyDiscountPercent: feat.yearlyDiscountPercent ?? 0,
       };
     });
@@ -147,7 +147,7 @@ export class SuperAdminService {
       ...plan,
       maxStaffPerBranch: feat.maxStaffPerBranch ?? fallback.maxStaffPerBranch ?? 1,
       maxTotalStaff: feat.maxTotalStaff ?? fallback.maxTotalStaff ?? (plan.maxBranches * (feat.maxStaffPerBranch ?? 1)),
-      trialDays: 0,
+      trialDays: feat.trialDays ?? (plan.tier === "TRIAL" ? 7 : 0),
       yearlyDiscountPercent: feat.yearlyDiscountPercent ?? 0,
     };
   }
