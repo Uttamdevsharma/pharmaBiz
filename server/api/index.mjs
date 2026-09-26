@@ -258,26 +258,6 @@ var SettingsService = class {
 
 // src/app/lib/planLimits.ts
 var CENTRAL_PLAN_DEFINITIONS = {
-  TRIAL: {
-    tier: "TRIAL",
-    name: "Plan 0 - Free Trial",
-    price: 0,
-    billingCycle: "MONTHLY",
-    trialDays: 7,
-    maxBranches: 1,
-    maxStaffPerBranch: 1,
-    maxTotalStaff: 1,
-    features: {
-      branches: "1 Branch (Main Branch Only)",
-      staff: "1 Staff Member",
-      inventoryTransfers: false,
-      regionalAdmin: false,
-      customAudit: false,
-      apiAccess: false,
-      branchPriceOverride: false,
-      auditReports: "Basic Audit Trail (7-Day Trial)"
-    }
-  },
   STARTER: {
     tier: "STARTER",
     name: "Plan 1 - Starter",
@@ -337,8 +317,8 @@ var CENTRAL_PLAN_DEFINITIONS = {
   }
 };
 function getPlanConfig(tier) {
-  const normalizedTier = (tier || "TRIAL").toUpperCase();
-  return CENTRAL_PLAN_DEFINITIONS[normalizedTier] || CENTRAL_PLAN_DEFINITIONS.TRIAL;
+  const normalizedTier = (tier || "STARTER").toUpperCase();
+  return CENTRAL_PLAN_DEFINITIONS[normalizedTier] || CENTRAL_PLAN_DEFINITIONS.STARTER;
 }
 function getTrialRemainingDays(endDate) {
   const end = new Date(endDate).getTime();
@@ -350,6 +330,7 @@ function getTrialRemainingDays(endDate) {
 function isSubscriptionExpired(subscription) {
   if (!subscription) return true;
   if (subscription.status === "EXPIRED" || subscription.status === "CANCELLED") return true;
+  if (subscription.status !== "ACTIVE") return true;
   if (!subscription.endDate) return false;
   return new Date(subscription.endDate).getTime() <= Date.now();
 }
@@ -372,14 +353,15 @@ async function checkCanAddBranch(tenantId) {
   const activeSub = tenant.subscriptions && tenant.subscriptions[0];
   const tier = activeSub?.plan?.tier || tenant.tier || "TRIAL";
   const planConfig = getPlanConfig(tier);
-  const maxBranches = activeSub?.plan?.maxBranches || planConfig.maxBranches;
+  const planName = activeSub?.plan?.name || planConfig.name;
+  const maxBranches = activeSub?.plan?.maxBranches ?? planConfig.maxBranches;
   const currentBranches = tenant.branches ? tenant.branches.length : 0;
   if (currentBranches >= maxBranches) {
     return {
       allowed: false,
       currentBranches,
       maxBranches,
-      message: `Branch limit reached (${currentBranches}/${maxBranches}). Your ${planConfig.name} allows at most ${maxBranches >= 999 ? "Unlimited" : maxBranches} branch(es). Please upgrade your subscription to add more branches.`
+      message: `Branch limit reached (${currentBranches}/${maxBranches}). Your ${planName} allows at most ${maxBranches >= 999 ? "Unlimited" : maxBranches} branch(es). Please upgrade your subscription to add more branches.`
     };
   }
   return { allowed: true, currentBranches, maxBranches };
@@ -403,34 +385,39 @@ async function checkCanAddStaff(tenantId, branchId) {
   const activeSub = tenant.subscriptions && tenant.subscriptions[0];
   const tier = activeSub?.plan?.tier || tenant.tier || "TRIAL";
   const planConfig = getPlanConfig(tier);
+  const planName = activeSub?.plan?.name || planConfig.name;
+  const planFeatures = typeof activeSub?.plan?.features === "object" && activeSub?.plan?.features !== null ? activeSub.plan.features : {};
+  const maxStaffPerBranch = Number(
+    planFeatures.maxStaffPerBranch ?? activeSub?.plan?.maxStaffPerBranch ?? planConfig.maxStaffPerBranch ?? 1
+  );
+  const maxTotalStaff = Number(
+    planFeatures.maxTotalStaff ?? activeSub?.plan?.maxTotalStaff ?? planConfig.maxTotalStaff ?? (tier === "TRIAL" ? 1 : 999)
+  );
   const nonOwnerUsers = (tenant.users || []).filter((u) => u.role !== "COMPANY_OWNER");
   const totalStaffCount = nonOwnerUsers.length;
-  if (tier === "TRIAL") {
-    if (totalStaffCount >= 1) {
-      return {
-        allowed: false,
-        currentStaff: totalStaffCount,
-        maxStaff: 1,
-        message: `Staff limit reached (1/1 staff on ${planConfig.name}). Plan 0 - Free Trial allows a maximum of 1 staff member. Please upgrade to a paid plan to add more staff.`
-      };
-    }
-    return { allowed: true, currentStaff: totalStaffCount, maxStaff: 1 };
+  if (maxTotalStaff < 999 && totalStaffCount >= maxTotalStaff) {
+    return {
+      allowed: false,
+      currentStaff: totalStaffCount,
+      maxStaff: maxTotalStaff,
+      message: `Staff limit reached (${totalStaffCount}/${maxTotalStaff} on ${planName}). Please upgrade your plan or adjust limits to add more staff members.`
+    };
   }
-  if (branchId && planConfig.maxStaffPerBranch < 999) {
+  if (branchId && maxStaffPerBranch < 999) {
     const branchStaff = nonOwnerUsers.filter((u) => u.branchId === branchId);
-    if (branchStaff.length >= planConfig.maxStaffPerBranch) {
+    if (branchStaff.length >= maxStaffPerBranch) {
       return {
         allowed: false,
         currentStaff: branchStaff.length,
-        maxStaff: planConfig.maxStaffPerBranch,
-        message: `Branch staff limit reached (${branchStaff.length}/${planConfig.maxStaffPerBranch} for this branch on ${planConfig.name}). Please upgrade your plan to assign more staff to this branch.`
+        maxStaff: maxStaffPerBranch,
+        message: `Branch staff limit reached (${branchStaff.length}/${maxStaffPerBranch} staff for this branch on ${planName}). Please upgrade your plan or adjust branch staff limits.`
       };
     }
   }
   return {
     allowed: true,
     currentStaff: totalStaffCount,
-    maxStaff: planConfig.maxTotalStaff || 999
+    maxStaff: maxTotalStaff
   };
 }
 
@@ -617,9 +604,35 @@ async function seedSuperAdmin() {
         });
       }
     }
-    const tiers = ["TRIAL", "STARTER", "GROWTH", "ENTERPRISE"];
+    try {
+      const trialPlan = await prisma.subscriptionPlan.findUnique({
+        where: { tier: "TRIAL" }
+      });
+      if (trialPlan) {
+        await prisma.tenant.updateMany({
+          where: { tier: "TRIAL" },
+          data: { tier: "STARTER" }
+        });
+        try {
+          await prisma.subscriptionPlan.delete({
+            where: { id: trialPlan.id }
+          });
+          console.log("[Seed] Successfully purged Free Trial subscription plan from database.");
+        } catch {
+          await prisma.subscriptionPlan.update({
+            where: { id: trialPlan.id },
+            data: { isActive: false }
+          });
+          console.log("[Seed] Deactivated legacy Free Trial subscription plan.");
+        }
+      }
+    } catch (e) {
+      console.warn("[Seed] Note during trial purge:", e.message);
+    }
+    const tiers = ["STARTER", "GROWTH", "ENTERPRISE"];
     for (const tier of tiers) {
       const planDef = CENTRAL_PLAN_DEFINITIONS[tier];
+      if (!planDef) continue;
       const existingPlan = await prisma.subscriptionPlan.findUnique({
         where: { tier }
       });
@@ -631,25 +644,33 @@ async function seedSuperAdmin() {
             price: planDef.price,
             billingCycle: planDef.billingCycle,
             maxBranches: planDef.maxBranches,
-            features: planDef.features,
+            features: {
+              ...planDef.features,
+              maxStaffPerBranch: planDef.maxStaffPerBranch,
+              maxTotalStaff: planDef.maxTotalStaff
+            },
             isActive: true
           }
         });
         console.log(`[Seed] Created ${planDef.name} (${tier}).`);
       } else {
-        await prisma.subscriptionPlan.update({
-          where: { tier },
-          data: {
-            name: planDef.name,
-            price: planDef.price,
-            maxBranches: planDef.maxBranches,
-            features: planDef.features,
-            isActive: true
-          }
-        });
+        const currentFeat = typeof existingPlan.features === "object" && existingPlan.features !== null ? existingPlan.features : {};
+        if (currentFeat.maxStaffPerBranch === void 0) {
+          await prisma.subscriptionPlan.update({
+            where: { tier },
+            data: {
+              features: {
+                ...planDef.features,
+                maxStaffPerBranch: planDef.maxStaffPerBranch,
+                maxTotalStaff: planDef.maxTotalStaff,
+                ...currentFeat
+              }
+            }
+          });
+        }
       }
     }
-    console.log("[Seed] All 4 subscription plans (Plan 0 Free Trial, Plan 1, Plan 2, Plan 3) verified.");
+    console.log("[Seed] All 3 subscription plans (Plan 1 Starter, Plan 2 Growth, Plan 3 Enterprise) verified.");
     try {
       await prisma.$executeRawUnsafe(`
         CREATE TABLE IF NOT EXISTS "PlatformRole" (
@@ -2038,7 +2059,7 @@ var EmailService = class {
    * Send Approval Notification Email with instructions to log in using registration credentials and complete payment to unlock dashboard
    */
   static async sendApprovalEmail(payload) {
-    const { to, name, companyName, planName, planTier, billingCycle, price, paymentUrl } = payload;
+    const { to, name, companyName, planName, planTier, billingCycle, price, paymentUrl, password } = payload;
     const recipientEmail = (to || "").trim().toLowerCase();
     const senderEmail = getSenderAddress();
     const subject = `[PharmaBiz] Your Pharmacy Registration Has Been Approved - ${companyName}`;
@@ -2058,8 +2079,9 @@ var EmailService = class {
             .header h1 { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.5px; }
             .header p { margin: 6px 0 0 0; font-size: 13px; opacity: 0.95; }
             .body { padding: 32px; }
-            .highlight-msg { font-size: 15px; font-weight: 600; line-height: 1.6; color: #0f172a; background: #f0fdf4; border-left: 4px solid #10b981; border-radius: 0 12px 12px 0; padding: 16px 20px; margin: 18px 0; }
-            .plan-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 14px; padding: 20px; margin: 20px 0; }
+            .highlight-msg { font-size: 14px; font-weight: 600; line-height: 1.6; color: #0f172a; background: #f0fdf4; border-left: 4px solid #10b981; border-radius: 0 12px 12px 0; padding: 14px 18px; margin: 16px 0; }
+            .cred-box { background: #f8fafc; border: 2px dashed #0284c7; border-radius: 14px; padding: 18px 20px; margin: 18px 0; }
+            .plan-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 14px; padding: 18px 20px; margin: 18px 0; }
             .btn { display: inline-block; background: #0284c7; color: #ffffff !important; font-size: 15px; font-weight: 700; text-decoration: none; padding: 14px 32px; border-radius: 12px; margin-top: 10px; box-shadow: 0 4px 10px -2px rgba(2, 132, 199, 0.3); }
             .footer { padding: 24px; text-align: center; font-size: 11px; color: #64748b; background: #f8fafc; border-top: 1px solid #e2e8f0; }
           </style>
@@ -2074,25 +2096,46 @@ var EmailService = class {
               <p style="font-size: 15px; margin-top: 0;">Dear <strong>${name || "Pharmacy Owner"}</strong>,</p>
               
               <div class="highlight-msg">
-                Your pharmacy registration for <strong>${companyName}</strong> has been approved. Please login using the email (<strong>${to}</strong>) and password you provided during registration. Complete the required payment first; after successful payment, you will get access to your dashboard.
+                Your pharmacy registration for <strong>${companyName}</strong> has been approved by our compliance team. Use your login credentials below or click the <strong>1-Click Login</strong> button to access your workspace and complete payment.
+              </div>
+
+              <!-- Login Credentials Card -->
+              <div class="cred-box">
+                <div style="font-size: 12px; font-weight: 800; color: #0369a1; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px;">
+                  \u{1F510} Your Account Login Credentials
+                </div>
+                <div style="font-size: 14px; color: #334155; margin-bottom: 6px;">
+                  Registered Email: <strong style="color: #0f172a; font-family: monospace; font-size: 15px; background: #e2e8f0; padding: 2px 8px; border-radius: 6px;">${recipientEmail}</strong>
+                </div>
+                ${password ? `
+                <div style="font-size: 14px; color: #334155; margin-bottom: 8px;">
+                  Account Password: <strong style="color: #0f172a; font-family: monospace; font-size: 15px; background: #e2e8f0; padding: 2px 8px; border-radius: 6px;">${password}</strong>
+                </div>
+                ` : ""}
+                <div style="font-size: 11px; color: #64748b; line-height: 1.4; margin-top: 8px;">
+                  \u26A1 <strong>1-Click Access:</strong> You can click the button below to log in directly without typing your password. Please save your password securely for future logins.
+                </div>
               </div>
 
               <div class="plan-box">
                 <div style="font-size: 11px; font-weight: 700; color: #166534; text-transform: uppercase; margin-bottom: 4px;">Approved Subscription Details</div>
                 <div style="font-size: 18px; font-weight: 800; color: #0f172a;">${planName} (${planTier})</div>
                 <div style="font-size: 13px; color: #475569; margin-top: 6px;">
-                  Billing Cycle: <strong>${billingCycle}</strong> &bull; Total Payable: <strong style="font-size: 16px; color: #059669;">\u09F3${price.toLocaleString()}</strong>
+                  Billing Cycle: <strong>${billingCycle}</strong> &bull; Plan Price: <strong>\u09F3${Math.max(0, price - 5e3).toLocaleString()}</strong> &bull; One-Time License Fee: <strong>\u09F35,000</strong>
+                </div>
+                <div style="font-size: 15px; color: #059669; font-weight: 800; margin-top: 8px;">
+                  Total Payable: \u09F3${price.toLocaleString()}
                 </div>
               </div>
 
-              <div style="text-align: center; margin: 28px 0 16px 0;">
+              <div style="text-align: center; margin: 26px 0 16px 0;">
                 <a href="${paymentUrl}" class="btn" target="_blank">
-                  Login & Complete Payment (\u09F3${price.toLocaleString()}) &rarr;
+                  1-Click Login & Complete Payment (\u09F3${price.toLocaleString()}) &rarr;
                 </a>
               </div>
 
               <p style="font-size: 12px; color: #64748b; line-height: 1.5; margin-top: 24px;">
-                Direct Link: <br />
+                Direct 1-Click Access Link: <br />
                 <a href="${paymentUrl}" style="color: #0284c7; word-break: break-all;">${paymentUrl}</a>
               </p>
             </div>
@@ -2673,6 +2716,10 @@ var AuthService = class {
     const user = await prisma.user.findFirst({
       where: {
         OR: [
+          { username: { equals: identifier, mode: "insensitive" } },
+          { email: { equals: identifier, mode: "insensitive" } },
+          { username: identifier.toLowerCase() },
+          { email: identifier.toLowerCase() },
           { username: identifier },
           { email: identifier }
         ]
@@ -2988,7 +3035,8 @@ var AuthService = class {
           otpExpiresAt,
           // Pending Plan Selection
           pendingPlanId: plan?.id,
-          pendingBillingCycle: data.billingCycle || "MONTHLY"
+          pendingBillingCycle: data.billingCycle || "MONTHLY",
+          tempPassword: data.password
         }
       });
       const mainBranch = await tx.branch.create({
@@ -3440,6 +3488,8 @@ router.get("/me", authenticate, AuthController.getMe);
 import { Router as Router2 } from "express";
 
 // src/modules/super-admin/super-admin.service.ts
+import jwt3 from "jsonwebtoken";
+import bcrypt3 from "bcryptjs";
 var SuperAdminService = class _SuperAdminService {
   /**
    * Helper: Calculate Prisma date range filter for date presets and custom date ranges
@@ -3500,6 +3550,13 @@ var SuperAdminService = class _SuperAdminService {
     if (existing) {
       throw new Error(`A subscription plan already exists for tier ${data.tier}. Please update the existing plan.`);
     }
+    const feat = {
+      ...data.features || {},
+      ...data.maxStaffPerBranch !== void 0 && { maxStaffPerBranch: data.maxStaffPerBranch },
+      ...data.maxTotalStaff !== void 0 && { maxTotalStaff: data.maxTotalStaff },
+      ...data.trialDays !== void 0 && { trialDays: data.trialDays },
+      ...data.yearlyDiscountPercent !== void 0 && { yearlyDiscountPercent: data.yearlyDiscountPercent }
+    };
     return await prisma.subscriptionPlan.create({
       data: {
         name: data.name,
@@ -3507,19 +3564,30 @@ var SuperAdminService = class _SuperAdminService {
         price: data.price,
         billingCycle: data.billingCycle,
         maxBranches: data.maxBranches,
-        features: data.features || {},
+        features: feat,
         isActive: data.isActive
       }
     });
   }
   static async listPlans() {
-    return await prisma.subscriptionPlan.findMany({
+    const plans = await prisma.subscriptionPlan.findMany({
       orderBy: { price: "asc" },
       include: {
         _count: {
           select: { subscriptions: true }
         }
       }
+    });
+    return plans.map((p) => {
+      const feat = typeof p.features === "object" && p.features !== null ? p.features : {};
+      const fallback = CENTRAL_PLAN_DEFINITIONS[p.tier] || CENTRAL_PLAN_DEFINITIONS.STARTER;
+      return {
+        ...p,
+        maxStaffPerBranch: feat.maxStaffPerBranch ?? fallback.maxStaffPerBranch ?? 1,
+        maxTotalStaff: feat.maxTotalStaff ?? fallback.maxTotalStaff ?? p.maxBranches * (feat.maxStaffPerBranch ?? 1),
+        trialDays: feat.trialDays ?? (p.tier === "TRIAL" ? 7 : 0),
+        yearlyDiscountPercent: feat.yearlyDiscountPercent ?? 0
+      };
     });
   }
   static async getPlanById(id) {
@@ -3540,13 +3608,30 @@ var SuperAdminService = class _SuperAdminService {
     if (!plan) {
       throw new Error("Subscription plan not found");
     }
-    return plan;
+    const feat = typeof plan.features === "object" && plan.features !== null ? plan.features : {};
+    const fallback = CENTRAL_PLAN_DEFINITIONS[plan.tier] || CENTRAL_PLAN_DEFINITIONS.STARTER;
+    return {
+      ...plan,
+      maxStaffPerBranch: feat.maxStaffPerBranch ?? fallback.maxStaffPerBranch ?? 1,
+      maxTotalStaff: feat.maxTotalStaff ?? fallback.maxTotalStaff ?? plan.maxBranches * (feat.maxStaffPerBranch ?? 1),
+      trialDays: feat.trialDays ?? (plan.tier === "TRIAL" ? 7 : 0),
+      yearlyDiscountPercent: feat.yearlyDiscountPercent ?? 0
+    };
   }
   static async updatePlan(id, data) {
     const plan = await prisma.subscriptionPlan.findUnique({ where: { id } });
     if (!plan) {
       throw new Error("Subscription plan not found");
     }
+    const currentFeatures = typeof plan.features === "object" && plan.features !== null ? plan.features : {};
+    const updatedFeatures = {
+      ...currentFeatures,
+      ...data.features || {},
+      ...data.maxStaffPerBranch !== void 0 && { maxStaffPerBranch: data.maxStaffPerBranch },
+      ...data.maxTotalStaff !== void 0 && { maxTotalStaff: data.maxTotalStaff },
+      ...data.trialDays !== void 0 && { trialDays: data.trialDays },
+      ...data.yearlyDiscountPercent !== void 0 && { yearlyDiscountPercent: data.yearlyDiscountPercent }
+    };
     return await prisma.subscriptionPlan.update({
       where: { id },
       data: {
@@ -3554,7 +3639,7 @@ var SuperAdminService = class _SuperAdminService {
         ...data.price !== void 0 && { price: data.price },
         ...data.billingCycle && { billingCycle: data.billingCycle },
         ...data.maxBranches !== void 0 && { maxBranches: data.maxBranches },
-        ...data.features && { features: data.features },
+        features: updatedFeatures,
         ...data.isActive !== void 0 && { isActive: data.isActive }
       }
     });
@@ -3598,6 +3683,13 @@ var SuperAdminService = class _SuperAdminService {
     }
     if (query.isActive !== void 0) {
       where.isActive = query.isActive;
+    }
+    if (query.subscriptionStatus) {
+      where.subscriptions = {
+        some: {
+          status: query.subscriptionStatus
+        }
+      };
     }
     const dateRange = _SuperAdminService.getDateRangeFilter(query.datePreset, query.startDate, query.endDate);
     if (dateRange) {
@@ -3785,9 +3877,21 @@ var SuperAdminService = class _SuperAdminService {
   /**
    * Platform Payments & Transactions
    */
-  static async listPlatformPayments(page = 1, limit = 50) {
+  static async listPlatformPayments(page = 1, limit = 50, datePreset, startDate, endDate, search) {
     const skip = (page - 1) * limit;
     const where = { tenant: { name: { not: "Platform HQ" } } };
+    if (search && search.trim()) {
+      const s = search.trim();
+      where.OR = [
+        { tranId: { contains: s, mode: "insensitive" } },
+        { paymentMethod: { contains: s, mode: "insensitive" } },
+        { tenant: { name: { contains: s, mode: "insensitive" } } }
+      ];
+    }
+    const dateRange = _SuperAdminService.getDateRangeFilter(datePreset, startDate, endDate);
+    if (dateRange) {
+      where.createdAt = dateRange;
+    }
     const [total, payments] = await Promise.all([
       prisma.payment.count({ where }),
       prisma.payment.findMany({
@@ -4348,8 +4452,8 @@ var SuperAdminService = class _SuperAdminService {
       });
     }
     const assignedPermissions = Array.isArray(data.permissions) && data.permissions.length > 0 ? data.permissions : matchedRole?.permissions || [];
-    const bcrypt4 = __require("bcryptjs");
-    const passwordHash = await bcrypt4.hash(data.password, 10);
+    const bcrypt5 = __require("bcryptjs");
+    const passwordHash = await bcrypt5.hash(data.password, 10);
     const enumRole = matchedRole?.name === "CTO" ? "CTO" : matchedRole?.name === "Project Manager" ? "PROJECT_MANAGER" : "PROJECT_MANAGER";
     const staff = await prisma.user.create({
       data: {
@@ -4433,8 +4537,8 @@ var SuperAdminService = class _SuperAdminService {
       ...data.isActive !== void 0 && { isActive: data.isActive }
     };
     if (data.password) {
-      const bcrypt4 = __require("bcryptjs");
-      updateData.passwordHash = await bcrypt4.hash(data.password, 10);
+      const bcrypt5 = __require("bcryptjs");
+      updateData.passwordHash = await bcrypt5.hash(data.password, 10);
     }
     const updated = await prisma.user.update({
       where: { id },
@@ -4749,7 +4853,9 @@ var SuperAdminService = class _SuperAdminService {
     const startDate = /* @__PURE__ */ new Date();
     const endDate = new Date(startDate.getTime() + durationDays * 24 * 60 * 60 * 1e3);
     const basePrice = Number(plan.price);
-    const amount = billingCycle === "YEARLY" ? Math.round(basePrice * 12 * 0.85) : basePrice;
+    const planAmount = billingCycle === "YEARLY" ? Math.round(basePrice * 12 * 0.85) : basePrice;
+    const INITIAL_LICENSE_FEE = 5e3;
+    const amount = planAmount + INITIAL_LICENSE_FEE;
     const updatedTenant = await prisma.tenant.update({
       where: { id: tenant.id },
       data: {
@@ -4786,8 +4892,30 @@ var SuperAdminService = class _SuperAdminService {
         include: { plan: true }
       });
     }
+    let plainPassword = tenant.tempPassword;
+    if (!plainPassword) {
+      plainPassword = `Pharma@${Math.floor(1e3 + Math.random() * 9e3)}`;
+      const passwordHash = await bcrypt3.hash(plainPassword, 10);
+      await prisma.user.update({
+        where: { id: owner.id },
+        data: { passwordHash }
+      });
+    }
     const clientUrl = process.env.CLIENT_URL || "http://localhost:3001";
-    const paymentUrl = `${clientUrl}/verification-status?tenantId=${tenant.id}&email=${encodeURIComponent(owner.email || tenant.email || "")}`;
+    const secret = process.env.JWT_SECRET || "default_secret";
+    const magicPayload = {
+      id: owner.id,
+      tenantId: tenant.id,
+      branchId: owner.branchId || null,
+      role: owner.role,
+      permissions: ["*"],
+      username: owner.username,
+      name: owner.name,
+      email: owner.email,
+      verificationStatus: "APPROVED_PENDING_PAYMENT"
+    };
+    const magicToken = jwt3.sign(magicPayload, secret, { expiresIn: "30d" });
+    const paymentUrl = `${clientUrl}/verification-status?tenantId=${tenant.id}&email=${encodeURIComponent(owner.email || tenant.email || "")}&token=${encodeURIComponent(magicToken)}`;
     const emailRecipient = owner.email || tenant.email;
     if (emailRecipient) {
       await EmailService.sendApprovalEmail({
@@ -4798,7 +4926,8 @@ var SuperAdminService = class _SuperAdminService {
         planTier: plan.tier,
         billingCycle,
         price: amount,
-        paymentUrl
+        paymentUrl,
+        password: plainPassword
       });
     }
     return {
@@ -4974,8 +5103,12 @@ var SuperAdminController = class {
   static async listPayments(req, res) {
     try {
       const page = req.query.page ? parseInt(req.query.page, 10) : 1;
-      const limit = req.query.limit ? parseInt(req.query.limit, 10) : 50;
-      const result = await SuperAdminService.listPlatformPayments(page, limit);
+      const limit = req.query.limit ? parseInt(req.query.limit, 10) : 100;
+      const datePreset = req.query.datePreset;
+      const startDate = req.query.startDate;
+      const endDate = req.query.endDate;
+      const search = req.query.search;
+      const result = await SuperAdminService.listPlatformPayments(page, limit, datePreset, startDate, endDate, search);
       res.status(200).json({ success: true, ...result });
     } catch (error) {
       res.status(500).json({ success: false, message: error.message });
@@ -5259,19 +5392,27 @@ var validateRequest = (schemas) => {
 // src/modules/super-admin/super-admin.validation.ts
 import { z as z2 } from "zod";
 var createPlanSchema = z2.object({
-  name: z2.string().min(2, "Plan name must be at least 2 characters"),
+  name: z2.string().min(1, "Plan name must be at least 1 character"),
   tier: z2.enum(["TRIAL", "STARTER", "GROWTH", "ENTERPRISE"]),
   price: z2.number().nonnegative("Price must be greater than or equal to 0"),
   billingCycle: z2.enum(["MONTHLY", "YEARLY"]).default("MONTHLY"),
+  yearlyDiscountPercent: z2.number().min(0).max(100).optional(),
   maxBranches: z2.number().int().positive("Max branches must be at least 1"),
+  maxStaffPerBranch: z2.number().int().positive().optional(),
+  maxTotalStaff: z2.number().int().positive().optional(),
+  trialDays: z2.number().int().min(0).optional(),
   features: z2.record(z2.string(), z2.any()).optional(),
   isActive: z2.boolean().default(true)
 });
 var updatePlanSchema = z2.object({
-  name: z2.string().min(2).optional(),
+  name: z2.string().min(1).optional(),
   price: z2.number().nonnegative().optional(),
   billingCycle: z2.enum(["MONTHLY", "YEARLY"]).optional(),
+  yearlyDiscountPercent: z2.number().min(0).max(100).optional(),
   maxBranches: z2.number().int().positive().optional(),
+  maxStaffPerBranch: z2.number().int().positive().optional(),
+  maxTotalStaff: z2.number().int().positive().optional(),
+  trialDays: z2.number().int().min(0).optional(),
   features: z2.record(z2.string(), z2.any()).optional(),
   isActive: z2.boolean().optional()
 });
@@ -5285,6 +5426,7 @@ var listTenantsQuerySchema = z2.object({
   search: z2.string().optional(),
   tier: z2.enum(["TRIAL", "STARTER", "GROWTH", "ENTERPRISE"]).optional(),
   isActive: z2.string().optional().transform((v) => v === "true" ? true : v === "false" ? false : void 0),
+  subscriptionStatus: z2.enum(["ACTIVE", "PENDING", "EXPIRED", "CANCELLED"]).optional(),
   datePreset: z2.string().optional(),
   startDate: z2.string().optional(),
   endDate: z2.string().optional()
@@ -5413,9 +5555,23 @@ var SubscriptionService = class {
    * List all available plans
    */
   static async listAvailablePlans() {
-    return await prisma.subscriptionPlan.findMany({
-      where: { isActive: true },
+    const plans = await prisma.subscriptionPlan.findMany({
+      where: {
+        isActive: true,
+        tier: { in: ["STARTER", "GROWTH", "ENTERPRISE"] }
+      },
       orderBy: { price: "asc" }
+    });
+    return plans.map((p) => {
+      const feat = typeof p.features === "object" && p.features !== null ? p.features : {};
+      const fallback = CENTRAL_PLAN_DEFINITIONS[p.tier] || CENTRAL_PLAN_DEFINITIONS.STARTER;
+      return {
+        ...p,
+        maxStaffPerBranch: feat.maxStaffPerBranch ?? fallback.maxStaffPerBranch ?? 1,
+        maxTotalStaff: feat.maxTotalStaff ?? fallback.maxTotalStaff ?? p.maxBranches * (feat.maxStaffPerBranch ?? 1),
+        trialDays: 0,
+        yearlyDiscountPercent: feat.yearlyDiscountPercent ?? fallback.yearlyDiscountPercent ?? (p.tier === "STARTER" ? 5 : p.tier === "GROWTH" ? 10 : p.tier === "ENTERPRISE" ? 15 : 0)
+      };
     });
   }
   static async getPlanDetails(planId) {
@@ -5425,7 +5581,15 @@ var SubscriptionService = class {
     if (!plan) {
       throw new Error("Subscription plan not found");
     }
-    return plan;
+    const feat = typeof plan.features === "object" && plan.features !== null ? plan.features : {};
+    const fallback = CENTRAL_PLAN_DEFINITIONS[plan.tier] || CENTRAL_PLAN_DEFINITIONS.STARTER;
+    return {
+      ...plan,
+      maxStaffPerBranch: feat.maxStaffPerBranch ?? fallback.maxStaffPerBranch ?? 1,
+      maxTotalStaff: feat.maxTotalStaff ?? fallback.maxTotalStaff ?? plan.maxBranches * (feat.maxStaffPerBranch ?? 1),
+      trialDays: 0,
+      yearlyDiscountPercent: feat.yearlyDiscountPercent ?? fallback.yearlyDiscountPercent ?? (plan.tier === "STARTER" ? 5 : plan.tier === "GROWTH" ? 10 : plan.tier === "ENTERPRISE" ? 15 : 0)
+    };
   }
   /**
    * Get current active subscription and usage for tenant
@@ -5439,25 +5603,32 @@ var SubscriptionService = class {
         subscriptions: {
           orderBy: { createdAt: "desc" },
           include: { plan: true },
-          take: 1
+          take: 5
         }
       }
     });
     if (!tenant) {
       throw new Error("Tenant not found");
     }
-    const currentSub = tenant.subscriptions && tenant.subscriptions[0];
-    const tier = currentSub?.plan?.tier || tenant.tier || "TRIAL";
+    const activeSub = (tenant.subscriptions || []).find((s) => s.status === "ACTIVE");
+    const currentSub = activeSub || tenant.subscriptions && tenant.subscriptions[0];
+    const tier = currentSub?.plan?.tier || tenant.tier || "STARTER";
     const planConfig = getPlanConfig(tier);
-    const isTrial = tier === "TRIAL";
+    const isTrial = false;
     const isExpired = currentSub ? isSubscriptionExpired(currentSub) : true;
-    const trialDaysRemaining = isTrial && currentSub?.endDate ? getTrialRemainingDays(currentSub.endDate) : 0;
-    const isTrialExpired = isTrial && isExpired;
+    const trialDaysRemaining = 0;
+    const isTrialExpired = false;
+    const planFeatures = typeof currentSub?.plan?.features === "object" && currentSub?.plan?.features !== null ? currentSub.plan.features : {};
     const branchCount = tenant.branches ? tenant.branches.length : 0;
-    const maxBranches = currentSub?.plan?.maxBranches || planConfig.maxBranches;
+    const maxBranches = currentSub?.plan?.maxBranches ?? planConfig.maxBranches;
     const nonOwnerStaff = (tenant.users || []).filter((u) => u.role !== "COMPANY_OWNER");
     const staffCount = nonOwnerStaff.length;
-    const maxStaff = isTrial ? 1 : planConfig.maxTotalStaff || 999;
+    const maxStaffPerBranch = Number(
+      planFeatures.maxStaffPerBranch ?? currentSub?.plan?.maxStaffPerBranch ?? planConfig.maxStaffPerBranch ?? 1
+    );
+    const maxStaff = Number(
+      planFeatures.maxTotalStaff ?? currentSub?.plan?.maxTotalStaff ?? planConfig.maxTotalStaff ?? 999
+    );
     return {
       tenantId: tenant.id,
       tenantName: tenant.name,
@@ -5467,21 +5638,30 @@ var SubscriptionService = class {
       isTrialExpired,
       trialDaysRemaining,
       isExpired,
-      planConfig,
+      planConfig: {
+        ...planConfig,
+        name: currentSub?.plan?.name || planConfig.name,
+        price: currentSub?.plan ? Number(currentSub.plan.price) : planConfig.price,
+        billingCycle: currentSub?.plan?.billingCycle || planConfig.billingCycle,
+        maxBranches,
+        maxStaffPerBranch,
+        maxTotalStaff: maxStaff
+      },
       usage: {
         currentBranches: branchCount,
         maxBranches,
         remainingBranches: Math.max(0, maxBranches - branchCount),
         currentStaff: staffCount,
         maxStaff,
-        remainingStaff: Math.max(0, maxStaff - staffCount)
+        remainingStaff: Math.max(0, maxStaff - staffCount),
+        maxStaffPerBranch
       },
       features: {
-        interBranchTransfer: tier !== "STARTER" && tier !== "TRIAL",
-        regionalAdmin: tier !== "STARTER" && tier !== "TRIAL",
-        customAudit: tier === "ENTERPRISE",
-        apiAccess: tier === "ENTERPRISE",
-        branchPriceOverride: tier !== "STARTER" && tier !== "TRIAL"
+        interBranchTransfer: planFeatures.inventoryTransfers ?? (tier !== "STARTER" && tier !== "TRIAL"),
+        regionalAdmin: planFeatures.regionalAdmin ?? (tier !== "STARTER" && tier !== "TRIAL"),
+        customAudit: planFeatures.customAudit ?? tier === "ENTERPRISE",
+        apiAccess: planFeatures.apiAccess ?? tier === "ENTERPRISE",
+        branchPriceOverride: planFeatures.branchPriceOverride ?? (tier !== "STARTER" && tier !== "TRIAL")
       }
     };
   }
@@ -5544,6 +5724,19 @@ var SubscriptionService = class {
         `Cannot change to ${newPlan.name}. You currently have ${activeBranches} active branches, but this plan allows at most ${newPlan.maxBranches}. Please deactivate extra branches first.`
       );
     }
+    const stalePending = await prisma.subscription.findMany({
+      where: { tenantId, status: "PENDING" },
+      select: { id: true }
+    });
+    if (stalePending.length > 0) {
+      const staleIds = stalePending.map((s) => s.id);
+      await prisma.payment.deleteMany({
+        where: { subscriptionId: { in: staleIds }, status: "PENDING" }
+      });
+      await prisma.subscription.deleteMany({
+        where: { id: { in: staleIds } }
+      });
+    }
     const startDate = /* @__PURE__ */ new Date();
     const endDate = new Date(startDate.getTime() + 30 * 24 * 60 * 60 * 1e3);
     const subscription = await prisma.subscription.create({
@@ -5563,12 +5756,25 @@ var SubscriptionService = class {
    */
   static async renewSubscription(tenantId) {
     const currentSub = await prisma.subscription.findFirst({
-      where: { tenantId },
+      where: { tenantId, status: { in: ["ACTIVE", "EXPIRED"] } },
       orderBy: { createdAt: "desc" },
       include: { plan: true }
     });
     if (!currentSub) {
       throw new Error("No existing subscription found to renew");
+    }
+    const stalePending = await prisma.subscription.findMany({
+      where: { tenantId, status: "PENDING" },
+      select: { id: true }
+    });
+    if (stalePending.length > 0) {
+      const staleIds = stalePending.map((s) => s.id);
+      await prisma.payment.deleteMany({
+        where: { subscriptionId: { in: staleIds }, status: "PENDING" }
+      });
+      await prisma.subscription.deleteMany({
+        where: { id: { in: staleIds } }
+      });
     }
     const durationDays = currentSub.plan.billingCycle === "YEARLY" ? 365 : 30;
     const baseDate = new Date(currentSub.endDate) > /* @__PURE__ */ new Date() ? new Date(currentSub.endDate) : /* @__PURE__ */ new Date();
@@ -5645,8 +5851,8 @@ var SubscriptionExpiryService = class {
         }
       });
       console.log(`\u2139\uFE0F [EXPIRY SCHEDULER] Found ${expiringSubscriptions.length} subscription(s) expiring within 2 days awaiting reminders.`);
-      const clientUrl = (process.env.CLIENT_URL || "http://localhost:3000").replace(/\/$/, "");
-      const renewUrl = `${clientUrl}/dashboard?tab=subscription`;
+      const clientUrl = (process.env.CLIENT_URL || "http://localhost:3001").replace(/\/$/, "");
+      const renewUrl = `${clientUrl}/dashboard/subscription/plans`;
       for (const sub of expiringSubscriptions) {
         try {
           const tenant = sub.tenant;
@@ -5906,7 +6112,7 @@ var SSLCommerzService = class {
   static get baseUrl() {
     return this.isSandbox ? "https://sandbox.sslcommerz.com" : "https://securepay.sslcommerz.com";
   }
-  /**
+  /**  
    * Initiate SSLCOMMERZ Payment Session
    */
   static async initPayment(data) {
@@ -6011,7 +6217,50 @@ var PaymentService = class {
     const basePrice = Number(subscription.plan.price);
     const durationDays = (new Date(subscription.endDate).getTime() - new Date(subscription.startDate).getTime()) / (1e3 * 60 * 60 * 24);
     const isYearly = durationDays > 45;
-    const amount = isYearly ? Math.round(basePrice * 12 * 0.85) : basePrice;
+    const planPrice = isYearly ? Math.round(basePrice * 12 * 0.85) : basePrice;
+    const validatedPaymentsCount = await prisma.payment.count({
+      where: {
+        tenantId: subscription.tenantId,
+        status: "VALIDATED"
+      }
+    });
+    const isInitialRegistration = validatedPaymentsCount === 0 || subscription.tenant?.verificationStatus === "APPROVED_PENDING_PAYMENT";
+    let extraFee = 0;
+    let feeLabel = "";
+    let productName = `${subscription.plan.name} Subscription Plan`;
+    if (isInitialRegistration) {
+      extraFee = 5e3;
+      feeLabel = "One-Time Software License Fee (\u09F35,000)";
+      productName = `${subscription.plan.name} + License Fee (\u09F35,000)`;
+    } else {
+      const priorSub = await prisma.subscription.findFirst({
+        where: {
+          tenantId: subscription.tenantId,
+          id: { not: subscription.id },
+          status: { in: ["ACTIVE", "EXPIRED"] }
+        },
+        orderBy: { endDate: "desc" }
+      });
+      const now = /* @__PURE__ */ new Date();
+      if (priorSub && new Date(priorSub.endDate).getTime() < now.getTime()) {
+        const msExpired = now.getTime() - new Date(priorSub.endDate).getTime();
+        const daysExpired = Math.floor(msExpired / (1e3 * 60 * 60 * 24));
+        if (daysExpired > 90) {
+          throw new Error(
+            `Your previous subscription expired ${daysExpired} days ago (exceeding the 90-day / 3-month data retention grace period). Under the terms of service, historical data cannot be restored. Please register a new pharmacy account with the initial \u09F35,000 license fee.`
+          );
+        } else if (daysExpired > 30) {
+          extraFee = 2e3;
+          feeLabel = `Server Data Retention & Reactivation Fee (\u09F32,000 - expired ${daysExpired} day(s) ago)`;
+          productName = `${subscription.plan.name} + Data Retention Fee (\u09F32,000)`;
+        } else {
+          extraFee = 0;
+          feeLabel = `Subscription Renewal (Within 30-Day Grace Period - expired ${daysExpired} day(s) ago)`;
+          productName = `${subscription.plan.name} Subscription Renewal`;
+        }
+      }
+    }
+    const amount = planPrice + extraFee;
     const payment = await prisma.payment.create({
       data: {
         tenantId: subscription.tenantId,
@@ -6031,11 +6280,11 @@ var PaymentService = class {
       customerPhone: data.customerPhone || subscription.tenant.phone || "01700000000",
       customerAddress: data.customerAddress || subscription.tenant.address || "Bangladesh",
       customerCity: data.customerCity || "Dhaka",
-      productName: `${subscription.plan.name} Subscription Plan`,
+      productName,
       productCategory: "SaaS Subscription",
       valueA: subscription.tenantId,
       valueB: subscription.id,
-      valueC: "SUBSCRIBE"
+      valueC: feeLabel || "SUBSCRIBE"
     });
     if (sslcommerzResponse.status !== "SUCCESS" && !sslcommerzResponse.GatewayPageURL) {
       await prisma.payment.update({
@@ -6145,10 +6394,29 @@ var PaymentService = class {
       });
       let updatedSubscription = null;
       if (payment.subscriptionId) {
+        const subRecord = await tx.subscription.findUnique({
+          where: { id: payment.subscriptionId },
+          include: { plan: true }
+        });
+        const billingCycle = subRecord?.plan?.billingCycle || "MONTHLY";
+        const durationDays = billingCycle === "YEARLY" ? 365 : 30;
+        const now = /* @__PURE__ */ new Date();
+        const endDate = new Date(now.getTime() + durationDays * 24 * 60 * 60 * 1e3);
+        await tx.subscription.updateMany({
+          where: {
+            tenantId: payment.tenantId,
+            id: { not: payment.subscriptionId },
+            status: "ACTIVE"
+          },
+          data: { status: "EXPIRED" }
+        });
         updatedSubscription = await tx.subscription.update({
           where: { id: payment.subscriptionId },
           data: {
-            status: "ACTIVE"
+            status: "ACTIVE",
+            startDate: now,
+            endDate,
+            expiryReminderSentAt: null
           },
           include: { plan: true }
         });
@@ -6209,13 +6477,17 @@ var PaymentService = class {
     });
   }
   /**
-   * Get Tenant Payment History
+   * Get Tenant Payment History (Only successful, completed subscription payments)
    */
   static async getTenantPayments(tenantId) {
     return await prisma.payment.findMany({
-      where: { tenantId },
+      where: {
+        tenantId,
+        status: "VALIDATED"
+      },
       orderBy: { createdAt: "desc" },
       include: {
+        tenant: true,
         subscription: {
           include: { plan: true }
         }
@@ -6674,7 +6946,7 @@ var BranchService = class {
       include: {
         _count: {
           select: {
-            users: { where: { isActive: true } },
+            users: { where: { isActive: true, role: { notIn: ["COMPANY_OWNER", "SUPER_ADMIN"] } } },
             inventories: true,
             sales: true
           }
@@ -6687,13 +6959,18 @@ var BranchService = class {
       where: { id: branchId, tenantId },
       include: {
         users: {
-          where: { isActive: true },
+          where: { isActive: true, role: { notIn: ["COMPANY_OWNER", "SUPER_ADMIN"] } },
           select: {
             id: true,
             name: true,
             username: true,
             email: true,
-            role: true
+            phone: true,
+            role: true,
+            pharmacyRoleName: true,
+            customRoleName: true,
+            isActive: true,
+            createdAt: true
           }
         },
         _count: {
@@ -7042,7 +7319,7 @@ router6.delete(
 import { Router as Router7 } from "express";
 
 // src/modules/user/user.service.ts
-import bcrypt3 from "bcryptjs";
+import bcrypt4 from "bcryptjs";
 var ALL_PHARMACY_PERMISSIONS = [
   // 1. Dashboard
   {
@@ -7585,7 +7862,7 @@ var UserService = class {
     } else {
       enumRole = "CASHIER";
     }
-    const passwordHash = await bcrypt3.hash(data.password, 10);
+    const passwordHash = await bcrypt4.hash(data.password, 10);
     const user = await prisma.user.create({
       data: {
         tenantId,
@@ -7767,7 +8044,7 @@ var UserService = class {
       permissions
     };
     if (data.password) {
-      updateData.passwordHash = await bcrypt3.hash(data.password, 10);
+      updateData.passwordHash = await bcrypt4.hash(data.password, 10);
     }
     const updated = await prisma.user.update({
       where: { id: userId },
@@ -7882,11 +8159,11 @@ var UserService = class {
     if (!user) {
       throw new Error("User not found.");
     }
-    const isValid = await bcrypt3.compare(data.currentPassword, user.passwordHash);
+    const isValid = await bcrypt4.compare(data.currentPassword, user.passwordHash);
     if (!isValid) {
       throw new Error("Current password does not match.");
     }
-    const newHash = await bcrypt3.hash(data.newPassword, 10);
+    const newHash = await bcrypt4.hash(data.newPassword, 10);
     await prisma.user.update({
       where: { id: userId },
       data: { passwordHash: newHash }
@@ -12295,14 +12572,15 @@ var SalesService = class {
     let discountAmount = 0;
     if (data.discount && data.discount > 0) {
       if (data.discountType === "PERCENT") {
-        discountAmount = Math.round(calculatedSubTotal * (data.discount / 100) * 100) / 100;
+        discountAmount = Math.round(calculatedSubTotal * (data.discount / 100));
       } else {
-        discountAmount = Number(data.discount);
+        discountAmount = Math.round(Number(data.discount));
       }
     }
-    const taxAmount = Number(data.tax || 0);
-    const totalAmount = Math.max(0, calculatedSubTotal - discountAmount + taxAmount);
-    const paidAmount = data.paidAmount !== void 0 ? Number(data.paidAmount) : totalAmount;
+    const taxAmount = Math.round(Number(data.tax || 0));
+    const rawTotal = Math.max(0, calculatedSubTotal - discountAmount + taxAmount);
+    const totalAmount = data.totalAmount !== void 0 ? Math.round(Number(data.totalAmount)) : Math.round(rawTotal);
+    const paidAmount = data.paidAmount !== void 0 ? Math.round(Number(data.paidAmount)) : totalAmount;
     const dueAmount = Math.max(0, totalAmount - paidAmount);
     const changeAmount = Math.max(0, paidAmount - totalAmount);
     const rand = Math.floor(1e3 + Math.random() * 9e3);
@@ -12320,7 +12598,7 @@ var SalesService = class {
           customerName: data.customerName || "Walk-in Customer",
           customerPhone: data.customerPhone || null,
           customerEmail: data.customerEmail || null,
-          subTotal: calculatedSubTotal,
+          subTotal: data.subTotal !== void 0 ? Math.round(Number(data.subTotal)) : Math.round(calculatedSubTotal),
           discount: discountAmount,
           discountType: data.discountType || "FIXED",
           tax: taxAmount,
@@ -12526,6 +12804,11 @@ var SalesService = class {
     }
     if (query.paymentMethod) {
       where.paymentMethod = query.paymentMethod;
+    }
+    if (query.paymentStatus === "DUE" || query.hasDue === true) {
+      where.dueAmount = { gt: 0 };
+    } else if (query.paymentStatus === "PAID" || query.hasDue === false) {
+      where.dueAmount = { lte: 0 };
     }
     if (query.startDate || query.endDate) {
       where.createdAt = {};
@@ -12843,6 +13126,135 @@ var SalesService = class {
     });
     return voided;
   }
+  /**
+   * Collect Outstanding Due Payment on an existing sale
+   */
+  static async collectDue(tenantId, userId, saleId, data) {
+    const sale = await prisma.sale.findFirst({
+      where: { id: saleId, tenantId },
+      include: { branch: true }
+    });
+    if (!sale) {
+      throw new Error("Sale record not found.");
+    }
+    if (sale.status !== "COMPLETED") {
+      throw new Error(`Cannot collect due on a ${sale.status} sale.`);
+    }
+    const currentDue = Number(sale.dueAmount || 0);
+    if (currentDue <= 0) {
+      throw new Error("This sale has no outstanding due balance.");
+    }
+    if (data.amount <= 0) {
+      throw new Error("Collected amount must be greater than 0.");
+    }
+    if (data.amount > currentDue + 0.01) {
+      throw new Error(`Collected amount (\u09F3${data.amount}) cannot exceed outstanding due (\u09F3${currentDue}).`);
+    }
+    const updatedSale = await prisma.$transaction(async (tx) => {
+      let financialAccount = null;
+      if (data.financialAccountId) {
+        financialAccount = await tx.financialAccount.findFirst({
+          where: { id: data.financialAccountId, tenantId, isActive: true }
+        });
+      }
+      if (!financialAccount && sale.branchId) {
+        const method = (data.paymentMethod || "CASH").toUpperCase();
+        financialAccount = await tx.financialAccount.findFirst({
+          where: {
+            tenantId,
+            branchId: sale.branchId,
+            isActive: true,
+            accountType: method === "BANK" || method === "CARD" ? "BANK" : method === "BKASH" || method === "NAGAD" || method === "MOBILE" ? "MOBILE_BANKING" : "CASH"
+          }
+        });
+        if (!financialAccount) {
+          financialAccount = await tx.financialAccount.findFirst({
+            where: { tenantId, branchId: sale.branchId, isActive: true }
+          });
+        }
+      }
+      if (financialAccount) {
+        await tx.financialAccount.update({
+          where: { id: financialAccount.id },
+          data: { balance: { increment: data.amount } }
+        });
+        await tx.financialTransaction.create({
+          data: {
+            tenantId,
+            branchId: sale.branchId,
+            destinationAccountId: financialAccount.id,
+            amount: data.amount,
+            type: "SALE_PAYMENT",
+            reference: sale.receiptNo,
+            note: `Due payment collected for Receipt #${sale.receiptNo}${data.notes ? ` (${data.notes})` : ""}${data.transactionRef ? ` Ref: ${data.transactionRef}` : ""}`,
+            userId
+          }
+        });
+      }
+      const newPaid = Number(sale.paidAmount || 0) + data.amount;
+      const newDue = Math.max(0, currentDue - data.amount);
+      const noteAddition = `[Due Payment: \u09F3${data.amount} via ${data.paymentMethod || "CASH"} on ${(/* @__PURE__ */ new Date()).toISOString().split("T")[0]}]`;
+      const updatedNotes = sale.notes ? `${sale.notes} | ${noteAddition}` : noteAddition;
+      const updated = await tx.sale.update({
+        where: { id: sale.id },
+        data: {
+          paidAmount: newPaid,
+          dueAmount: newDue,
+          notes: updatedNotes
+        },
+        include: {
+          branch: { select: { id: true, name: true, location: true } },
+          user: { select: { id: true, name: true, username: true } },
+          items: {
+            include: {
+              product: { select: { id: true, name: true, sku: true, unit: true, size: true } }
+            }
+          }
+        }
+      });
+      return updated;
+    });
+    await AuditService.log({
+      tenantId,
+      branchId: sale.branchId,
+      userId,
+      action: "POS_DUE_COLLECTED",
+      details: {
+        saleId: sale.id,
+        receiptNo: sale.receiptNo,
+        collectedAmount: data.amount,
+        remainingDue: Number(updatedSale.dueAmount),
+        customerName: sale.customerName,
+        customerPhone: sale.customerPhone
+      }
+    });
+    return updatedSale;
+  }
+  /**
+   * Get Due Sales aggregate summary statistics
+   */
+  static async getDueStats(tenantId, branchId) {
+    const where = { tenantId, status: "COMPLETED", dueAmount: { gt: 0 } };
+    if (branchId && branchId !== "all" && branchId !== "all-branches") {
+      where.branchId = branchId;
+    }
+    const aggregate = await prisma.sale.aggregate({
+      where,
+      _sum: {
+        dueAmount: true,
+        totalAmount: true,
+        paidAmount: true
+      },
+      _count: {
+        id: true
+      }
+    });
+    return {
+      totalDue: Number(aggregate._sum?.dueAmount || 0),
+      totalDueSalesCount: aggregate._count?.id || 0,
+      totalSalesWithDueAmount: Number(aggregate._sum?.totalAmount || 0)
+    };
+  }
 };
 
 // src/modules/sales/sales.controller.ts
@@ -12950,6 +13362,37 @@ var SalesController = class {
       res.status(400).json({ success: false, message: error.message });
     }
   }
+  static async collectDue(req, res) {
+    try {
+      const { id } = req.params;
+      const tenantId = req.user.tenantId;
+      const userId = req.user.id;
+      const updatedSale = await SalesService.collectDue(tenantId, userId, id, req.body);
+      res.status(200).json({
+        success: true,
+        message: "Outstanding due payment collected successfully",
+        data: updatedSale
+      });
+    } catch (error) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  }
+  static async getDueStats(req, res) {
+    try {
+      const tenantId = req.user.tenantId;
+      let branchId = req.query.branchId;
+      if (!branchId && req.headers["x-branch-id"]) {
+        const headerBranch = req.headers["x-branch-id"].trim();
+        if (headerBranch && headerBranch !== "all" && headerBranch !== "all-branches") {
+          branchId = headerBranch;
+        }
+      }
+      const stats = await SalesService.getDueStats(tenantId, branchId);
+      res.status(200).json({ success: true, data: stats });
+    } catch (error) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
 };
 
 // src/modules/sales/sales.validation.ts
@@ -12977,6 +13420,8 @@ var createSaleSchema = z11.object({
   transactionRef: z11.string().optional().nullable(),
   discount: z11.number().nonnegative().default(0),
   discountType: z11.enum(["FIXED", "PERCENT"]).default("FIXED"),
+  subTotal: z11.number().nonnegative().optional(),
+  totalAmount: z11.number().nonnegative().optional(),
   tax: z11.number().nonnegative().default(0),
   paidAmount: z11.number().nonnegative().optional(),
   notes: z11.string().optional().nullable(),
@@ -13002,7 +13447,17 @@ var listSalesQuerySchema = z11.object({
   financialAccountId: z11.string().optional(),
   startDate: z11.string().optional(),
   endDate: z11.string().optional(),
-  search: z11.string().optional()
+  search: z11.string().optional(),
+  hasDue: z11.string().optional().transform((v) => v === "true" || v === "1" ? true : v === "false" || v === "0" ? false : void 0),
+  paymentStatus: z11.enum(["ALL", "PAID", "DUE"]).optional()
+});
+var collectDueSchema = z11.object({
+  amount: z11.number().positive("Collected amount must be greater than 0"),
+  paymentMethod: z11.enum(["CASH", "BKASH", "NAGAD", "BANK", "CARD", "MOBILE", "OTHER"]).default("CASH"),
+  financialAccountId: z11.string().optional().nullable(),
+  bankName: z11.string().optional().nullable(),
+  transactionRef: z11.string().optional().nullable(),
+  notes: z11.string().optional().nullable()
 });
 
 // src/modules/sales/sales.routes.ts
@@ -13020,9 +13475,16 @@ router11.get(
   validateRequest({ query: listSalesQuerySchema }),
   SalesController.listSales
 );
+router11.get("/due-stats", requirePermission("pos.history"), SalesController.getDueStats);
 router11.get("/customers", requirePermission("pos.manage"), SalesController.getCustomers);
 router11.get("/:id", requirePermission("pos.history"), SalesController.getSaleById);
 router11.get("/:id/receipt", requirePermission("pos.history"), SalesController.getReceipt);
+router11.post(
+  "/:id/collect-due",
+  requirePermission("pos.manage"),
+  validateRequest({ body: collectDueSchema }),
+  SalesController.collectDue
+);
 router11.post(
   "/:id/refund",
   requirePermission("pos.manage"),
@@ -13952,15 +14414,15 @@ var ReportService = class {
     const netMargin = totalSalesRevenue > 0 ? Math.round(netProfitAfterLoss / totalSalesRevenue * 1e3) / 10 : 0;
     const branchWiseList = Object.values(branchStatsMap).map((b) => {
       const gross = Math.max(0, b.salesRevenue - b.costOfSold);
-      const net = Math.round((gross - b.damagedMissingLoss) * 100) / 100;
+      const net = Math.round(gross - b.damagedMissingLoss);
       const margin = b.salesRevenue > 0 ? Math.round(gross / b.salesRevenue * 1e3) / 10 : 0;
       return {
         ...b,
-        inventoryValue: Math.round(b.inventoryValue * 100) / 100,
-        salesRevenue: Math.round(b.salesRevenue * 100) / 100,
-        costOfSold: Math.round(b.costOfSold * 100) / 100,
-        grossProfit: Math.round(gross * 100) / 100,
-        damagedMissingLoss: Math.round(b.damagedMissingLoss * 100) / 100,
+        inventoryValue: Math.round(b.inventoryValue),
+        salesRevenue: Math.round(b.salesRevenue),
+        costOfSold: Math.round(b.costOfSold),
+        grossProfit: Math.round(gross),
+        damagedMissingLoss: Math.round(b.damagedMissingLoss),
         netProfit: net,
         profitMargin: margin
       };
@@ -13989,25 +14451,25 @@ var ReportService = class {
         isBranchRestricted,
         // 1. Current Live Inventory & Purchase Cost Valuation
         totalStockUnits,
-        totalStockCostValue: Math.round(totalInventoryCostValue * 100) / 100,
-        totalInventoryValue: Math.round(totalInventoryCostValue * 100) / 100,
-        totalPurchaseCostValue: Math.round(totalInventoryCostValue * 100) / 100,
+        totalStockCostValue: Math.round(totalInventoryCostValue),
+        totalInventoryValue: Math.round(totalInventoryCostValue),
+        totalPurchaseCostValue: Math.round(totalInventoryCostValue),
         // 2. Sales Revenue in Period
-        totalSalesRevenue: Math.round(totalSalesRevenue * 100) / 100,
-        totalRevenue: Math.round(totalSalesRevenue * 100) / 100,
+        totalSalesRevenue: Math.round(totalSalesRevenue),
+        totalRevenue: Math.round(totalSalesRevenue),
         totalSalesCount: sales.length,
         totalTransactions: sales.length,
         // 3. Cost of Sold Products (COGS) in Period
-        totalCostOfSold: Math.round(totalCostOfSold * 100) / 100,
+        totalCostOfSold: Math.round(totalCostOfSold),
         // 4. Gross Profit in Period
-        totalGrossProfit: Math.round(totalGrossProfit * 100) / 100,
-        totalProfit: Math.round(totalGrossProfit * 100) / 100,
+        totalGrossProfit: Math.round(totalGrossProfit),
+        totalProfit: Math.round(totalGrossProfit),
         grossMargin,
         // 5. Damaged & Missing Stock Loss in Period
-        totalDamagedMissingLoss: Math.round(totalDamagedMissingLoss * 100) / 100,
+        totalDamagedMissingLoss: Math.round(totalDamagedMissingLoss),
         damagedMissingUnitsCount,
         // 6. Net Realized Profit After Loss
-        netProfitAfterLoss,
+        netProfitAfterLoss: Math.round(netProfitAfterLoss),
         netMargin,
         // Alerts & Stock Counts
         lowStockCount,
@@ -14539,17 +15001,128 @@ var SyncService = class {
           continue;
         }
         const sale = await prisma.$transaction(async (tx) => {
+          const totalAmt = Number(saleEvent.totalAmount);
+          const paidAmt = saleEvent.paidAmount !== void 0 ? Number(saleEvent.paidAmount) : totalAmt;
+          const actualPaid = Math.min(paidAmt, totalAmt);
+          const dueAmt = saleEvent.dueAmount !== void 0 ? Number(saleEvent.dueAmount) : Math.max(0, totalAmt - paidAmt);
+          const changeAmt = saleEvent.changeAmount !== void 0 ? Number(saleEvent.changeAmount) : Math.max(0, paidAmt - totalAmt);
+          const productIds = saleEvent.items.map((it) => it.productId);
+          const [productsInDb, inventoriesInDb] = await Promise.all([
+            tx.product.findMany({
+              where: { id: { in: productIds } },
+              select: { id: true, basePrice: true }
+            }),
+            tx.inventory.findMany({
+              where: { branchId, productId: { in: productIds } },
+              select: { id: true, productId: true, purchasePrice: true, sellingPrice: true },
+              orderBy: { createdAt: "desc" }
+            })
+          ]);
+          const productPriceMap = new Map(productsInDb.map((p) => [p.id, Number(p.basePrice || 0)]));
+          const inventoryPriceMap = new Map(
+            inventoriesInDb.map((inv) => [inv.productId, Number(inv.purchasePrice || 0)])
+          );
+          const preparedSaleItems = saleEvent.items.map((item) => {
+            const mult = Number(item.unitMultiplier) || 1;
+            const itemQty = Number(item.quantity) || 1;
+            const lowestUnits = Number(item.lowestUnitQuantity) || itemQty * mult;
+            const pPrice = item.purchasePrice !== void 0 && item.purchasePrice !== null && Number(item.purchasePrice) > 0 ? Number(item.purchasePrice) : inventoryPriceMap.get(item.productId) || productPriceMap.get(item.productId) || 0;
+            return {
+              productId: item.productId,
+              inventoryId: item.inventoryId || null,
+              inventoryLocationId: item.inventoryLocationId || null,
+              batchNumber: item.batchNumber || null,
+              unitType: item.unitType || "PIECE",
+              unitMultiplier: mult,
+              quantity: itemQty,
+              lowestUnitQuantity: lowestUnits,
+              unitPrice: Number(item.unitPrice),
+              purchasePrice: pPrice,
+              subTotal: Number(item.subTotal)
+            };
+          });
+          let financialAccount = null;
+          if (saleEvent.financialAccountId) {
+            financialAccount = await tx.financialAccount.findFirst({
+              where: { id: saleEvent.financialAccountId, tenantId, isActive: true }
+            });
+          }
+          if (!financialAccount) {
+            const pMethod = String(saleEvent.paymentMethod).toUpperCase();
+            const notesLower = (saleEvent.notes || "").toLowerCase();
+            if (pMethod === "BKASH" || pMethod === "MOBILE" && notesLower.includes("bkash")) {
+              financialAccount = await tx.financialAccount.findFirst({
+                where: {
+                  tenantId,
+                  branchId,
+                  isActive: true,
+                  OR: [{ type: "BKASH" }, { name: { contains: "bkash", mode: "insensitive" } }]
+                }
+              });
+            } else if (pMethod === "NAGAD" || pMethod === "MOBILE" && notesLower.includes("nagad")) {
+              financialAccount = await tx.financialAccount.findFirst({
+                where: {
+                  tenantId,
+                  branchId,
+                  isActive: true,
+                  OR: [{ type: "NAGAD" }, { name: { contains: "nagad", mode: "insensitive" } }]
+                }
+              });
+            } else if (pMethod === "BANK" || pMethod === "CARD") {
+              financialAccount = await tx.financialAccount.findFirst({
+                where: {
+                  tenantId,
+                  branchId,
+                  type: "BANK",
+                  isActive: true
+                },
+                orderBy: { isDefault: "desc" }
+              });
+            }
+            if (!financialAccount) {
+              financialAccount = await tx.financialAccount.findFirst({
+                where: {
+                  tenantId,
+                  branchId,
+                  type: "CASH",
+                  isActive: true
+                },
+                orderBy: { isDefault: "desc" }
+              });
+            }
+            if (!financialAccount) {
+              financialAccount = await tx.financialAccount.findFirst({
+                where: { tenantId, branchId, isActive: true }
+              });
+            }
+          }
+          let resolvedPaymentMethod = saleEvent.paymentMethod;
+          const pMethodUpper = String(saleEvent.paymentMethod || "").toUpperCase();
+          const notesText = `${saleEvent.notes || ""} ${financialAccount?.name || ""}`.toLowerCase();
+          if (pMethodUpper === "MOBILE") {
+            if (notesText.includes("bkash") || financialAccount?.type === "BKASH") {
+              resolvedPaymentMethod = "BKASH";
+            } else if (notesText.includes("nagad") || financialAccount?.type === "NAGAD") {
+              resolvedPaymentMethod = "NAGAD";
+            }
+          }
           const createdSale = await tx.sale.create({
             data: {
               tenantId,
               branchId,
               userId: saleEvent.userId,
               receiptNo: saleEvent.receiptNo,
+              financialAccountId: financialAccount ? financialAccount.id : saleEvent.financialAccountId || null,
+              customerName: saleEvent.customerName || "Walk-in Customer",
+              customerPhone: saleEvent.customerPhone || null,
               subTotal: saleEvent.subTotal,
               discount: saleEvent.discount,
               tax: saleEvent.tax,
-              totalAmount: saleEvent.totalAmount,
-              paymentMethod: saleEvent.paymentMethod,
+              totalAmount: totalAmt,
+              paidAmount: actualPaid,
+              dueAmount: dueAmt,
+              changeAmount: changeAmt,
+              paymentMethod: resolvedPaymentMethod,
               status: saleEvent.status,
               notes: saleEvent.notes || null,
               managerApprovedBy: saleEvent.managerApprovedBy || null,
@@ -14557,12 +15130,7 @@ var SyncService = class {
               localCreatedAt: new Date(saleEvent.localCreatedAt),
               syncedAt: /* @__PURE__ */ new Date(),
               items: {
-                create: saleEvent.items.map((item) => ({
-                  productId: item.productId,
-                  quantity: item.quantity,
-                  unitPrice: item.unitPrice,
-                  subTotal: item.subTotal
-                }))
+                create: preparedSaleItems
               }
             }
           });
@@ -14576,15 +15144,35 @@ var SyncService = class {
                 data: { quantity: Math.max(0, inv.quantity - item.quantity) }
               });
             }
+            const itemPurchasePrice = preparedSaleItems.find((i) => i.productId === item.productId)?.purchasePrice || 0;
             await tx.stockMovement.create({
               data: {
                 branchId,
                 productId: item.productId,
                 type: "SALE",
                 quantity: -item.quantity,
+                unitPrice: itemPurchasePrice,
                 reason: `Offline Sync POS Sale #${saleEvent.receiptNo}`,
                 referenceId: createdSale.id,
                 performedBy: saleEvent.userId
+              }
+            });
+          }
+          if (financialAccount && actualPaid > 0) {
+            await tx.financialAccount.update({
+              where: { id: financialAccount.id },
+              data: { balance: { increment: actualPaid } }
+            });
+            await tx.financialTransaction.create({
+              data: {
+                tenantId,
+                branchId,
+                destinationAccountId: financialAccount.id,
+                amount: actualPaid,
+                type: "SALE_PAYMENT",
+                reference: saleEvent.receiptNo,
+                note: `Offline Sync POS Sale Receipt #${saleEvent.receiptNo} via ${financialAccount.name}`,
+                userId: saleEvent.userId
               }
             });
           }
@@ -14955,8 +15543,15 @@ var SyncController = class {
 import { z as z15 } from "zod";
 var offlineSaleItemSchema = z15.object({
   productId: z15.string().uuid(),
+  inventoryId: z15.string().uuid().nullable().optional(),
+  inventoryLocationId: z15.string().uuid().nullable().optional(),
+  batchNumber: z15.string().nullable().optional(),
+  unitType: z15.string().optional(),
+  unitMultiplier: z15.number().int().positive().optional(),
+  lowestUnitQuantity: z15.number().int().positive().optional(),
   quantity: z15.number().int().positive(),
   unitPrice: z15.number().positive(),
+  purchasePrice: z15.number().nullable().optional(),
   subTotal: z15.number().positive()
 });
 var offlineSaleEventSchema = z15.object({
@@ -14965,11 +15560,17 @@ var offlineSaleEventSchema = z15.object({
   receiptNo: z15.string().min(3),
   branchId: z15.string().uuid(),
   userId: z15.string().uuid(),
+  customerName: z15.string().nullable().optional(),
+  customerPhone: z15.string().nullable().optional(),
+  financialAccountId: z15.string().uuid().nullable().optional(),
   subTotal: z15.number().nonnegative(),
   discount: z15.number().nonnegative().default(0),
   tax: z15.number().nonnegative().default(0),
   totalAmount: z15.number().nonnegative(),
-  paymentMethod: z15.enum(["CASH", "CARD", "MOBILE"]).default("CASH"),
+  paidAmount: z15.number().nonnegative().optional(),
+  dueAmount: z15.number().nonnegative().optional(),
+  changeAmount: z15.number().nonnegative().optional(),
+  paymentMethod: z15.enum(["CASH", "CARD", "MOBILE", "BKASH", "NAGAD", "BANK", "OTHER"]).default("CASH"),
   status: z15.enum(["COMPLETED", "REFUNDED", "VOIDED"]).default("COMPLETED"),
   notes: z15.string().optional(),
   managerApprovedBy: z15.string().optional(),
@@ -15700,20 +16301,20 @@ var SupplierService = class {
     });
     let invoiceDiscount = 0;
     if (data.discountType === "PERCENT") {
-      invoiceDiscount = subtotalAmount * (Number(data.discountAmount) || 0) / 100;
+      invoiceDiscount = Math.round(subtotalAmount * (Number(data.discountAmount) || 0) / 100);
     } else if (data.discountType === "FIXED") {
-      invoiceDiscount = Number(data.discountAmount) || 0;
+      invoiceDiscount = Math.round(Number(data.discountAmount) || 0);
     }
-    const invoiceTax = Number(data.taxAmount) || 0;
-    const computedTotal = Math.max(0, Math.round((subtotalAmount - invoiceDiscount + invoiceTax) * 100) / 100);
-    const totalPurchaseAmount = data.totalAmount !== void 0 && data.totalAmount !== null ? Number(data.totalAmount) : computedTotal;
-    const paidAmount = Number(data.paidAmount || 0);
-    const dueAmount = Math.max(0, Math.round((totalPurchaseAmount - paidAmount) * 100) / 100);
+    const invoiceTax = Math.round(Number(data.taxAmount) || 0);
+    const computedTotal = Math.max(0, Math.round(subtotalAmount - invoiceDiscount + invoiceTax));
+    const totalPurchaseAmount = data.totalAmount !== void 0 && data.totalAmount !== null ? Math.round(Number(data.totalAmount)) : computedTotal;
+    const paidAmount = Math.round(Number(data.paidAmount || 0));
+    const dueAmount = Math.max(0, totalPurchaseAmount - paidAmount);
     const paymentStatus = dueAmount === 0 ? "PAID" : paidAmount > 0 ? "PARTIAL" : "DUE";
     const noteParts = [];
     if (data.notes) noteParts.push(data.notes);
-    if (invoiceDiscount > 0) noteParts.push(`Discount: -\u09F3${invoiceDiscount.toFixed(2)} (${data.discountType})`);
-    if (invoiceTax > 0) noteParts.push(`Tax: +\u09F3${invoiceTax.toFixed(2)}`);
+    if (invoiceDiscount > 0) noteParts.push(`Discount: -\u09F3${invoiceDiscount} (${data.discountType})`);
+    if (invoiceTax > 0) noteParts.push(`Tax: +\u09F3${invoiceTax}`);
     const finalNotes = noteParts.length > 0 ? noteParts.join(" | ") : null;
     const purchaseDate = data.purchaseDate ? new Date(data.purchaseDate) : /* @__PURE__ */ new Date();
     const result = await prisma.$transaction(async (tx) => {
@@ -16012,28 +16613,52 @@ var SupplierService = class {
     const newDue = Math.max(0, Number(supplier.totalDue) - payAmount);
     const newPaid = Number(supplier.totalPaid) + payAmount;
     const paymentDate = data.paymentDate ? new Date(data.paymentDate) : /* @__PURE__ */ new Date();
-    const openPurchases = await prisma.purchase.findMany({
-      where: { tenantId, supplierId, dueAmount: { gt: 0 } },
-      orderBy: { purchaseDate: "asc" }
-    });
     let remainingPay = payAmount;
-    for (const p of openPurchases) {
-      if (remainingPay <= 0) break;
-      const pDue = Number(p.dueAmount || 0);
-      const pPaid = Number(p.paidAmount || 0);
-      const chunk = Math.min(pDue, remainingPay);
-      const nextDue = pDue - chunk;
-      const nextPaid = pPaid + chunk;
-      const status = nextDue === 0 ? "PAID" : "PARTIAL";
-      await prisma.purchase.update({
-        where: { id: p.id },
-        data: {
-          dueAmount: nextDue,
-          paidAmount: nextPaid,
-          paymentStatus: status
-        }
+    if (data.purchaseId) {
+      const specificPurchase = await prisma.purchase.findFirst({
+        where: { id: data.purchaseId, tenantId, supplierId }
       });
-      remainingPay -= chunk;
+      if (specificPurchase) {
+        const pDue = Number(specificPurchase.dueAmount || 0);
+        const pPaid = Number(specificPurchase.paidAmount || 0);
+        const chunk = Math.min(pDue, remainingPay);
+        const nextDue = Math.max(0, pDue - chunk);
+        const nextPaid = pPaid + chunk;
+        const status = nextDue === 0 ? "PAID" : "PARTIAL";
+        await prisma.purchase.update({
+          where: { id: specificPurchase.id },
+          data: {
+            dueAmount: nextDue,
+            paidAmount: nextPaid,
+            paymentStatus: status
+          }
+        });
+        remainingPay -= chunk;
+      }
+    }
+    if (remainingPay > 0 && !data.purchaseId) {
+      const openPurchases = await prisma.purchase.findMany({
+        where: { tenantId, supplierId, dueAmount: { gt: 0 } },
+        orderBy: { purchaseDate: "asc" }
+      });
+      for (const p of openPurchases) {
+        if (remainingPay <= 0) break;
+        const pDue = Number(p.dueAmount || 0);
+        const pPaid = Number(p.paidAmount || 0);
+        const chunk = Math.min(pDue, remainingPay);
+        const nextDue = pDue - chunk;
+        const nextPaid = pPaid + chunk;
+        const status = nextDue === 0 ? "PAID" : "PARTIAL";
+        await prisma.purchase.update({
+          where: { id: p.id },
+          data: {
+            dueAmount: nextDue,
+            paidAmount: nextPaid,
+            paymentStatus: status
+          }
+        });
+        remainingPay -= chunk;
+      }
     }
     const [updated, paymentRecord] = await prisma.$transaction(async (tx) => {
       const sup = await tx.supplier.update({
@@ -19519,10 +20144,20 @@ var LocationService = class {
    * If includeInactive is false, only active items are returned.
    * Also computes usedLocations, emptyLocations, and active stock counts.
    */
-  static async getRacks(branchId, includeInactive = false) {
+  static async getRacks(branchId, includeInactive = false, type) {
     const where = { branchId };
     if (!includeInactive) {
       where.isActive = true;
+    }
+    if (type && type !== "ALL") {
+      const upperType = type.toUpperCase();
+      if (upperType === "RACK") {
+        where.type = "RACK";
+      } else if (upperType === "CUSTOM" || upperType === "OTHER") {
+        where.type = { not: "RACK" };
+      } else {
+        where.type = type;
+      }
     }
     const shelfWhere = {};
     if (!includeInactive) {
@@ -19569,14 +20204,21 @@ var LocationService = class {
       for (const s of rack.shelves || []) {
         numberOfBins += s.bins ? s.bins.length : 0;
       }
-      const usedBinIds = /* @__PURE__ */ new Set();
+      const usedLocationKeys = /* @__PURE__ */ new Set();
       let totalStockUnits = 0;
       for (const loc of rack.inventoryLocations || []) {
-        if (loc.binId) usedBinIds.add(loc.binId);
+        if (loc.binId) {
+          usedLocationKeys.add(`bin:${loc.binId}`);
+        } else if (loc.shelfId) {
+          usedLocationKeys.add(`shelf:${loc.shelfId}`);
+        } else if (loc.rackId) {
+          usedLocationKeys.add(`rack:${loc.rackId}`);
+        }
         totalStockUnits += loc.quantity || 0;
       }
-      const usedLocations = usedBinIds.size;
-      const emptyLocations = Math.max(0, numberOfBins - usedLocations);
+      const usedLocations = usedLocationKeys.size;
+      const totalCapacitySlots = numberOfBins > 0 ? numberOfBins : numberOfShelves > 0 ? numberOfShelves : 1;
+      const emptyLocations = Math.max(0, totalCapacitySlots - usedLocations);
       return {
         ...rack,
         numberOfShelves,
@@ -19589,8 +20231,10 @@ var LocationService = class {
   }
   static async quickCreateRack(branchId, data) {
     const rackName = data.name.trim();
-    const numberOfShelves = Math.max(1, Math.min(50, data.numberOfShelves));
-    const binsPerShelf = Math.max(1, Math.min(50, data.binsPerShelf));
+    const numberOfShelves = Math.max(0, Math.min(50, data.numberOfShelves ?? 0));
+    const binsPerShelf = Math.max(0, Math.min(50, data.binsPerShelf ?? 0));
+    const shelfPrefix = (data.shelfPrefix || "Shelf").trim();
+    const binPrefix = (data.binPrefix || "Bin").trim();
     const isActive = data.isActive ?? true;
     const existing = await prisma.rack.findFirst({
       where: {
@@ -19599,35 +20243,51 @@ var LocationService = class {
       }
     });
     if (existing) {
-      throw new Error(`A rack with name "${rackName}" already exists in this branch. Please choose a different name.`);
+      throw new Error(`A storage unit with name "${rackName}" already exists in this branch. Please choose a different name.`);
     }
-    const shelvesData = Array.from({ length: numberOfShelves }, (_, s) => {
-      const sIdx = s + 1;
-      const shelfNum = sIdx < 10 ? `S0${sIdx}` : `S${sIdx}`;
-      return {
-        name: shelfNum,
-        isActive,
-        bins: {
-          create: Array.from({ length: binsPerShelf }, (_2, b) => {
-            const bIdx = b + 1;
-            const binNum = bIdx < 10 ? `B0${bIdx}` : `B${bIdx}`;
-            return {
-              name: binNum,
-              isActive
-            };
-          })
+    const formatName = (prefix, index) => {
+      if (prefix.length <= 2 && /^[a-zA-Z]+$/.test(prefix)) {
+        return index < 10 ? `${prefix}0${index}` : `${prefix}${index}`;
+      }
+      return `${prefix} ${index}`;
+    };
+    let shelvesData = void 0;
+    if (numberOfShelves > 0) {
+      shelvesData = Array.from({ length: numberOfShelves }, (_, s) => {
+        const sIdx = s + 1;
+        const shelfName = formatName(shelfPrefix, sIdx);
+        const shelfObj = {
+          name: shelfName,
+          isActive
+        };
+        if (binsPerShelf > 0) {
+          shelfObj.bins = {
+            create: Array.from({ length: binsPerShelf }, (_2, b) => {
+              const bIdx = b + 1;
+              const binName = formatName(binPrefix, bIdx);
+              return {
+                name: binName,
+                isActive
+              };
+            })
+          };
         }
+        return shelfObj;
+      });
+    }
+    const rackCreateData = {
+      branchId,
+      name: rackName,
+      type: data.type?.trim() || "RACK",
+      isActive
+    };
+    if (shelvesData && shelvesData.length > 0) {
+      rackCreateData.shelves = {
+        create: shelvesData
       };
-    });
+    }
     const rack = await prisma.rack.create({
-      data: {
-        branchId,
-        name: rackName,
-        isActive,
-        shelves: {
-          create: shelvesData
-        }
-      },
+      data: rackCreateData,
       include: {
         shelves: {
           include: {
@@ -19667,6 +20327,7 @@ var LocationService = class {
       data: {
         branchId,
         name: rackName,
+        type: data.type?.trim() || "RACK",
         isActive: data.isActive ?? true
       },
       include: {
@@ -19679,6 +20340,7 @@ var LocationService = class {
   static async updateRack(id, data) {
     const updateData = {};
     if (data.name !== void 0) updateData.name = data.name.trim();
+    if (data.type !== void 0) updateData.type = data.type;
     if (data.isActive !== void 0) updateData.isActive = data.isActive;
     return prisma.rack.update({
       where: { id },
@@ -19987,10 +20649,12 @@ import { z as z20 } from "zod";
 var CreateRackSchema = z20.object({
   name: z20.string().min(1, "Rack name is required"),
   branchId: z20.string().optional(),
+  type: z20.string().optional().default("RACK"),
   isActive: z20.boolean().optional()
 });
 var UpdateRackSchema = z20.object({
   name: z20.string().min(1, "Name cannot be empty").optional(),
+  type: z20.string().optional(),
   isActive: z20.boolean().optional()
 });
 var CreateShelfSchema = z20.object({
@@ -20012,10 +20676,13 @@ var UpdateBinSchema = z20.object({
   isActive: z20.boolean().optional()
 });
 var QuickCreateRackSchema = z20.object({
-  name: z20.string().min(1, "Rack name/code is required").max(50, "Rack name is too long"),
+  name: z20.string().min(1, "Storage unit name/code is required").max(60, "Name is too long"),
   branchId: z20.string().optional(),
-  numberOfShelves: z20.coerce.number().int().min(1, "At least 1 shelf is required").max(50, "Maximum 50 shelves allowed"),
-  binsPerShelf: z20.coerce.number().int().min(1, "At least 1 bin per shelf is required").max(50, "Maximum 50 bins per shelf allowed"),
+  type: z20.string().optional().default("RACK"),
+  shelfPrefix: z20.string().max(30).optional().default("Shelf"),
+  numberOfShelves: z20.coerce.number().int().min(0, "Shelves cannot be negative").max(50, "Maximum 50 shelves allowed").default(0),
+  binPrefix: z20.string().max(30).optional().default("Bin"),
+  binsPerShelf: z20.coerce.number().int().min(0, "Bins cannot be negative").max(50, "Maximum 50 bins per shelf allowed").default(0),
   isActive: z20.boolean().optional()
 });
 
@@ -20036,7 +20703,8 @@ var LocationController = class {
         return res.json({ success: true, data: [] });
       }
       const includeInactive = req.query.includeInactive === "true" || req.query.includeInactive === "1";
-      const racks = await LocationService.getRacks(branchId, includeInactive);
+      const type = req.query.type;
+      const racks = await LocationService.getRacks(branchId, includeInactive, type);
       return res.json({ success: true, data: racks });
     } catch (error) {
       console.error("[LocationController.getLocations]", error);
@@ -20289,6 +20957,4587 @@ var location_routes_default = router21;
 
 // src/app.ts
 import path3 from "path";
+
+// src/docs/index.ts
+import swaggerUi from "swagger-ui-express";
+
+// src/docs/swagger.config.ts
+var baseSwaggerConfig = {
+  openapi: "3.0.3",
+  info: {
+    title: "PharmaBiz - Enterprise Multi-Tenant SaaS Pharmacy Management API",
+    version: "1.0.0",
+    description: `
+## Overview
+PharmaBiz is an enterprise-grade, multi-tenant pharmacy SaaS platform engineered for multi-branch retail & wholesale pharmaceutical chains.
+
+### Core Features
+- **Multi-Tenancy & RBAC**: Tenant isolation with granular role-based permissions (Super Admin, Company Owner, Branch Manager, Cashier, Auditor, etc.)
+- **Multi-Branch Control**: Centralized management with branch context switching via \`x-branch-id\` header.
+- **Inventory & FEFO Batches**: First-Expiry-First-Out batch tracking, barcode scanning, stock inwarding, stock adjustments, and shelf/rack location management.
+- **POS & Billing**: High-speed offline-tolerant point of sale, receipts, returns, and refunds.
+- **Inter-Branch Stock Transfers**: Formal transfer requisition, dispatch, discrepancy tracking, and branch-to-branch settlement.
+- **Comprehensive Accounting & Payroll**: Chart of accounts, daily register, recurring overheads, payroll disbursement, and salary deduction rules.
+- **Payments**: SSLCommerz & Stripe gateway integration, subscription billing, and IPN webhooks.
+- **Bangladesh Localization**: Ready-to-use Divisions, Districts, Upazilas, and Union-level geo hierarchies.
+
+### Authentication
+Protected endpoints require a standard JSON Web Token passed in the \`Authorization\` header:
+\`\`\`http
+Authorization: Bearer <your-jwt-token>
+\`\`\`
+Use the **Authorize** button on the top right to authenticate your Swagger session.
+    `,
+    contact: {
+      name: "PharmaBiz Engineering & API Support",
+      email: "support@pharmabiz.com"
+    },
+    license: {
+      name: "Proprietary"
+    }
+  },
+  servers: [
+    {
+      url: "http://localhost:3000",
+      description: "Local Development Server"
+    },
+    {
+      url: "/",
+      description: "Current Host / Serverless Domain"
+    }
+  ],
+  tags: [
+    { name: "Authentication", description: "Login, Registration, OTP Verification, and User Session" },
+    { name: "Super Admin", description: "Platform Administration, Plans, Pharmacy Approvals, and System Analytics" },
+    { name: "Subscriptions", description: "SaaS Subscription Plans, Upgrades, Renewals, and Invoices" },
+    { name: "Payments", description: "Payment Gateway Checkouts, Status Validation, IPN, and Webhooks" },
+    { name: "Tenant", description: "Tenant Profile, Quotas, Limits, and Organization Info" },
+    { name: "Branches", description: "Pharmacy Branch Creation, Configuration, and Listing" },
+    { name: "Users & Roles", description: "Staff Management, Custom Pharmacy Roles, and RBAC Permissions" },
+    { name: "Products & Catalog", description: "Medicines, Generics, Brands, Categories, Units, and Pricing" },
+    { name: "Inventory & Batches", description: "Stock Batches, FEFO Allocation, Expiry Alerts, and Low Stock" },
+    { name: "Stock Transfers", description: "Inter-Branch Stock Requests, Dispatch, Receiving, and Settlement" },
+    { name: "Sales & POS", description: "Point of Sale Transactions, Invoices, Customer Tracking, and Refunds" },
+    { name: "Reports & Analytics", description: "Daily/Weekly/Monthly Sales, Branch Reports, VAT MIS, and Dashboard" },
+    { name: "Audit Logs", description: "System Audit Trail, Operational Activity, and Security Logs" },
+    { name: "Notifications", description: "Stock Alerts, Expiry Warnings, System Announcements, and Sync Logs" },
+    { name: "Offline Sync", description: "Offline POS Sync, Batch Uploads, and Conflict Resolution" },
+    { name: "Settings", description: "Global Platform Settings, Tenant VAT Rates, and Receipt Configuration" },
+    { name: "Uploads", description: "Document and Image Upload to Cloudinary / Local Storage" },
+    { name: "Suppliers & Purchases", description: "Supplier Directory, Purchase Orders, Ledger, and Dues Settle" },
+    { name: "Accounting & Payroll", description: "Chart of Accounts, Ledger, Expenses, and Staff Salary Disbursement" },
+    { name: "Attendance & HR", description: "Employee Shifts, Daily Attendance, Leaves, and Salary Deductions" },
+    { name: "Location & Rack Management", description: "Racks, Shelves, Bins, and Bangladesh Geographic Divisions" },
+    { name: "Root & Health", description: "API Health Check and Public Payment Callbacks" }
+  ],
+  components: {
+    securitySchemes: {
+      bearerAuth: {
+        type: "http",
+        scheme: "bearer",
+        bearerFormat: "JWT",
+        description: "Standard JWT Bearer Token. Format: Bearer <token>"
+      },
+      branchHeader: {
+        type: "apiKey",
+        in: "header",
+        name: "x-branch-id",
+        description: "Pharmacy Branch ID (UUID) to scope the request to a specific branch."
+      }
+    },
+    schemas: {
+      ApiResponseSuccess: {
+        type: "object",
+        properties: {
+          success: { type: "boolean", example: true },
+          message: { type: "string", example: "Operation completed successfully" },
+          data: { type: "object" }
+        }
+      },
+      ApiResponseError: {
+        type: "object",
+        properties: {
+          success: { type: "boolean", example: false },
+          message: { type: "string", example: "Detailed error message" },
+          errors: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                field: { type: "string", example: "email" },
+                message: { type: "string", example: "Invalid email format" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+};
+
+// src/docs/modules/auth.swagger.ts
+var authSwagger = {
+  paths: {
+    "/api/auth/login": {
+      post: {
+        tags: ["Authentication"],
+        summary: "Login with email/username and password",
+        description: "Authenticates a user and returns a signed JWT access token along with user profile, assigned roles, permissions, and tenant details.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/LoginDto" },
+              example: {
+                email: "owner@pharmabiz.com",
+                password: "Password123!"
+              }
+            }
+          }
+        },
+        responses: {
+          200: {
+            description: "Authentication successful",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", example: true },
+                    data: {
+                      type: "object",
+                      properties: {
+                        token: { type: "string", example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." },
+                        user: { $ref: "#/components/schemas/UserResponseDto" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          400: { description: "Validation error (missing username/email or password)" },
+          401: { description: "Invalid credentials or unauthorized account status" }
+        }
+      }
+    },
+    "/api/auth/register-owner": {
+      post: {
+        tags: ["Authentication"],
+        summary: "Register new pharmacy organization and owner account",
+        description: "Creates a new tenant and owner user, initiates email OTP verification, and sets verification status to PENDING_OTP.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/RegisterOwnerDto" },
+              example: {
+                companyName: "Green Care Pharmacy Ltd",
+                ownerName: "Dr. Rafiqul Islam",
+                email: "rafiq@greencare.com",
+                phone: "01712345678",
+                password: "SecurePassword123!",
+                address: "Plot 12, Road 4, Dhanmondi, Dhaka",
+                nidNumber: "19852691234567890",
+                tradeLicenseNumber: "TRAD/DNCC/023941/2024",
+                drugLicenseNumber: "DL-DHAKA-2024-8849",
+                billingCycle: "MONTHLY"
+              }
+            }
+          }
+        },
+        responses: {
+          201: {
+            description: "Owner registered successfully; OTP email dispatched",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ApiResponseSuccess" }
+              }
+            }
+          },
+          400: { description: "Validation error or email/company already in use" }
+        }
+      }
+    },
+    "/api/auth/verify-otp": {
+      post: {
+        tags: ["Authentication"],
+        summary: "Verify email OTP code",
+        description: "Validates the 4-6 digit numeric OTP code sent to the pharmacy owner email during registration.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/VerifyOtpDto" },
+              example: {
+                email: "rafiq@greencare.com",
+                otpCode: "123456"
+              }
+            }
+          }
+        },
+        responses: {
+          200: {
+            description: "OTP verified successfully. Tenant status updated to PENDING_APPROVAL.",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ApiResponseSuccess" }
+              }
+            }
+          },
+          400: { description: "Invalid or expired OTP code" }
+        }
+      }
+    },
+    "/api/auth/resend-otp": {
+      post: {
+        tags: ["Authentication"],
+        summary: "Resend registration OTP code",
+        description: "Generates a new verification OTP and sends it via email.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/ResendOtpDto" },
+              example: {
+                email: "rafiq@greencare.com"
+              }
+            }
+          }
+        },
+        responses: {
+          200: { description: "New OTP code sent successfully" },
+          400: { description: "Account already verified or invalid email" }
+        }
+      }
+    },
+    "/api/auth/verification-status": {
+      get: {
+        tags: ["Authentication"],
+        summary: "Check pharmacy verification status",
+        description: "Retrieves verification lifecycle stage: PENDING_OTP, PENDING_APPROVAL, APPROVED_PENDING_PAYMENT, ACTIVE, or REJECTED.",
+        parameters: [
+          {
+            name: "identifier",
+            in: "query",
+            required: false,
+            description: "Email or Tenant ID of the registered pharmacy",
+            schema: { type: "string", example: "rafiq@greencare.com" }
+          },
+          {
+            name: "email",
+            in: "query",
+            required: false,
+            description: "Email address alias for identifier",
+            schema: { type: "string" }
+          },
+          {
+            name: "tenantId",
+            in: "query",
+            required: false,
+            description: "Tenant UUID alias for identifier",
+            schema: { type: "string" }
+          }
+        ],
+        responses: {
+          200: {
+            description: "Current verification status retrieved successfully",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", example: true },
+                    data: {
+                      type: "object",
+                      properties: {
+                        tenantId: { type: "string", example: "b3f0e75a-4cb7-4c31-b0db-6e6ad95ff091" },
+                        status: { type: "string", example: "APPROVED_PENDING_PAYMENT" },
+                        companyName: { type: "string", example: "Green Care Pharmacy Ltd" },
+                        isEmailVerified: { type: "boolean", example: true }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          400: { description: "Identifier missing or not found" }
+        }
+      }
+    },
+    "/api/auth/me": {
+      get: {
+        tags: ["Authentication"],
+        summary: "Get current authenticated user profile",
+        description: "Returns currently logged-in user profile, roles, branch assignment, permissions, and tenant subscription status.",
+        security: [{ bearerAuth: [] }],
+        responses: {
+          200: {
+            description: "Authenticated user profile",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", example: true },
+                    data: { $ref: "#/components/schemas/UserResponseDto" }
+                  }
+                }
+              }
+            }
+          },
+          401: { description: "Unauthorized - Token missing or expired" }
+        }
+      }
+    }
+  },
+  schemas: {
+    LoginDto: {
+      type: "object",
+      required: ["password"],
+      properties: {
+        email: {
+          type: "string",
+          format: "email",
+          description: "Registered email address (either email or username is required)",
+          example: "owner@pharmabiz.com"
+        },
+        username: {
+          type: "string",
+          description: "Staff username (either email or username is required)",
+          example: "owner123"
+        },
+        password: {
+          type: "string",
+          format: "password",
+          minLength: 6,
+          description: "Account password",
+          example: "Password123!"
+        }
+      }
+    },
+    RegisterOwnerDto: {
+      type: "object",
+      required: [
+        "companyName",
+        "ownerName",
+        "email",
+        "phone",
+        "password",
+        "nidNumber",
+        "tradeLicenseNumber",
+        "drugLicenseNumber"
+      ],
+      properties: {
+        companyName: { type: "string", minLength: 2, example: "Green Care Pharmacy Ltd" },
+        ownerName: { type: "string", minLength: 2, example: "Dr. Rafiqul Islam" },
+        email: { type: "string", format: "email", example: "rafiq@greencare.com" },
+        phone: { type: "string", minLength: 5, example: "01712345678" },
+        password: { type: "string", format: "password", minLength: 6, example: "SecurePass123!" },
+        address: { type: "string", example: "Plot 12, Road 4, Dhanmondi, Dhaka" },
+        nidNumber: { type: "string", minLength: 4, example: "19852691234567890" },
+        nidFrontDocument: { type: "string", format: "uri", example: "https://res.cloudinary.com/.../nid_front.jpg" },
+        nidBackDocument: { type: "string", format: "uri", example: "https://res.cloudinary.com/.../nid_back.jpg" },
+        tradeLicenseNumber: { type: "string", minLength: 4, example: "TRAD/DNCC/023941/2024" },
+        tradeLicenseFrontDocument: { type: "string", format: "uri", example: "https://res.cloudinary.com/.../trade_license.pdf" },
+        drugLicenseNumber: { type: "string", minLength: 4, example: "DL-DHAKA-2024-8849" },
+        drugLicenseFrontDocument: { type: "string", format: "uri", example: "https://res.cloudinary.com/.../drug_license.pdf" },
+        planId: { type: "string", format: "uuid", example: "d6f5c8d0-e190-4a8b-a25e-324227f4d2f1" },
+        billingCycle: { type: "string", enum: ["MONTHLY", "YEARLY"], default: "MONTHLY" }
+      }
+    },
+    VerifyOtpDto: {
+      type: "object",
+      required: ["email", "otpCode"],
+      properties: {
+        email: { type: "string", format: "email", example: "rafiq@greencare.com" },
+        tenantId: { type: "string", format: "uuid", example: "b3f0e75a-4cb7-4c31-b0db-6e6ad95ff091" },
+        otpCode: { type: "string", minLength: 4, maxLength: 6, example: "123456" }
+      }
+    },
+    ResendOtpDto: {
+      type: "object",
+      required: ["email"],
+      properties: {
+        email: { type: "string", format: "email", example: "rafiq@greencare.com" }
+      }
+    },
+    UserResponseDto: {
+      type: "object",
+      properties: {
+        id: { type: "string", format: "uuid", example: "u-1234-5678" },
+        name: { type: "string", example: "Dr. Rafiqul Islam" },
+        email: { type: "string", example: "rafiq@greencare.com" },
+        role: { type: "string", example: "COMPANY_OWNER" },
+        tenantId: { type: "string", example: "t-9876-5432" },
+        branchId: { type: "string", nullable: true, example: "b-5555-4444" },
+        isActive: { type: "boolean", example: true },
+        permissions: {
+          type: "array",
+          items: { type: "string" },
+          example: ["inventory.manage", "pos.manage", "reports.view"]
+        }
+      }
+    }
+  }
+};
+
+// src/docs/modules/super-admin.swagger.ts
+var superAdminSwagger = {
+  paths: {
+    "/api/super-admin/plans": {
+      get: {
+        tags: ["Super Admin"],
+        summary: "List all subscription plans",
+        description: "Returns all SaaS subscription plans including inactive and tier metadata.",
+        security: [{ bearerAuth: [] }],
+        responses: {
+          200: { description: "List of subscription plans" },
+          401: { description: "Unauthorized" },
+          403: { description: "Forbidden - Requires plans.manage permission" }
+        }
+      },
+      post: {
+        tags: ["Super Admin"],
+        summary: "Create a subscription plan",
+        description: "Creates a new SaaS billing plan with branch and staff quotas.",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/CreatePlanDto" },
+              example: {
+                name: "Growth Multi-Branch",
+                tier: "GROWTH",
+                price: 4999,
+                billingCycle: "MONTHLY",
+                maxBranches: 5,
+                maxStaffPerBranch: 10,
+                maxTotalStaff: 50,
+                trialDays: 14,
+                features: { pos: true, accounting: true, interBranchTransfers: true },
+                isActive: true
+              }
+            }
+          }
+        },
+        responses: {
+          201: { description: "Plan created successfully" },
+          400: { description: "Validation error" }
+        }
+      }
+    },
+    "/api/super-admin/plans/{id}": {
+      get: {
+        tags: ["Super Admin"],
+        summary: "Get plan details by ID",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string" }, description: "Plan UUID" }
+        ],
+        responses: {
+          200: { description: "Plan details" },
+          404: { description: "Plan not found" }
+        }
+      },
+      patch: {
+        tags: ["Super Admin"],
+        summary: "Update subscription plan",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string" }, description: "Plan UUID" }
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/UpdatePlanDto" },
+              example: {
+                price: 5499,
+                maxBranches: 6
+              }
+            }
+          }
+        },
+        responses: {
+          200: { description: "Plan updated successfully" },
+          404: { description: "Plan not found" }
+        }
+      },
+      delete: {
+        tags: ["Super Admin"],
+        summary: "Delete subscription plan",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string" }, description: "Plan UUID" }
+        ],
+        responses: {
+          200: { description: "Plan removed" },
+          400: { description: "Cannot delete plan with active subscribers" }
+        }
+      }
+    },
+    "/api/super-admin/tenants": {
+      get: {
+        tags: ["Super Admin"],
+        summary: "List all pharmacy tenants",
+        description: "Returns paginated list of pharmacies, active subscriptions, branches count, and verification stages.",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "page", in: "query", schema: { type: "integer", default: 1 }, description: "Page number" },
+          { name: "limit", in: "query", schema: { type: "integer", default: 100 }, description: "Page limit" },
+          { name: "search", in: "query", schema: { type: "string" }, description: "Search by pharmacy name, email, or owner name" },
+          { name: "tier", in: "query", schema: { type: "string", enum: ["TRIAL", "STARTER", "GROWTH", "ENTERPRISE"] } },
+          { name: "isActive", in: "query", schema: { type: "boolean" }, description: "Filter active or suspended tenants" },
+          { name: "subscriptionStatus", in: "query", schema: { type: "string", enum: ["ACTIVE", "PENDING", "EXPIRED", "CANCELLED"] } }
+        ],
+        responses: {
+          200: { description: "Paginated list of tenants" }
+        }
+      }
+    },
+    "/api/super-admin/tenants/{id}": {
+      get: {
+        tags: ["Super Admin"],
+        summary: "Get tenant full profile & branches",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string" }, description: "Tenant UUID" }
+        ],
+        responses: {
+          200: { description: "Tenant full profile details" },
+          404: { description: "Tenant not found" }
+        }
+      }
+    },
+    "/api/super-admin/tenants/{id}/subscription": {
+      get: {
+        tags: ["Super Admin"],
+        summary: "Get tenant subscription details",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string" }, description: "Tenant UUID" }
+        ],
+        responses: {
+          200: { description: "Tenant subscription and billing status" }
+        }
+      }
+    },
+    "/api/super-admin/tenants/{id}/status": {
+      patch: {
+        tags: ["Super Admin"],
+        summary: "Suspend or reactivate a tenant pharmacy",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string" }, description: "Tenant UUID" }
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/UpdateTenantStatusDto" },
+              example: {
+                isActive: false,
+                reason: "Pending compliance verification"
+              }
+            }
+          }
+        },
+        responses: {
+          200: { description: "Tenant status updated" }
+        }
+      }
+    },
+    "/api/super-admin/verifications": {
+      get: {
+        tags: ["Super Admin"],
+        summary: "List pharmacy verification requests",
+        description: "Returns pharmacies waiting for license and NID document verification.",
+        security: [{ bearerAuth: [] }],
+        responses: {
+          200: { description: "List of pending and reviewed verifications" }
+        }
+      }
+    },
+    "/api/super-admin/verifications/{id}": {
+      get: {
+        tags: ["Super Admin"],
+        summary: "Get verification document details for a pharmacy",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string" }, description: "Verification or Tenant ID" }
+        ],
+        responses: {
+          200: { description: "Document verification details" }
+        }
+      }
+    },
+    "/api/super-admin/verifications/{id}/approve": {
+      post: {
+        tags: ["Super Admin"],
+        summary: "Approve pharmacy verification",
+        description: "Changes status to APPROVED_PENDING_PAYMENT, enabling the owner to choose plan and pay.",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string" }, description: "Verification or Tenant ID" }
+        ],
+        responses: {
+          200: { description: "Pharmacy approved successfully" }
+        }
+      }
+    },
+    "/api/super-admin/verifications/{id}/reject": {
+      post: {
+        tags: ["Super Admin"],
+        summary: "Reject pharmacy verification",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string" }, description: "Verification or Tenant ID" }
+        ],
+        requestBody: {
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  reason: { type: "string", example: "Drug license document is expired or blurry." }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          200: { description: "Verification rejected" }
+        }
+      }
+    },
+    "/api/super-admin/subscriptions": {
+      get: {
+        tags: ["Super Admin"],
+        summary: "List all tenant subscriptions across platform",
+        security: [{ bearerAuth: [] }],
+        responses: {
+          200: { description: "All subscriptions" }
+        }
+      }
+    },
+    "/api/super-admin/payments": {
+      get: {
+        tags: ["Super Admin"],
+        summary: "List all platform gateway payment transactions",
+        security: [{ bearerAuth: [] }],
+        responses: {
+          200: { description: "List of payment transactions" }
+        }
+      }
+    },
+    "/api/super-admin/analytics": {
+      get: {
+        tags: ["Super Admin"],
+        summary: "Platform-wide SaaS analytics & MRR",
+        description: "Returns total pharmacies, active branches, MRR, churn rate, and system health.",
+        security: [{ bearerAuth: [] }],
+        responses: {
+          200: { description: "Platform analytics metrics" }
+        }
+      }
+    },
+    "/api/super-admin/roles": {
+      get: {
+        tags: ["Super Admin"],
+        summary: "List platform roles and permissions",
+        security: [{ bearerAuth: [] }],
+        responses: { 200: { description: "List of platform roles" } }
+      },
+      post: {
+        tags: ["Super Admin"],
+        summary: "Create a platform role",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/CreatePlatformRoleDto" },
+              example: {
+                name: "PLATFORM_SUPPORT",
+                description: "Customer support delegate with read-only rights",
+                permissions: ["pharmacies.manage", "reports.view"],
+                isActive: true
+              }
+            }
+          }
+        },
+        responses: { 201: { description: "Role created successfully" } }
+      }
+    },
+    "/api/super-admin/roles/matrix": {
+      post: {
+        tags: ["Super Admin"],
+        summary: "Batch update platform role permissions matrix",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  matrix: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        roleId: { type: "string" },
+                        permissions: { type: "array", items: { type: "string" } }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        responses: { 200: { description: "Matrix updated successfully" } }
+      }
+    },
+    "/api/super-admin/roles/{id}": {
+      patch: {
+        tags: ["Super Admin"],
+        summary: "Update platform role",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        requestBody: {
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/CreatePlatformRoleDto" }
+            }
+          }
+        },
+        responses: { 200: { description: "Role updated" } }
+      },
+      delete: {
+        tags: ["Super Admin"],
+        summary: "Delete platform role",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: { 200: { description: "Role deleted" } }
+      }
+    },
+    "/api/super-admin/staff": {
+      get: {
+        tags: ["Super Admin"],
+        summary: "List platform staff users",
+        security: [{ bearerAuth: [] }],
+        responses: { 200: { description: "Platform staff list" } }
+      },
+      post: {
+        tags: ["Super Admin"],
+        summary: "Create platform staff user",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/CreatePlatformStaffDto" },
+              example: {
+                name: "Tariqul Hasan",
+                email: "tariq@pharmabiz.internal",
+                username: "tariq_support",
+                password: "StaffPassword123!",
+                role: "PROJECT_MANAGER",
+                permissions: ["pharmacies.manage", "reports.view"]
+              }
+            }
+          }
+        },
+        responses: { 201: { description: "Staff created" } }
+      }
+    },
+    "/api/super-admin/staff/{id}": {
+      patch: {
+        tags: ["Super Admin"],
+        summary: "Update platform staff user",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        requestBody: {
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/UpdatePlatformStaffDto" }
+            }
+          }
+        },
+        responses: { 200: { description: "Staff updated" } }
+      },
+      delete: {
+        tags: ["Super Admin"],
+        summary: "Delete platform staff user",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: { 200: { description: "Staff deleted" } }
+      }
+    },
+    "/api/super-admin/staff/{id}/status": {
+      patch: {
+        tags: ["Super Admin"],
+        summary: "Toggle platform staff active status",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: { 200: { description: "Staff status toggled" } }
+      }
+    },
+    "/api/super-admin/staff/permissions": {
+      get: {
+        tags: ["Super Admin"],
+        summary: "Get platform permissions metadata & hierarchy",
+        security: [{ bearerAuth: [] }],
+        responses: { 200: { description: "Platform permissions list" } }
+      },
+      post: {
+        tags: ["Super Admin"],
+        summary: "Update platform role permissions",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  role: { type: "string", example: "CTO" },
+                  permissions: { type: "array", items: { type: "string" } }
+                }
+              }
+            }
+          }
+        },
+        responses: { 200: { description: "Permissions updated" } }
+      }
+    }
+  },
+  schemas: {
+    CreatePlanDto: {
+      type: "object",
+      required: ["name", "tier", "price", "maxBranches"],
+      properties: {
+        name: { type: "string", example: "Growth Multi-Branch" },
+        tier: { type: "string", enum: ["TRIAL", "STARTER", "GROWTH", "ENTERPRISE"] },
+        price: { type: "number", minimum: 0, example: 4999 },
+        billingCycle: { type: "string", enum: ["MONTHLY", "YEARLY"], default: "MONTHLY" },
+        maxBranches: { type: "integer", minimum: 1, example: 5 },
+        maxStaffPerBranch: { type: "integer", minimum: 1, example: 10 },
+        maxTotalStaff: { type: "integer", minimum: 1, example: 50 },
+        trialDays: { type: "integer", example: 14 },
+        features: { type: "object", additionalProperties: true },
+        isActive: { type: "boolean", default: true }
+      }
+    },
+    UpdatePlanDto: {
+      type: "object",
+      properties: {
+        name: { type: "string" },
+        price: { type: "number" },
+        billingCycle: { type: "string", enum: ["MONTHLY", "YEARLY"] },
+        maxBranches: { type: "integer" },
+        maxStaffPerBranch: { type: "integer" },
+        maxTotalStaff: { type: "integer" },
+        trialDays: { type: "integer" },
+        features: { type: "object", additionalProperties: true },
+        isActive: { type: "boolean" }
+      }
+    },
+    UpdateTenantStatusDto: {
+      type: "object",
+      required: ["isActive"],
+      properties: {
+        isActive: { type: "boolean", example: false },
+        reason: { type: "string", example: "Subscription overdue" }
+      }
+    },
+    CreatePlatformRoleDto: {
+      type: "object",
+      required: ["name"],
+      properties: {
+        name: { type: "string", example: "PLATFORM_AUDITOR" },
+        description: { type: "string", example: "Audits platform compliance" },
+        permissions: { type: "array", items: { type: "string" } },
+        isActive: { type: "boolean", default: true }
+      }
+    },
+    CreatePlatformStaffDto: {
+      type: "object",
+      required: ["name", "email", "password", "role"],
+      properties: {
+        name: { type: "string", example: "Tariqul Hasan" },
+        email: { type: "string", format: "email", example: "tariq@pharmabiz.internal" },
+        username: { type: "string", example: "tariq_admin" },
+        phone: { type: "string", example: "01812345678" },
+        password: { type: "string", format: "password", example: "Pass123!" },
+        role: { type: "string", example: "PROJECT_MANAGER" },
+        permissions: { type: "array", items: { type: "string" } }
+      }
+    },
+    UpdatePlatformStaffDto: {
+      type: "object",
+      properties: {
+        name: { type: "string" },
+        email: { type: "string", format: "email" },
+        phone: { type: "string" },
+        password: { type: "string", format: "password" },
+        role: { type: "string" },
+        permissions: { type: "array", items: { type: "string" } },
+        isActive: { type: "boolean" }
+      }
+    }
+  }
+};
+
+// src/docs/modules/subscription.swagger.ts
+var subscriptionSwagger = {
+  paths: {
+    "/api/subscriptions/plans": {
+      get: {
+        tags: ["Subscriptions"],
+        summary: "List public active plans",
+        description: "Returns all active subscription plans available for signup or upgrades.",
+        responses: {
+          200: { description: "Active plans list" }
+        }
+      }
+    },
+    "/api/subscriptions/plans/{id}": {
+      get: {
+        tags: ["Subscriptions"],
+        summary: "Get plan details by ID",
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: {
+          200: { description: "Plan details" },
+          404: { description: "Plan not found" }
+        }
+      }
+    },
+    "/api/subscriptions/current": {
+      get: {
+        tags: ["Subscriptions"],
+        summary: "Get current tenant active subscription",
+        security: [{ bearerAuth: [] }],
+        responses: {
+          200: { description: "Current active subscription with expiry dates and limits" },
+          401: { description: "Unauthorized" }
+        }
+      }
+    },
+    "/api/subscriptions/history": {
+      get: {
+        tags: ["Subscriptions"],
+        summary: "Get tenant billing & subscription history",
+        security: [{ bearerAuth: [] }],
+        responses: {
+          200: { description: "Historical subscription records and invoices" }
+        }
+      }
+    },
+    "/api/subscriptions/subscribe": {
+      post: {
+        tags: ["Subscriptions"],
+        summary: "Subscribe to a plan",
+        description: "Initializes a subscription for the tenant and returns pending subscription record to pay.",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/SubscribeDto" },
+              example: {
+                planId: "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d",
+                billingCycle: "MONTHLY",
+                autoRenew: false
+              }
+            }
+          }
+        },
+        responses: {
+          200: { description: "Subscription initiated" }
+        }
+      }
+    },
+    "/api/subscriptions/change-plan": {
+      post: {
+        tags: ["Subscriptions"],
+        summary: "Upgrade or downgrade current plan",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/ChangePlanDto" },
+              example: {
+                newPlanId: "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d"
+              }
+            }
+          }
+        },
+        responses: {
+          200: { description: "Plan changed successfully" }
+        }
+      }
+    },
+    "/api/subscriptions/renew": {
+      post: {
+        tags: ["Subscriptions"],
+        summary: "Renew current subscription",
+        security: [{ bearerAuth: [] }],
+        responses: {
+          200: { description: "Renewal invoice created for payment" }
+        }
+      }
+    },
+    "/api/subscriptions/cancel": {
+      post: {
+        tags: ["Subscriptions"],
+        summary: "Cancel current subscription",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  reason: { type: "string", example: "Migrating to new branch location" }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          200: { description: "Subscription cancelled" }
+        }
+      }
+    },
+    "/api/subscriptions/check-expiry-reminders": {
+      post: {
+        tags: ["Subscriptions"],
+        summary: "Manually trigger expiry check & notifications",
+        description: "Reserved for Super Admin / CTO to force check upcoming expiration reminders.",
+        security: [{ bearerAuth: [] }],
+        responses: {
+          200: { description: "Expiry checks executed" }
+        }
+      }
+    }
+  },
+  schemas: {
+    SubscribeDto: {
+      type: "object",
+      required: ["planId"],
+      properties: {
+        planId: { type: "string", format: "uuid", example: "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d" },
+        billingCycle: { type: "string", enum: ["MONTHLY", "YEARLY"], default: "MONTHLY" },
+        autoRenew: { type: "boolean", default: false }
+      }
+    },
+    ChangePlanDto: {
+      type: "object",
+      required: ["newPlanId"],
+      properties: {
+        newPlanId: { type: "string", format: "uuid", example: "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d" }
+      }
+    }
+  }
+};
+
+// src/docs/modules/payment.swagger.ts
+var paymentSwagger = {
+  paths: {
+    "/api/payments/initiate": {
+      post: {
+        tags: ["Payments"],
+        summary: "Initiate SSLCommerz payment checkout",
+        description: "Creates an SSLCommerz gateway session for subscription payment and returns the payment gateway redirect URL.",
+        security: [{ bearerAuth: [] }, {}],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/InitiatePaymentDto" },
+              example: {
+                subscriptionId: "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d",
+                customerName: "Dr. Rafiqul Islam",
+                customerEmail: "rafiq@greencare.com",
+                customerPhone: "01712345678",
+                customerAddress: "Plot 12, Dhanmondi, Dhaka",
+                customerCity: "Dhaka"
+              }
+            }
+          }
+        },
+        responses: {
+          200: {
+            description: "Gateway session created",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", example: true },
+                    data: {
+                      type: "object",
+                      properties: {
+                        gatewayUrl: { type: "string", example: "https://sandbox.sslcommerz.com/gwprocess/v4/gw.php?Q=..." },
+                        sessionkey: { type: "string" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          400: { description: "Invalid subscription or payment gateway error" }
+        }
+      }
+    },
+    "/api/payments/history": {
+      get: {
+        tags: ["Payments"],
+        summary: "Get tenant payment transactions history",
+        security: [{ bearerAuth: [] }],
+        responses: {
+          200: { description: "List of payment transactions" }
+        }
+      }
+    },
+    "/api/payments/{id}/validate": {
+      get: {
+        tags: ["Payments"],
+        summary: "Validate payment status with gateway",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string" }, description: "Payment Transaction UUID or Session ID" }
+        ],
+        responses: {
+          200: { description: "Validation result" }
+        }
+      }
+    },
+    "/api/payments/sslcommerz/success": {
+      post: {
+        tags: ["Payments"],
+        summary: "SSLCommerz success IPN/callback endpoint (POST)",
+        description: "Called by SSLCommerz upon customer completing successful payment.",
+        responses: {
+          200: { description: "Payment verified and subscription activated" }
+        }
+      },
+      get: {
+        tags: ["Payments"],
+        summary: "SSLCommerz success redirect endpoint (GET)",
+        responses: { 302: { description: "Redirect to client payment confirmation" } }
+      }
+    },
+    "/api/payments/sslcommerz/fail": {
+      post: {
+        tags: ["Payments"],
+        summary: "SSLCommerz failed payment webhook (POST)",
+        responses: { 200: { description: "Payment marked failed" } }
+      },
+      get: {
+        tags: ["Payments"],
+        summary: "SSLCommerz failed payment redirect (GET)",
+        responses: { 302: { description: "Redirect to client fail page" } }
+      }
+    },
+    "/api/payments/sslcommerz/cancel": {
+      post: {
+        tags: ["Payments"],
+        summary: "SSLCommerz cancelled payment webhook (POST)",
+        responses: { 200: { description: "Payment marked cancelled" } }
+      },
+      get: {
+        tags: ["Payments"],
+        summary: "SSLCommerz cancelled payment redirect (GET)",
+        responses: { 302: { description: "Redirect to client cancel page" } }
+      }
+    },
+    "/api/payments/sslcommerz/ipn": {
+      post: {
+        tags: ["Payments"],
+        summary: "SSLCommerz Instant Payment Notification (IPN)",
+        description: "Backend-to-backend automated IPN validator for async transaction verification.",
+        responses: { 200: { description: "IPN processed" } }
+      }
+    }
+  },
+  schemas: {
+    InitiatePaymentDto: {
+      type: "object",
+      required: ["subscriptionId"],
+      properties: {
+        subscriptionId: { type: "string", format: "uuid", example: "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d" },
+        customerName: { type: "string", example: "Dr. Rafiqul Islam" },
+        customerEmail: { type: "string", format: "email", example: "rafiq@greencare.com" },
+        customerPhone: { type: "string", example: "01712345678" },
+        customerAddress: { type: "string", example: "Plot 12, Dhanmondi, Dhaka" },
+        customerCity: { type: "string", example: "Dhaka" }
+      }
+    }
+  }
+};
+
+// src/docs/modules/tenant.swagger.ts
+var tenantSwagger = {
+  paths: {
+    "/api/tenant/profile": {
+      get: {
+        tags: ["Tenant"],
+        summary: "Get current tenant pharmacy profile",
+        security: [{ bearerAuth: [] }],
+        responses: {
+          200: { description: "Tenant organization profile details" },
+          401: { description: "Unauthorized" }
+        }
+      },
+      patch: {
+        tags: ["Tenant"],
+        summary: "Update tenant pharmacy profile & branding",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/UpdateTenantProfileDto" },
+              example: {
+                name: "Green Care Pharmacy Ltd",
+                phone: "01712345678",
+                address: "Plot 12, Road 4, Dhanmondi, Dhaka",
+                logoUrl: "https://res.cloudinary.com/demo/image/upload/v1/logo.png"
+              }
+            }
+          }
+        },
+        responses: {
+          200: { description: "Tenant profile updated successfully" }
+        }
+      }
+    },
+    "/api/tenant/subscription": {
+      get: {
+        tags: ["Tenant"],
+        summary: "Get tenant subscription info & limits",
+        security: [{ bearerAuth: [] }],
+        responses: {
+          200: { description: "Active plan, branch limits, staff limits, and status" }
+        }
+      }
+    },
+    "/api/tenant/usage": {
+      get: {
+        tags: ["Tenant"],
+        summary: "Get current resource usage vs plan limits",
+        description: "Returns branches created vs max branches, staff headcount vs max allowed, etc.",
+        security: [{ bearerAuth: [] }],
+        responses: {
+          200: { description: "Current resource usage report" }
+        }
+      }
+    }
+  },
+  schemas: {
+    UpdateTenantProfileDto: {
+      type: "object",
+      properties: {
+        name: { type: "string", minLength: 2, example: "Green Care Pharmacy Ltd" },
+        email: { type: "string", format: "email", example: "info@greencare.com" },
+        phone: { type: "string", example: "01712345678" },
+        address: { type: "string", example: "Plot 12, Road 4, Dhanmondi, Dhaka" },
+        logoUrl: { type: "string", format: "uri", example: "https://res.cloudinary.com/demo/logo.png" }
+      }
+    }
+  }
+};
+
+// src/docs/modules/branch.swagger.ts
+var branchSwagger = {
+  paths: {
+    "/api/branches": {
+      get: {
+        tags: ["Branches"],
+        summary: "List all branches of current tenant",
+        description: "Returns branches configured under this pharmacy organization.",
+        security: [{ bearerAuth: [] }],
+        responses: {
+          200: { description: "List of branches" }
+        }
+      },
+      post: {
+        tags: ["Branches"],
+        summary: "Create a new branch",
+        description: "Enforces plan branch limit before creating a new physical pharmacy branch.",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/CreateBranchDto" },
+              example: {
+                name: "Uttara Sector 7 Branch",
+                location: "House 24, Road 1, Sector 7, Uttara, Dhaka",
+                phone: "01798765432",
+                email: "uttara@greencare.com"
+              }
+            }
+          }
+        },
+        responses: {
+          201: { description: "Branch created successfully" },
+          403: { description: "Plan limit exceeded or insufficient permissions" }
+        }
+      }
+    },
+    "/api/branches/{id}": {
+      get: {
+        tags: ["Branches"],
+        summary: "Get branch details by ID",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string" }, description: "Branch UUID" }
+        ],
+        responses: {
+          200: { description: "Branch details" },
+          404: { description: "Branch not found" }
+        }
+      },
+      patch: {
+        tags: ["Branches"],
+        summary: "Update branch details or status",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string" }, description: "Branch UUID" }
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/UpdateBranchDto" },
+              example: {
+                name: "Uttara Flagship Branch",
+                phone: "01711223344",
+                isActive: true
+              }
+            }
+          }
+        },
+        responses: {
+          200: { description: "Branch updated successfully" }
+        }
+      },
+      delete: {
+        tags: ["Branches"],
+        summary: "Delete branch",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string" }, description: "Branch UUID" }
+        ],
+        responses: {
+          200: { description: "Branch deleted" }
+        }
+      }
+    }
+  },
+  schemas: {
+    CreateBranchDto: {
+      type: "object",
+      required: ["name"],
+      properties: {
+        name: { type: "string", minLength: 2, example: "Uttara Sector 7 Branch" },
+        location: { type: "string", example: "House 24, Road 1, Sector 7, Uttara, Dhaka" },
+        phone: { type: "string", example: "01798765432" },
+        email: { type: "string", format: "email", example: "uttara@greencare.com" }
+      }
+    },
+    UpdateBranchDto: {
+      type: "object",
+      properties: {
+        name: { type: "string", minLength: 2, example: "Uttara Flagship Branch" },
+        location: { type: "string" },
+        phone: { type: "string" },
+        email: { type: "string", format: "email" },
+        isActive: { type: "boolean" }
+      }
+    }
+  }
+};
+
+// src/docs/modules/user.swagger.ts
+var userSwagger = {
+  paths: {
+    "/api/users": {
+      get: {
+        tags: ["Users & Roles"],
+        summary: "List pharmacy staff members",
+        description: "Returns paginated staff users under the tenant with role, branch, and active status filters.",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "page", in: "query", schema: { type: "integer", default: 1 } },
+          { name: "limit", in: "query", schema: { type: "integer", default: 50 } },
+          { name: "search", in: "query", schema: { type: "string" }, description: "Search by name, email, or username" },
+          { name: "role", in: "query", schema: { type: "string" } },
+          { name: "branchId", in: "query", schema: { type: "string" }, description: "Filter staff by specific branch UUID" },
+          { name: "isActive", in: "query", schema: { type: "boolean" } }
+        ],
+        responses: {
+          200: { description: "List of staff members" }
+        }
+      },
+      post: {
+        tags: ["Users & Roles"],
+        summary: "Create a new staff user",
+        description: "Checks plan staff quota and registers a new cashier, manager, auditor, or executive.",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/CreateStaffDto" },
+              example: {
+                name: "Kamal Hossain",
+                username: "kamal_cashier",
+                email: "kamal@greencare.com",
+                phone: "01855443322",
+                password: "StaffPass123!",
+                role: "CASHIER",
+                branchId: "b3f0e75a-4cb7-4c31-b0db-6e6ad95ff091"
+              }
+            }
+          }
+        },
+        responses: {
+          201: { description: "Staff created successfully" },
+          403: { description: "Staff limit reached or insufficient permissions" }
+        }
+      }
+    },
+    "/api/users/{id}": {
+      get: {
+        tags: ["Users & Roles"],
+        summary: "Get staff user details",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: { 200: { description: "Staff details" } }
+      },
+      patch: {
+        tags: ["Users & Roles"],
+        summary: "Update staff member profile & assignment",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        requestBody: {
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/UpdateStaffDto" },
+              example: {
+                name: "Kamal Hossain Senior",
+                phone: "01855443399",
+                role: "BRANCH_MANAGER"
+              }
+            }
+          }
+        },
+        responses: { 200: { description: "Staff updated" } }
+      },
+      delete: {
+        tags: ["Users & Roles"],
+        summary: "Delete staff user",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: { 200: { description: "Staff deleted" } }
+      }
+    },
+    "/api/users/{id}/status": {
+      patch: {
+        tags: ["Users & Roles"],
+        summary: "Toggle staff active/inactive status",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: { 200: { description: "Status updated" } }
+      }
+    },
+    "/api/users/change-password": {
+      post: {
+        tags: ["Users & Roles"],
+        summary: "Change own account password",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/ChangePasswordDto" },
+              example: {
+                currentPassword: "OldPassword123!",
+                newPassword: "NewSecretPassword123!"
+              }
+            }
+          }
+        },
+        responses: { 200: { description: "Password updated successfully" } }
+      }
+    },
+    "/api/users/profile": {
+      patch: {
+        tags: ["Users & Roles"],
+        summary: "Update own user profile",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/UpdateUserProfileDto" },
+              example: {
+                name: "Kamal Hossain",
+                phone: "01855443322"
+              }
+            }
+          }
+        },
+        responses: { 200: { description: "Profile updated" } }
+      }
+    },
+    "/api/users/roles": {
+      get: {
+        tags: ["Users & Roles"],
+        summary: "List dynamic pharmacy custom roles",
+        security: [{ bearerAuth: [] }],
+        responses: { 200: { description: "List of roles" } }
+      },
+      post: {
+        tags: ["Users & Roles"],
+        summary: "Create custom pharmacy role with permissions",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/CreatePharmacyRoleDto" },
+              example: {
+                name: "Senior Pharmacist",
+                description: "Prescription verification and inventory adjustments",
+                permissions: ["inventory.manage", "pos.manage", "reports.view"]
+              }
+            }
+          }
+        },
+        responses: { 201: { description: "Role created" } }
+      }
+    },
+    "/api/users/roles/{id}": {
+      patch: {
+        tags: ["Users & Roles"],
+        summary: "Update custom pharmacy role",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        requestBody: {
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/CreatePharmacyRoleDto" }
+            }
+          }
+        },
+        responses: { 200: { description: "Role updated" } }
+      },
+      delete: {
+        tags: ["Users & Roles"],
+        summary: "Delete custom role",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: { 200: { description: "Role deleted" } }
+      }
+    },
+    "/api/users/roles/matrix": {
+      post: {
+        tags: ["Users & Roles"],
+        summary: "Batch update pharmacy role permissions matrix",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  matrix: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        roleId: { type: "string" },
+                        permissions: { type: "array", items: { type: "string" } }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        responses: { 200: { description: "Matrix updated" } }
+      }
+    },
+    "/api/users/roles/permissions": {
+      get: {
+        tags: ["Users & Roles"],
+        summary: "Get RBAC permissions catalog & hierarchy",
+        security: [{ bearerAuth: [] }],
+        responses: { 200: { description: "Available permissions list" } }
+      },
+      post: {
+        tags: ["Users & Roles"],
+        summary: "Update role permissions mapping",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  role: { type: "string", example: "CASHIER" },
+                  permissions: { type: "array", items: { type: "string" } }
+                }
+              }
+            }
+          }
+        },
+        responses: { 200: { description: "Permissions updated" } }
+      }
+    }
+  },
+  schemas: {
+    CreateStaffDto: {
+      type: "object",
+      required: ["password", "role"],
+      properties: {
+        username: { type: "string", minLength: 3, example: "kamal_cashier" },
+        name: { type: "string", minLength: 2, example: "Kamal Hossain" },
+        email: { type: "string", format: "email", example: "kamal@greencare.com" },
+        phone: { type: "string", example: "01855443322" },
+        password: { type: "string", format: "password", minLength: 6, example: "StaffPass123!" },
+        role: { type: "string", example: "CASHIER" },
+        branchId: { type: "string", format: "uuid", nullable: true, example: "b3f0e75a-4cb7-4c31-b0db-6e6ad95ff091" }
+      }
+    },
+    UpdateStaffDto: {
+      type: "object",
+      properties: {
+        name: { type: "string" },
+        email: { type: "string", format: "email" },
+        phone: { type: "string" },
+        role: { type: "string" },
+        branchId: { type: "string", format: "uuid", nullable: true },
+        password: { type: "string", format: "password" },
+        isActive: { type: "boolean" }
+      }
+    },
+    ChangePasswordDto: {
+      type: "object",
+      required: ["currentPassword", "newPassword"],
+      properties: {
+        currentPassword: { type: "string", format: "password", example: "OldPassword123!" },
+        newPassword: { type: "string", format: "password", minLength: 6, example: "NewPassword123!" }
+      }
+    },
+    UpdateUserProfileDto: {
+      type: "object",
+      properties: {
+        name: { type: "string", example: "Kamal Hossain" },
+        phone: { type: "string", example: "01855443322" },
+        email: { type: "string", format: "email" },
+        avatarUrl: { type: "string", format: "uri" }
+      }
+    },
+    CreatePharmacyRoleDto: {
+      type: "object",
+      required: ["name"],
+      properties: {
+        name: { type: "string", example: "Senior Pharmacist" },
+        description: { type: "string", example: "Prescription verification and inventory adjustments" },
+        permissions: {
+          type: "array",
+          items: { type: "string" },
+          example: ["inventory.manage", "pos.manage", "reports.view"]
+        },
+        isActive: { type: "boolean", default: true }
+      }
+    }
+  }
+};
+
+// src/docs/modules/product.swagger.ts
+var productSwagger = {
+  paths: {
+    "/api/products": {
+      get: {
+        tags: ["Products & Catalog"],
+        summary: "List medicines & pharmaceutical products",
+        description: "Returns paginated list of catalog products with brand, category, dosage form, and stock status.",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "page", in: "query", schema: { type: "integer", default: 1 } },
+          { name: "limit", in: "query", schema: { type: "integer", default: 20 } },
+          { name: "search", in: "query", schema: { type: "string" }, description: "Search by brand name, generic name, or barcode" },
+          { name: "category", in: "query", schema: { type: "string" } },
+          { name: "categoryId", in: "query", schema: { type: "string" } },
+          { name: "brandId", in: "query", schema: { type: "string" } },
+          { name: "productType", in: "query", schema: { type: "string", enum: ["MEDICINE", "SYRUP", "EQUIPMENT", "SALINE", "OTHER"] } },
+          { name: "isControlled", in: "query", schema: { type: "boolean" } },
+          { name: "requiresPrescription", in: "query", schema: { type: "boolean" } },
+          { name: "branchId", in: "query", schema: { type: "string" } }
+        ],
+        responses: {
+          200: { description: "Paginated product list" }
+        }
+      },
+      post: {
+        tags: ["Products & Catalog"],
+        summary: "Create a new medicine / product",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/CreateProductDto" },
+              example: {
+                name: "Napa Extra 500mg/65mg",
+                genericName: "Paracetamol + Caffeine",
+                sku: "NAPA-EXT-500",
+                barcode: "8941100523412",
+                basePrice: 2.5,
+                unit: "tablet",
+                productType: "MEDICINE",
+                defaultPackType: "BOX",
+                stripsPerBox: 20,
+                tabletsPerStrip: 10,
+                minStockAlert: 50,
+                requiresPrescription: false
+              }
+            }
+          }
+        },
+        responses: {
+          201: { description: "Product created successfully" }
+        }
+      }
+    },
+    "/api/products/bulk": {
+      post: {
+        tags: ["Products & Catalog"],
+        summary: "Bulk import products",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  products: {
+                    type: "array",
+                    items: { $ref: "#/components/schemas/CreateProductDto" }
+                  }
+                }
+              }
+            }
+          }
+        },
+        responses: { 200: { description: "Bulk import completed" } }
+      }
+    },
+    "/api/products/barcode/{barcode}": {
+      get: {
+        tags: ["Products & Catalog"],
+        summary: "Scan / Lookup product by barcode",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "barcode", in: "path", required: true, schema: { type: "string" }, example: "8941100523412" }],
+        responses: {
+          200: { description: "Product matching barcode" },
+          404: { description: "Barcode not found" }
+        }
+      }
+    },
+    "/api/products/{id}": {
+      get: {
+        tags: ["Products & Catalog"],
+        summary: "Get product details by ID",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: { 200: { description: "Product details" } }
+      },
+      patch: {
+        tags: ["Products & Catalog"],
+        summary: "Update product metadata",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        requestBody: {
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/CreateProductDto" }
+            }
+          }
+        },
+        responses: { 200: { description: "Product updated" } }
+      },
+      delete: {
+        tags: ["Products & Catalog"],
+        summary: "Delete product",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: { 200: { description: "Product deleted" } }
+      }
+    },
+    "/api/products/{id}/price": {
+      patch: {
+        tags: ["Products & Catalog"],
+        summary: "Update base MRP / selling price",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: { basePrice: { type: "number", example: 3 } }
+              }
+            }
+          }
+        },
+        responses: { 200: { description: "Price updated" } }
+      }
+    },
+    "/api/products/{id}/branch-price": {
+      post: {
+        tags: ["Products & Catalog"],
+        summary: "Set custom price override for a specific branch",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["branchId", "price"],
+                properties: {
+                  branchId: { type: "string", format: "uuid" },
+                  price: { type: "number", example: 3.5 }
+                }
+              }
+            }
+          }
+        },
+        responses: { 200: { description: "Branch override price set" } }
+      }
+    },
+    "/api/products/{id}/branch-price/{branchId}": {
+      delete: {
+        tags: ["Products & Catalog"],
+        summary: "Remove branch price override",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string" } },
+          { name: "branchId", in: "path", required: true, schema: { type: "string" } }
+        ],
+        responses: { 200: { description: "Override removed" } }
+      }
+    },
+    "/api/products/categories": {
+      get: {
+        tags: ["Products & Catalog"],
+        summary: "List product categories",
+        security: [{ bearerAuth: [] }],
+        responses: { 200: { description: "Categories list" } }
+      },
+      post: {
+        tags: ["Products & Catalog"],
+        summary: "Create product category",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/CreateCategoryDto" },
+              example: {
+                name: "Antibiotics",
+                productType: "MEDICINE",
+                description: "Antibacterial medicines and cephalosporins"
+              }
+            }
+          }
+        },
+        responses: { 201: { description: "Category created" } }
+      }
+    },
+    "/api/products/categories/{id}": {
+      patch: {
+        tags: ["Products & Catalog"],
+        summary: "Update category",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        requestBody: {
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/CreateCategoryDto" }
+            }
+          }
+        },
+        responses: { 200: { description: "Category updated" } }
+      },
+      delete: {
+        tags: ["Products & Catalog"],
+        summary: "Delete category",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: { 200: { description: "Category deleted" } }
+      }
+    },
+    "/api/products/brands": {
+      get: {
+        tags: ["Products & Catalog"],
+        summary: "List medicine brands / manufacturers",
+        security: [{ bearerAuth: [] }],
+        responses: { 200: { description: "Brands list" } }
+      },
+      post: {
+        tags: ["Products & Catalog"],
+        summary: "Create brand",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/CreateBrandDto" },
+              example: { name: "Square Pharmaceuticals PLC", description: "Leading pharmaceutical manufacturer" }
+            }
+          }
+        },
+        responses: { 201: { description: "Brand created" } }
+      }
+    },
+    "/api/products/brands/{id}": {
+      patch: {
+        tags: ["Products & Catalog"],
+        summary: "Update brand",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        requestBody: {
+          content: { "application/json": { schema: { $ref: "#/components/schemas/CreateBrandDto" } } }
+        },
+        responses: { 200: { description: "Brand updated" } }
+      },
+      delete: {
+        tags: ["Products & Catalog"],
+        summary: "Delete brand",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: { 200: { description: "Brand deleted" } }
+      }
+    },
+    "/api/products/units": {
+      get: {
+        tags: ["Products & Catalog"],
+        summary: "List measurement units",
+        security: [{ bearerAuth: [] }],
+        responses: { 200: { description: "Units list" } }
+      },
+      post: {
+        tags: ["Products & Catalog"],
+        summary: "Create measurement unit",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/CreateUnitDto" },
+              example: { name: "Tablet", symbol: "tab", productType: "MEDICINE" }
+            }
+          }
+        },
+        responses: { 201: { description: "Unit created" } }
+      }
+    }
+  },
+  schemas: {
+    CreateProductDto: {
+      type: "object",
+      required: ["name"],
+      properties: {
+        name: { type: "string", minLength: 2, example: "Napa Extra 500mg/65mg" },
+        genericName: { type: "string", example: "Paracetamol + Caffeine" },
+        sku: { type: "string", example: "NAPA-EXT-500" },
+        barcode: { type: "string", example: "8941100523412" },
+        basePrice: { type: "number", minimum: 0, default: 0, example: 2.5 },
+        category: { type: "string", example: "Analgesic" },
+        categoryId: { type: "string", format: "uuid" },
+        brandId: { type: "string", format: "uuid" },
+        unitId: { type: "string", format: "uuid" },
+        productType: { type: "string", enum: ["MEDICINE", "SYRUP", "EQUIPMENT", "SALINE", "OTHER"], default: "MEDICINE" },
+        unit: { type: "string", default: "piece", example: "tablet" },
+        defaultPackType: { type: "string", default: "BOX" },
+        stripsPerBox: { type: "integer", example: 20 },
+        tabletsPerStrip: { type: "integer", example: 10 },
+        minStockAlert: { type: "integer", default: 10, example: 50 },
+        requiresPrescription: { type: "boolean", default: false },
+        isControlled: { type: "boolean", default: false }
+      }
+    },
+    CreateCategoryDto: {
+      type: "object",
+      required: ["name"],
+      properties: {
+        name: { type: "string", minLength: 2, example: "Antibiotics" },
+        productType: { type: "string", enum: ["MEDICINE", "SYRUP", "EQUIPMENT", "SALINE", "OTHER"] },
+        description: { type: "string" },
+        isActive: { type: "boolean", default: true }
+      }
+    },
+    CreateBrandDto: {
+      type: "object",
+      required: ["name"],
+      properties: {
+        name: { type: "string", minLength: 2, example: "Square Pharmaceuticals PLC" },
+        description: { type: "string" }
+      }
+    },
+    CreateUnitDto: {
+      type: "object",
+      required: ["name", "symbol"],
+      properties: {
+        name: { type: "string", example: "Tablet" },
+        symbol: { type: "string", example: "tab" },
+        productType: { type: "string", enum: ["MEDICINE", "SYRUP", "EQUIPMENT", "SALINE", "OTHER"] }
+      }
+    }
+  }
+};
+
+// src/docs/modules/inventory.swagger.ts
+var inventorySwagger = {
+  paths: {
+    "/api/inventory": {
+      get: {
+        tags: ["Inventory & Batches"],
+        summary: "Get branch inventory stock list",
+        description: "Returns stock on hand grouped by product and batch for the specified or active branch.",
+        security: [{ bearerAuth: [] }, { branchHeader: [] }],
+        parameters: [
+          { name: "branchId", in: "query", schema: { type: "string" }, description: "Branch UUID (or 'all' for company-wide)" }
+        ],
+        responses: { 200: { description: "Branch inventory list" } }
+      }
+    },
+    "/api/inventory/branch/{branchId}": {
+      get: {
+        tags: ["Inventory & Batches"],
+        summary: "Get branch inventory by branch path parameter",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "branchId", in: "path", required: true, schema: { type: "string" } }],
+        responses: { 200: { description: "Inventory items" } }
+      }
+    },
+    "/api/inventory/inward": {
+      post: {
+        tags: ["Inventory & Batches"],
+        summary: "Inward stock / Add medicine batch",
+        description: "Inwards new shipment batches with carton/box breakdowns, expiry dates, supplier linkages, and payment ledger entries.",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/InwardStockDto" },
+              example: {
+                branchId: "b3f0e75a-4cb7-4c31-b0db-6e6ad95ff091",
+                productId: "p1a2b3c4-d5e6-7f8a-9b0c-1d2e3f4a5b6c",
+                batchNumber: "BX-2026-901",
+                mfgDate: "2026-01-01",
+                expiryDate: "2027-12-31",
+                receivingUnit: "BOX",
+                boxesReceived: 50,
+                boxQuantity: 50,
+                quantity: 500,
+                purchasePrice: 1.8,
+                sellingPrice: 2.5,
+                shelfLocation: "Rack A / Shelf 2",
+                paidAmount: 900
+              }
+            }
+          }
+        },
+        responses: { 201: { description: "Stock inwarded successfully" } }
+      }
+    },
+    "/api/inventory/adjust": {
+      post: {
+        tags: ["Inventory & Batches"],
+        summary: "Manual stock adjustment (audit correction, damages, wastage)",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/AdjustStockDto" },
+              example: {
+                branchId: "b3f0e75a-4cb7-4c31-b0db-6e6ad95ff091",
+                productId: "p1a2b3c4-d5e6-7f8a-9b0c-1d2e3f4a5b6c",
+                quantity: -5,
+                type: "DAMAGE",
+                reason: "Broken ampoules during shelf arrangement"
+              }
+            }
+          }
+        },
+        responses: { 200: { description: "Stock adjusted" } }
+      }
+    },
+    "/api/inventory/allocate": {
+      post: {
+        tags: ["Inventory & Batches"],
+        summary: "Allocate batch stock to physical rack/shelf/bin",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/AllocateStockDto" },
+              example: {
+                inventoryId: "inv-uuid-1234",
+                rack: "Rack A",
+                shelf: "Shelf 3",
+                bin: "Bin 04",
+                quantity: 100
+              }
+            }
+          }
+        },
+        responses: { 200: { description: "Stock allocated to location" } }
+      }
+    },
+    "/api/inventory/move": {
+      post: {
+        tags: ["Inventory & Batches"],
+        summary: "Move stock between physical locations inside branch",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/MoveStockDto" },
+              example: {
+                fromLocationId: "loc-src-uuid",
+                rack: "Rack B",
+                shelf: "Shelf 1",
+                quantity: 50
+              }
+            }
+          }
+        },
+        responses: { 200: { description: "Stock relocated" } }
+      }
+    },
+    "/api/inventory/remove-expired": {
+      post: {
+        tags: ["Inventory & Batches"],
+        summary: "Dispose / Remove expired medicine stock",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/RemoveExpiredDto" },
+              example: {
+                branchId: "b3f0e75a-4cb7-4c31-b0db-6e6ad95ff091",
+                inventoryId: "inv-uuid-1234",
+                source: "BULK",
+                quantity: 20,
+                reason: "Expired stock incinerated as per DGDA regulations"
+              }
+            }
+          }
+        },
+        responses: { 200: { description: "Expired stock written off" } }
+      }
+    },
+    "/api/inventory/pos-batches": {
+      get: {
+        tags: ["Inventory & Batches"],
+        summary: "POS: Get FEFO-sorted batches for a product",
+        description: "Returns batches sorted by First-Expiry-First-Out with remaining available quantities for cashier selection.",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "branchId", in: "query", required: true, schema: { type: "string" } },
+          { name: "productId", in: "query", required: true, schema: { type: "string" } }
+        ],
+        responses: { 200: { description: "FEFO batch listing" } }
+      }
+    },
+    "/api/inventory/receiving-history": {
+      get: {
+        tags: ["Inventory & Batches"],
+        summary: "List stock receiving & inwarding history",
+        security: [{ bearerAuth: [] }],
+        responses: { 200: { description: "Receiving history log" } }
+      }
+    },
+    "/api/inventory/movements": {
+      get: {
+        tags: ["Inventory & Batches"],
+        summary: "Stock movements audit ledger",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "page", in: "query", schema: { type: "integer", default: 1 } },
+          { name: "limit", in: "query", schema: { type: "integer", default: 20 } },
+          { name: "branchId", in: "query", schema: { type: "string" } },
+          { name: "productId", in: "query", schema: { type: "string" } },
+          { name: "type", in: "query", schema: { type: "string", enum: ["PURCHASE", "SALE", "ADJUSTMENT", "TRANSFER_IN", "TRANSFER_OUT", "DAMAGE", "RETURN", "ALLOCATION"] } }
+        ],
+        responses: { 200: { description: "Stock movements ledger" } }
+      }
+    },
+    "/api/inventory/low-stock": {
+      get: {
+        tags: ["Inventory & Batches"],
+        summary: "Low stock alert notifications",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "branchId", in: "query", schema: { type: "string" } }],
+        responses: { 200: { description: "Medicines below reorder threshold" } }
+      }
+    },
+    "/api/inventory/near-expiry": {
+      get: {
+        tags: ["Inventory & Batches"],
+        summary: "Near-expiry & expired batches alert",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "branchId", in: "query", schema: { type: "string" } },
+          { name: "daysThreshold", in: "query", schema: { type: "integer", default: 30 } }
+        ],
+        responses: { 200: { description: "Batches nearing expiration" } }
+      }
+    },
+    "/api/inventory/batch/{id}": {
+      get: {
+        tags: ["Inventory & Batches"],
+        summary: "Get specific batch details",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: { 200: { description: "Batch details" } }
+      }
+    },
+    "/api/inventory/{id}": {
+      patch: {
+        tags: ["Inventory & Batches"],
+        summary: "Update inventory batch metadata",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        requestBody: {
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/UpdateInventoryDto" }
+            }
+          }
+        },
+        responses: { 200: { description: "Inventory item updated" } }
+      }
+    }
+  },
+  schemas: {
+    InwardStockDto: {
+      type: "object",
+      required: ["branchId", "productId", "quantity"],
+      properties: {
+        branchId: { type: "string", format: "uuid" },
+        productId: { type: "string", format: "uuid" },
+        supplierId: { type: "string", format: "uuid" },
+        batchNumber: { type: "string", example: "BX-2026-901" },
+        barcode: { type: "string", example: "8941100523412" },
+        mfgDate: { type: "string", format: "date", example: "2026-01-01" },
+        expiryDate: { type: "string", format: "date", example: "2027-12-31" },
+        receivingUnit: { type: "string", enum: ["CARTON", "BOX"], default: "CARTON" },
+        boxesReceived: { type: "integer", example: 50 },
+        quantity: { type: "integer", minimum: 1, example: 500 },
+        purchasePrice: { type: "number", example: 1.8 },
+        sellingPrice: { type: "number", example: 2.5 },
+        shelfLocation: { type: "string", example: "Rack A / Shelf 2" },
+        paidAmount: { type: "number", default: 0, example: 900 },
+        notes: { type: "string" }
+      }
+    },
+    AdjustStockDto: {
+      type: "object",
+      required: ["branchId", "productId", "quantity"],
+      properties: {
+        branchId: { type: "string", format: "uuid" },
+        productId: { type: "string", format: "uuid" },
+        inventoryId: { type: "string", format: "uuid" },
+        quantity: { type: "integer", example: -5, description: "Positive to add, negative to subtract" },
+        type: { type: "string", enum: ["PURCHASE", "SALE", "ADJUSTMENT", "DAMAGE", "RETURN"], default: "ADJUSTMENT" },
+        reason: { type: "string", example: "Physical damage during shelf cleaning" }
+      }
+    },
+    AllocateStockDto: {
+      type: "object",
+      required: ["inventoryId", "quantity"],
+      properties: {
+        inventoryId: { type: "string", format: "uuid" },
+        rack: { type: "string", example: "Rack A" },
+        shelf: { type: "string", example: "Shelf 3" },
+        bin: { type: "string", example: "Bin 04" },
+        quantity: { type: "integer", minimum: 1, example: 100 }
+      }
+    },
+    MoveStockDto: {
+      type: "object",
+      required: ["fromLocationId", "quantity"],
+      properties: {
+        fromLocationId: { type: "string", format: "uuid" },
+        rack: { type: "string", example: "Rack B" },
+        shelf: { type: "string", example: "Shelf 1" },
+        quantity: { type: "integer", minimum: 1, example: 50 }
+      }
+    },
+    RemoveExpiredDto: {
+      type: "object",
+      required: ["branchId", "inventoryId", "source", "quantity"],
+      properties: {
+        branchId: { type: "string", format: "uuid" },
+        inventoryId: { type: "string", format: "uuid" },
+        source: { type: "string", enum: ["BULK", "LOCATION"] },
+        quantity: { type: "integer", minimum: 1, example: 20 },
+        reason: { type: "string", example: "Expired medicine disposed" }
+      }
+    },
+    UpdateInventoryDto: {
+      type: "object",
+      properties: {
+        batchNumber: { type: "string" },
+        barcode: { type: "string" },
+        expiryDate: { type: "string", format: "date" },
+        shelfLocation: { type: "string" },
+        purchasePrice: { type: "number" },
+        sellingPrice: { type: "number" }
+      }
+    }
+  }
+};
+
+// src/docs/modules/transfer.swagger.ts
+var transferSwagger = {
+  paths: {
+    "/api/transfers": {
+      get: {
+        tags: ["Stock Transfers"],
+        summary: "List inter-branch stock transfers",
+        description: "Returns transfer requisitions and shipments with status filter (PENDING, IN_TRANSIT, RECEIVED, REJECTED).",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "page", in: "query", schema: { type: "integer", default: 1 } },
+          { name: "limit", in: "query", schema: { type: "integer", default: 20 } },
+          { name: "branchId", in: "query", schema: { type: "string" }, description: "Source or destination branch UUID" },
+          { name: "status", in: "query", schema: { type: "string", enum: ["PENDING", "IN_TRANSIT", "RECEIVED", "CANCELLED"] } },
+          { name: "settlementStatus", in: "query", schema: { type: "string", enum: ["UNSETTLED", "PARTIAL", "SETTLED"] } }
+        ],
+        responses: { 200: { description: "List of transfers" } }
+      },
+      post: {
+        tags: ["Stock Transfers"],
+        summary: "Create and dispatch inter-branch transfer",
+        description: "Transfers medicine stock from source branch to destination branch with courier details.",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/CreateTransferDto" },
+              example: {
+                fromBranchId: "b1111111-1111-1111-1111-111111111111",
+                toBranchId: "b2222222-2222-2222-2222-222222222222",
+                courierName: "Sundarban Courier",
+                trackingId: "SC-998822",
+                notes: "Urgent restocking of insulin and analgesics",
+                items: [
+                  {
+                    productId: "p1a2b3c4-d5e6-7f8a-9b0c-1d2e3f4a5b6c",
+                    sentQuantity: 100,
+                    costPrice: 2
+                  }
+                ]
+              }
+            }
+          }
+        },
+        responses: { 201: { description: "Transfer dispatched successfully" } }
+      }
+    },
+    "/api/transfers/damaged-products": {
+      get: {
+        tags: ["Stock Transfers"],
+        summary: "List transit damaged products report",
+        security: [{ bearerAuth: [] }],
+        responses: { 200: { description: "Damaged stock items recorded during receipt" } }
+      }
+    },
+    "/api/transfers/{id}": {
+      get: {
+        tags: ["Stock Transfers"],
+        summary: "Get transfer details & manifest",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: { 200: { description: "Transfer details" } }
+      }
+    },
+    "/api/transfers/{id}/receive": {
+      post: {
+        tags: ["Stock Transfers"],
+        summary: "Receive shipment and acknowledge delivery",
+        description: "Receives inventory at destination branch and flags any broken, damaged, or missing units.",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/ReceiveTransferDto" },
+              example: {
+                items: [
+                  {
+                    itemId: "item-uuid-1234",
+                    receivedQuantity: 98,
+                    damagedQuantity: 2,
+                    missingQuantity: 0,
+                    notes: "2 vials broken during transit"
+                  }
+                ],
+                notes: "Shipment verified by Branch Manager"
+              }
+            }
+          }
+        },
+        responses: { 200: { description: "Transfer received and added to branch inventory" } }
+      }
+    },
+    "/api/transfers/{id}/settle": {
+      post: {
+        tags: ["Stock Transfers"],
+        summary: "Settle transfer cost between branch accounts",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/SettleTransferDto" },
+              example: {
+                sourceAccountId: "acc-dest-branch-uuid",
+                destinationAccountId: "acc-src-branch-uuid",
+                amount: 200,
+                paymentMethod: "BANK"
+              }
+            }
+          }
+        },
+        responses: { 200: { description: "Transfer settled" } }
+      }
+    },
+    "/api/transfers/{id}/cancel": {
+      post: {
+        tags: ["Stock Transfers"],
+        summary: "Cancel transfer and revert stock to source",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: { 200: { description: "Transfer cancelled and stock refunded to origin" } }
+      }
+    }
+  },
+  schemas: {
+    CreateTransferDto: {
+      type: "object",
+      required: ["fromBranchId", "toBranchId", "items"],
+      properties: {
+        fromBranchId: { type: "string", format: "uuid" },
+        toBranchId: { type: "string", format: "uuid" },
+        courierName: { type: "string", example: "Sundarban Courier" },
+        trackingId: { type: "string", example: "SC-998822" },
+        deliveryPersonName: { type: "string" },
+        deliveryPersonContact: { type: "string" },
+        notes: { type: "string" },
+        items: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["productId", "sentQuantity", "costPrice"],
+            properties: {
+              productId: { type: "string", format: "uuid" },
+              inventoryId: { type: "string", format: "uuid" },
+              batchNumber: { type: "string" },
+              sentQuantity: { type: "integer", minimum: 1, example: 100 },
+              costPrice: { type: "number", example: 2 }
+            }
+          }
+        }
+      }
+    },
+    ReceiveTransferDto: {
+      type: "object",
+      required: ["items"],
+      properties: {
+        items: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["itemId", "receivedQuantity"],
+            properties: {
+              itemId: { type: "string", format: "uuid" },
+              receivedQuantity: { type: "integer", minimum: 0, example: 98 },
+              damagedQuantity: { type: "integer", default: 0, example: 2 },
+              missingQuantity: { type: "integer", default: 0, example: 0 },
+              notes: { type: "string" }
+            }
+          }
+        },
+        notes: { type: "string" }
+      }
+    },
+    SettleTransferDto: {
+      type: "object",
+      required: ["sourceAccountId", "destinationAccountId", "amount"],
+      properties: {
+        sourceAccountId: { type: "string", format: "uuid" },
+        destinationAccountId: { type: "string", format: "uuid" },
+        amount: { type: "number", minimum: 0.01, example: 200 },
+        paymentMethod: { type: "string", default: "CASH" },
+        reference: { type: "string" }
+      }
+    }
+  }
+};
+
+// src/docs/modules/sales.swagger.ts
+var salesSwagger = {
+  paths: {
+    "/api/sales": {
+      get: {
+        tags: ["Sales & POS"],
+        summary: "List sales transactions & invoices",
+        description: "Returns paginated sales history with filter options for branch, payment method, cashier, and date range.",
+        security: [{ bearerAuth: [] }, { branchHeader: [] }],
+        parameters: [
+          { name: "page", in: "query", schema: { type: "integer", default: 1 } },
+          { name: "limit", in: "query", schema: { type: "integer", default: 20 } },
+          { name: "branchId", in: "query", schema: { type: "string" } },
+          { name: "status", in: "query", schema: { type: "string", enum: ["COMPLETED", "REFUNDED", "VOIDED"] } },
+          { name: "paymentMethod", in: "query", schema: { type: "string", enum: ["CASH", "BKASH", "NAGAD", "BANK", "CARD"] } },
+          { name: "startDate", in: "query", schema: { type: "string", format: "date" } },
+          { name: "endDate", in: "query", schema: { type: "string", format: "date" } },
+          { name: "search", in: "query", schema: { type: "string" }, description: "Invoice number or customer name/phone" }
+        ],
+        responses: { 200: { description: "List of sales" } }
+      },
+      post: {
+        tags: ["Sales & POS"],
+        summary: "POS Checkout / Create sale transaction",
+        description: "Executes Point-of-Sale billing, deducts inventory batches using FEFO, calculates VAT and discounts, and generates receipt.",
+        security: [{ bearerAuth: [] }, { branchHeader: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/CreateSaleDto" },
+              example: {
+                branchId: "b3f0e75a-4cb7-4c31-b0db-6e6ad95ff091",
+                customerName: "Mohammad Ali",
+                customerPhone: "01711998877",
+                paymentMethod: "CASH",
+                discount: 10,
+                discountType: "FIXED",
+                tax: 5,
+                items: [
+                  {
+                    productId: "p1a2b3c4-d5e6-7f8a-9b0c-1d2e3f4a5b6c",
+                    quantity: 2,
+                    unitType: "STRIP",
+                    unitPrice: 25
+                  }
+                ]
+              }
+            }
+          }
+        },
+        responses: { 201: { description: "Sale completed and receipt invoice created" } }
+      }
+    },
+    "/api/sales/customers": {
+      get: {
+        tags: ["Sales & POS"],
+        summary: "List customer directory & purchase history",
+        security: [{ bearerAuth: [] }],
+        responses: { 200: { description: "Customer list with loyalty & purchase stats" } }
+      }
+    },
+    "/api/sales/{id}": {
+      get: {
+        tags: ["Sales & POS"],
+        summary: "Get sale details & line items",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: { 200: { description: "Sale invoice details" } }
+      }
+    },
+    "/api/sales/{id}/receipt": {
+      get: {
+        tags: ["Sales & POS"],
+        summary: "Get thermal POS receipt data / printable layout",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: { 200: { description: "Formatted receipt structure" } }
+      }
+    },
+    "/api/sales/{id}/refund": {
+      post: {
+        tags: ["Sales & POS"],
+        summary: "Process sale refund & restock items",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/RefundSaleDto" },
+              example: {
+                reason: "Patient prescribed alternative medication by doctor",
+                managerId: "mgr-uuid-1234"
+              }
+            }
+          }
+        },
+        responses: { 200: { description: "Refund issued" } }
+      }
+    },
+    "/api/sales/{id}/void": {
+      post: {
+        tags: ["Sales & POS"],
+        summary: "Void mistakenly created POS invoice",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/RefundSaleDto" },
+              example: {
+                reason: "Wrong item selected during checkout",
+                managerId: "mgr-uuid-1234"
+              }
+            }
+          }
+        },
+        responses: { 200: { description: "Sale voided" } }
+      }
+    }
+  },
+  schemas: {
+    CreateSaleDto: {
+      type: "object",
+      required: ["branchId", "items"],
+      properties: {
+        branchId: { type: "string", format: "uuid" },
+        customerName: { type: "string", example: "Mohammad Ali" },
+        customerPhone: { type: "string", example: "01711998877" },
+        customerEmail: { type: "string", format: "email" },
+        paymentMethod: { type: "string", enum: ["CASH", "BKASH", "NAGAD", "BANK", "CARD", "MOBILE", "OTHER"], default: "CASH" },
+        financialAccountId: { type: "string", format: "uuid" },
+        transactionRef: { type: "string" },
+        discount: { type: "number", default: 0, example: 10 },
+        discountType: { type: "string", enum: ["FIXED", "PERCENT"], default: "FIXED" },
+        tax: { type: "number", default: 0, example: 5 },
+        notes: { type: "string" },
+        prescriptionRef: { type: "string" },
+        items: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["productId", "quantity"],
+            properties: {
+              productId: { type: "string", format: "uuid" },
+              inventoryId: { type: "string", format: "uuid" },
+              batchNumber: { type: "string" },
+              unitType: { type: "string", default: "PIECE", example: "STRIP" },
+              quantity: { type: "integer", minimum: 1, example: 2 },
+              unitPrice: { type: "number", example: 25 }
+            }
+          }
+        }
+      }
+    },
+    RefundSaleDto: {
+      type: "object",
+      required: ["reason", "managerId"],
+      properties: {
+        reason: { type: "string", example: "Patient returned unopened medicine" },
+        managerId: { type: "string", format: "uuid", example: "mgr-uuid-1234" }
+      }
+    }
+  }
+};
+
+// src/docs/modules/report.swagger.ts
+var reportSwagger = {
+  paths: {
+    "/api/reports/dashboard": {
+      get: {
+        tags: ["Reports & Analytics"],
+        summary: "Owner / Manager Dashboard summary metrics",
+        description: "Returns today's sales, total revenue, low stock count, pending orders, and recent transactions.",
+        security: [{ bearerAuth: [] }, { branchHeader: [] }],
+        parameters: [
+          { name: "branchId", in: "query", schema: { type: "string" }, description: "Specific branch or 'all'" },
+          { name: "period", in: "query", schema: { type: "string", enum: ["today", "yesterday", "7d", "30d", "all"] } }
+        ],
+        responses: { 200: { description: "Dashboard summary KPIs" } }
+      }
+    },
+    "/api/reports/sales/daily": {
+      get: {
+        tags: ["Reports & Analytics"],
+        summary: "Daily sales revenue report",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "startDate", in: "query", schema: { type: "string", format: "date" } },
+          { name: "endDate", in: "query", schema: { type: "string", format: "date" } },
+          { name: "branchId", in: "query", schema: { type: "string" } }
+        ],
+        responses: { 200: { description: "Daily sales breakdown" } }
+      }
+    },
+    "/api/reports/sales/weekly": {
+      get: {
+        tags: ["Reports & Analytics"],
+        summary: "Weekly sales report",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "startDate", in: "query", schema: { type: "string", format: "date" } },
+          { name: "endDate", in: "query", schema: { type: "string", format: "date" } }
+        ],
+        responses: { 200: { description: "Weekly sales metrics" } }
+      }
+    },
+    "/api/reports/sales/monthly": {
+      get: {
+        tags: ["Reports & Analytics"],
+        summary: "Monthly sales report",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "startDate", in: "query", schema: { type: "string", format: "date" } },
+          { name: "endDate", in: "query", schema: { type: "string", format: "date" } }
+        ],
+        responses: { 200: { description: "Monthly sales breakdown" } }
+      }
+    },
+    "/api/reports/sales/branch-wise": {
+      get: {
+        tags: ["Reports & Analytics"],
+        summary: "Branch-wise revenue comparison",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "startDate", in: "query", schema: { type: "string", format: "date" } },
+          { name: "endDate", in: "query", schema: { type: "string", format: "date" } }
+        ],
+        responses: { 200: { description: "Branch comparative sales figures" } }
+      }
+    },
+    "/api/reports/sales/region-wise": {
+      get: {
+        tags: ["Reports & Analytics"],
+        summary: "Regional sales breakdown (GROWTH & ENTERPRISE tiers)",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "startDate", in: "query", schema: { type: "string", format: "date" } },
+          { name: "endDate", in: "query", schema: { type: "string", format: "date" } }
+        ],
+        responses: { 200: { description: "Region-wise sales statistics" } }
+      }
+    },
+    "/api/reports/sales/company-wide": {
+      get: {
+        tags: ["Reports & Analytics"],
+        summary: "Consolidated enterprise company-wide financial report",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "startDate", in: "query", schema: { type: "string", format: "date" } },
+          { name: "endDate", in: "query", schema: { type: "string", format: "date" } }
+        ],
+        responses: { 200: { description: "Company-wide revenue and profits" } }
+      }
+    },
+    "/api/reports/inventory": {
+      get: {
+        tags: ["Reports & Analytics"],
+        summary: "Inventory valuation and stock holdings report",
+        security: [{ bearerAuth: [] }],
+        responses: { 200: { description: "Valuation of stock on hand at cost & selling price" } }
+      }
+    },
+    "/api/reports/vat-mis": {
+      get: {
+        tags: ["Reports & Analytics"],
+        summary: "Government VAT / MIS regulatory compliance report",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "branchId", in: "query", schema: { type: "string" } },
+          { name: "month", in: "query", schema: { type: "string" }, example: "2026-09" },
+          { name: "year", in: "query", schema: { type: "integer", default: 2026 } }
+        ],
+        responses: { 200: { description: "VAT audit and MIS report" } }
+      }
+    }
+  }
+};
+
+// src/docs/modules/audit.swagger.ts
+var auditSwagger = {
+  paths: {
+    "/api/audit": {
+      get: {
+        tags: ["Audit Logs"],
+        summary: "List audit trail logs",
+        description: "Returns activity logs tracking logins, inventory edits, pricing overrides, voided sales, and role changes.",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "page", in: "query", schema: { type: "integer", default: 1 } },
+          { name: "limit", in: "query", schema: { type: "integer", default: 20 } },
+          { name: "action", in: "query", schema: { type: "string" }, description: "Filter by action keyword (e.g., SALE_CREATE, STOCK_ADJUST)" },
+          { name: "userId", in: "query", schema: { type: "string" }, description: "Actor User UUID" },
+          { name: "branchId", in: "query", schema: { type: "string" }, description: "Branch UUID" },
+          { name: "startDate", in: "query", schema: { type: "string", format: "date" } },
+          { name: "endDate", in: "query", schema: { type: "string", format: "date" } }
+        ],
+        responses: { 200: { description: "Paginated audit logs" } }
+      }
+    },
+    "/api/audit/{id}": {
+      get: {
+        tags: ["Audit Logs"],
+        summary: "Get audit log entry details",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: { 200: { description: "Audit log details with before/after state diff" } }
+      }
+    }
+  }
+};
+
+// src/docs/modules/notification.swagger.ts
+var notificationSwagger = {
+  paths: {
+    "/api/notifications": {
+      get: {
+        tags: ["Notifications"],
+        summary: "List notifications",
+        description: "Returns notifications for the user with filter for read/unread and notification type.",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "page", in: "query", schema: { type: "integer", default: 1 } },
+          { name: "limit", in: "query", schema: { type: "integer", default: 20 } },
+          { name: "type", in: "query", schema: { type: "string", enum: ["LOW_STOCK", "EXPIRY", "SYNC_FAILURE", "SYSTEM"] } },
+          { name: "isRead", in: "query", schema: { type: "boolean" } }
+        ],
+        responses: { 200: { description: "List of notifications" } }
+      }
+    },
+    "/api/notifications/low-stock": {
+      get: {
+        tags: ["Notifications"],
+        summary: "Get low stock notifications",
+        security: [{ bearerAuth: [] }],
+        responses: { 200: { description: "Low stock alert notifications" } }
+      }
+    },
+    "/api/notifications/expiry": {
+      get: {
+        tags: ["Notifications"],
+        summary: "Get medicine expiry alert notifications",
+        security: [{ bearerAuth: [] }],
+        responses: { 200: { description: "Expiry alert notifications" } }
+      }
+    },
+    "/api/notifications/sync-failures": {
+      get: {
+        tags: ["Notifications"],
+        summary: "Get offline POS sync failure notifications",
+        security: [{ bearerAuth: [] }],
+        responses: { 200: { description: "Sync failure alerts" } }
+      }
+    },
+    "/api/notifications/read-all": {
+      patch: {
+        tags: ["Notifications"],
+        summary: "Mark all user notifications as read",
+        security: [{ bearerAuth: [] }],
+        responses: { 200: { description: "All marked as read" } }
+      }
+    },
+    "/api/notifications/{id}/read": {
+      patch: {
+        tags: ["Notifications"],
+        summary: "Mark single notification as read",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: { 200: { description: "Notification marked read" } }
+      }
+    }
+  }
+};
+
+// src/docs/modules/sync.swagger.ts
+var syncSwagger = {
+  paths: {
+    "/api/sync/push/sales": {
+      post: {
+        tags: ["Offline Sync"],
+        summary: "Push batch of offline completed sales to cloud",
+        description: "Enables desktop/offline POS nodes to flush cached sales when internet connectivity resumes.",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/PushSalesBatchDto" },
+              example: {
+                branchId: "b3f0e75a-4cb7-4c31-b0db-6e6ad95ff091",
+                sales: [
+                  {
+                    localId: "local-sale-001",
+                    receiptNo: "REC-OFFLINE-9901",
+                    branchId: "b3f0e75a-4cb7-4c31-b0db-6e6ad95ff091",
+                    userId: "u-cashier-uuid",
+                    subTotal: 100,
+                    discount: 0,
+                    tax: 0,
+                    totalAmount: 100,
+                    paymentMethod: "CASH",
+                    localCreatedAt: "2026-09-22T08:00:00Z",
+                    items: [
+                      {
+                        productId: "p1a2b3c4-d5e6-7f8a-9b0c-1d2e3f4a5b6c",
+                        quantity: 4,
+                        unitPrice: 25,
+                        subTotal: 100
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        },
+        responses: { 200: { description: "Sales batch synced successfully" } }
+      }
+    },
+    "/api/sync/push/stock": {
+      post: {
+        tags: ["Offline Sync"],
+        summary: "Push batch of offline stock adjustments",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/PushStockBatchDto" },
+              example: {
+                branchId: "b3f0e75a-4cb7-4c31-b0db-6e6ad95ff091",
+                adjustments: [
+                  {
+                    localId: "adj-local-01",
+                    branchId: "b3f0e75a-4cb7-4c31-b0db-6e6ad95ff091",
+                    productId: "p1a2b3c4-d5e6-7f8a-9b0c-1d2e3f4a5b6c",
+                    quantityChange: -1,
+                    type: "DAMAGE",
+                    reason: "Broken ampoule",
+                    localCreatedAt: "2026-09-22T08:15:00Z"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        responses: { 200: { description: "Stock batch synced" } }
+      }
+    },
+    "/api/sync/pull": {
+      get: {
+        tags: ["Offline Sync"],
+        summary: "Pull updated products, prices, and batches to branch node",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "branchId", in: "query", required: true, schema: { type: "string" } },
+          { name: "lastSyncedAt", in: "query", schema: { type: "string" }, description: "ISO timestamp of last sync" }
+        ],
+        responses: { 200: { description: "Updated delta payload" } }
+      }
+    },
+    "/api/sync/status/{branchId}": {
+      get: {
+        tags: ["Offline Sync"],
+        summary: "Check current branch sync status and health",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "branchId", in: "path", required: true, schema: { type: "string" } }],
+        responses: { 200: { description: "Branch sync status" } }
+      }
+    },
+    "/api/sync/logs": {
+      get: {
+        tags: ["Offline Sync"],
+        summary: "List sync history logs & conflicts",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "page", in: "query", schema: { type: "integer", default: 1 } },
+          { name: "limit", in: "query", schema: { type: "integer", default: 20 } },
+          { name: "branchId", in: "query", schema: { type: "string" } }
+        ],
+        responses: { 200: { description: "Sync logs" } }
+      }
+    }
+  },
+  schemas: {
+    PushSalesBatchDto: {
+      type: "object",
+      required: ["branchId", "sales"],
+      properties: {
+        branchId: { type: "string", format: "uuid" },
+        sales: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["localId", "receiptNo", "branchId", "userId", "subTotal", "totalAmount", "localCreatedAt", "items"],
+            properties: {
+              localId: { type: "string" },
+              receiptNo: { type: "string" },
+              branchId: { type: "string", format: "uuid" },
+              userId: { type: "string", format: "uuid" },
+              subTotal: { type: "number" },
+              totalAmount: { type: "number" },
+              paymentMethod: { type: "string", enum: ["CASH", "CARD", "MOBILE"], default: "CASH" },
+              localCreatedAt: { type: "string" },
+              items: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    productId: { type: "string", format: "uuid" },
+                    quantity: { type: "integer" },
+                    unitPrice: { type: "number" },
+                    subTotal: { type: "number" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    PushStockBatchDto: {
+      type: "object",
+      required: ["branchId", "adjustments"],
+      properties: {
+        branchId: { type: "string", format: "uuid" },
+        adjustments: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              localId: { type: "string" },
+              branchId: { type: "string", format: "uuid" },
+              productId: { type: "string", format: "uuid" },
+              quantityChange: { type: "integer" },
+              type: { type: "string" },
+              localCreatedAt: { type: "string" }
+            }
+          }
+        }
+      }
+    }
+  }
+};
+
+// src/docs/modules/settings.swagger.ts
+var settingsSwagger = {
+  paths: {
+    "/api/settings/public": {
+      get: {
+        tags: ["Settings"],
+        summary: "Get public platform settings & landing page content",
+        description: "Returns marketing site branding, hero banners, feature lists, pricing metadata, and contact information.",
+        responses: { 200: { description: "Public landing page configuration" } }
+      }
+    },
+    "/api/settings/admin": {
+      get: {
+        tags: ["Settings"],
+        summary: "Get admin platform settings",
+        security: [{ bearerAuth: [] }],
+        responses: { 200: { description: "Platform configuration" } }
+      },
+      patch: {
+        tags: ["Settings"],
+        summary: "Update platform CMS settings (Super Admin, CTO)",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/UpdatePlatformSettingsDto" },
+              example: {
+                siteName: "PharmaBiz Enterprise",
+                primaryColor: "#059669"
+              }
+            }
+          }
+        },
+        responses: { 200: { description: "Platform settings updated" } }
+      }
+    },
+    "/api/settings/vat": {
+      get: {
+        tags: ["Settings"],
+        summary: "Get pharmacy VAT & tax configurations",
+        security: [{ bearerAuth: [] }],
+        responses: { 200: { description: "VAT configuration" } }
+      },
+      put: {
+        tags: ["Settings"],
+        summary: "Update pharmacy VAT rates",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  vatRate: { type: "number", example: 5 },
+                  isVatInclusive: { type: "boolean", example: true }
+                }
+              }
+            }
+          }
+        },
+        responses: { 200: { description: "VAT settings updated" } }
+      }
+    },
+    "/api/settings/pharmacy": {
+      get: {
+        tags: ["Settings"],
+        summary: "Get pharmacy receipt & print settings",
+        security: [{ bearerAuth: [] }],
+        responses: { 200: { description: "Pharmacy custom settings" } }
+      },
+      put: {
+        tags: ["Settings"],
+        summary: "Update pharmacy receipt notes, terms, and footer message",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  receiptFooter: { type: "string", example: "Thank you for shopping with Green Care Pharmacy!" },
+                  returnPolicyDays: { type: "integer", example: 7 }
+                }
+              }
+            }
+          }
+        },
+        responses: { 200: { description: "Pharmacy settings updated" } }
+      }
+    }
+  },
+  schemas: {
+    UpdatePlatformSettingsDto: {
+      type: "object",
+      properties: {
+        siteName: { type: "string", example: "PharmaBiz Enterprise" },
+        logoUrl: { type: "string" },
+        primaryColor: { type: "string", example: "#059669" },
+        hero: {
+          type: "object",
+          properties: {
+            title: { type: "string", example: "Modern Multi-Branch Pharmacy Management" },
+            subtitle: { type: "string" }
+          }
+        }
+      }
+    }
+  }
+};
+
+// src/docs/modules/upload.swagger.ts
+var uploadSwagger = {
+  paths: {
+    "/api/upload/image": {
+      post: {
+        tags: ["Uploads"],
+        summary: "Upload image or regulatory document",
+        description: "Uploads prescription image, trade license, drug license, or company logo to Cloudinary or local disk.",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "multipart/form-data": {
+              schema: {
+                type: "object",
+                properties: {
+                  file: {
+                    type: "string",
+                    format: "binary",
+                    description: "Image or PDF file (up to 25MB)"
+                  },
+                  image: {
+                    type: "string",
+                    format: "binary",
+                    description: "Alternative alias field for file"
+                  }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          200: {
+            description: "File uploaded successfully",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", example: true },
+                    data: {
+                      type: "object",
+                      properties: {
+                        url: { type: "string", example: "https://res.cloudinary.com/pharmabiz/image/upload/v1/license.jpg" },
+                        publicId: { type: "string", example: "pharmabiz/licenses/license_01" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          400: { description: "No file uploaded or file format invalid" }
+        }
+      },
+      delete: {
+        tags: ["Uploads"],
+        summary: "Delete uploaded image by public ID or URL",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  publicId: { type: "string", example: "pharmabiz/licenses/license_01" },
+                  url: { type: "string" }
+                }
+              }
+            }
+          }
+        },
+        responses: { 200: { description: "Image deleted" } }
+      }
+    }
+  }
+};
+
+// src/docs/modules/supplier.swagger.ts
+var supplierSwagger = {
+  paths: {
+    "/api/suppliers": {
+      get: {
+        tags: ["Suppliers & Purchases"],
+        summary: "List medicine distributors & suppliers",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "page", in: "query", schema: { type: "integer", default: 1 } },
+          { name: "limit", in: "query", schema: { type: "integer", default: 50 } },
+          { name: "search", in: "query", schema: { type: "string" } }
+        ],
+        responses: { 200: { description: "Suppliers list" } }
+      },
+      post: {
+        tags: ["Suppliers & Purchases"],
+        summary: "Register new supplier / distributor",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/CreateSupplierDto" },
+              example: {
+                name: "Square Pharma Distribution Hub",
+                company: "Square Pharmaceuticals PLC",
+                phone: "01755112233",
+                email: "distribution@squarepharma.com",
+                address: "Tejgaon I/A, Dhaka",
+                contacts: [
+                  {
+                    name: "Mr. Zahid",
+                    phone: "01755112244",
+                    designation: "Territory Sales Executive"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        responses: { 201: { description: "Supplier registered successfully" } }
+      }
+    },
+    "/api/suppliers/purchases/list": {
+      get: {
+        tags: ["Suppliers & Purchases"],
+        summary: "List supplier purchase orders & invoices",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "page", in: "query", schema: { type: "integer", default: 1 } },
+          { name: "limit", in: "query", schema: { type: "integer", default: 50 } },
+          { name: "supplierId", in: "query", schema: { type: "string" } },
+          { name: "paymentStatus", in: "query", schema: { type: "string", enum: ["PAID", "PARTIAL", "DUE"] } }
+        ],
+        responses: { 200: { description: "Purchase order history" } }
+      }
+    },
+    "/api/suppliers/purchases": {
+      post: {
+        tags: ["Suppliers & Purchases"],
+        summary: "Record purchase order & inward stock",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/CreatePurchaseDto" },
+              example: {
+                branchId: "b3f0e75a-4cb7-4c31-b0db-6e6ad95ff091",
+                supplierId: "sup-uuid-1234",
+                invoiceNo: "INV-SQ-99881",
+                paidAmount: 5e3,
+                paymentMethod: "BANK",
+                items: [
+                  {
+                    productId: "p1a2b3c4-d5e6-7f8a-9b0c-1d2e3f4a5b6c",
+                    batchNumber: "B-2026-10",
+                    expiryDate: "2027-10-31",
+                    quantity: 2e3,
+                    unitPurchasePrice: 2,
+                    unitSellingPrice: 2.8
+                  }
+                ]
+              }
+            }
+          }
+        },
+        responses: { 201: { description: "Purchase recorded" } }
+      }
+    },
+    "/api/suppliers/payments/list": {
+      get: {
+        tags: ["Suppliers & Purchases"],
+        summary: "List payments made to suppliers",
+        security: [{ bearerAuth: [] }],
+        responses: { 200: { description: "Supplier payment ledger" } }
+      }
+    },
+    "/api/suppliers/due-summary": {
+      get: {
+        tags: ["Suppliers & Purchases"],
+        summary: "Supplier outstanding payables & dues summary",
+        security: [{ bearerAuth: [] }],
+        responses: { 200: { description: "Outstanding debt by supplier" } }
+      }
+    },
+    "/api/suppliers/{id}": {
+      get: {
+        tags: ["Suppliers & Purchases"],
+        summary: "Get supplier details & contact representatives",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: { 200: { description: "Supplier profile" } }
+      },
+      patch: {
+        tags: ["Suppliers & Purchases"],
+        summary: "Update supplier profile",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        requestBody: {
+          content: { "application/json": { schema: { $ref: "#/components/schemas/CreateSupplierDto" } } }
+        },
+        responses: { 200: { description: "Supplier updated" } }
+      },
+      delete: {
+        tags: ["Suppliers & Purchases"],
+        summary: "Delete supplier",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: { 200: { description: "Supplier deleted" } }
+      }
+    },
+    "/api/suppliers/{id}/payments": {
+      post: {
+        tags: ["Suppliers & Purchases"],
+        summary: "Disburse due payment to supplier",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/RecordSupplierPaymentDto" },
+              example: {
+                amount: 3500,
+                financialAccountId: "acc-bank-uuid",
+                paymentMethod: "CHEQUE",
+                reference: "CHQ-882201"
+              }
+            }
+          }
+        },
+        responses: { 200: { description: "Payment disbursed and supplier balance updated" } }
+      }
+    },
+    "/api/suppliers/{id}/purchases": {
+      get: {
+        tags: ["Suppliers & Purchases"],
+        summary: "List all purchases for this specific supplier",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: { 200: { description: "Purchases list" } }
+      }
+    },
+    "/api/suppliers/{id}/contacts": {
+      get: {
+        tags: ["Suppliers & Purchases"],
+        summary: "List contact persons under supplier",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: { 200: { description: "Contact persons" } }
+      },
+      post: {
+        tags: ["Suppliers & Purchases"],
+        summary: "Add contact person to supplier",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["name", "phone"],
+                properties: {
+                  name: { type: "string", example: "Kabir Hossain" },
+                  phone: { type: "string", example: "01788776655" },
+                  email: { type: "string", format: "email" },
+                  designation: { type: "string", example: "Order Booker" }
+                }
+              }
+            }
+          }
+        },
+        responses: { 201: { description: "Contact added" } }
+      }
+    },
+    "/api/suppliers/{id}/contacts/{contactId}": {
+      patch: {
+        tags: ["Suppliers & Purchases"],
+        summary: "Update supplier contact person",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string" } },
+          { name: "contactId", in: "path", required: true, schema: { type: "string" } }
+        ],
+        responses: { 200: { description: "Contact updated" } }
+      },
+      delete: {
+        tags: ["Suppliers & Purchases"],
+        summary: "Delete supplier contact",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string" } },
+          { name: "contactId", in: "path", required: true, schema: { type: "string" } }
+        ],
+        responses: { 200: { description: "Contact deleted" } }
+      }
+    }
+  },
+  schemas: {
+    CreateSupplierDto: {
+      type: "object",
+      required: ["name"],
+      properties: {
+        name: { type: "string", minLength: 2, example: "Square Pharma Distribution Hub" },
+        company: { type: "string", example: "Square Pharmaceuticals PLC" },
+        phone: { type: "string", example: "01755112233" },
+        email: { type: "string", format: "email", example: "distribution@squarepharma.com" },
+        address: { type: "string", example: "Tejgaon I/A, Dhaka" },
+        contacts: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["name", "phone"],
+            properties: {
+              name: { type: "string", example: "Mr. Zahid" },
+              phone: { type: "string", example: "01755112244" },
+              email: { type: "string", format: "email" },
+              designation: { type: "string", example: "Territory Sales Executive" }
+            }
+          }
+        }
+      }
+    },
+    CreatePurchaseDto: {
+      type: "object",
+      required: ["branchId", "items"],
+      properties: {
+        branchId: { type: "string", format: "uuid" },
+        supplierId: { type: "string", format: "uuid" },
+        invoiceNo: { type: "string", example: "INV-SQ-99881" },
+        paidAmount: { type: "number", default: 0, example: 5e3 },
+        paymentMethod: { type: "string", default: "CASH" },
+        financialAccountId: { type: "string", format: "uuid" },
+        items: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["productId", "quantity", "unitPurchasePrice", "unitSellingPrice"],
+            properties: {
+              productId: { type: "string", format: "uuid" },
+              batchNumber: { type: "string", example: "B-2026-10" },
+              expiryDate: { type: "string", format: "date", example: "2027-10-31" },
+              quantity: { type: "integer", minimum: 1, example: 2e3 },
+              unitPurchasePrice: { type: "number", example: 2 },
+              unitSellingPrice: { type: "number", example: 2.8 }
+            }
+          }
+        }
+      }
+    },
+    RecordSupplierPaymentDto: {
+      type: "object",
+      required: ["amount", "financialAccountId"],
+      properties: {
+        amount: { type: "number", minimum: 0.01, example: 3500 },
+        financialAccountId: { type: "string", format: "uuid" },
+        paymentMethod: { type: "string", example: "CHEQUE" },
+        reference: { type: "string", example: "CHQ-882201" },
+        notes: { type: "string" }
+      }
+    }
+  }
+};
+
+// src/docs/modules/accounting.swagger.ts
+var accountingSwagger = {
+  paths: {
+    "/api/accounting/overview": {
+      get: {
+        tags: ["Accounting & Payroll"],
+        summary: "Financial overview & ledger balances",
+        security: [{ bearerAuth: [] }],
+        responses: { 200: { description: "Cash on hand, bank balances, mobile money, and recent cashflow" } }
+      }
+    },
+    "/api/accounting/accounts": {
+      get: {
+        tags: ["Accounting & Payroll"],
+        summary: "List financial accounts (Cash drawer, Bank, bKash, Nagad)",
+        security: [{ bearerAuth: [] }],
+        responses: { 200: { description: "Accounts list" } }
+      },
+      post: {
+        tags: ["Accounting & Payroll"],
+        summary: "Create financial account",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/CreateAccountDto" },
+              example: {
+                branchId: "b3f0e75a-4cb7-4c31-b0db-6e6ad95ff091",
+                name: "Cash Drawer 01",
+                type: "CASH",
+                isDefault: true,
+                initialBalance: 5e3
+              }
+            }
+          }
+        },
+        responses: { 201: { description: "Account created" } }
+      }
+    },
+    "/api/accounting/accounts/{id}": {
+      patch: {
+        tags: ["Accounting & Payroll"],
+        summary: "Update financial account",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        requestBody: { content: { "application/json": { schema: { $ref: "#/components/schemas/CreateAccountDto" } } } },
+        responses: { 200: { description: "Account updated" } }
+      },
+      delete: {
+        tags: ["Accounting & Payroll"],
+        summary: "Delete financial account",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: { 200: { description: "Account deleted" } }
+      }
+    },
+    "/api/accounting/accounts/deposit": {
+      post: {
+        tags: ["Accounting & Payroll"],
+        summary: "Deposit funds into account",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["accountId", "amount"],
+                properties: {
+                  accountId: { type: "string", format: "uuid" },
+                  amount: { type: "number", minimum: 0.01, example: 1e4 },
+                  description: { type: "string", example: "Capital injection" }
+                }
+              }
+            }
+          }
+        },
+        responses: { 200: { description: "Funds deposited" } }
+      }
+    },
+    "/api/accounting/transfer": {
+      post: {
+        tags: ["Accounting & Payroll"],
+        summary: "Double-entry transfer funds between accounts",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/TransferFundsDto" },
+              example: {
+                branchId: "b3f0e75a-4cb7-4c31-b0db-6e6ad95ff091",
+                sourceAccountId: "acc-cash-uuid",
+                destinationAccountId: "acc-bank-uuid",
+                amount: 15e3,
+                note: "Evening cash deposit into Dutch Bangla Bank"
+              }
+            }
+          }
+        },
+        responses: { 200: { description: "Funds transferred" } }
+      }
+    },
+    "/api/accounting/transactions": {
+      get: {
+        tags: ["Accounting & Payroll"],
+        summary: "List ledger journal transactions",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "page", in: "query", schema: { type: "integer", default: 1 } },
+          { name: "limit", in: "query", schema: { type: "integer", default: 20 } },
+          { name: "type", in: "query", schema: { type: "string", enum: ["INCOME", "EXPENSE", "TRANSFER", "SALE_PAYMENT", "PURCHASE_PAYMENT", "REFUND"] } }
+        ],
+        responses: { 200: { description: "Journal transactions list" } }
+      },
+      post: {
+        tags: ["Accounting & Payroll"],
+        summary: "Record custom Income / Expense journal transaction",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/RecordTransactionDto" },
+              example: {
+                branchId: "b3f0e75a-4cb7-4c31-b0db-6e6ad95ff091",
+                accountId: "acc-cash-uuid",
+                amount: 300,
+                type: "EXPENSE",
+                reference: "PETTY-012",
+                note: "Emergency cleaning supplies"
+              }
+            }
+          }
+        },
+        responses: { 201: { description: "Transaction recorded" } }
+      }
+    },
+    "/api/accounting/daily-sales": {
+      get: {
+        tags: ["Accounting & Payroll"],
+        summary: "Daily sales register audit",
+        security: [{ bearerAuth: [] }],
+        responses: { 200: { description: "Daily register sales reconciliation" } }
+      }
+    },
+    "/api/accounting/recurring-expenses": {
+      get: {
+        tags: ["Accounting & Payroll"],
+        summary: "List recurring monthly expense templates (Rent, Bills)",
+        security: [{ bearerAuth: [] }],
+        responses: { 200: { description: "Recurring expenses list" } }
+      },
+      post: {
+        tags: ["Accounting & Payroll"],
+        summary: "Create recurring expense configuration",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/CreateRecurringExpenseDto" },
+              example: {
+                branchId: "b3f0e75a-4cb7-4c31-b0db-6e6ad95ff091",
+                category: "SHOP_RENT",
+                title: "Monthly Pharmacy Shop Rent",
+                estimatedAmount: 25e3,
+                dueDay: 5
+              }
+            }
+          }
+        },
+        responses: { 201: { description: "Recurring expense created" } }
+      }
+    },
+    "/api/accounting/recurring-expenses/{id}": {
+      put: {
+        tags: ["Accounting & Payroll"],
+        summary: "Update recurring expense configuration",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        requestBody: { content: { "application/json": { schema: { $ref: "#/components/schemas/CreateRecurringExpenseDto" } } } },
+        responses: { 200: { description: "Recurring expense updated" } }
+      },
+      delete: {
+        tags: ["Accounting & Payroll"],
+        summary: "Delete recurring expense configuration",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: { 200: { description: "Recurring expense deleted" } }
+      }
+    },
+    "/api/accounting/expenses": {
+      get: {
+        tags: ["Accounting & Payroll"],
+        summary: "List paid expenses",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "expenseMonth", in: "query", schema: { type: "string" }, example: "2026-09" }
+        ],
+        responses: { 200: { description: "Expenses list" } }
+      },
+      post: {
+        tags: ["Accounting & Payroll"],
+        summary: "Record monthly bill / overhead payment",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/RecordExpensePaymentDto" },
+              example: {
+                branchId: "b3f0e75a-4cb7-4c31-b0db-6e6ad95ff091",
+                financialAccountId: "acc-bank-uuid",
+                category: "ELECTRICITY_BILL",
+                title: "DESCO Electricity Bill - September",
+                expenseMonth: "2026-09",
+                amount: 6200,
+                voucherNo: "V-9901"
+              }
+            }
+          }
+        },
+        responses: { 201: { description: "Expense recorded and account balance deducted" } }
+      }
+    },
+    "/api/accounting/expenses/summary": {
+      get: {
+        tags: ["Accounting & Payroll"],
+        summary: "Expenses summary by category",
+        security: [{ bearerAuth: [] }],
+        responses: { 200: { description: "Category-wise expense totals" } }
+      }
+    },
+    "/api/accounting/salaries/employees": {
+      get: {
+        tags: ["Accounting & Payroll"],
+        summary: "List branch staff salary configurations",
+        security: [{ bearerAuth: [] }],
+        responses: { 200: { description: "Employee salary details" } }
+      }
+    },
+    "/api/accounting/salaries/config": {
+      post: {
+        tags: ["Accounting & Payroll"],
+        summary: "Set employee salary structure",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/SetSalaryConfigDto" },
+              example: {
+                branchId: "b3f0e75a-4cb7-4c31-b0db-6e6ad95ff091",
+                userId: "u-staff-uuid",
+                baseSalary: 18e3,
+                allowances: 2e3,
+                deductions: 500
+              }
+            }
+          }
+        },
+        responses: { 200: { description: "Salary structure saved" } }
+      }
+    },
+    "/api/accounting/salaries/disburse": {
+      post: {
+        tags: ["Accounting & Payroll"],
+        summary: "Disburse monthly staff salary",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/DisburseSalaryDto" },
+              example: {
+                branchId: "b3f0e75a-4cb7-4c31-b0db-6e6ad95ff091",
+                userId: "u-staff-uuid",
+                financialAccountId: "acc-bank-uuid",
+                month: "2026-09",
+                paidAmount: 19500,
+                paymentRef: "SAL-202609-01"
+              }
+            }
+          }
+        },
+        responses: { 200: { description: "Salary disbursed" } }
+      }
+    },
+    "/api/accounting/salaries/branch-history": {
+      get: {
+        tags: ["Accounting & Payroll"],
+        summary: "Branch salary disbursement history",
+        security: [{ bearerAuth: [] }],
+        responses: { 200: { description: "Branch payroll history" } }
+      }
+    },
+    "/api/accounting/salaries/history/{userId}": {
+      get: {
+        tags: ["Accounting & Payroll"],
+        summary: "Specific employee salary history",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "userId", in: "path", required: true, schema: { type: "string" } }],
+        responses: { 200: { description: "Employee salary history" } }
+      }
+    },
+    "/api/accounting/salaries/my-history": {
+      get: {
+        tags: ["Accounting & Payroll"],
+        summary: "Self-service: My salary slip history",
+        security: [{ bearerAuth: [] }],
+        responses: { 200: { description: "User's personal pay slips" } }
+      }
+    }
+  },
+  schemas: {
+    CreateAccountDto: {
+      type: "object",
+      required: ["branchId", "name", "type"],
+      properties: {
+        branchId: { type: "string", format: "uuid" },
+        name: { type: "string", example: "Cash Drawer 01" },
+        type: { type: "string", enum: ["CASH", "BANK", "BKASH", "NAGAD", "MOBILE", "CARD_SETTLEMENT", "OTHER"] },
+        accountNumber: { type: "string" },
+        bankName: { type: "string" },
+        branchName: { type: "string" },
+        isDefault: { type: "boolean", default: false },
+        initialBalance: { type: "number", default: 0 }
+      }
+    },
+    TransferFundsDto: {
+      type: "object",
+      required: ["branchId", "sourceAccountId", "destinationAccountId", "amount"],
+      properties: {
+        branchId: { type: "string", format: "uuid" },
+        sourceAccountId: { type: "string", format: "uuid" },
+        destinationAccountId: { type: "string", format: "uuid" },
+        amount: { type: "number", minimum: 0.01, example: 15e3 },
+        note: { type: "string" }
+      }
+    },
+    RecordTransactionDto: {
+      type: "object",
+      required: ["branchId", "accountId", "amount", "type"],
+      properties: {
+        branchId: { type: "string", format: "uuid" },
+        accountId: { type: "string", format: "uuid" },
+        amount: { type: "number", minimum: 0.01, example: 300 },
+        type: { type: "string", enum: ["INCOME", "EXPENSE", "SALE_PAYMENT", "PURCHASE_PAYMENT", "REFUND"] },
+        reference: { type: "string" },
+        note: { type: "string" }
+      }
+    },
+    CreateRecurringExpenseDto: {
+      type: "object",
+      required: ["branchId", "title"],
+      properties: {
+        branchId: { type: "string", format: "uuid" },
+        category: { type: "string", enum: ["SHOP_RENT", "ELECTRICITY_BILL", "INTERNET_BILL", "SECURITY_GUARD", "MAINTENANCE", "EMPLOYEE_SALARY", "OTHER"] },
+        title: { type: "string", example: "Shop Rent" },
+        estimatedAmount: { type: "number", example: 25e3 },
+        dueDay: { type: "integer", minimum: 1, maximum: 31, example: 5 }
+      }
+    },
+    RecordExpensePaymentDto: {
+      type: "object",
+      required: ["branchId", "financialAccountId", "title", "expenseMonth", "amount"],
+      properties: {
+        branchId: { type: "string", format: "uuid" },
+        financialAccountId: { type: "string", format: "uuid" },
+        category: { type: "string", enum: ["SHOP_RENT", "ELECTRICITY_BILL", "INTERNET_BILL", "SECURITY_GUARD", "MAINTENANCE", "EMPLOYEE_SALARY", "OTHER"] },
+        title: { type: "string", example: "Electricity Bill" },
+        expenseMonth: { type: "string", example: "2026-09" },
+        amount: { type: "number", minimum: 0.01, example: 6200 },
+        voucherNo: { type: "string" }
+      }
+    },
+    SetSalaryConfigDto: {
+      type: "object",
+      required: ["branchId", "userId", "baseSalary"],
+      properties: {
+        branchId: { type: "string", format: "uuid" },
+        userId: { type: "string", format: "uuid" },
+        baseSalary: { type: "number", minimum: 0, example: 18e3 },
+        allowances: { type: "number", default: 0, example: 2e3 },
+        deductions: { type: "number", default: 0, example: 500 }
+      }
+    },
+    DisburseSalaryDto: {
+      type: "object",
+      required: ["branchId", "userId", "financialAccountId", "month", "paidAmount"],
+      properties: {
+        branchId: { type: "string", format: "uuid" },
+        userId: { type: "string", format: "uuid" },
+        financialAccountId: { type: "string", format: "uuid" },
+        month: { type: "string", example: "2026-09" },
+        paidAmount: { type: "number", minimum: 0.01, example: 19500 },
+        paymentRef: { type: "string" }
+      }
+    }
+  }
+};
+
+// src/docs/modules/attendance.swagger.ts
+var attendanceSwagger = {
+  paths: {
+    "/api/attendance/my-history": {
+      get: {
+        tags: ["Attendance & HR"],
+        summary: "Employee self-service: View own attendance history",
+        security: [{ bearerAuth: [] }],
+        responses: { 200: { description: "Personal attendance sheet" } }
+      }
+    },
+    "/api/attendance/off-days": {
+      get: {
+        tags: ["Attendance & HR"],
+        summary: "Get branch weekly & custom off-day settings",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "branchId", in: "query", schema: { type: "string" } }],
+        responses: { 200: { description: "Off-day calendar configuration" } }
+      },
+      post: {
+        tags: ["Attendance & HR"],
+        summary: "Configure branch weekly off-days and public holidays",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/SetBranchOffDayConfigDto" },
+              example: {
+                branchId: "b3f0e75a-4cb7-4c31-b0db-6e6ad95ff091",
+                month: "2026-09",
+                weeklyOffDays: ["Friday"],
+                customOffDates: ["2026-09-16"]
+              }
+            }
+          }
+        },
+        responses: { 200: { description: "Off-day schedule saved" } }
+      }
+    },
+    "/api/attendance/daily": {
+      get: {
+        tags: ["Attendance & HR"],
+        summary: "Get branch daily attendance sheet",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "branchId", in: "query", schema: { type: "string" } },
+          { name: "date", in: "query", schema: { type: "string", format: "date" } }
+        ],
+        responses: { 200: { description: "Daily attendance roster" } }
+      },
+      post: {
+        tags: ["Attendance & HR"],
+        summary: "Mark bulk daily attendance for staff",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/MarkBulkDailyAttendanceDto" },
+              example: {
+                branchId: "b3f0e75a-4cb7-4c31-b0db-6e6ad95ff091",
+                date: "2026-09-22",
+                attendances: [
+                  {
+                    userId: "u-staff-uuid",
+                    status: "PRESENT"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        responses: { 200: { description: "Attendance recorded" } }
+      }
+    },
+    "/api/attendance/employee-history": {
+      get: {
+        tags: ["Attendance & HR"],
+        summary: "Get monthly attendance records for staff members",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "userId", in: "query", schema: { type: "string" } },
+          { name: "month", in: "query", schema: { type: "string" } }
+        ],
+        responses: { 200: { description: "Staff attendance history" } }
+      }
+    },
+    "/api/attendance/salary-calc": {
+      get: {
+        tags: ["Attendance & HR"],
+        summary: "Calculate automated monthly salary based on attendance & deductions",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "branchId", in: "query", schema: { type: "string" } },
+          { name: "month", in: "query", schema: { type: "string" } }
+        ],
+        responses: { 200: { description: "Calculated payable salary per employee" } }
+      }
+    },
+    "/api/attendance/summary": {
+      get: {
+        tags: ["Attendance & HR"],
+        summary: "Branch monthly attendance summary",
+        security: [{ bearerAuth: [] }],
+        responses: { 200: { description: "Present, Absent, and Late statistics" } }
+      }
+    },
+    "/api/attendance/allowances": {
+      get: {
+        tags: ["Attendance & HR"],
+        summary: "List custom monthly allowances (Eid bonus, Overtime, Performance)",
+        security: [{ bearerAuth: [] }],
+        responses: { 200: { description: "Allowances list" } }
+      },
+      post: {
+        tags: ["Attendance & HR"],
+        summary: "Add monthly allowance to employee",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/CreateAllowanceDto" },
+              example: {
+                branchId: "b3f0e75a-4cb7-4c31-b0db-6e6ad95ff091",
+                userId: "u-staff-uuid",
+                month: "2026-09",
+                title: "Overtime Duty Allowance",
+                amount: 1500
+              }
+            }
+          }
+        },
+        responses: { 201: { description: "Allowance added" } }
+      }
+    },
+    "/api/attendance/allowances/{id}": {
+      delete: {
+        tags: ["Attendance & HR"],
+        summary: "Delete allowance entry",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: { 200: { description: "Allowance deleted" } }
+      }
+    },
+    "/api/attendance/employees/{id}/deactivate": {
+      post: {
+        tags: ["Attendance & HR"],
+        summary: "Deactivate resigned employee",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        requestBody: {
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  resignationReason: { type: "string", example: "Relocated to another city" }
+                }
+              }
+            }
+          }
+        },
+        responses: { 200: { description: "Employee deactivated" } }
+      }
+    },
+    "/api/attendance/employees/{id}/reactivate": {
+      post: {
+        tags: ["Attendance & HR"],
+        summary: "Reactivate staff member",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: { 200: { description: "Employee reactivated" } }
+      }
+    },
+    "/api/attendance/deduction-rules": {
+      get: {
+        tags: ["Attendance & HR"],
+        summary: "Get salary deduction rules (Late arrivals & unexcused leaves)",
+        security: [{ bearerAuth: [] }],
+        responses: { 200: { description: "Deduction rules" } }
+      },
+      put: {
+        tags: ["Attendance & HR"],
+        summary: "Configure automated salary deduction policy",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  lateDaysForOneDaySalaryCut: { type: "integer", example: 3 },
+                  unexcusedAbsentSalaryCutRate: { type: "number", example: 1 }
+                }
+              }
+            }
+          }
+        },
+        responses: { 200: { description: "Deduction rules configured" } }
+      }
+    }
+  },
+  schemas: {
+    SetBranchOffDayConfigDto: {
+      type: "object",
+      required: ["branchId", "month", "weeklyOffDays"],
+      properties: {
+        branchId: { type: "string", format: "uuid" },
+        month: { type: "string", example: "2026-09" },
+        weeklyOffDays: { type: "array", items: { type: "string" }, example: ["Friday"] },
+        customOffDates: { type: "array", items: { type: "string" }, example: ["2026-09-16"] },
+        notes: { type: "string" }
+      }
+    },
+    MarkBulkDailyAttendanceDto: {
+      type: "object",
+      required: ["branchId", "date", "attendances"],
+      properties: {
+        branchId: { type: "string", format: "uuid" },
+        date: { type: "string", format: "date", example: "2026-09-22" },
+        attendances: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["userId", "status"],
+            properties: {
+              userId: { type: "string", format: "uuid" },
+              status: { type: "string", enum: ["PRESENT", "ABSENT", "LATE", "PAID_LEAVE", "UNPAID_LEAVE", "OFF_DAY"] },
+              notes: { type: "string" }
+            }
+          }
+        }
+      }
+    },
+    CreateAllowanceDto: {
+      type: "object",
+      required: ["branchId", "userId", "month", "title", "amount"],
+      properties: {
+        branchId: { type: "string", format: "uuid" },
+        userId: { type: "string", format: "uuid" },
+        month: { type: "string", example: "2026-09" },
+        title: { type: "string", example: "Overtime Duty Allowance" },
+        amount: { type: "number", minimum: 0.01, example: 1500 },
+        notes: { type: "string" }
+      }
+    }
+  }
+};
+
+// src/docs/modules/location.swagger.ts
+var locationSwagger = {
+  paths: {
+    "/api/locations": {
+      get: {
+        tags: ["Location & Rack Management"],
+        summary: "Get branch storage racks and location hierarchy",
+        security: [{ bearerAuth: [] }, { branchHeader: [] }],
+        parameters: [
+          { name: "branchId", in: "query", schema: { type: "string" } },
+          { name: "includeInactive", in: "query", schema: { type: "boolean" } }
+        ],
+        responses: { 200: { description: "Racks, shelves, and bins hierarchy" } }
+      }
+    },
+    "/api/locations/batch/{inventoryId}": {
+      get: {
+        tags: ["Location & Rack Management"],
+        summary: "Get physical storage rack locations for a batch",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "inventoryId", in: "path", required: true, schema: { type: "string" } }],
+        responses: { 200: { description: "Batch locations" } }
+      }
+    },
+    "/api/locations/quick-rack": {
+      post: {
+        tags: ["Location & Rack Management"],
+        summary: "Quick auto-generate rack with shelves and bins",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/QuickCreateRackDto" },
+              example: {
+                branchId: "b3f0e75a-4cb7-4c31-b0db-6e6ad95ff091",
+                name: "Rack A",
+                numberOfShelves: 4,
+                binsPerShelf: 6
+              }
+            }
+          }
+        },
+        responses: { 201: { description: "Rack auto-created with shelves and bins" } }
+      }
+    },
+    "/api/locations/racks": {
+      post: {
+        tags: ["Location & Rack Management"],
+        summary: "Create single rack",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["name"],
+                properties: {
+                  branchId: { type: "string", format: "uuid" },
+                  name: { type: "string", example: "Rack B" },
+                  zone: { type: "string", example: "Front Sales Floor" }
+                }
+              }
+            }
+          }
+        },
+        responses: { 201: { description: "Rack created" } }
+      }
+    },
+    "/api/locations/racks/{id}": {
+      patch: {
+        tags: ["Location & Rack Management"],
+        summary: "Update rack name or zone",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: { 200: { description: "Rack updated" } }
+      },
+      delete: {
+        tags: ["Location & Rack Management"],
+        summary: "Delete rack",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: { 200: { description: "Rack deleted" } }
+      }
+    },
+    "/api/locations/shelves": {
+      post: {
+        tags: ["Location & Rack Management"],
+        summary: "Create shelf under a rack",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["rackId", "name"],
+                properties: {
+                  rackId: { type: "string", format: "uuid" },
+                  name: { type: "string", example: "Shelf 1" }
+                }
+              }
+            }
+          }
+        },
+        responses: { 201: { description: "Shelf created" } }
+      }
+    },
+    "/api/locations/shelves/{id}": {
+      patch: {
+        tags: ["Location & Rack Management"],
+        summary: "Update shelf",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: { 200: { description: "Shelf updated" } }
+      },
+      delete: {
+        tags: ["Location & Rack Management"],
+        summary: "Delete shelf",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: { 200: { description: "Shelf deleted" } }
+      }
+    },
+    "/api/locations/bins": {
+      post: {
+        tags: ["Location & Rack Management"],
+        summary: "Create storage bin under a shelf",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["shelfId", "name"],
+                properties: {
+                  shelfId: { type: "string", format: "uuid" },
+                  name: { type: "string", example: "Bin 01" }
+                }
+              }
+            }
+          }
+        },
+        responses: { 201: { description: "Bin created" } }
+      }
+    },
+    "/api/locations/bins/{id}": {
+      patch: {
+        tags: ["Location & Rack Management"],
+        summary: "Update bin",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: { 200: { description: "Bin updated" } }
+      },
+      delete: {
+        tags: ["Location & Rack Management"],
+        summary: "Delete bin",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: { 200: { description: "Bin deleted" } }
+      }
+    }
+  },
+  schemas: {
+    QuickCreateRackDto: {
+      type: "object",
+      required: ["name"],
+      properties: {
+        branchId: { type: "string", format: "uuid" },
+        name: { type: "string", example: "Rack A" },
+        numberOfShelves: { type: "integer", default: 4, example: 4 },
+        binsPerShelf: { type: "integer", default: 6, example: 6 }
+      }
+    }
+  }
+};
+
+// src/docs/modules/root.swagger.ts
+var rootSwagger = {
+  paths: {
+    "/": {
+      get: {
+        tags: ["Root & Health"],
+        summary: "API Health Check & Status",
+        description: "Returns server status, running timestamp, and API version.",
+        responses: {
+          200: {
+            description: "Server is healthy",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", example: true },
+                    name: { type: "string", example: "Multi-Tenant SaaS Pharmacy Management API" },
+                    version: { type: "string", example: "1.0.0" },
+                    status: { type: "string", example: "Healthy" },
+                    timestamp: { type: "string", format: "date-time" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/payment/success": {
+      post: {
+        tags: ["Root & Health"],
+        summary: "Gateway root payment success callback (POST)",
+        responses: { 200: { description: "Payment handled" } }
+      },
+      get: {
+        tags: ["Root & Health"],
+        summary: "Gateway root payment success redirect (GET)",
+        responses: { 302: { description: "Redirect to frontend" } }
+      }
+    },
+    "/payment/fail": {
+      post: {
+        tags: ["Root & Health"],
+        summary: "Gateway root payment fail callback (POST)",
+        responses: { 200: { description: "Payment failure handled" } }
+      },
+      get: {
+        tags: ["Root & Health"],
+        summary: "Gateway root payment fail redirect (GET)",
+        responses: { 302: { description: "Redirect to frontend" } }
+      }
+    },
+    "/payment/cancel": {
+      post: {
+        tags: ["Root & Health"],
+        summary: "Gateway root payment cancel callback (POST)",
+        responses: { 200: { description: "Payment cancellation handled" } }
+      },
+      get: {
+        tags: ["Root & Health"],
+        summary: "Gateway root payment cancel redirect (GET)",
+        responses: { 302: { description: "Redirect to frontend" } }
+      }
+    }
+  }
+};
+
+// src/docs/index.ts
+var mergedPaths = {
+  ...rootSwagger.paths,
+  ...authSwagger.paths,
+  ...superAdminSwagger.paths,
+  ...subscriptionSwagger.paths,
+  ...paymentSwagger.paths,
+  ...tenantSwagger.paths,
+  ...branchSwagger.paths,
+  ...userSwagger.paths,
+  ...productSwagger.paths,
+  ...inventorySwagger.paths,
+  ...transferSwagger.paths,
+  ...salesSwagger.paths,
+  ...reportSwagger.paths,
+  ...auditSwagger.paths,
+  ...notificationSwagger.paths,
+  ...syncSwagger.paths,
+  ...settingsSwagger.paths,
+  ...uploadSwagger.paths,
+  ...supplierSwagger.paths,
+  ...accountingSwagger.paths,
+  ...attendanceSwagger.paths,
+  ...locationSwagger.paths
+};
+var mergedSchemas = {
+  ...baseSwaggerConfig.components.schemas,
+  ...authSwagger.schemas,
+  ...superAdminSwagger.schemas,
+  ...subscriptionSwagger.schemas,
+  ...paymentSwagger.schemas,
+  ...tenantSwagger.schemas,
+  ...branchSwagger.schemas,
+  ...userSwagger.schemas,
+  ...productSwagger.schemas,
+  ...inventorySwagger.schemas,
+  ...transferSwagger.schemas,
+  ...salesSwagger.schemas,
+  ...syncSwagger.schemas,
+  ...settingsSwagger.schemas,
+  ...supplierSwagger.schemas,
+  ...accountingSwagger.schemas,
+  ...attendanceSwagger.schemas,
+  ...locationSwagger.schemas
+};
+var swaggerSpec = {
+  ...baseSwaggerConfig,
+  paths: mergedPaths,
+  components: {
+    ...baseSwaggerConfig.components,
+    schemas: mergedSchemas
+  }
+};
+var swaggerUiOptions = {
+  explorer: true,
+  customSiteTitle: "PharmaBiz API Documentation & Testing Sandbox",
+  swaggerOptions: {
+    persistAuthorization: true,
+    displayRequestDuration: true,
+    filter: true,
+    docExpansion: "none",
+    tagsSorter: "alpha",
+    operationsSorter: "alpha",
+    tryItOutEnabled: true
+  },
+  customCss: `
+    .swagger-ui .topbar { background-color: #0f172a; padding: 12px 0; border-bottom: 2px solid #10b981; }
+    .swagger-ui .topbar .topbar-wrapper a { font-weight: 700; color: #fff; font-size: 1.1rem; }
+    .swagger-ui .topbar .topbar-wrapper a span { color: #10b981; }
+    .swagger-ui .info .title { color: #0f172a; font-size: 2.2rem; }
+    .swagger-ui .btn.authorize { background-color: #059669; color: #fff; border-color: #059669; font-weight: 600; }
+    .swagger-ui .btn.authorize svg { fill: #fff; }
+    .swagger-ui .opblock.opblock-post { border-color: #10b981; background: rgba(16, 185, 129, 0.05); }
+    .swagger-ui .opblock.opblock-get { border-color: #3b82f6; background: rgba(59, 130, 246, 0.05); }
+    .swagger-ui .opblock.opblock-patch { border-color: #f59e0b; background: rgba(245, 158, 11, 0.05); }
+    .swagger-ui .opblock.opblock-delete { border-color: #ef4444; background: rgba(239, 68, 68, 0.05); }
+  `
+};
+function setupSwagger(app2) {
+  app2.get("/api-docs.json", (_req, res) => {
+    res.setHeader("Content-Type", "application/json");
+    res.send(swaggerSpec);
+  });
+  app2.use(
+    "/api-docs",
+    swaggerUi.serve,
+    swaggerUi.setup(swaggerSpec, swaggerUiOptions)
+  );
+  console.log("\u{1F4D8} Swagger UI interactive docs mounted at /api-docs and spec at /api-docs.json");
+}
+
+// src/app.ts
 var app = express();
 var port = process.env.PORT || 3e3;
 app.use((req, res, next) => {
@@ -20304,6 +25553,7 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: "25mb" }));
 app.use(express.urlencoded({ limit: "25mb", extended: true }));
 app.use("/uploads", express.static(path3.join(process.cwd(), "public", "uploads")));
+setupSwagger(app);
 app.get("/", (req, res) => {
   res.json({
     success: true,
