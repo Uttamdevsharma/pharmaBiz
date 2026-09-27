@@ -42,7 +42,10 @@ import { StockAllocationHistoryView } from "@/components/dashboard/StockAllocati
 import { CreateRackView } from "@/components/dashboard/CreateRackView";
 import { RackListView } from "@/components/dashboard/RackListView";
 import { CreateCustomLocationView } from "@/components/dashboard/CreateCustomLocationView";
+import { CreateStorageGroupView } from "@/components/dashboard/CreateStorageGroupView";
+import { StorageGroupListView } from "@/components/dashboard/StorageGroupListView";
 import { CustomLocationListView } from "@/components/dashboard/CustomLocationListView";
+import { StorageGroupHub } from "@/components/dashboard/StorageGroupHub";
 import { StockHistoryView } from "@/components/dashboard/StockHistoryView";
 import { TransferStockView } from "@/components/dashboard/TransferStockView";
 import { TransferHistoryView } from "@/components/dashboard/TransferHistoryView";
@@ -1147,7 +1150,7 @@ export default function RoleBasedDashboard() {
         return (
           <StockListView
             onNavigate={(module, extra) => {
-              if (extra && module === "stock_stock_allocation") {
+              if (extra && (module === "stock_stock_allocation" || module === "loc_storage_groups" || module === "loc_group_list")) {
                 if (typeof extra === "object") {
                   setPreselectedBatchId(extra.batchId || "");
                   setPreselectedProductId(extra.productId || "");
@@ -1195,6 +1198,9 @@ export default function RoleBasedDashboard() {
         }
         return <StockHistoryView />;
 
+      case "stock_expired_stock":
+        return <ExpiredProductsView />;
+
       case "stock_transfer_stock":
         if (!isOwner && !hasPermission("stock.transfer")) {
           return <TenantAccessRestricted moduleName="Transfer Stock" requiredPerm="stock.transfer" />;
@@ -1238,7 +1244,26 @@ export default function RoleBasedDashboard() {
         }
         return <DamagedProductsView onNavigate={handleNavigate} />;
 
-      // 📍 Location Management Subpages
+      // 📍 Location & Storage Groups Subpages
+      case "loc_create_group":
+        return (
+          <CreateStorageGroupView
+            selectedBranchId={selectedBranchId}
+            onNavigate={handleNavigate}
+          />
+        );
+
+      case "loc_group_list":
+      case "loc_storage_groups":
+        return (
+          <StorageGroupListView
+            selectedBranchId={selectedBranchId}
+            onNavigate={handleNavigate}
+            preselectedProductId={preselectedProductId || undefined}
+            preselectedBatchId={preselectedBatchId || undefined}
+          />
+        );
+
       case "loc_create_rack":
         if (!isOwner && !hasPermission("location.create_rack")) {
           return <TenantAccessRestricted moduleName="Create Rack" requiredPerm="location.create_rack" />;

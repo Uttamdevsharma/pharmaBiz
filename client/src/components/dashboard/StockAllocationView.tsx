@@ -189,6 +189,13 @@ export function StockAllocationView({
           inv.product?.category ||
           "";
 
+        const realManufacturer =
+          inv.manufacturer ||
+          inv.product?.manufacturer ||
+          inv.product?.brandName ||
+          inv.brandName ||
+          "";
+
         const realUnit =
           inv.unit ||
           inv.product?.unit ||
@@ -200,6 +207,7 @@ export function StockAllocationView({
           name: realProductName || "Unknown Product",
           genericName: realGenericName,
           category: realCategory,
+          manufacturer: realManufacturer,
           unit: realUnit,
         };
 
@@ -1330,6 +1338,10 @@ export function StockAllocationView({
                     }}
                     label="Destination Location (Rack / Refrigerator / Shelf)"
                     required={true}
+                    suggestedCompany={selectedProductItem?.product?.manufacturer || selectedBatch?.manufacturer || selectedBatch?.product?.manufacturer}
+                    suggestedGeneric={selectedProductItem?.product?.genericName || selectedBatch?.genericName || selectedBatch?.product?.genericName}
+                    suggestedCategory={selectedProductItem?.product?.category || selectedBatch?.category}
+                    productName={selectedProductItem?.product?.name || selectedBatch?.productName}
                   />
 
                   {/* Submit Button */}
@@ -1439,19 +1451,28 @@ export function StockAllocationView({
               </div>
             </div>
 
-            <SmartLocationSelector
-              racks={racks}
-              selectedRackId={destRackId}
-              selectedShelfId={destShelfId}
-              selectedBinId={destBinId}
-              onSelect={(rId, sId, bId) => {
-                setDestRackId(rId);
-                setDestShelfId(sId);
-                setDestBinId(bId);
-              }}
-              label="Destination Location"
-              required={true}
-            />
+            {(() => {
+              const rItem = inventory.find((i) => i.id === relocateBatchId);
+              return (
+                <SmartLocationSelector
+                  racks={racks}
+                  selectedRackId={destRackId}
+                  selectedShelfId={destShelfId}
+                  selectedBinId={destBinId}
+                  onSelect={(rId, sId, bId) => {
+                    setDestRackId(rId);
+                    setDestShelfId(sId);
+                    setDestBinId(bId);
+                  }}
+                  label="Destination Location"
+                  required={true}
+                  suggestedCompany={rItem?.manufacturer || rItem?.product?.manufacturer || rItem?.brandName}
+                  suggestedGeneric={rItem?.genericName || rItem?.product?.genericName}
+                  suggestedCategory={rItem?.category || rItem?.product?.category}
+                  productName={rItem?.productName || rItem?.product?.name}
+                />
+              );
+            })()}
 
             <button
               type="submit"

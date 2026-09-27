@@ -17,7 +17,12 @@ export const registerOwnerSchema = z.object({
   companyName: z.string().min(2, "Company name must be at least 2 characters"),
   ownerName: z.string().min(2, "Owner name must be at least 2 characters"),
   email: z.string().email("Invalid email address"),
-  phone: z.string().min(5, "Phone number must be at least 5 digits"),
+  phone: z
+    .string()
+    .trim()
+    .regex(/^\d+$/, "Phone number must contain digits only")
+    .min(11, "Phone number must be at least 11 digits")
+    .max(12, "Phone number cannot exceed 12 digits"),
   password: z.string().min(6, "Password must be at least 6 characters"),
   address: z.string().optional(),
   

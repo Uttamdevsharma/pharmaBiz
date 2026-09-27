@@ -18,5 +18,6 @@ router.patch(
 );
 router.get("/subscription", TenantController.getSubscription);
 router.get("/usage", TenantController.getUsage);
+router.get("/billing-ledger", TenantController.getBillingLedger);
 
 export { router as tenantRoutes };

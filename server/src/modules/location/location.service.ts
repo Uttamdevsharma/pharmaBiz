@@ -141,7 +141,8 @@ export class LocationService {
     if (numberOfShelves > 0) {
       shelvesData = Array.from({ length: numberOfShelves }, (_, s) => {
         const sIdx = s + 1;
-        const shelfName = formatName(shelfPrefix, sIdx);
+        const customName = data.customShelves && data.customShelves[s] ? data.customShelves[s].trim() : "";
+        const shelfName = customName || formatName(shelfPrefix, sIdx);
         const shelfObj: any = {
           name: shelfName,
           isActive,

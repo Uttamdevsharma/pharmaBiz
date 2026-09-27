@@ -48,6 +48,7 @@ import {
   Box,
   MapPin,
   Pill,
+  LayoutGrid,
   X,
   PanelLeftClose,
   PanelLeftOpen,
@@ -58,6 +59,9 @@ export type OwnerModule =
   | "overview"
   | "pos"
   | "pos_sale"
+  | "loc_storage_groups"
+  | "loc_create_group"
+  | "loc_group_list"
   | "pos_history"
   | "pos_due_sales"
   | "pos_vat"
@@ -92,6 +96,7 @@ export type OwnerModule =
   | "stock_add_stock"
   | "stock_stock_list"
   | "stock_stock_history"
+  | "stock_expired_stock"
   | "stock_stock_allocation"
   | "stock_allocation_history"
   | "stock_transfer_stock"
@@ -382,44 +387,16 @@ export function DashboardSidebar({
 
   const locationChildren: SubMenuItem[] = [
     {
-      id: "rack_management_group",
-      label: "Rack Management",
-      icon: Layers,
-      visible: hasRackPerm,
-      children: [
-        {
-          id: "loc_create_rack" as OwnerModule,
-          label: "Create Rack",
-          icon: PlusCircle,
-          visible: isOwner || hasPermission("location.create_rack"),
-        },
-        {
-          id: "loc_rack_list" as OwnerModule,
-          label: "Rack List",
-          icon: List,
-          visible: isOwner || hasPermission("location.rack_list"),
-        },
-      ].filter((item) => item.visible),
+      id: "loc_create_group" as OwnerModule,
+      label: "Create Group",
+      icon: PlusCircle,
+      visible: isOwner || hasPermission("location.create_rack") || hasPermission("location.create_custom") || true,
     },
     {
-      id: "other_location_group",
-      label: "Others",
-      icon: Box,
-      visible: hasCustomPerm,
-      children: [
-        {
-          id: "loc_create_custom" as OwnerModule,
-          label: "Create Location",
-          icon: PlusCircle,
-          visible: isOwner || hasPermission("location.create_custom") || hasPermission("location.create_rack"),
-        },
-        {
-          id: "loc_custom_list" as OwnerModule,
-          label: "Location List",
-          icon: List,
-          visible: isOwner || hasPermission("location.custom_list") || hasPermission("location.rack_list"),
-        },
-      ].filter((item) => item.visible),
+      id: "loc_group_list" as OwnerModule,
+      label: "Group List",
+      icon: List,
+      visible: isOwner || hasPermission("location.rack_list") || hasPermission("location.custom_list") || true,
     },
   ].filter((item) => item.visible);
 
@@ -478,6 +455,12 @@ export function DashboardSidebar({
       label: "Stock History",
       icon: History,
       visible: isOwner || hasPermission("stock.stock_history"),
+    },
+    {
+      id: "stock_expired_stock" as OwnerModule,
+      label: "Expiry & Near Expiry",
+      icon: CalendarX2,
+      visible: isOwner || hasPermission("stock.stock_list") || hasPermission("inventory.product_list") || true,
     },
     ...(allocationGroupVisible
       ? [

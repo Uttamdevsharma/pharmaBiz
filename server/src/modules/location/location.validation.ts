@@ -43,6 +43,7 @@ export const QuickCreateRackSchema = z.object({
   numberOfShelves: z.coerce.number().int().min(0, "Shelves cannot be negative").max(50, "Maximum 50 shelves allowed").default(0),
   binPrefix: z.string().max(30).optional().default("Bin"),
   binsPerShelf: z.coerce.number().int().min(0, "Bins cannot be negative").max(50, "Maximum 50 bins per shelf allowed").default(0),
+  customShelves: z.array(z.string()).optional(),
   isActive: z.boolean().optional(),
 });
 

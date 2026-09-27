@@ -49,28 +49,38 @@ interface DocumentUploadState {
 }
 
 // ================= ZOD VALIDATION SCHEMAS =================
-const step1Schema = z.object({
-  companyName: z
-    .string()
-    .trim()
-    .min(2, "Pharmacy legal name must be at least 2 characters."),
-  ownerName: z
-    .string()
-    .trim()
-    .min(2, "Owner name must be at least 2 characters."),
-  phone: z
-    .string()
-    .trim()
-    .min(5, "Contact phone number must be at least 5 digits."),
-  email: z
-    .string()
-    .trim()
-    .email("Please enter a valid email address."),
-  password: z
-    .string()
-    .min(6, "Password must be at least 6 characters."),
-  address: z.string().trim().optional(),
-});
+const step1Schema = z
+  .object({
+    companyName: z
+      .string()
+      .trim()
+      .min(2, "Pharmacy legal name must be at least 2 characters."),
+    ownerName: z
+      .string()
+      .trim()
+      .min(2, "Owner name must be at least 2 characters."),
+    phone: z
+      .string()
+      .trim()
+      .regex(/^\d+$/, "Phone number must contain numbers only (no letters allowed).")
+      .min(11, "Phone number must be at least 11 digits.")
+      .max(12, "Phone number cannot exceed 12 digits."),
+    email: z
+      .string()
+      .trim()
+      .email("Please enter a valid email address."),
+    password: z
+      .string()
+      .min(6, "Password must be at least 6 characters."),
+    confirmPassword: z
+      .string()
+      .min(1, "Please confirm your password."),
+    address: z.string().trim().optional(),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Confirm password does not match password.",
+    path: ["confirmPassword"],
+  });
 
 const step2Schema = z.object({
   nidNumber: z
@@ -128,12 +138,15 @@ function RegisterContent() {
     email: "",
     phone: "",
     password: "",
+    confirmPassword: "",
     address: "",
     nidNumber: "",
     tradeLicenseNumber: "",
     drugLicenseNumber: "",
   });
 
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   // Document Uploads: NID (Front + Back), Trade License (Single doc), Drug License (Single doc)
@@ -153,7 +166,11 @@ function RegisterContent() {
   const [error, setError] = useState<string | null>(null);
 
   const handleInputChange = (field: string, value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+    let cleanVal = value;
+    if (field === "phone") {
+      cleanVal = value.replace(/\D/g, "").slice(0, 12);
+    }
+    setFormData((prev) => ({ ...prev, [field]: cleanVal }));
     if (fieldErrors[field]) {
       setFieldErrors((prev) => {
         const next = { ...prev };
@@ -641,9 +658,10 @@ function RegisterContent() {
                   <input
                     type="tel"
                     required
+                    maxLength={12}
                     value={formData.phone}
                     onChange={(e) => handleInputChange("phone", e.target.value)}
-                    placeholder="017XXXXXXXX"
+                    placeholder="017XXXXXXXX (11-12 digits)"
                     className={`w-full pl-11 pr-4 py-3 rounded-xl border text-sm font-medium focus:outline-none focus:ring-2 ${
                       fieldErrors.phone
                         ? "border-rose-500 focus:ring-rose-500 bg-rose-50/10"
@@ -651,8 +669,10 @@ function RegisterContent() {
                     }`}
                   />
                 </div>
-                {fieldErrors.phone && (
+                {fieldErrors.phone ? (
                   <p className="text-xs text-rose-500 font-semibold mt-1">{fieldErrors.phone}</p>
+                ) : (
+                  <p className="text-[11px] text-slate-400 mt-1">Numbers only, 11 to 12 digits (no letters allowed)</p>
                 )}
               </div>
 
@@ -682,31 +702,6 @@ function RegisterContent() {
 
               <div>
                 <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
-                  Password *
-                </label>
-                <div className="relative">
-                  <Lock className="h-5 w-5 text-slate-400 absolute left-3.5 top-3.5" />
-                  <input
-                    type="password"
-                    required
-                    minLength={6}
-                    value={formData.password}
-                    onChange={(e) => handleInputChange("password", e.target.value)}
-                    placeholder="Minimum 6 characters"
-                    className={`w-full pl-11 pr-4 py-3 rounded-xl border text-sm font-medium focus:outline-none focus:ring-2 ${
-                      fieldErrors.password
-                        ? "border-rose-500 focus:ring-rose-500 bg-rose-50/10"
-                        : "border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:ring-brand-primary"
-                    }`}
-                  />
-                </div>
-                {fieldErrors.password && (
-                  <p className="text-xs text-rose-500 font-semibold mt-1">{fieldErrors.password}</p>
-                )}
-              </div>
-
-              <div className="sm:col-span-2">
-                <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
                   Pharmacy Address *
                 </label>
                 <div className="relative">
@@ -726,6 +721,72 @@ function RegisterContent() {
                 </div>
                 {fieldErrors.address && (
                   <p className="text-xs text-rose-500 font-semibold mt-1">{fieldErrors.address}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
+                  Password *
+                </label>
+                <div className="relative">
+                  <Lock className="h-5 w-5 text-slate-400 absolute left-3.5 top-3.5" />
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    required
+                    minLength={6}
+                    value={formData.password}
+                    onChange={(e) => handleInputChange("password", e.target.value)}
+                    placeholder="Minimum 6 characters"
+                    className={`w-full pl-11 pr-11 py-3 rounded-xl border text-sm font-medium focus:outline-none focus:ring-2 ${
+                      fieldErrors.password
+                        ? "border-rose-500 focus:ring-rose-500 bg-rose-50/10"
+                        : "border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:ring-brand-primary"
+                    }`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3.5 top-3.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                    title={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                  </button>
+                </div>
+                {fieldErrors.password && (
+                  <p className="text-xs text-rose-500 font-semibold mt-1">{fieldErrors.password}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
+                  Confirm Password *
+                </label>
+                <div className="relative">
+                  <Lock className="h-5 w-5 text-slate-400 absolute left-3.5 top-3.5" />
+                  <input
+                    type={showConfirmPassword ? "text" : "password"}
+                    required
+                    minLength={6}
+                    value={formData.confirmPassword}
+                    onChange={(e) => handleInputChange("confirmPassword", e.target.value)}
+                    placeholder="Re-enter password"
+                    className={`w-full pl-11 pr-11 py-3 rounded-xl border text-sm font-medium focus:outline-none focus:ring-2 ${
+                      fieldErrors.confirmPassword
+                        ? "border-rose-500 focus:ring-rose-500 bg-rose-50/10"
+                        : "border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:ring-brand-primary"
+                    }`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute right-3.5 top-3.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                    title={showConfirmPassword ? "Hide password" : "Show password"}
+                  >
+                    {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                  </button>
+                </div>
+                {fieldErrors.confirmPassword && (
+                  <p className="text-xs text-rose-500 font-semibold mt-1">{fieldErrors.confirmPassword}</p>
                 )}
               </div>
             </div>

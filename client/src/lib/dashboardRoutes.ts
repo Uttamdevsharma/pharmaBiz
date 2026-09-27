@@ -55,6 +55,7 @@ export const MODULE_TO_PATH: Record<OwnerModule, string> = {
   stock_add_stock: "/dashboard/stock/add",
   stock_stock_list: "/dashboard/stock",
   stock_stock_history: "/dashboard/stock/history",
+  stock_expired_stock: "/dashboard/stock/expired",
   stock_stock_allocation: "/dashboard/stock/allocation",
   stock_allocation_history: "/dashboard/stock/allocation-history",
   stock_transfer_stock: "/dashboard/stock/transfer",
@@ -64,6 +65,9 @@ export const MODULE_TO_PATH: Record<OwnerModule, string> = {
   stock_damaged_products: "/dashboard/stock/damaged",
 
   // Racks & Locations
+  loc_create_group: "/dashboard/locations/create",
+  loc_group_list: "/dashboard/locations/groups",
+  loc_storage_groups: "/dashboard/locations/groups",
   loc_create_rack: "/dashboard/locations/create-rack",
   loc_rack_list: "/dashboard/locations/racks",
   loc_create_custom: "/dashboard/locations/create-custom",
@@ -111,6 +115,9 @@ for (const [moduleKey, path] of Object.entries(MODULE_TO_PATH)) {
 PATH_TO_MODULE_MAP["/dashboard/overview"] = "overview";
 PATH_TO_MODULE_MAP["/dashboard/inventory"] = "inv_product_list";
 PATH_TO_MODULE_MAP["/dashboard/sales"] = "pos";
+PATH_TO_MODULE_MAP["/dashboard/locations"] = "loc_group_list";
+PATH_TO_MODULE_MAP["/dashboard/locations/groups"] = "loc_group_list";
+PATH_TO_MODULE_MAP["/dashboard/locations/create"] = "loc_create_group";
 
 /**
  * Converts an OwnerModule to a clean URL path

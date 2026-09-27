@@ -129,4 +129,63 @@ export class TenantService {
       },
     };
   }
+
+  static async getBillingLedger(tenantId: string) {
+    const tenant = await (prisma as any).tenant.findUnique({
+      where: { id: tenantId },
+      include: {
+        branches: {
+          select: {
+            id: true,
+            name: true,
+            location: true,
+            phone: true,
+            email: true,
+            isActive: true,
+            createdAt: true,
+          },
+        },
+        users: {
+          select: {
+            id: true,
+            name: true,
+            username: true,
+            email: true,
+            phone: true,
+            role: true,
+            isActive: true,
+            createdAt: true,
+          },
+        },
+        subscriptions: {
+          orderBy: { createdAt: "desc" },
+          include: {
+            plan: true,
+            payments: {
+              orderBy: { createdAt: "desc" },
+            },
+          },
+        },
+        payments: {
+          orderBy: { createdAt: "desc" },
+          include: {
+            subscription: {
+              include: { plan: true },
+            },
+          },
+        },
+      },
+    });
+
+    if (!tenant) {
+      throw new Error("Tenant not found");
+    }
+
+    const ownerUser = (tenant.users || []).find((u: any) => u.role === "COMPANY_OWNER") || tenant.users?.[0] || null;
+
+    return {
+      tenant,
+      ownerUser,
+    };
+  }
 }

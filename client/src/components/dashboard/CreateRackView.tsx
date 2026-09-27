@@ -13,6 +13,12 @@ import {
   List,
   FolderTree,
   Box,
+  Building2,
+  Pill,
+  Snowflake,
+  Sparkles,
+  Check,
+  Zap,
 } from "lucide-react";
 
 interface CreateRackViewProps {
@@ -20,13 +26,62 @@ interface CreateRackViewProps {
   onNavigate?: (module: any) => void;
 }
 
+interface RackPreset {
+  id: string;
+  name: string;
+  code: string;
+  category: "COMPANY" | "GENERIC" | "SPECIAL";
+  shelves: number;
+  bins: number;
+  type?: string;
+  description: string;
+  badge: string;
+}
+
+const RACK_PRESETS: RackPreset[] = [
+  // 🏢 Top Pharma Companies
+  { id: "bex", name: "Beximco Pharmaceuticals", code: "BEX-01 (Beximco)", category: "COMPANY", shelves: 6, bins: 0, description: "Napa, Ace, Filmet, Tofen, etc.", badge: "Top Company" },
+  { id: "sqr", name: "Square Pharmaceuticals", code: "SQR-01 (Square)", category: "COMPANY", shelves: 6, bins: 0, description: "Seclo, Ace, Alatrol, Ciprocin, etc.", badge: "Top Company" },
+  { id: "inc", name: "Incepta Pharmaceuticals", code: "INC-01 (Incepta)", category: "COMPANY", shelves: 6, bins: 0, description: "Pantone, Osartil, Filwel, etc.", badge: "Top Company" },
+  { id: "ren", name: "Renata Limited", code: "REN-01 (Renata)", category: "COMPANY", shelves: 5, bins: 0, description: "Maxpro, Fexo, Rolac, etc.", badge: "Company" },
+  { id: "aci", name: "ACI Healthcare", code: "ACI-01 (ACI)", category: "COMPANY", shelves: 5, bins: 0, description: "Oradin, Deflux, Naproxen, etc.", badge: "Company" },
+  { id: "skf", name: "Eskayef (SK+F)", code: "SKF-01 (SK+F)", category: "COMPANY", shelves: 5, bins: 0, description: "Losectil, Bilastin, Coralcal, etc.", badge: "Company" },
+  { id: "ops", name: "Opsonin Pharma", code: "OPS-01 (Opsonin)", category: "COMPANY", shelves: 5, bins: 0, description: "Finix, De-Rash, Cef-3, etc.", badge: "Company" },
+  { id: "ari", name: "Aristopharma", code: "ARI-01 (Aristopharma)", category: "COMPANY", shelves: 5, bins: 0, description: "Omep, Lodipin, Aritone, etc.", badge: "Company" },
+  { id: "pop", name: "Popular Pharmaceuticals", code: "POP-01 (Popular)", category: "COMPANY", shelves: 5, bins: 0, description: "Progut, Polium, etc.", badge: "Company" },
+  { id: "hpl", name: "Healthcare Pharmaceuticals", code: "HPL-01 (Healthcare)", category: "COMPANY", shelves: 5, bins: 0, description: "Sergel, Xeldrin, etc.", badge: "Company" },
+
+  // 💊 Generic & Therapy Categories
+  { id: "gst", name: "Gastric & PPI", code: "GST-01 (Gastric & PPI)", category: "GENERIC", shelves: 6, bins: 0, description: "Omeprazole, Esomeprazole, Rabeprazole, Antacids", badge: "High Demand" },
+  { id: "ant", name: "Antibiotics & Anti-infectives", code: "ANT-01 (Antibiotics)", category: "GENERIC", shelves: 6, bins: 0, description: "Cefixime, Azithromycin, Ciprofloxacin, Amoxicillin", badge: "Controlled" },
+  { id: "syr", name: "Syrups & Suspensions", code: "SYR-01 (Syrups & Suspensions)", category: "GENERIC", shelves: 4, bins: 0, description: "Cough syrups, Paediatric drops, Liquid tonics", badge: "Liquids" },
+  { id: "pain", name: "Pain Relief, Fever & NSAIDs", code: "PAIN-01 (Pain & Fever)", category: "GENERIC", shelves: 5, bins: 0, description: "Paracetamol, Aceclofenac, Ketorolac, Ibuprofen", badge: "Everyday" },
+  { id: "cvs", name: "Cardiovascular & BP", code: "CVS-01 (Heart & BP)", category: "GENERIC", shelves: 5, bins: 0, description: "Amlodipine, Losartan, Telmisartan, Rosuvastatin", badge: "Chronic" },
+  { id: "dia", name: "Diabetes & Endocrine", code: "DIA-01 (Diabetes)", category: "GENERIC", shelves: 4, bins: 0, description: "Metformin, Gliclazide, Sitagliptin, Linagliptin", badge: "Chronic" },
+  { id: "drop", name: "Eye, Ear & Nasal Drops", code: "DRP-01 (Drops)", category: "GENERIC", shelves: 4, bins: 0, description: "Ophthalmic & Otic formulations, Nasal sprays", badge: "Specialty" },
+  { id: "ont", name: "Ointments, Creams & Topical", code: "ONT-01 (Ointments)", category: "GENERIC", shelves: 4, bins: 0, description: "Antibiotic creams, Steroids, Antifungal gels", badge: "Topical" },
+  { id: "vit", name: "Vitamins & Calcium", code: "VIT-01 (Vitamins & Supplements)", category: "GENERIC", shelves: 5, bins: 0, description: "Multivitamins, Zinc, Calcium + Vit D, Iron", badge: "OTC" },
+
+  // ❄️ Specialized Units
+  { id: "fridge", name: "Main Refrigerator (Cold Chain)", code: "FRIDGE-01 (Cold Chain 2-8°C)", category: "SPECIAL", shelves: 3, bins: 0, type: "REFRIGERATOR", description: "Insulins, Vaccines, Eye Drops, Biologics", badge: "2°C to 8°C" },
+  { id: "otc", name: "Fast-Moving Front Counter", code: "OTC-01 (Front Counter)", category: "SPECIAL", shelves: 4, bins: 0, description: "Quick access emergency & high-volume products", badge: "Front Desk" },
+];
+
 export function CreateRackView({ selectedBranchId, onNavigate }: CreateRackViewProps) {
   // Form State
-  const [rackName, setRackName] = useState("R01");
+  const [rackName, setRackName] = useState("BEX-01 (Beximco)");
+  const [rackType, setRackType] = useState("RACK");
   const [shelfPrefix, setShelfPrefix] = useState("Shelf");
   const [numberOfShelves, setNumberOfShelves] = useState<number>(6);
   const [binPrefix, setBinPrefix] = useState("Bin");
-  const [binsPerShelf, setBinsPerShelf] = useState<number>(3);
+  const [binsPerShelf, setBinsPerShelf] = useState<number>(0);
+
+  // Custom Shelf Names state
+  const [useCustomShelfLabels, setUseCustomShelfLabels] = useState(false);
+  const [customShelfNames, setCustomShelfNames] = useState<string[]>([]);
+
+  // Preset filter tab
+  const [presetTab, setPresetTab] = useState<"COMPANY" | "GENERIC" | "SPECIAL">("COMPANY");
 
   // Submission State
   const [submitting, setSubmitting] = useState(false);
@@ -46,6 +101,41 @@ export function CreateRackView({ selectedBranchId, onNavigate }: CreateRackViewP
     return `${clean} ${index}`;
   };
 
+  // Quick shelf name helpers
+  const fillCompanyShelves = () => {
+    setUseCustomShelfLabels(true);
+    const companies = [
+      "Shelf 1 - Beximco (Napa, Ace)",
+      "Shelf 2 - Square (Seclo, Alatrol)",
+      "Shelf 3 - Incepta (Pantone, Osartil)",
+      "Shelf 4 - Renata (Maxpro, Fexo)",
+      "Shelf 5 - ACI Healthcare (Oradin)",
+      "Shelf 6 - Eskayef SK+F (Losectil)",
+      "Shelf 7 - Opsonin (Finix)",
+      "Shelf 8 - Aristopharma (Omep)",
+      "Shelf 9 - Popular Pharma",
+      "Shelf 10 - Healthcare Pharma",
+    ];
+    setCustomShelfNames(companies.slice(0, totalShelves));
+  };
+
+  const fillGenericShelves = () => {
+    setUseCustomShelfLabels(true);
+    const generics = [
+      "Shelf 1 - Gastric & PPI (Antacids)",
+      "Shelf 2 - Antibiotics & Anti-infectives",
+      "Shelf 3 - Pain, Fever & NSAIDs",
+      "Shelf 4 - Syrups & Suspensions",
+      "Shelf 5 - Cardiovascular & BP",
+      "Shelf 6 - Diabetes & Endocrine",
+      "Shelf 7 - Eye & Ear Drops",
+      "Shelf 8 - Ointments & Topical",
+      "Shelf 9 - Vitamins & Calcium",
+      "Shelf 10 - Surgical & OTC",
+    ];
+    setCustomShelfNames(generics.slice(0, totalShelves));
+  };
+
   // Live Structure Preview
   const previewStructure = useMemo(() => {
     const rName = rackName.trim() || "Rack";
@@ -59,7 +149,8 @@ export function CreateRackView({ selectedBranchId, onNavigate }: CreateRackViewP
     }> = [];
 
     for (let s = 1; s <= totalShelves; s++) {
-      const sName = formatName(sPrefix, s);
+      const customVal = customShelfNames[s - 1]?.trim();
+      const sName = (useCustomShelfLabels && customVal) ? customVal : formatName(sPrefix, s);
       const binsList: Array<{ name: string; fullCode: string }> = [];
 
       if (totalBinsPerShelf > 0) {
@@ -83,7 +174,7 @@ export function CreateRackView({ selectedBranchId, onNavigate }: CreateRackViewP
       rackName: rName,
       shelves: shelvesList,
     };
-  }, [rackName, shelfPrefix, totalShelves, binPrefix, totalBinsPerShelf]);
+  }, [rackName, shelfPrefix, totalShelves, binPrefix, totalBinsPerShelf, useCustomShelfLabels, customShelfNames]);
 
   // Handle Rack Creation
   const handleCreate = async (e: React.FormEvent) => {
@@ -102,11 +193,12 @@ export function CreateRackView({ selectedBranchId, onNavigate }: CreateRackViewP
         method: "POST",
         body: JSON.stringify({
           name: rackName.trim(),
-          type: "RACK",
+          type: rackType || "RACK",
           shelfPrefix: shelfPrefix.trim() || "Shelf",
           numberOfShelves: totalShelves,
           binPrefix: binPrefix.trim() || "Bin",
           binsPerShelf: totalBinsPerShelf,
+          customShelves: useCustomShelfLabels ? customShelfNames.slice(0, totalShelves) : undefined,
           branchId: selectedBranchId || undefined,
         }),
       });
@@ -127,12 +219,28 @@ export function CreateRackView({ selectedBranchId, onNavigate }: CreateRackViewP
     }
   };
 
+  const handleApplyPreset = (preset: RackPreset) => {
+    setRackName(preset.code);
+    setRackType(preset.type || "RACK");
+    setNumberOfShelves(preset.shelves);
+    setBinsPerShelf(preset.bins);
+    setShelfPrefix("Shelf");
+    setBinPrefix("Bin");
+    setUseCustomShelfLabels(false);
+    setCustomShelfNames([]);
+    setErrorMsg(null);
+    setSuccessMsg(null);
+  };
+
   const handleReset = () => {
     setRackName("");
+    setRackType("RACK");
     setShelfPrefix("Shelf");
     setNumberOfShelves(6);
     setBinPrefix("Bin");
-    setBinsPerShelf(3);
+    setBinsPerShelf(0);
+    setUseCustomShelfLabels(false);
+    setCustomShelfNames([]);
     setErrorMsg(null);
     setSuccessMsg(null);
   };
@@ -197,24 +305,147 @@ export function CreateRackView({ selectedBranchId, onNavigate }: CreateRackViewP
         </div>
       )}
 
+      {/* ⚡ Quick Strategy Presets (1-Click Fill) */}
+      <div className="bg-gradient-to-r from-brand-primary/5 via-blue-50/50 to-indigo-50/50 dark:from-slate-900 dark:via-slate-900 dark:to-slate-850 border border-brand-primary/20 dark:border-slate-800 rounded-2xl p-5 shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="h-9 w-9 rounded-xl bg-brand-primary text-white flex items-center justify-center shrink-0 shadow-sm">
+              <Zap className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
+                <span>Fast Rack Setup Templates</span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-brand-primary/10 text-brand-primary font-black uppercase tracking-wider">
+                  1-Click Fill
+                </span>
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Choose a pre-configured template for company-wise or generic therapy-wise pharmacy organization.
+              </p>
+            </div>
+          </div>
+
+          {/* Strategy Tabs */}
+          <div className="flex items-center gap-1 bg-white dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 self-start sm:self-auto text-xs">
+            <button
+              type="button"
+              onClick={() => setPresetTab("COMPANY")}
+              className={`px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                presetTab === "COMPANY"
+                  ? "bg-brand-primary text-white shadow-xs"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+              }`}
+            >
+              <Building2 className="h-3.5 w-3.5" />
+              <span>Pharma Companies</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setPresetTab("GENERIC")}
+              className={`px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                presetTab === "GENERIC"
+                  ? "bg-brand-primary text-white shadow-xs"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+              }`}
+            >
+              <Pill className="h-3.5 w-3.5" />
+              <span>Generic Therapy</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setPresetTab("SPECIAL")}
+              className={`px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                presetTab === "SPECIAL"
+                  ? "bg-brand-primary text-white shadow-xs"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+              }`}
+            >
+              <Snowflake className="h-3.5 w-3.5" />
+              <span>Cold / Special</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Preset Cards Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5">
+          {RACK_PRESETS.filter((p) => p.category === presetTab).map((preset) => {
+            const isActive = rackName === preset.code;
+            return (
+              <button
+                key={preset.id}
+                type="button"
+                onClick={() => handleApplyPreset(preset)}
+                className={`p-3 rounded-xl border-2 text-left transition flex flex-col justify-between gap-1.5 cursor-pointer group ${
+                  isActive
+                    ? "border-brand-primary bg-white dark:bg-slate-800 shadow-md ring-2 ring-brand-primary/20"
+                    : "border-slate-200/80 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 hover:border-brand-primary/40 hover:bg-white dark:hover:bg-slate-900"
+                }`}
+              >
+                <div className="flex items-center justify-between gap-1">
+                  <span className="text-[10px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                    {preset.badge}
+                  </span>
+                  {isActive && (
+                    <div className="h-4 w-4 rounded-full bg-brand-primary text-white flex items-center justify-center shrink-0">
+                      <Check className="h-3 w-3 stroke-[3]" />
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-0.5">
+                  <div className="text-xs font-black text-slate-900 dark:text-white group-hover:text-brand-primary transition truncate">
+                    {preset.name}
+                  </div>
+                  <div className="text-[11px] font-mono font-bold text-brand-primary">
+                    {preset.code.split(" ")[0]}
+                  </div>
+                </div>
+
+                <div className="text-[10px] text-slate-400 dark:text-slate-500 truncate" title={preset.description}>
+                  {preset.shelves} Shelves • {preset.bins === 0 ? "Direct (0 Bins)" : `${preset.bins} Bins/Shelf`}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Main Grid: Form Left, Preview Right */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Form Container */}
         <div className="lg:col-span-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 lg:p-7 shadow-xs space-y-6">
           <form onSubmit={handleCreate} className="space-y-6">
-            {/* Rack Name */}
-            <div>
-              <label className="block text-base font-bold text-slate-800 dark:text-slate-200 mb-2">
-                Rack Name <span className="text-rose-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={rackName}
-                onChange={(e) => setRackName(e.target.value)}
-                placeholder="e.g. R01, Rack A, Wall Rack 1"
-                required
-                className="w-full h-12 text-base font-bold px-4 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:border-brand-primary outline-none transition"
-              />
+            {/* Storage Type & Rack Name */}
+            <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+              <div className="sm:col-span-8">
+                <label className="block text-base font-bold text-slate-800 dark:text-slate-200 mb-2">
+                  Rack / Unit Name <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={rackName}
+                  onChange={(e) => setRackName(e.target.value)}
+                  placeholder="e.g. BEX-01 (Beximco), GST-01, Wall Rack 1"
+                  required
+                  className="w-full h-12 text-base font-bold px-4 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:border-brand-primary outline-none transition"
+                />
+              </div>
+
+              <div className="sm:col-span-4">
+                <label className="block text-base font-bold text-slate-800 dark:text-slate-200 mb-2">
+                  Unit Type
+                </label>
+                <select
+                  value={rackType}
+                  onChange={(e) => setRackType(e.target.value)}
+                  className="w-full h-12 text-sm font-bold px-3 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:border-brand-primary outline-none transition cursor-pointer"
+                >
+                  <option value="RACK">Standard Rack</option>
+                  <option value="REFRIGERATOR">Refrigerator (Cold)</option>
+                  <option value="CABINET">Lockable Cabinet</option>
+                  <option value="DRAWER">Counter Drawer</option>
+                </select>
+              </div>
             </div>
 
             {/* Shelves Setup */}
@@ -250,6 +481,85 @@ export function CreateRackView({ selectedBranchId, onNavigate }: CreateRackViewP
                   />
                 </div>
               </div>
+
+              {/* Custom Individual Shelf Labels Toggle */}
+              <div className="pt-2 border-t border-slate-200 dark:border-slate-800 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
+                      Individual Shelf Names / Categories
+                    </span>
+                    <span className="text-[11px] text-slate-400">
+                      Assign specific company (Beximco, Square) or therapy to each shelf
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 self-start sm:self-auto">
+                    <button
+                      type="button"
+                      onClick={() => setUseCustomShelfLabels(!useCustomShelfLabels)}
+                      className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                        useCustomShelfLabels
+                          ? "bg-brand-primary text-white shadow-xs"
+                          : "bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300"
+                      }`}
+                    >
+                      {useCustomShelfLabels ? "Custom Naming ON" : "+ Customize Shelves"}
+                    </button>
+                  </div>
+                </div>
+
+                {useCustomShelfLabels && (
+                  <div className="space-y-3 bg-white dark:bg-slate-900 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 animate-in fade-in duration-200">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                        Quick Fill Each Shelf:
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={fillCompanyShelves}
+                          className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900 hover:bg-blue-100 transition cursor-pointer"
+                        >
+                          🏢 Fill Top Companies
+                        </button>
+                        <button
+                          type="button"
+                          onClick={fillGenericShelves}
+                          className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-900 hover:bg-purple-100 transition cursor-pointer"
+                        >
+                          💊 Fill Generic Therapies
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2 max-h-56 overflow-y-auto pr-1 divide-y divide-slate-100 dark:divide-slate-800">
+                      {Array.from({ length: totalShelves }, (_, idx) => {
+                        const sNum = idx + 1;
+                        const currentVal = customShelfNames[idx] || "";
+                        return (
+                          <div key={idx} className="pt-2 first:pt-0 flex items-center gap-2">
+                            <span className="text-xs font-mono font-bold text-slate-500 dark:text-slate-400 w-16 shrink-0">
+                              Shelf {sNum}:
+                            </span>
+                            <input
+                              type="text"
+                              value={currentVal}
+                              placeholder={`e.g. Shelf ${sNum} - Beximco (Napa) or Gastric`}
+                              onChange={(e) => {
+                                const next = [...customShelfNames];
+                                next[idx] = e.target.value;
+                                setCustomShelfNames(next);
+                              }}
+                              className="flex-1 h-9 text-xs font-semibold px-3 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-850 text-slate-900 dark:text-white focus:border-brand-primary focus:bg-white outline-none"
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Bins Setup */}
@@ -284,6 +594,14 @@ export function CreateRackView({ selectedBranchId, onNavigate }: CreateRackViewP
                     className="w-full h-11 text-sm font-bold px-3.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:border-brand-primary outline-none"
                   />
                 </div>
+              </div>
+
+              <div className="text-xs text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-900 p-3 rounded-lg border border-slate-200/80 dark:border-slate-800 flex items-start gap-2">
+                <span className="text-amber-500 font-bold shrink-0">💡 Note:</span>
+                <span>
+                  <strong>0 Bins (Recommended):</strong> Medicines are placed directly on each shelf (e.g., <em>{rackName || "Rack"} › Shelf 1</em>).
+                  Only specify bins if you physically use plastic bin boxes or divided slots inside the shelf.
+                </span>
               </div>
             </div>
 

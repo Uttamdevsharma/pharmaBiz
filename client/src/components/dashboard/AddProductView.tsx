@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { fetchApi } from "@/lib/api";
-import { Product, Category } from "@/types";
+import { Product, Category, Supplier } from "@/types";
 import { showAlert } from "@/lib/swal";
 import {
   Package,
@@ -20,6 +20,8 @@ import {
   Plus,
   X,
   FolderTree,
+  Building2,
+  Truck,
 } from "lucide-react";
 
 interface AddProductViewProps {
@@ -36,6 +38,7 @@ export function AddProductView({
   const isEditing = Boolean(editingProduct);
 
   const [categories, setCategories] = useState<Category[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loadingVariants, setLoadingVariants] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -61,9 +64,11 @@ export function AddProductView({
     categoryId: editingProduct?.categoryId || "",
     subcategoryId: editingProduct?.subcategoryId || "",
     brandId: editingProduct?.brandId || "",
-    brandName: editingProduct?.brandName || "",
+    brandName: editingProduct?.brandName || (editingProduct as any)?.manufacturer || "",
+    supplierId: (editingProduct as any)?.supplierId || "",
     unit: editingProduct?.unit || "tablet",
     size: editingProduct?.size || "500mg",
+    minStockAlert: (editingProduct as any)?.minStockAlert ?? 10,
     defaultPackType: "BOX",
     stripsPerBox: editingProduct?.stripsPerBox || 10,
     tabletsPerStrip: editingProduct?.tabletsPerStrip || 10,
@@ -74,16 +79,45 @@ export function AddProductView({
   const loadVariants = async () => {
     try {
       setLoadingVariants(true);
-      const catsRes = await fetchApi("/products/variants/categories");
-      if (catsRes.success && catsRes.data) {
+      const [catsRes, suppsRes] = await Promise.all([
+        fetchApi<any>("/products/variants/categories"),
+        fetchApi<any>("/suppliers"),
+      ]);
+
+      if (catsRes?.success && catsRes.data) {
         setCategories(catsRes.data);
         if (!formData.categoryId && catsRes.data.length > 0) {
           const defaultCat = catsRes.data[0];
           setFormData((prev) => ({ ...prev, categoryId: defaultCat.id }));
         }
       }
+
+      let suppList: Supplier[] = [];
+      if (suppsRes?.success && Array.isArray(suppsRes.data)) {
+        suppList = suppsRes.data;
+      } else if (Array.isArray(suppsRes)) {
+        suppList = suppsRes;
+      }
+      setSuppliers(suppList);
+
+      if (editingProduct) {
+        const bName = editingProduct.brandName || (editingProduct as any)?.manufacturer || "";
+        const sId = (editingProduct as any)?.supplierId;
+        const matched = suppList.find(
+          (s) =>
+            (sId && s.id === sId) ||
+            (bName && (s.company?.toLowerCase() === bName.toLowerCase() || s.name.toLowerCase() === bName.toLowerCase()))
+        );
+        if (matched) {
+          setFormData((prev) => ({
+            ...prev,
+            supplierId: matched.id,
+            brandName: matched.name || matched.company || "",
+          }));
+        }
+      }
     } catch (err) {
-      console.error("Failed to load catalog variants", err);
+      console.error("Failed to load catalog variants and suppliers", err);
     } finally {
       setLoadingVariants(false);
     }
@@ -95,6 +129,27 @@ export function AddProductView({
 
   useEffect(() => {
     if (editingProduct) {
+      setFormData({
+        name: editingProduct.name || "",
+        genericName: editingProduct.genericName || "",
+        sku: editingProduct.sku || "",
+        barcode: editingProduct.barcode || `${Math.floor(100000000000 + Math.random() * 900000000000)}`,
+        basePrice: editingProduct.basePrice ? Number(editingProduct.basePrice) : 0,
+        categoryId: editingProduct.categoryId || "",
+        subcategoryId: editingProduct.subcategoryId || "",
+        brandId: editingProduct.brandId || "",
+        brandName: editingProduct.brandName || (editingProduct as any)?.manufacturer || "",
+        supplierId: (editingProduct as any)?.supplierId || "",
+        unit: editingProduct.unit || "tablet",
+        size: editingProduct.size || "500mg",
+        minStockAlert: (editingProduct as any)?.minStockAlert ?? 10,
+        defaultPackType: editingProduct.defaultPackType || "BOX",
+        stripsPerBox: editingProduct.stripsPerBox || 10,
+        tabletsPerStrip: editingProduct.tabletsPerStrip || 10,
+        description: editingProduct.description || "",
+        requiresPrescription: Boolean(editingProduct.requiresPrescription),
+      });
+
       const u = editingProduct.unit?.toLowerCase() || "";
       const p = editingProduct.defaultPackType?.toUpperCase() || "";
       if (u === "bottle" || p === "BOTTLE") {
@@ -328,6 +383,7 @@ export function AddProductView({
         tabletsPerStrip: tablets,
         qtyPerLevel3: strips,
         qtyPerLevel4: tablets,
+        minStockAlert: Number(formData.minStockAlert) >= 0 ? Number(formData.minStockAlert) : 10,
         description: formData.description || null,
         requiresPrescription: formData.requiresPrescription,
       };
@@ -379,6 +435,7 @@ export function AddProductView({
       subcategoryId: "",
       brandId: "",
       brandName: "",
+      supplierId: "",
       unit: "tablet",
       size: "500mg",
       defaultPackType: "BOX",
@@ -386,6 +443,7 @@ export function AddProductView({
       tabletsPerStrip: 10,
       description: "",
       requiresPrescription: false,
+      minStockAlert: 10,
     });
   };
 
@@ -498,9 +556,61 @@ export function AddProductView({
               />
             </div>
 
+            {/* Company / Supplier Dropdown */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="block text-sm sm:text-base xl:text-lg font-bold text-slate-800 dark:text-slate-200">
+                  Company / Supplier <span className="text-rose-500">*</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => onNavigate("sup_create_supplier")}
+                  className="text-xs sm:text-sm text-brand-primary hover:underline font-bold flex items-center gap-1 cursor-pointer"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  <span>+ New Supplier</span>
+                </button>
+              </div>
+
+              <div className="relative">
+                <Building2 className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400 pointer-events-none" />
+                <select
+                  required
+                  value={formData.supplierId}
+                  onChange={(e) => {
+                    const sId = e.target.value;
+                    const matchedSupplier = suppliers.find((s) => s.id === sId);
+                    setFormData({
+                      ...formData,
+                      supplierId: sId,
+                      brandName: matchedSupplier?.name || matchedSupplier?.company || "",
+                    });
+                  }}
+                  className="w-full h-12 sm:h-12 xl:h-13 pl-11 pr-4 bg-slate-50/70 hover:bg-slate-50 dark:bg-slate-800/60 dark:hover:bg-slate-800/80 focus:bg-white dark:focus:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-sm sm:text-base xl:text-lg font-semibold text-slate-900 dark:text-white outline-none focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20 transition-all cursor-pointer"
+                >
+                  <option value="">-- Select Company / Supplier --</option>
+                  {suppliers.map((s) => {
+                    const label = s.company && s.company !== s.name
+                      ? `${s.company} (${s.name})`
+                      : s.name;
+                    return (
+                      <option key={s.id} value={s.id}>
+                        {label}
+                      </option>
+                    );
+                  })}
+                  {formData.brandName && !suppliers.some((s) => s.id === formData.supplierId) && (
+                    <option value={formData.supplierId || "custom"}>
+                      {formData.brandName}
+                    </option>
+                  )}
+                </select>
+              </div>
+            </div>
+
             {/* Strength / Size */}
-            <div>
-              <label className="block text-sm sm:text-base xl:text-lg font-bold text-slate-800 dark:text-slate-200 mb-2">
+            <div className="space-y-1.5">
+              <label className="block text-sm sm:text-base xl:text-lg font-bold text-slate-800 dark:text-slate-200">
                 Strength / Size
               </label>
               <input
@@ -512,8 +622,28 @@ export function AddProductView({
               />
             </div>
 
+            {/* Low Stock Alert Threshold */}
+            <div className="space-y-1.5">
+              <label className="block text-sm sm:text-base xl:text-lg font-bold text-slate-800 dark:text-slate-200">
+                Low Stock Alert Limit (Units)
+              </label>
+              <input
+                type="number"
+                min="0"
+                placeholder="e.g. 50 or 100 (Default: 10)"
+                value={formData.minStockAlert}
+                onChange={(e) =>
+                  setFormData({ ...formData, minStockAlert: e.target.value === "" ? "" : Number(e.target.value) })
+                }
+                className="w-full h-12 sm:h-12 xl:h-13 px-4 bg-slate-50/70 hover:bg-slate-50 dark:bg-slate-800/60 dark:hover:bg-slate-800/80 focus:bg-white dark:focus:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-sm sm:text-base xl:text-lg font-semibold text-slate-900 dark:text-white placeholder:text-xs sm:placeholder:text-sm xl:placeholder:text-base placeholder:font-normal placeholder:text-slate-400 dark:placeholder:text-slate-500 outline-none focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20 transition-all"
+              />
+              <p className="text-[11px] text-slate-400">
+                Triggers &quot;Low Stock&quot; warning when total stock falls below this amount.
+              </p>
+            </div>
+
             {/* Doctor Prescription Rx Checkbox */}
-            <div className="flex flex-col justify-end">
+            <div className="md:col-span-2 flex flex-col justify-end">
               <label className="h-12 sm:h-12 xl:h-13 px-4 bg-slate-50/70 hover:bg-slate-50 dark:bg-slate-800/60 dark:hover:bg-slate-800/80 border-2 border-slate-200 dark:border-slate-700 rounded-xl flex items-center justify-between cursor-pointer transition">
                 <span className="text-sm sm:text-base xl:text-lg font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2.5">
                   <span className="px-2 py-0.5 bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 rounded-md text-xs sm:text-sm font-black">

@@ -13,6 +13,7 @@ import {
   RotateCcw,
   Sparkles,
   Info,
+  Archive,
 } from "lucide-react";
 
 export interface SmartLocationSelectorProps {
@@ -25,6 +26,10 @@ export interface SmartLocationSelectorProps {
   required?: boolean;
   disabled?: boolean;
   compact?: boolean;
+  suggestedCompany?: string | null;
+  suggestedGeneric?: string | null;
+  suggestedCategory?: string | null;
+  productName?: string | null;
 }
 
 /**
@@ -48,6 +53,162 @@ export function isRefrigeratorOrColdUnit(rack: any): boolean {
   );
 }
 
+export interface LocationMatchSuggestion {
+  rack: any;
+  shelf?: any;
+  reason: string;
+  badge: string;
+  type: "COMPANY" | "GENERIC" | "CATEGORY" | "COLD";
+}
+
+export function findSmartLocationSuggestion(
+  racks: any[],
+  company?: string | null,
+  generic?: string | null,
+  category?: string | null,
+  productName?: string | null
+): LocationMatchSuggestion | null {
+  if (!racks || racks.length === 0) return null;
+
+  const comp = (company || "").toLowerCase().trim();
+  const gen = (generic || "").toLowerCase().trim();
+  const cat = (category || "").toLowerCase().trim();
+  const prod = (productName || "").toLowerCase().trim();
+
+  // 1. Check Cold Chain requirement (Insulin, Vaccine, Injection, Eye Drops requiring cold)
+  const isColdRequired =
+    prod.includes("insulin") ||
+    gen.includes("insulin") ||
+    prod.includes("vaccine") ||
+    cat.includes("cold") ||
+    cat.includes("vaccine") ||
+    cat.includes("insulin");
+
+  if (isColdRequired) {
+    const coldRack = racks.find((r) => isRefrigeratorOrColdUnit(r));
+    if (coldRack) {
+      return {
+        rack: coldRack,
+        shelf: coldRack.shelves?.[0] || null,
+        reason: "Cold chain temperature-controlled storage (2°C - 8°C)",
+        badge: "Cold Storage",
+        type: "COLD",
+      };
+    }
+  }
+
+  // 2. Company / Manufacturer Match
+  if (comp) {
+    const compClean = comp.replace(/pharma(ceuticals)?|ltd\.?|limited/gi, "").trim();
+    const compFirstWord = compClean.split(/\s+/)[0];
+
+    const companyRack = racks.find((r) => {
+      const rName = (r.name || "").toLowerCase();
+      return (
+        rName.includes(compClean) ||
+        (compFirstWord.length >= 3 && rName.includes(compFirstWord)) ||
+        (comp.includes("beximco") && (rName.includes("bex") || rName.includes("beximco"))) ||
+        (comp.includes("square") && (rName.includes("sqr") || rName.includes("square"))) ||
+        (comp.includes("incepta") && (rName.includes("inc") || rName.includes("incepta"))) ||
+        (comp.includes("renata") && (rName.includes("ren") || rName.includes("renata"))) ||
+        (comp.includes("opsonin") && (rName.includes("ops") || rName.includes("opsonin"))) ||
+        (comp.includes("eskayef") && (rName.includes("skf") || rName.includes("sk+f") || rName.includes("eskayef"))) ||
+        (comp.includes("aci") && rName.includes("aci")) ||
+        (comp.includes("popular") && (rName.includes("pop") || rName.includes("popular"))) ||
+        (comp.includes("healthcare") && (rName.includes("hpl") || rName.includes("healthcare"))) ||
+        (comp.includes("aristopharma") && (rName.includes("ari") || rName.includes("aristopharma")))
+      );
+    });
+
+    if (companyRack) {
+      return {
+        rack: companyRack,
+        shelf: companyRack.shelves?.[0] || null,
+        reason: `Company Rack for ${company}`,
+        badge: "Company Rack",
+        type: "COMPANY",
+      };
+    }
+  }
+
+  // 3. Generic / Therapy Match
+  if (gen || prod) {
+    const isGastric =
+      gen.includes("prazole") ||
+      gen.includes("antacid") ||
+      prod.includes("seclo") ||
+      prod.includes("losectil") ||
+      prod.includes("maxpro") ||
+      prod.includes("pantone") ||
+      prod.includes("sergel");
+
+    const isAntibiotic =
+      gen.includes("cillin") ||
+      gen.includes("mycin") ||
+      gen.includes("oxacin") ||
+      gen.includes("cefixime") ||
+      gen.includes("cefpodoxime") ||
+      gen.includes("cef-3") ||
+      cat.includes("antibiotic");
+
+    const isPain =
+      gen.includes("paracetamol") ||
+      gen.includes("aceclofenac") ||
+      gen.includes("ketorolac") ||
+      gen.includes("ibuprofen") ||
+      gen.includes("naproxen") ||
+      prod.includes("napa") ||
+      prod.includes("ace");
+
+    const genericRack = racks.find((r) => {
+      const rName = (r.name || "").toLowerCase();
+      if (isGastric && (rName.includes("gastric") || rName.includes("ppi") || rName.includes("gst"))) return true;
+      if (isAntibiotic && (rName.includes("antibiotic") || rName.includes("ant-") || rName.includes("anti"))) return true;
+      if (isPain && (rName.includes("pain") || rName.includes("fever") || rName.includes("nsaid"))) return true;
+      if (gen && gen.length >= 4 && rName.includes(gen)) return true;
+      return false;
+    });
+
+    if (genericRack) {
+      return {
+        rack: genericRack,
+        shelf: genericRack.shelves?.[0] || null,
+        reason: `Therapy Rack for ${generic || "Therapy Group"}`,
+        badge: "Generic Rack",
+        type: "GENERIC",
+      };
+    }
+  }
+
+  // 4. Category Match (Syrup, Drop, Ointment, etc.)
+  if (cat || prod) {
+    const isSyrup = cat.includes("syrup") || cat.includes("suspension") || prod.includes("syrup");
+    const isDrop = cat.includes("drop") || cat.includes("eye") || cat.includes("ear");
+    const isOintment = cat.includes("cream") || cat.includes("ointment") || cat.includes("gel");
+
+    const categoryRack = racks.find((r) => {
+      const rName = (r.name || "").toLowerCase();
+      if (isSyrup && (rName.includes("syrup") || rName.includes("syr"))) return true;
+      if (isDrop && (rName.includes("drop") || rName.includes("drp"))) return true;
+      if (isOintment && (rName.includes("ointment") || rName.includes("ont") || rName.includes("cream"))) return true;
+      if (cat && cat.length >= 4 && rName.includes(cat)) return true;
+      return false;
+    });
+
+    if (categoryRack) {
+      return {
+        rack: categoryRack,
+        shelf: categoryRack.shelves?.[0] || null,
+        reason: `Formulation Rack for ${category}`,
+        badge: "Category Rack",
+        type: "CATEGORY",
+      };
+    }
+  }
+
+  return null;
+}
+
 export function SmartLocationSelector({
   racks,
   selectedRackId,
@@ -58,6 +219,10 @@ export function SmartLocationSelector({
   required = true,
   disabled = false,
   compact = false,
+  suggestedCompany,
+  suggestedGeneric,
+  suggestedCategory,
+  productName,
 }: SmartLocationSelectorProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -103,6 +268,17 @@ export function SmartLocationSelector({
   const isSelectedCold = useMemo(() => {
     return isRefrigeratorOrColdUnit(selectedRack);
   }, [selectedRack]);
+
+  // Compute intelligent company/generic auto-suggestion
+  const smartSuggestion = useMemo(() => {
+    return findSmartLocationSuggestion(
+      racks,
+      suggestedCompany,
+      suggestedGeneric,
+      suggestedCategory,
+      productName
+    );
+  }, [racks, suggestedCompany, suggestedGeneric, suggestedCategory, productName]);
 
   // Flattened searchable entries for instant search
   const searchableOptions = useMemo(() => {
@@ -305,6 +481,43 @@ export function SmartLocationSelector({
         )}
       </div>
 
+      {/* 💡 Intelligent Auto-Match Recommendation Banner */}
+      {smartSuggestion && !selectedRackId && (
+        <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border-2 border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in duration-200">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-sm">
+              <Sparkles className="h-5 w-5 animate-pulse" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-black uppercase tracking-wider text-amber-700 dark:text-amber-400">
+                  Smart Placement Match
+                </span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 font-bold">
+                  {smartSuggestion.badge}
+                </span>
+              </div>
+              <div className="text-sm font-bold text-slate-900 dark:text-white mt-0.5">
+                {smartSuggestion.reason} &rarr; <span className="text-brand-primary font-black underline">{smartSuggestion.rack.name}</span>
+                {smartSuggestion.shelf ? ` › ${smartSuggestion.shelf.name}` : ""}
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              const firstShelf = smartSuggestion.shelf || smartSuggestion.rack.shelves?.[0];
+              onSelect(smartSuggestion.rack.id, firstShelf ? firstShelf.id : "", "");
+            }}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-black shadow-sm transition shrink-0 cursor-pointer"
+          >
+            <Sparkles className="h-4 w-4" />
+            <span>Apply Location ({smartSuggestion.rack.name})</span>
+          </button>
+        </div>
+      )}
+
       {/* Prominent Search Bar for All Locations */}
       <div ref={searchContainerRef} className="relative z-20">
         <div className="relative">
@@ -465,6 +678,7 @@ export function SmartLocationSelector({
               {filteredRacks.map((r) => {
                 const isSelected = r.id === selectedRackId;
                 const isCold = isRefrigeratorOrColdUnit(r);
+                const isSuggested = smartSuggestion?.rack?.id === r.id;
                 const shelfCount = r.shelves?.length ?? 0;
 
                 return (
@@ -477,6 +691,8 @@ export function SmartLocationSelector({
                         ? isCold
                           ? "border-sky-500 bg-sky-50 dark:bg-sky-950/40 text-sky-950 dark:text-sky-100 shadow-xs"
                           : "border-brand-primary bg-brand-primary/5 dark:bg-brand-primary/10 text-brand-primary shadow-xs"
+                        : isSuggested
+                        ? "border-amber-400 dark:border-amber-600/80 bg-amber-50/40 dark:bg-amber-950/20 text-slate-900 dark:text-white"
                         : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700 text-slate-800 dark:text-slate-200"
                     }`}
                   >
@@ -489,11 +705,18 @@ export function SmartLocationSelector({
                         )}
                         <span className="text-sm font-black truncate">{r.name}</span>
                       </div>
-                      {isSelected && (
-                        <div className="h-4 w-4 rounded-full bg-brand-primary text-white flex items-center justify-center shrink-0">
-                          <Check className="h-3 w-3 stroke-[3]" />
-                        </div>
-                      )}
+                      <div className="flex items-center gap-1">
+                        {isSuggested && !isSelected && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 font-black shrink-0">
+                            ⭐ Match
+                          </span>
+                        )}
+                        {isSelected && (
+                          <div className="h-4 w-4 rounded-full bg-brand-primary text-white flex items-center justify-center shrink-0">
+                            <Check className="h-3 w-3 stroke-[3]" />
+                          </div>
+                        )}
+                      </div>
                     </div>
 
                     <div className="text-[11px] font-medium text-slate-400 dark:text-slate-500">
@@ -575,19 +798,41 @@ export function SmartLocationSelector({
                         2
                       </span>
                       Select Shelf / Section in &quot;{selectedRack.name}&quot;:
-                      <span className="text-rose-500">*</span>
+                      <span className="text-xs text-slate-400 font-normal ml-1.5">(Choose shelf or whole rack)</span>
                     </span>
 
-                    {selectedShelf && (
+                    {selectedShelf ? (
                       <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
                         <Check className="h-3.5 w-3.5" />
                         <span>Shelf: {selectedShelf.name}</span>
+                      </span>
+                    ) : (
+                      <span className="text-xs font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                        <Check className="h-3.5 w-3.5" />
+                        <span>Entire Rack (General)</span>
                       </span>
                     )}
                   </div>
 
                   {/* Shelf Buttons */}
                   <div className="flex flex-wrap gap-2">
+                    {/* Optional Entire Rack Placement */}
+                    <button
+                      type="button"
+                      onClick={() => onSelect(selectedRackId, "", "")}
+                      className={`px-4 py-2 rounded-xl text-xs font-bold border-2 transition flex items-center gap-2 cursor-pointer ${
+                        !selectedShelfId
+                          ? "border-amber-500 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 shadow-xs"
+                          : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700 text-slate-700 dark:text-slate-300"
+                      }`}
+                    >
+                      <Archive className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                      <span>Entire Rack (General)</span>
+                      {!selectedShelfId && (
+                        <Check className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 stroke-[3]" />
+                      )}
+                    </button>
+
                     {availableShelves.map((shelf: any) => {
                       const isShelfSelected = shelf.id === selectedShelfId;
                       const binCount = shelf.bins?.length ?? 0;

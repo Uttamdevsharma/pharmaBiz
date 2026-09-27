@@ -537,6 +537,25 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
           return copy;
         }
       } else {
+        const locs = (batch?.locations || prod?.locations || []) as any[];
+        const primaryLoc = locs.find((l) => (Number(l.quantity) || 0) > 0) || locs[0];
+        let locLabel = "";
+        let rName = "";
+        let sName = "";
+        let bName = "";
+        if (primaryLoc) {
+          rName = primaryLoc.rack?.name || primaryLoc.rackName || "";
+          sName = primaryLoc.shelf?.name || primaryLoc.shelfName || "";
+          bName = primaryLoc.bin?.name || primaryLoc.binName || "";
+          if (rName && sName && bName && bName !== "B01" && bName !== "Bin 1") {
+            locLabel = `${rName} › ${sName} › ${bName}`;
+          } else if (rName && sName && sName !== "S01") {
+            locLabel = `${rName} › ${sName}`;
+          } else if (rName) {
+            locLabel = rName;
+          }
+        }
+
         const newItem: CartItem = {
           productId: prod.id,
           name: prod.name,
@@ -560,9 +579,12 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
           batchNumber: batch?.batchNumber || "Default",
           expiryDate: batch?.expiryDate || null,
           inventoryId: batch?.id || null,
-          inventoryLocationId: null,
-          shelfLocation: null,
-          locationLabel: undefined,
+          inventoryLocationId: primaryLoc?.id || null,
+          shelfLocation: locLabel || null,
+          locationLabel: locLabel || undefined,
+          rackName: rName || undefined,
+          shelfName: sName || undefined,
+          binName: bName || undefined,
           isControlled: prod.isControlled,
           requiresPrescription: prod.requiresPrescription,
           purchasePrice: batch?.purchasePrice || null,
@@ -673,15 +695,18 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
     } else if (batch?.locations && Array.isArray(batch.locations) && batch.locations.length > 0) {
       immediateLocs = batch.locations
         .map((loc: any) => {
-          const rName = loc.rack?.name || loc.rackName || "Rack 1";
-          const sName = loc.shelf?.name || loc.shelfName || "Shelf A";
-          const bName = loc.bin?.name || loc.binName || "Bin 1";
+          const rName = loc.rack?.name || loc.rackName || "";
+          const sName = loc.shelf?.name || loc.shelfName || "";
+          const bName = loc.bin?.name || loc.binName || "";
+          let label = rName || "Store";
+          if (sName && sName !== "S01" && sName !== "Shelf A") label += ` → ${sName}`;
+          if (bName && bName !== "B01" && bName !== "Bin 1") label += ` → ${bName}`;
           return {
             id: loc.id,
             rackName: rName,
             shelfName: sName,
             binName: bName,
-            locationLabel: `${rName} → ${sName} → ${bName}`,
+            locationLabel: label,
             quantity: loc.quantity || batch.quantity || 0,
           };
         })
@@ -694,10 +719,10 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
         immediateLocs = [
           {
             id: null,
-            rackName: "Main Store",
-            shelfName: "Rack 1",
-            binName: "Shelf A",
-            locationLabel: "Main Store → Rack 1 → Shelf A",
+            rackName: "Godown",
+            shelfName: "",
+            binName: "",
+            locationLabel: "Warehouse / Godown",
             quantity: defQty,
           },
         ];
@@ -1681,6 +1706,23 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                     const isKeySelected = idx === selectedSearchIndex;
                     const barcodeVal = batch?.barcode || product.barcode || product.sku || "—";
                     const variantStr = product.size || (product.unit ? `Unit: ${product.unit}` : "- - -");
+
+                    const locs = (batch?.locations || (product as any)?.locations || []) as any[];
+                    const primaryLoc = locs.find((l) => (Number(l.quantity) || 0) > 0) || locs[0];
+                    let locLabel = "";
+                    if (primaryLoc) {
+                      const rName = primaryLoc.rack?.name || primaryLoc.rackName || "";
+                      const sName = primaryLoc.shelf?.name || primaryLoc.shelfName || "";
+                      const bName = primaryLoc.bin?.name || primaryLoc.binName || "";
+                      if (rName && sName && bName && bName !== "B01" && bName !== "Bin 1") {
+                        locLabel = `${rName} › ${sName} › ${bName}`;
+                      } else if (rName && sName && sName !== "S01") {
+                        locLabel = `${rName} › ${sName}`;
+                      } else if (rName) {
+                        locLabel = rName;
+                      }
+                    }
+
                     return (
                       <div
                         key={`${product.id}-${batch?.id || idx}`}
@@ -1710,7 +1752,19 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-2 shrink-0">
+                        <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                          {/* Shelf Location Tag */}
+                          {locLabel ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-black bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900">
+                              <MapPin className="h-3 w-3 text-blue-500 shrink-0" />
+                              <span>{locLabel}</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold text-slate-400 bg-slate-100 dark:bg-slate-800">
+                              <span>Godown / Unassigned</span>
+                            </span>
+                          )}
+
                           <span className="px-2.5 py-1 rounded-full text-xs font-black bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 font-mono">
                             Stock: {stock.toLocaleString()}
                           </span>
@@ -1772,7 +1826,6 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                   className="sticky top-0 z-10 bg-emerald-600 dark:bg-emerald-700 text-white font-black text-sm uppercase tracking-wider shadow-sm"
                 >
                   <tr>
-                    <th className="py-3.5 px-4 whitespace-nowrap">Barcode</th>
                     <th className="py-3.5 px-4">Product Name</th>
                     <th className="py-3.5 px-4 text-right whitespace-nowrap">Price</th>
                     <th className="py-3.5 px-4 text-center whitespace-nowrap">Quantity & Packaging</th>
@@ -1783,7 +1836,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                 <tbody className="divide-y divide-slate-200 dark:divide-slate-800 text-slate-900 dark:text-slate-100">
                   {cart.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-14 sm:py-18 text-center text-slate-400">
+                      <td colSpan={5} className="py-14 sm:py-18 text-center text-slate-400">
                         <Barcode className="h-10 w-10 mx-auto text-slate-300 dark:text-slate-600 mb-2" />
                         <p className="text-base font-black text-slate-700 dark:text-slate-300">Sale cart is empty</p>
                         <p className="text-xs text-slate-400 mt-1 font-semibold">Click the search bar above to view products or scan barcode.</p>
@@ -1800,17 +1853,25 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
 
                       return (
                         <tr key={`${item.productId}-${idx}`} className="hover:bg-slate-50 dark:hover:bg-slate-800/60 transition">
-                          {/* Barcode */}
-                          <td className="py-3.5 px-3.5 font-mono text-slate-600 dark:text-slate-300 font-extrabold text-sm whitespace-nowrap">
-                            {item.barcode || item.sku || "—"}
-                          </td>
-
                           {/* Product Name */}
-                          <td className="py-3.5 px-3.5 font-black text-slate-900 dark:text-white max-w-[260px]">
+                          <td className="py-3 px-4 font-black text-slate-900 dark:text-white max-w-[280px]">
                             <div className="truncate text-base font-black leading-snug">{item.name}</div>
-                            {item.genericName && (
-                              <div className="text-xs text-emerald-600 dark:text-emerald-400 truncate font-bold mt-0.5">{item.genericName}</div>
-                            )}
+                            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                              {item.shelfLocation && (
+                                <span className="inline-flex items-center gap-1 text-[11px] font-black px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900">
+                                  <MapPin className="h-2.5 w-2.5 text-blue-500 shrink-0" />
+                                  <span>{item.shelfLocation}</span>
+                                </span>
+                              )}
+                              {item.genericName && (
+                                <span className="text-xs text-emerald-600 dark:text-emerald-400 truncate font-bold">{item.genericName}</span>
+                              )}
+                              {(item.barcode || item.sku) && (
+                                <span className="text-[11px] font-mono text-slate-400 dark:text-slate-500 font-medium">
+                                  #{item.barcode || item.sku}
+                                </span>
+                              )}
+                            </div>
                           </td>
 
                           {/* Price */}
@@ -1819,17 +1880,19 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                             {isMed && <span className="text-xs text-slate-400 font-sans block font-medium">/ tab</span>}
                           </td>
 
-                          {/* Quantity & Packaging Controls (Direct Text Input + Buttons) */}
+                          {/* Quantity & Packaging Controls (Clean Segmented Stepper) */}
                           <td className="py-3.5 px-3.5 text-center whitespace-nowrap">
                             {isMed ? (
                               <div className="flex items-center justify-center gap-2 py-0.5">
-                                {/* Box Input */}
-                                <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-2 py-1 shadow-xs" title={`1 Box = ${item.tabletsPerBox} tabs`}>
-                                  <span className="text-xs font-black text-slate-600 dark:text-slate-300 uppercase">Box</span>
+                                {/* Box Stepper */}
+                                <div className="inline-flex items-center border border-slate-300 dark:border-slate-700 rounded-lg overflow-hidden bg-slate-50 dark:bg-slate-800 shadow-xs" title={`1 Box = ${item.tabletsPerBox} tabs`}>
+                                  <span className="px-2 py-1 text-[11px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-300 bg-slate-200/70 dark:bg-slate-700/80 border-r border-slate-300 dark:border-slate-700 select-none">
+                                    Box
+                                  </span>
                                   <button
                                     type="button"
                                     onClick={() => updateMedicineQty(idx, "box", -1)}
-                                    className="h-7 w-7 flex items-center justify-center text-slate-800 dark:text-slate-100 bg-white dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-lg font-black text-sm cursor-pointer active:scale-95 border border-slate-300 dark:border-slate-600"
+                                    className="w-7 h-7 flex items-center justify-center text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 border-r border-slate-300 dark:border-slate-700 text-sm font-black transition active:bg-slate-300 cursor-pointer select-none"
                                   >
                                     -
                                   </button>
@@ -1839,24 +1902,26 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                                     value={b}
                                     onFocus={(e) => e.target.select()}
                                     onChange={(e) => updateMedicineDirectQty(idx, "box", parseInt(e.target.value) || 0)}
-                                    className="w-12 h-7 text-center font-black text-base font-mono text-slate-900 dark:text-white bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/30"
+                                    className="w-11 h-7 text-center font-black text-sm font-mono text-slate-900 dark:text-white bg-white dark:bg-slate-900 border-r border-slate-300 dark:border-slate-700 outline-none focus:bg-emerald-50 dark:focus:bg-emerald-950/40"
                                   />
                                   <button
                                     type="button"
                                     onClick={() => updateMedicineQty(idx, "box", 1)}
-                                    className="h-7 w-7 flex items-center justify-center text-slate-800 dark:text-slate-100 bg-white dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-lg font-black text-sm cursor-pointer active:scale-95 border border-slate-300 dark:border-slate-600"
+                                    className="w-7 h-7 flex items-center justify-center text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 text-sm font-black transition active:bg-slate-300 cursor-pointer select-none"
                                   >
                                     +
                                   </button>
                                 </div>
 
-                                {/* Strip Input */}
-                                <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-2 py-1 shadow-xs" title={`1 Strip = ${item.tabletsPerStrip} tabs`}>
-                                  <span className="text-xs font-black text-slate-600 dark:text-slate-300 uppercase">Strip</span>
+                                {/* Strip Stepper */}
+                                <div className="inline-flex items-center border border-slate-300 dark:border-slate-700 rounded-lg overflow-hidden bg-slate-50 dark:bg-slate-800 shadow-xs" title={`1 Strip = ${item.tabletsPerStrip} tabs`}>
+                                  <span className="px-2 py-1 text-[11px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-300 bg-slate-200/70 dark:bg-slate-700/80 border-r border-slate-300 dark:border-slate-700 select-none">
+                                    Strip
+                                  </span>
                                   <button
                                     type="button"
                                     onClick={() => updateMedicineQty(idx, "strip", -1)}
-                                    className="h-7 w-7 flex items-center justify-center text-slate-800 dark:text-slate-100 bg-white dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-lg font-black text-sm cursor-pointer active:scale-95 border border-slate-300 dark:border-slate-600"
+                                    className="w-7 h-7 flex items-center justify-center text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 border-r border-slate-300 dark:border-slate-700 text-sm font-black transition active:bg-slate-300 cursor-pointer select-none"
                                   >
                                     -
                                   </button>
@@ -1866,24 +1931,26 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                                     value={s}
                                     onFocus={(e) => e.target.select()}
                                     onChange={(e) => updateMedicineDirectQty(idx, "strip", parseInt(e.target.value) || 0)}
-                                    className="w-12 h-7 text-center font-black text-base font-mono text-slate-900 dark:text-white bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/30"
+                                    className="w-11 h-7 text-center font-black text-sm font-mono text-slate-900 dark:text-white bg-white dark:bg-slate-900 border-r border-slate-300 dark:border-slate-700 outline-none focus:bg-emerald-50 dark:focus:bg-emerald-950/40"
                                   />
                                   <button
                                     type="button"
                                     onClick={() => updateMedicineQty(idx, "strip", 1)}
-                                    className="h-7 w-7 flex items-center justify-center text-slate-800 dark:text-slate-100 bg-white dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-lg font-black text-sm cursor-pointer active:scale-95 border border-slate-300 dark:border-slate-600"
+                                    className="w-7 h-7 flex items-center justify-center text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 text-sm font-black transition active:bg-slate-300 cursor-pointer select-none"
                                   >
                                     +
                                   </button>
                                 </div>
 
-                                {/* Tablet Input */}
-                                <div className="flex items-center gap-1 bg-emerald-50 dark:bg-emerald-950/60 border-2 border-emerald-400 dark:border-emerald-700 rounded-xl px-2 py-1 shadow-xs" title="Single Tablet">
-                                  <span className="text-xs font-black text-emerald-800 dark:text-emerald-400 uppercase">Tab</span>
+                                {/* Tablet Stepper */}
+                                <div className="inline-flex items-center border border-emerald-400 dark:border-emerald-700 rounded-lg overflow-hidden bg-emerald-50/50 dark:bg-slate-800 shadow-xs" title="Single Tablet">
+                                  <span className="px-2 py-1 text-[11px] font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950/60 border-r border-emerald-300 dark:border-emerald-700 select-none">
+                                    Tab
+                                  </span>
                                   <button
                                     type="button"
                                     onClick={() => updateMedicineQty(idx, "tablet", -1)}
-                                    className="h-7 w-7 flex items-center justify-center text-emerald-900 dark:text-emerald-200 bg-white dark:bg-emerald-900/60 hover:bg-emerald-100 dark:hover:bg-emerald-800 rounded-lg font-black text-sm cursor-pointer active:scale-95 border border-emerald-300 dark:border-emerald-700"
+                                    className="w-7 h-7 flex items-center justify-center text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 border-r border-emerald-300 dark:border-emerald-700 text-sm font-black transition active:bg-emerald-200 cursor-pointer select-none"
                                   >
                                     -
                                   </button>
@@ -1893,25 +1960,25 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                                     value={t}
                                     onFocus={(e) => e.target.select()}
                                     onChange={(e) => updateMedicineDirectQty(idx, "tablet", parseInt(e.target.value) || 0)}
-                                    className="w-12 h-7 text-center font-black text-base font-mono text-emerald-950 dark:text-white bg-white dark:bg-slate-900 border border-emerald-400 dark:border-emerald-600 rounded-lg outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/30"
+                                    className="w-11 h-7 text-center font-black text-sm font-mono text-emerald-950 dark:text-white bg-white dark:bg-slate-900 border-r border-emerald-300 dark:border-emerald-700 outline-none focus:bg-emerald-50 dark:focus:bg-emerald-950/40"
                                   />
                                   <button
                                     type="button"
                                     onClick={() => updateMedicineQty(idx, "tablet", 1)}
-                                    className="h-7 w-7 flex items-center justify-center text-emerald-900 dark:text-emerald-200 bg-white dark:bg-emerald-900/60 hover:bg-emerald-100 dark:hover:bg-emerald-800 rounded-lg font-black text-sm cursor-pointer active:scale-95 border border-emerald-300 dark:border-emerald-700"
+                                    className="w-7 h-7 flex items-center justify-center text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 text-sm font-black transition active:bg-emerald-200 cursor-pointer select-none"
                                   >
                                     +
                                   </button>
                                 </div>
                               </div>
                             ) : (
-                              <div className="inline-flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-xl p-1.5 shadow-xs">
+                              <div className="inline-flex items-center border border-slate-300 dark:border-slate-700 rounded-lg overflow-hidden bg-white dark:bg-slate-900 shadow-xs">
                                 <button
                                   type="button"
                                   onClick={() => updateCartQuantity(idx, item.quantity - 1)}
-                                  className="h-7 w-7 flex items-center justify-center text-slate-800 dark:text-slate-100 bg-white dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-lg font-black text-sm cursor-pointer active:scale-95 border border-slate-300 dark:border-slate-600"
+                                  className="w-8 h-7 flex items-center justify-center text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 border-r border-slate-300 dark:border-slate-700 transition active:bg-slate-200 cursor-pointer"
                                 >
-                                  <Minus className="h-4 w-4" />
+                                  <Minus className="h-3.5 w-3.5" />
                                 </button>
                                 <input
                                   type="number"
@@ -1919,14 +1986,14 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                                   value={item.quantity}
                                   onFocus={(e) => e.target.select()}
                                   onChange={(e) => updateCartQuantity(idx, parseInt(e.target.value) || 0)}
-                                  className="w-14 h-7 text-center font-black text-base font-mono text-slate-900 dark:text-white bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/30"
+                                  className="w-12 h-7 text-center font-black text-sm font-mono text-slate-900 dark:text-white bg-white dark:bg-slate-900 border-r border-slate-300 dark:border-slate-700 outline-none focus:bg-emerald-50 dark:focus:bg-emerald-950/40"
                                 />
                                 <button
                                   type="button"
                                   onClick={() => updateCartQuantity(idx, item.quantity + 1)}
-                                  className="h-7 w-7 flex items-center justify-center text-slate-800 dark:text-slate-100 bg-white dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-lg font-black text-sm cursor-pointer active:scale-95 border border-slate-300 dark:border-slate-600"
+                                  className="w-8 h-7 flex items-center justify-center text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition active:bg-slate-200 cursor-pointer"
                                 >
-                                  <Plus className="h-4 w-4" />
+                                  <Plus className="h-3.5 w-3.5" />
                                 </button>
                               </div>
                             )}
@@ -2299,10 +2366,10 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                     const alloc = modalAllocations[locKey] || { box: 0, strip: 0, tablet: 0, qty: 0 };
                     const locStock = loc.quantity || 0;
 
-                    const rName = loc.rackName || loc.rack?.name || "R01";
-                    const sName = loc.shelfName || loc.shelf?.name || "S01";
-                    const bName = loc.binName || loc.bin?.name || "B01";
-                    const displayCode = loc.rackName && loc.shelfName ? `${rName} / ${sName} / ${bName}` : (loc.locationLabel || "Main Counter");
+                    const rName = loc.rackName || loc.rack?.name || "";
+                    const sName = loc.shelfName || loc.shelf?.name || "";
+                    const bName = loc.binName || loc.bin?.name || "";
+                    const displayCode = loc.locationLabel || (sName && sName !== "S01" ? `${rName} / ${sName}` : (rName || "Main Store"));
 
                     const branchObj = branches.find((b) => b.id === selectedBranchId);
                     const branchName = branchObj?.name || "Main Branch";

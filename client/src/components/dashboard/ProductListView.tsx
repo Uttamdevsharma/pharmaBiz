@@ -59,6 +59,7 @@ export function ProductListView({ onNavigate, onEditProduct }: ProductListViewPr
     unit: "tablet",
     stripsPerBox: 10,
     tabletsPerStrip: 10,
+    minStockAlert: 10,
     requiresPrescription: false,
   });
 
@@ -159,6 +160,7 @@ export function ProductListView({ onNavigate, onEditProduct }: ProductListViewPr
       unit: p.unit || "tablet",
       stripsPerBox: p.stripsPerBox || 10,
       tabletsPerStrip: p.tabletsPerStrip || 10,
+      minStockAlert: (p as any).minStockAlert ?? 10,
       requiresPrescription: Boolean(p.requiresPrescription),
     });
     setEditingProduct(p);
@@ -260,6 +262,7 @@ export function ProductListView({ onNavigate, onEditProduct }: ProductListViewPr
         tabletsPerStrip: tablets,
         qtyPerLevel3: strips,
         qtyPerLevel4: tablets,
+        minStockAlert: Number(editFormData.minStockAlert) >= 0 ? Number(editFormData.minStockAlert) : 10,
         requiresPrescription: editFormData.requiresPrescription,
       };
 
@@ -481,6 +484,14 @@ export function ProductListView({ onNavigate, onEditProduct }: ProductListViewPr
                               Rx
                             </span>
                           )}
+                          {p.minStockAlert !== undefined && (
+                            <span
+                              title={`Low stock alert triggers when total units drop to ${p.minStockAlert} or less`}
+                              className="bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-900/60 text-[11px] px-2 py-0.5 rounded-md font-bold"
+                            >
+                              Alert ≤ {p.minStockAlert}
+                            </span>
+                          )}
                         </div>
                       </td>
 
@@ -651,6 +662,34 @@ export function ProductListView({ onNavigate, onEditProduct }: ProductListViewPr
                       </option>
                     ))}
                   </select>
+                </div>
+
+                {/* Low Stock Alert Limit */}
+                <div className="sm:col-span-2">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-200">
+                      Low Stock Alert Limit (Min Units)
+                    </label>
+                    <span className="text-xs text-slate-500 dark:text-slate-400">
+                      Default: 10 units
+                    </span>
+                  </div>
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="e.g. 50 or 100"
+                    value={editFormData.minStockAlert}
+                    onChange={(e) =>
+                      setEditFormData({
+                        ...editFormData,
+                        minStockAlert: e.target.value === "" ? 0 : Number(e.target.value),
+                      })
+                    }
+                    className="w-full h-11 sm:h-12 px-3.5 bg-slate-50 hover:bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-sm sm:text-base font-semibold text-slate-900 dark:text-white placeholder:text-xs sm:placeholder:text-sm placeholder:text-slate-400 outline-none focus:border-brand-primary transition"
+                  />
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                    মোট স্টক (দোকান ও গোডাউন মিলিয়ে) এই পরিমাণের সমান বা নিচে নামলে প্রডাক্টটি &quot;Low Stock&quot; সতর্কবার্তা দেখাবে।
+                  </p>
                 </div>
               </div>
 

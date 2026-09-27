@@ -1,11 +1,13 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   Calendar,
   FileText,
   Printer,
   X,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 
 export type LedgerFilterType =
@@ -165,6 +167,8 @@ export function PharmacyBillingLedger({
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
   const [showPrintModal, setShowPrintModal] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(15);
 
   const licenseFee = 5000;
 
@@ -405,6 +409,18 @@ export function PharmacyBillingLedger({
     return ledgerRows;
   }, [ledgerRows, filter, customStart, customEnd]);
 
+  // Reset page when filter changes
+  useEffect(() => {
+    setPage(1);
+  }, [filter, customStart, customEnd]);
+
+  // Paginated rows for table view
+  const totalPages = Math.ceil(filteredRows.length / pageSize) || 1;
+  const paginatedRows = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filteredRows.slice(start, start + pageSize);
+  }, [filteredRows, page, pageSize]);
+
   const handlePrint = () => {
     window.print();
   };
@@ -546,7 +562,8 @@ export function PharmacyBillingLedger({
             </button>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+            <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead className="bg-slate-50 dark:bg-slate-850/80 border-b border-slate-200 dark:border-slate-800 text-[11px] font-black uppercase tracking-wider text-slate-500 select-none">
                 <tr>
@@ -560,7 +577,7 @@ export function PharmacyBillingLedger({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium text-xs sm:text-sm">
-                {filteredRows.map((row) => {
+                {paginatedRows.map((row) => {
                   return (
                     <tr
                       key={row.id}
@@ -676,8 +693,105 @@ export function PharmacyBillingLedger({
               </tbody>
             </table>
           </div>
-        )}
-      </div>
+
+          {/* Bottom Table Pagination & Show per page selector */}
+          {filteredRows.length > 0 && (
+            <div className="p-4 bg-slate-50/90 dark:bg-slate-800/60 border-t border-slate-200 dark:border-slate-800 flex flex-col md:flex-row items-center justify-between gap-3.5">
+              {/* Left: Showing info & Show per page dropdown */}
+              <div className="flex items-center gap-3 flex-wrap text-xs text-slate-500 dark:text-slate-400">
+                <span className="font-medium">
+                  Showing <strong className="text-slate-900 dark:text-white font-mono font-bold">{(page - 1) * pageSize + 1}</strong> to{" "}
+                  <strong className="text-slate-900 dark:text-white font-mono font-bold">{Math.min(page * pageSize, filteredRows.length)}</strong> of{" "}
+                  <strong className="text-slate-900 dark:text-white font-mono font-bold">{filteredRows.length}</strong> billing cycles
+                </span>
+
+                <span className="hidden sm:inline text-slate-300 dark:text-slate-700">•</span>
+
+                {/* Show per page dropdown */}
+                <div className="flex items-center gap-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-1.5 rounded-xl shadow-2xs">
+                  <span className="font-bold text-slate-600 dark:text-slate-300">Show:</span>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => {
+                      setPageSize(parseInt(e.target.value) || 15);
+                      setPage(1);
+                    }}
+                    className="bg-transparent font-black text-brand-primary outline-none cursor-pointer pr-1"
+                  >
+                    <option value={10} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">10</option>
+                    <option value={15} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">15</option>
+                    <option value={25} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">25</option>
+                    <option value={50} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">50</option>
+                  </select>
+                  <span className="text-slate-400 font-medium">/ page</span>
+                </div>
+              </div>
+
+              {/* Right: Previous, Page Numbers & Next */}
+              {totalPages > 1 && (
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={page <= 1}
+                    className="px-3 py-1.5 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition flex items-center gap-1 cursor-pointer"
+                  >
+                    <ChevronLeft className="h-3.5 w-3.5" />
+                    <span>Previous</span>
+                  </button>
+
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => {
+                      if (
+                        totalPages > 7 &&
+                        p > 2 &&
+                        p < totalPages - 1 &&
+                        Math.abs(p - page) > 1
+                      ) {
+                        if (p === 3 || p === totalPages - 2) {
+                          return (
+                            <span key={p} className="px-1 text-xs text-slate-400">
+                              ...
+                            </span>
+                          );
+                        }
+                        return null;
+                      }
+
+                      const isCur = page === p;
+                      return (
+                        <button
+                          key={p}
+                          type="button"
+                          onClick={() => setPage(p)}
+                          className={`min-w-8 h-8 rounded-xl text-xs font-bold font-mono transition cursor-pointer ${
+                            isCur
+                              ? "bg-brand-primary text-white shadow-xs"
+                              : "border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                          }`}
+                        >
+                          {p}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={page >= totalPages}
+                    className="px-3 py-1.5 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition flex items-center gap-1 cursor-pointer"
+                  >
+                    <span>Next</span>
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
+    </div>
 
       {/* ===================================================================== */}
       {/* PRINTABLE BILLING LEDGER MODAL (CLEAN & USER FRIENDLY)                */}
