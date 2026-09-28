@@ -110,7 +110,7 @@ export function CreateStorageGroupView({
         name: groupName.trim(),
         branchId: selectedBranchId && selectedBranchId !== "all" ? selectedBranchId : undefined,
         type: detectedType,
-        description: placementNote.trim() || undefined,
+        location: placementNote.trim() || undefined,
         numberOfShelves: 0,
         binsPerShelf: 0,
       };
@@ -155,28 +155,23 @@ export function CreateStorageGroupView({
       {/* Main Clean Creation Card */}
       <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 sm:p-8 shadow-xs space-y-6">
         {/* Header */}
-        <div className="border-b border-slate-100 dark:border-slate-800 pb-5">
+        <div className="border-b border-slate-100 dark:border-slate-800 pb-4">
           <div className="flex items-center gap-3">
-            <div className="p-3 rounded-2xl bg-brand-primary/10 text-brand-primary">
-              <PlusCircle className="h-6 w-6" />
+            <div className="p-2.5 rounded-2xl bg-brand-primary/10 text-brand-primary">
+              <PlusCircle className="h-5 w-5" />
             </div>
-            <div>
-              <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
-                Create Storage Group
-              </h1>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Just give your group a name. It can be a company, generic, or any store area.
-              </p>
-            </div>
+            <h1 className="text-xl font-black text-slate-900 dark:text-white">
+              Create Storage Group
+            </h1>
           </div>
         </div>
 
-        {/* Minimal 1-Input Form */}
-        <form onSubmit={handleSubmit} className="space-y-5">
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="space-y-4">
           {/* 1. Storage Group Name */}
           <div>
-            <label className="block text-xs font-black uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-2">
-              Storage Group Name <span className="text-rose-500">*</span>
+            <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-2">
+              Group Name <span className="text-rose-500">*</span>
             </label>
             <input
               ref={inputRef}
@@ -184,37 +179,31 @@ export function CreateStorageGroupView({
               required
               value={groupName}
               onChange={(e) => setGroupName(e.target.value)}
-              placeholder="e.g., Beximco, Square, Paracetamol, Gastric, Front Counter..."
-              className="w-full px-4 py-3.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm sm:text-base font-bold text-slate-900 dark:text-white placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-brand-primary focus:border-transparent transition shadow-2xs"
+              placeholder="Enter group name"
+              className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-semibold text-slate-900 dark:text-white placeholder:text-xs placeholder:font-normal placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-brand-primary focus:border-transparent transition shadow-2xs"
             />
-            <p className="text-[11px] text-slate-400 mt-1.5 font-medium">
-              Examples: Company corner (e.g. <em>Beximco</em>), Generic therapy (e.g. <em>Paracetamol</em>), or shop area (e.g. <em>Counter 1</em>, <em>Fridge</em>).
-            </p>
           </div>
 
-          {/* 2. Optional Placement Note */}
+          {/* 2. Physical Location */}
           <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-2">
-              Physical Location / Note <span className="text-slate-400 font-normal lowercase">(optional)</span>
+            <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-2">
+              Physical Location <span className="text-slate-400 font-normal lowercase">(optional)</span>
             </label>
             <input
               type="text"
               value={placementNote}
               onChange={(e) => setPlacementNote(e.target.value)}
-              placeholder="e.g., Behind Cash Counter, Right Wall Shelf, or Main Fridge"
-              className="w-full px-4 py-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-200 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-brand-primary focus:border-transparent transition"
+              placeholder="Enter location (e.g. Rack 04, Shelf 2, Fridge)"
+              className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-semibold text-slate-900 dark:text-white placeholder:text-xs placeholder:font-normal placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-brand-primary focus:border-transparent transition shadow-2xs"
             />
-            <p className="text-[11px] text-slate-400 mt-1">
-              Helps sales counter staff locate medicines quickly without remembering shelf numbers.
-            </p>
           </div>
 
           {/* Action Buttons */}
-          <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-3">
+          <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-3">
             <button
               type="button"
               onClick={() => onNavigate("loc_group_list")}
-              className="px-5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 text-xs font-bold hover:bg-slate-50 dark:hover:bg-slate-800 transition cursor-pointer"
+              className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 text-xs font-bold hover:bg-slate-50 dark:hover:bg-slate-800 transition cursor-pointer"
             >
               Cancel
             </button>
@@ -222,7 +211,7 @@ export function CreateStorageGroupView({
             <button
               type="submit"
               disabled={submitting || !groupName.trim()}
-              className="px-6 py-2.5 rounded-xl bg-brand-primary hover:opacity-90 disabled:opacity-50 text-white text-xs sm:text-sm font-black transition flex items-center gap-2 cursor-pointer shadow-md shadow-brand-primary/20 active:scale-95"
+              className="px-5 py-2 rounded-xl bg-brand-primary hover:opacity-90 disabled:opacity-50 text-white text-xs font-black transition flex items-center gap-2 cursor-pointer shadow-md shadow-brand-primary/20 active:scale-95"
             >
               {submitting ? (
                 <>
@@ -232,7 +221,7 @@ export function CreateStorageGroupView({
               ) : (
                 <>
                   <Check className="h-4 w-4 stroke-[3]" />
-                  <span>Save Storage Group</span>
+                  <span>Save Group</span>
                 </>
               )}
             </button>

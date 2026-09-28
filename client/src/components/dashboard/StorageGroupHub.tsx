@@ -29,6 +29,10 @@ import {
   Tag,
   Store,
   Warehouse,
+  MapPin,
+  Edit2,
+  Trash2,
+  X,
 } from "lucide-react";
 
 export interface StorageGroupHubProps {
@@ -77,6 +81,35 @@ const STORAGE_PRESETS: StorageGroupPreset[] = [
   { id: "otc", name: "Fast-Moving Front Counter", category: "SPECIAL", targetKey: "OTC", description: "Quick access emergency & high-volume daily medicines", badge: "Front Desk" },
 ];
 
+export const autoDetectGroupType = (name: string): "COMPANY" | "GENERIC" | "SPECIAL" | "CUSTOM" => {
+  const lower = name.toLowerCase().trim();
+  if (
+    lower.includes("cold") ||
+    lower.includes("fridge") ||
+    lower.includes("refrigerator") ||
+    lower.includes("freeze") ||
+    lower.includes("insulin") ||
+    lower.includes("vaccine")
+  ) {
+    return "SPECIAL";
+  }
+  if (
+    STORAGE_PRESETS.some(
+      (p) => p.category === "COMPANY" && (lower.includes(p.targetKey.toLowerCase()) || lower.includes(p.name.toLowerCase()))
+    )
+  ) {
+    return "COMPANY";
+  }
+  if (
+    STORAGE_PRESETS.some(
+      (p) => p.category === "GENERIC" && (lower.includes(p.targetKey.toLowerCase()) || lower.includes(p.name.toLowerCase()))
+    )
+  ) {
+    return "GENERIC";
+  }
+  return "CUSTOM";
+};
+
 export function StorageGroupHub({
   selectedBranchId,
   onNavigate,
@@ -97,12 +130,18 @@ export function StorageGroupHub({
   const [activeCategoryTab, setActiveCategoryTab] = useState<GroupCategory>("ALL");
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Group creation form state
+  // Group creation form state (Clean: only Name & Physical Location)
   const [isCreatingGroup, setIsCreatingGroup] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
-  const [newGroupType, setNewGroupType] = useState<"COMPANY" | "GENERIC" | "SPECIAL" | "CUSTOM">("COMPANY");
-  const [newGroupNote, setNewGroupNote] = useState("");
+  const [newGroupLocation, setNewGroupLocation] = useState("");
   const [creatingSubmitting, setCreatingSubmitting] = useState(false);
+
+  // Group Edit modal state
+  const [isEditingModalOpen, setIsEditingModalOpen] = useState(false);
+  const [editingGroupId, setEditingGroupId] = useState("");
+  const [editingGroupName, setEditingGroupName] = useState("");
+  const [editingGroupLocation, setEditingGroupLocation] = useState("");
+  const [editingSubmitting, setEditingSubmitting] = useState(false);
 
   // Move stock form state
   const [moveProductId, setMoveProductId] = useState<string>(preselectedProductId || "");
@@ -369,30 +408,104 @@ export function StorageGroupHub({
 
     try {
       setCreatingSubmitting(true);
+      const detectedType = autoDetectGroupType(newGroupName);
       const res = await fetchApi<any>("/locations/quick-rack", {
         method: "POST",
         body: JSON.stringify({
           name: newGroupName.trim(),
-          type: newGroupType,
+          type: detectedType === "SPECIAL" ? "REFRIGERATOR" : detectedType,
+          location: newGroupLocation.trim() || undefined,
           numberOfShelves: 0,
           binsPerShelf: 0,
           branchId: selectedBranchId || undefined,
         }),
       });
 
-      if (!res.success) {
+      if (!res.success && !(res as any)?.id && !(res as any)?.rack) {
         throw new Error(res.message || "Failed to create storage group");
       }
 
       showAlert.success("Storage Group Created!", `Group "${newGroupName.trim()}" is ready for stock placement.`);
       setNewGroupName("");
-      setNewGroupNote("");
+      setNewGroupLocation("");
       setIsCreatingGroup(false);
       loadData();
     } catch (err: any) {
       showAlert.error("Creation Failed", err.message || "Failed to create group");
     } finally {
       setCreatingSubmitting(false);
+    }
+  };
+
+  // Handle Edit Storage Group
+  const handleStartEditGroup = (group: any) => {
+    setEditingGroupId(group.id);
+    setEditingGroupName(group.name || "");
+    setEditingGroupLocation(group.location || "");
+    setIsEditingModalOpen(true);
+  };
+
+  const handleSaveEditGroup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingGroupName.trim()) {
+      showAlert.error("Required", "Group name cannot be empty.");
+      return;
+    }
+
+    try {
+      setEditingSubmitting(true);
+      const detectedType = autoDetectGroupType(editingGroupName);
+      const res = await fetchApi<any>(`/locations/racks/${editingGroupId}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          name: editingGroupName.trim(),
+          type: detectedType === "SPECIAL" ? "REFRIGERATOR" : detectedType,
+          location: editingGroupLocation.trim() || null,
+        }),
+      });
+
+      if (!res.success && !(res as any)?.id && !(res as any)?.data) {
+        throw new Error(res.message || "Failed to update storage group");
+      }
+
+      showAlert.success("Group Updated!", "Storage group details saved successfully.");
+      setIsEditingModalOpen(false);
+      loadData();
+    } catch (err: any) {
+      showAlert.error("Update Failed", err.message || "Failed to update group");
+    } finally {
+      setEditingSubmitting(false);
+    }
+  };
+
+  // Handle Delete Storage Group
+  const handleDeleteGroup = async (groupId: string, groupName: string) => {
+    const isConfirmed = await showAlert.confirm(
+      "Delete Storage Group?",
+      `Are you sure you want to delete "${groupName}"? Any medicines placed in this group will become unassigned.`
+    );
+    if (!isConfirmed) return;
+
+    try {
+      setLoading(true);
+      const res = await fetchApi<any>(`/locations/racks/${groupId}`, {
+        method: "DELETE",
+      });
+
+      if (res && res.success === false) {
+        throw new Error(res.message || "Failed to delete storage group");
+      }
+
+      showAlert.success("Deleted!", `Group "${groupName}" was deleted.`);
+      if (activeGroupId === groupId) {
+        setActiveGroupId("");
+        setViewMode("OVERVIEW");
+      }
+      loadData();
+    } catch (err: any) {
+      showAlert.error("Delete Failed", err.message || "Could not delete group");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -592,17 +705,12 @@ export function StorageGroupHub({
             <div className="bg-white dark:bg-slate-900 border-2 border-brand-primary/40 rounded-2xl p-6 shadow-md animate-in fade-in duration-200 space-y-5">
               <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
                 <div className="flex items-center gap-2.5">
-                  <div className="h-9 w-9 rounded-xl bg-brand-primary text-white flex items-center justify-center shadow-sm">
-                    <Plus className="h-5 w-5" />
+                  <div className="h-8 w-8 rounded-xl bg-brand-primary/10 text-brand-primary flex items-center justify-center">
+                    <Plus className="h-4 w-4" />
                   </div>
-                  <div>
-                    <h3 className="text-base font-black text-slate-900 dark:text-white">
-                      Create Storage Group / Zone
-                    </h3>
-                    <p className="text-xs text-slate-400">
-                      Create a dedicated company group or generic zone for easy stock placement.
-                    </p>
-                  </div>
+                  <h3 className="text-sm font-black text-slate-900 dark:text-white">
+                    New Storage Group
+                  </h3>
                 </div>
                 <button
                   type="button"
@@ -614,48 +722,35 @@ export function StorageGroupHub({
               </div>
 
               <form onSubmit={handleCreateGroup} className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-12 gap-4">
-                  <div className="sm:col-span-5">
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-2">
                       Group Name <span className="text-rose-500">*</span>
                     </label>
                     <input
                       type="text"
                       value={newGroupName}
                       onChange={(e) => setNewGroupName(e.target.value)}
-                      placeholder="e.g. Beximco Group, Paracetamol Zone, Fridge"
+                      placeholder="Enter group name"
                       required
-                      className="w-full h-11 text-sm font-bold px-3.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:border-brand-primary outline-none"
+                      className="w-full h-11 text-sm font-semibold px-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder:text-xs placeholder:font-normal placeholder:text-slate-400 focus:border-brand-primary outline-none transition"
                     />
                   </div>
 
-                  <div className="sm:col-span-3">
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                      Group Type
+                  <div>
+                    <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-2">
+                      Physical Location <span className="text-slate-400 font-normal lowercase">(optional)</span>
                     </label>
-                    <select
-                      value={newGroupType}
-                      onChange={(e) => setNewGroupType(e.target.value as any)}
-                      className="w-full h-11 text-xs font-bold px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:border-brand-primary outline-none cursor-pointer"
-                    >
-                      <option value="COMPANY">🏢 Company Group</option>
-                      <option value="GENERIC">💊 Generic / Therapy</option>
-                      <option value="SPECIAL">❄️ Cold Storage / Special</option>
-                      <option value="CUSTOM">🏷️ Custom Zone / Rack</option>
-                    </select>
-                  </div>
-
-                  <div className="sm:col-span-4">
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                      Physical Placement Note (Optional)
-                    </label>
-                    <input
-                      type="text"
-                      value={newGroupNote}
-                      onChange={(e) => setNewGroupNote(e.target.value)}
-                      placeholder="e.g. Left wall glass cabinet, Front drawer"
-                      className="w-full h-11 text-sm px-3.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:border-brand-primary outline-none"
-                    />
+                    <div className="relative">
+                      <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                      <input
+                        type="text"
+                        value={newGroupLocation}
+                        onChange={(e) => setNewGroupLocation(e.target.value)}
+                        placeholder="Enter location (e.g. Rack 04, Shelf 2, Fridge)"
+                        className="w-full h-11 text-sm font-semibold pl-9 pr-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder:text-xs placeholder:font-normal placeholder:text-slate-400 focus:border-brand-primary outline-none transition"
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -839,7 +934,46 @@ export function StorageGroupHub({
                             </span>
                           </div>
                         </div>
+
+                        {/* Edit & Delete Actions */}
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleStartEditGroup(group);
+                            }}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-brand-primary hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+                            title="Edit Group & Location"
+                          >
+                            <Edit2 className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteGroup(group.id, group.name);
+                            }}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition cursor-pointer"
+                            title="Delete Group"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                       </div>
+
+                      {/* Prominent Physical Location Tag */}
+                      {group.location ? (
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-300 bg-slate-100/90 dark:bg-slate-800/80 px-2.5 py-1 rounded-xl border border-slate-200/80 dark:border-slate-700/60 mt-1 w-fit">
+                          <MapPin className="h-3.5 w-3.5 text-rose-500 shrink-0" />
+                          <span className="truncate">{group.location}</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5 text-[11px] font-medium text-slate-400 mt-1">
+                          <MapPin className="h-3 w-3 opacity-40 shrink-0" />
+                          <span>No location set</span>
+                        </div>
+                      )}
 
                       {/* Stock Distribution Bar */}
                       <div className="space-y-1.5 mt-4">
@@ -965,9 +1099,21 @@ export function StorageGroupHub({
                     {selectedGroup.type || "GROUP"}
                   </span>
                 </div>
-                <p className="text-xs text-slate-400 mt-1">
-                  Active pharmacy storage section for all associated medicines and stock movements.
-                </p>
+                
+                <div className="flex items-center gap-2.5 mt-2 flex-wrap">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-xl border border-slate-200 dark:border-slate-700">
+                    <MapPin className="h-3.5 w-3.5 text-rose-500 shrink-0" />
+                    <span>Location: {selectedGroup.location || "Not assigned"}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleStartEditGroup(selectedGroup)}
+                    className="inline-flex items-center gap-1 text-xs font-bold text-brand-primary hover:underline cursor-pointer"
+                  >
+                    <Edit2 className="h-3 w-3" />
+                    <span>Change Location</span>
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -1280,6 +1426,93 @@ export function StorageGroupHub({
                       <span>Move Stock into Supershop Group</span>
                     </>
                   )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════
+          EDIT GROUP & LOCATION MODAL
+          ═══════════════════════════════════════════════════════════════ */}
+      {isEditingModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden">
+            <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="h-8 w-8 rounded-xl bg-brand-primary/10 text-brand-primary flex items-center justify-center">
+                  <Edit2 className="h-4 w-4" />
+                </div>
+                <h3 className="text-base font-black text-slate-900 dark:text-white">
+                  Edit Storage Group
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEditingModalOpen(false)}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditGroup} className="p-5 space-y-4">
+              <div>
+                <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-2">
+                  Group Name <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={editingGroupName}
+                  onChange={(e) => setEditingGroupName(e.target.value)}
+                  required
+                  placeholder="Enter group name"
+                  className="w-full h-11 text-sm font-semibold px-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder:text-xs placeholder:font-normal placeholder:text-slate-400 focus:border-brand-primary outline-none transition"
+                />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                    Physical Location <span className="text-slate-400 font-normal lowercase">(optional)</span>
+                  </label>
+                  {editingGroupLocation && (
+                    <button
+                      type="button"
+                      onClick={() => setEditingGroupLocation("")}
+                      className="text-xs font-semibold text-rose-500 hover:underline cursor-pointer"
+                    >
+                      Clear location
+                    </button>
+                  )}
+                </div>
+                <div className="relative">
+                  <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                  <input
+                    type="text"
+                    value={editingGroupLocation}
+                    onChange={(e) => setEditingGroupLocation(e.target.value)}
+                    placeholder="Enter location (e.g. Rack 04, Shelf 2, Fridge)"
+                    className="w-full h-11 text-sm font-semibold pl-9 pr-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder:text-xs placeholder:font-normal placeholder:text-slate-400 focus:border-brand-primary outline-none transition"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setIsEditingModalOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 text-xs font-bold hover:bg-slate-50 dark:hover:bg-slate-800 transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={editingSubmitting || !editingGroupName.trim()}
+                  className="px-5 py-2 rounded-xl bg-brand-primary hover:bg-brand-primary/90 text-white text-xs font-black transition cursor-pointer disabled:opacity-50"
+                >
+                  {editingSubmitting ? "Saving..." : "Save Changes"}
                 </button>
               </div>
             </form>

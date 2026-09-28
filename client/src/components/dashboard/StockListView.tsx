@@ -179,11 +179,14 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
       if (item.locations && item.locations.length > 0) {
         const first = item.locations[0];
         const rName = first.rack?.name || first.rackName || "Rack R01";
+        const rLoc = first.rack?.location;
         const sName = first.shelf?.name || first.shelfName || "";
         const bName = first.bin?.name || first.binName || "";
         const cleanBin = bName && bName.toLowerCase() !== "none" && bName.toLowerCase() !== "n/a" && bName !== "B01" ? bName : "";
         if (sName && sName !== "S01") {
           primaryLocation = cleanBin ? `${rName} › ${sName} › ${cleanBin}` : `${rName} › ${sName}`;
+        } else if (rLoc) {
+          primaryLocation = `${rName} (${rLoc})`;
         } else {
           primaryLocation = rName;
         }

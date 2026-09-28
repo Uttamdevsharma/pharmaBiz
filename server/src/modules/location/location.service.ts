@@ -170,6 +170,7 @@ export class LocationService {
       branchId,
       name: rackName,
       type: (data as any).type?.trim() || "RACK",
+      location: (data as any).location !== undefined ? (data as any).location : null,
       isActive,
     };
     if (shelvesData && shelvesData.length > 0) {
@@ -225,6 +226,7 @@ export class LocationService {
         branchId,
         name: rackName,
         type: (data as any).type?.trim() || "RACK",
+        location: (data as any).location !== undefined ? (data as any).location : null,
         isActive: data.isActive ?? true,
       },
       include: {
@@ -239,6 +241,10 @@ export class LocationService {
     const updateData: any = {};
     if (data.name !== undefined) updateData.name = data.name.trim();
     if ((data as any).type !== undefined) updateData.type = (data as any).type;
+    if ((data as any).location !== undefined) {
+      const locVal = (data as any).location;
+      updateData.location = locVal && typeof locVal === "string" ? locVal.trim() : null;
+    }
     if (data.isActive !== undefined) updateData.isActive = data.isActive;
 
     return (prisma as any).rack.update({

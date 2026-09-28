@@ -566,10 +566,10 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
           productType: model,
           unitType: isMed ? "TABLET" : (model === "BOTTLE" ? "BOTTLE" : model === "VIAL" ? "VIAL" : "PIECE"),
           unitMultiplier: 1,
-          quantity: 1,
+          quantity: isMed ? 0 : 1,
           boxCount: 0,
           stripCount: 0,
-          tabletCount: isMed ? 1 : 0,
+          tabletCount: 0,
           unitPrice: baseSellingPrice,
           basePrice: baseSellingPrice,
           stripsPerBox,
@@ -617,10 +617,6 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
       else if (unitType === "tablet") tabC = Math.max(0, tabC + delta);
 
       const totalBaseUnits = (boxC * item.tabletsPerBox) + (stripC * item.tabletsPerStrip) + tabC;
-
-      if (totalBaseUnits === 0) {
-        return prev.filter((_, i) => i !== idx);
-      }
 
       if (totalBaseUnits > item.availableBaseStock) {
         showToast(`Stock limit reached (${item.availableBaseStock} max available).`, "warning");
@@ -1220,6 +1216,22 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
   // Final Checkout Submission (Direct One-Click Sale with Immediate Receipt Preview)
   const handleCheckout = async () => {
     if (cart.length === 0 || !selectedBranchId) return;
+
+    // Validate that all items in cart have at least 1 unit quantity
+    const zeroItem = cart.find((item) => {
+      const isMed = item.productType === "MEDICINE";
+      const totalUnits = isMed
+        ? ((item.boxCount || 0) * item.tabletsPerBox) + ((item.stripCount || 0) * item.tabletsPerStrip) + (item.tabletCount || 0)
+        : item.quantity;
+      return totalUnits <= 0;
+    });
+
+    if (zeroItem) {
+      const msg = `Please enter quantity for "${zeroItem.name}" before completing sale.`;
+      setError(msg);
+      showToast(msg, "warning");
+      return;
+    }
 
     if (hasRxItems && !prescriptionRef.trim()) {
       setError("Prescription required: Please enter Doctor / Rx reference for prescribed medicine.");

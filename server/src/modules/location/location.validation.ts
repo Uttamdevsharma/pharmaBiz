@@ -4,12 +4,14 @@ export const CreateRackSchema = z.object({
   name: z.string().min(1, "Rack name is required"),
   branchId: z.string().optional(),
   type: z.string().optional().default("RACK"),
+  location: z.string().optional(),
   isActive: z.boolean().optional(),
 });
 
 export const UpdateRackSchema = z.object({
   name: z.string().min(1, "Name cannot be empty").optional(),
   type: z.string().optional(),
+  location: z.string().optional().nullable(),
   isActive: z.boolean().optional(),
 });
 
@@ -39,6 +41,7 @@ export const QuickCreateRackSchema = z.object({
   name: z.string().min(1, "Storage unit name/code is required").max(60, "Name is too long"),
   branchId: z.string().optional(),
   type: z.string().optional().default("RACK"),
+  location: z.string().optional(),
   shelfPrefix: z.string().max(30).optional().default("Shelf"),
   numberOfShelves: z.coerce.number().int().min(0, "Shelves cannot be negative").max(50, "Maximum 50 shelves allowed").default(0),
   binPrefix: z.string().max(30).optional().default("Bin"),
