@@ -344,15 +344,32 @@ export function EmployeeListView({
       </div>
 
       {/* Employees Table */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg shadow-xs overflow-hidden">
         {loading ? (
-          <div className="flex flex-col items-center justify-center p-16">
-            <Loader2 className="w-8 h-8 text-emerald-500 animate-spin" />
-            <p className="mt-3 text-sm text-slate-500">Loading branch employees...</p>
+          <div className="p-4 space-y-3">
+            {[...Array(6)].map((_, i) => (
+              <div
+                key={i}
+                className="animate-pulse flex items-center justify-between py-3.5 px-4 border border-slate-100 dark:border-slate-800/80 rounded-lg bg-slate-50/50 dark:bg-slate-800/30"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-slate-200 dark:bg-slate-700" />
+                  <div className="space-y-1.5">
+                    <div className="h-4 w-32 bg-slate-200 dark:bg-slate-700 rounded-sm" />
+                    <div className="h-3 w-20 bg-slate-100 dark:bg-slate-800 rounded-sm" />
+                  </div>
+                </div>
+                <div className="h-6 w-24 bg-slate-200 dark:bg-slate-700 rounded-md" />
+                <div className="h-6 w-16 bg-slate-200 dark:bg-slate-700 rounded-full" />
+                <div className="h-4 w-28 bg-slate-200 dark:bg-slate-700 rounded-sm" />
+                <div className="h-6 w-28 bg-slate-200 dark:bg-slate-700 rounded-md" />
+                <div className="h-8 w-24 bg-slate-200 dark:bg-slate-700 rounded-lg" />
+              </div>
+            ))}
           </div>
         ) : filteredEmployees.length === 0 ? (
           <div className="flex flex-col items-center justify-center p-16 text-center">
-            <div className="p-4 bg-emerald-500/10 text-emerald-600 rounded-2xl mb-4">
+            <div className="p-4 bg-emerald-500/10 text-emerald-600 rounded-lg mb-4">
               <Users className="w-10 h-10" />
             </div>
             <h3 className="text-lg font-bold text-slate-900 dark:text-white">No employees found</h3>
@@ -500,13 +517,14 @@ export function EmployeeListView({
           totalItems={filteredEmployees.length}
           pageSize={pageSize}
           onPageChange={setPage}
+          alwaysShow={true}
         />
       </div>
 
       {/* Salary Structure Modal */}
       {isStructureModalOpen && targetEmployee && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5 max-h-[92vh] overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg max-w-lg w-full p-6 shadow-2xl space-y-5 max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 bg-emerald-500/10 text-emerald-600 rounded-xl">

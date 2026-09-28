@@ -52,11 +52,13 @@ import {
   X,
   PanelLeftClose,
   PanelLeftOpen,
+  Compass,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/common/ThemeToggle";
 
 export type OwnerModule =
   | "overview"
+  | "medicine_locator"
   | "pos"
   | "pos_sale"
   | "loc_storage_groups"
@@ -189,6 +191,7 @@ export function DashboardSidebar({
     activeModule === "roles";
 
   const isSalesPosActive =
+    activeModule === "medicine_locator" ||
     activeModule === "pos" ||
     activeModule === "pos_sale" ||
     activeModule === "pos_history" ||
@@ -433,10 +436,6 @@ export function DashboardSidebar({
   ].filter((item) => item.visible);
 
   // 6. Stock Management Section
-  const hasAllocationPerm = isOwner || hasPermission("stock.allocation");
-  const hasAllocationHistPerm = isOwner || hasPermission("stock.allocation_history");
-  const allocationGroupVisible = hasAllocationPerm || hasAllocationHistPerm;
-
   const stockChildren: SubMenuItem[] = [
     {
       id: "stock_add_stock" as OwnerModule,
@@ -451,9 +450,15 @@ export function DashboardSidebar({
       visible: isOwner || hasPermission("stock.stock_list"),
     },
     {
+      id: "stock_allocation_history" as OwnerModule,
+      label: "Allocation History",
+      icon: History,
+      visible: isOwner || hasPermission("stock.allocation_history") || hasPermission("stock.stock_history") || true,
+    },
+    {
       id: "stock_stock_history" as OwnerModule,
       label: "Stock History",
-      icon: History,
+      icon: Layers,
       visible: isOwner || hasPermission("stock.stock_history"),
     },
     {
@@ -462,30 +467,6 @@ export function DashboardSidebar({
       icon: CalendarX2,
       visible: isOwner || hasPermission("stock.stock_list") || hasPermission("inventory.product_list") || true,
     },
-    ...(allocationGroupVisible
-      ? [
-          {
-            id: "allocate_product_group",
-            label: "Allocate Product",
-            icon: MapPin,
-            visible: true,
-            children: [
-              {
-                id: "stock_stock_allocation" as OwnerModule,
-                label: "Stock Allocation",
-                icon: Layers,
-                visible: hasAllocationPerm,
-              },
-              {
-                id: "stock_allocation_history" as OwnerModule,
-                label: "Allocation History",
-                icon: History,
-                visible: hasAllocationHistPerm,
-              },
-            ].filter((c) => c.visible),
-          },
-        ]
-      : []),
     {
       id: "stock_transfer_stock" as OwnerModule,
       label: "Transfer Stock",
@@ -512,20 +493,8 @@ export function DashboardSidebar({
     },
   ].filter((item) => item.visible);
 
-  // 7. Staff Management Section (Create Staff, Staff List, Role Management -> Create Role, Permission Assignment)
+  // 7. Staff Management Section (Role Management -> Create Role, Permission Assignment, Create Staff, Staff List)
   const staffChildren: SubMenuItem[] = [
-    {
-      id: "staff_create" as OwnerModule,
-      label: "Create Staff",
-      icon: UserPlus,
-      visible: isOwner || hasPermission("staff.create"),
-    },
-    {
-      id: "staff" as OwnerModule,
-      label: "Staff List",
-      icon: Users,
-      visible: isOwner || hasPermission("staff.view"),
-    },
     {
       id: "role_management_group",
       label: "Role Management",
@@ -545,6 +514,18 @@ export function DashboardSidebar({
           visible: isOwner || hasPermission("roles.manage"),
         },
       ].filter((c) => c.visible),
+    },
+    {
+      id: "staff_create" as OwnerModule,
+      label: "Create Staff",
+      icon: UserPlus,
+      visible: isOwner || hasPermission("staff.create"),
+    },
+    {
+      id: "staff" as OwnerModule,
+      label: "Staff List",
+      icon: Users,
+      visible: isOwner || hasPermission("staff.view"),
     },
   ].filter((item) => item.visible);
 
@@ -579,6 +560,18 @@ export function DashboardSidebar({
       label: "VAT Settings",
       icon: Percent,
       visible: isOwner || hasPermission("pos.vat"),
+    },
+    {
+      id: "medicine_locator" as OwnerModule,
+      label: "Medicine Locator",
+      icon: Compass,
+      visible:
+        isOwner ||
+        hasPermission("medicine.locator") ||
+        hasPermission("pos.manage") ||
+        hasPermission("pos.view") ||
+        hasPermission("stock.stock_list") ||
+        hasPermission("stock.view"),
     },
   ].filter((item) => item.visible);
 

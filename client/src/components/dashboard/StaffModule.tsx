@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { fetchApi } from "@/lib/api";
 import {
@@ -20,8 +20,10 @@ import {
   Trash2,
   Edit2,
   X,
+  Phone,
 } from "lucide-react";
 import { getClientPlanConfig } from "@/lib/planLimits";
+import { Pagination } from "@/components/common/Pagination";
 
 interface PharmacyRole {
   id: string;
@@ -53,6 +55,11 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
   const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 10;
 
   const isManager = user?.role === "BRANCH_MANAGER";
   const isOwner = user?.role === "COMPANY_OWNER" || user?.role === "SUPER_ADMIN";
@@ -63,6 +70,7 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
     username: "",
     phone: "",
     password: "",
+    confirmPassword: "",
     role: "",
     branchId: user?.branchId || "",
   });
@@ -132,10 +140,13 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
       username: "",
       phone: "",
       password: "",
+      confirmPassword: "",
       role: roles[0]?.id || "",
       branchId: user?.branchId || branches[0]?.id || "",
     });
     setError(null);
+    setShowPassword(false);
+    setShowConfirmPassword(false);
     setModalOpen(true);
   };
 
@@ -147,11 +158,20 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
       username: member.username || "",
       phone: member.phone || "",
       password: "",
+      confirmPassword: "",
       role: member.pharmacyRoleId || member.role || roles[0]?.id || "",
       branchId: member.branchId || "",
     });
     setError(null);
+    setShowPassword(false);
+    setShowConfirmPassword(false);
     setModalOpen(true);
+  };
+
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // Strictly numeric only, discard any non-digit chars like letters a, b, etc. Max 12 digits.
+    const digitsOnly = e.target.value.replace(/\D/g, "").slice(0, 12);
+    setFormData((prev) => ({ ...prev, phone: digitsOnly }));
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -161,6 +181,33 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
     if (!formData.role) {
       setError("Please select a role for this staff member.");
       return;
+    }
+
+    // Phone number validation: 11 or 12 digits
+    if (formData.phone && (formData.phone.length < 11 || formData.phone.length > 12)) {
+      setError("Phone number must be either 11 or 12 digits (e.g. 01712345678).");
+      return;
+    }
+
+    // Password validation for new staff
+    if (!editingStaff) {
+      if (formData.password.length < 6) {
+        setError("Password must be at least 6 characters long.");
+        return;
+      }
+      if (formData.password !== formData.confirmPassword) {
+        setError("Passwords do not match. Please verify your confirm password.");
+        return;
+      }
+    } else if (formData.password) {
+      if (formData.password.length < 6) {
+        setError("Password must be at least 6 characters long.");
+        return;
+      }
+      if (formData.password !== formData.confirmPassword) {
+        setError("Passwords do not match. Please verify your confirm password.");
+        return;
+      }
     }
 
     try {
@@ -269,7 +316,12 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
     }
   };
 
-  const selectedRoleObj = roles.find((r) => r.id === formData.role || r.name === formData.role);
+  // Pagination calculation
+  const totalPages = Math.ceil(staff.length / pageSize) || 1;
+  const paginatedStaff = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return staff.slice(start, start + pageSize);
+  }, [staff, currentPage, pageSize]);
 
   return (
     <div className="space-y-6 w-full">
@@ -285,6 +337,9 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
             <Users className="h-7 w-7 text-brand-primary" />
             <span>{isManager ? "Branch Staff" : "Staff List"}</span>
           </h2>
+          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+            Overview of all staff members, their assigned roles, branches, and account status.
+          </p>
         </div>
 
         {user?.role !== "AUDITOR" && (
@@ -294,7 +349,7 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
                 type="button"
                 onClick={() => onNavigate("staff_create")}
                 disabled={isTotalLimitReached}
-                className="h-11 px-5 rounded-xl bg-brand-primary text-white text-sm font-bold shadow-sm hover:bg-brand-primary-hover transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="h-10 px-4 rounded-lg bg-brand-primary text-white text-xs sm:text-sm font-bold shadow-xs hover:bg-brand-primary-hover transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Plus className="h-4 w-4" />
                 <span>Create Staff</span>
@@ -303,7 +358,7 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
             <button
               onClick={handleOpenCreate}
               disabled={isTotalLimitReached}
-              className="h-11 px-5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 text-sm font-bold transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="h-10 px-4 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 text-xs sm:text-sm font-bold transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Plus className="h-4 w-4" />
               <span>Quick Add</span>
@@ -315,7 +370,7 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
       {/* Feedback Notification */}
       {feedback && (
         <div
-          className={`p-4 rounded-xl text-xs font-semibold flex items-center justify-between transition-all ${
+          className={`p-4 rounded-lg text-xs font-semibold flex items-center justify-between transition-all ${
             feedback.type === "success"
               ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
               : "bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800"
@@ -336,7 +391,7 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
       )}
 
       {isTotalLimitReached && (
-        <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-300 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm">
+        <div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-300 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
           <div className="flex items-center gap-2.5">
             <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0" />
             <div>
@@ -351,29 +406,62 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
         </div>
       )}
 
-      {/* Staff Table */}
-      <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-        {staff.length === 0 ? (
-          <div className="py-20 flex flex-col items-center justify-center gap-2 text-slate-500">
-            <span className="text-xs font-medium">
-              {loading ? "Loading staff team..." : "No staff members found."}
-            </span>
+      {/* Staff Table Container */}
+      <div className="rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
+        <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+          <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <Users className="h-4 w-4 text-brand-primary" />
+            <span>Staff Members ({staff.length})</span>
+          </h3>
+          <span className="text-xs text-slate-400 font-medium">
+            Page {currentPage} of {totalPages}
+          </span>
+        </div>
+
+        {/* Skeleton Loading State */}
+        {loading ? (
+          <div className="p-4 space-y-3">
+            {[...Array(6)].map((_, i) => (
+              <div
+                key={i}
+                className="animate-pulse flex items-center justify-between py-3.5 px-4 border border-slate-100 dark:border-slate-800/80 rounded-lg bg-slate-50/50 dark:bg-slate-800/30"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="h-9 w-9 bg-slate-200 dark:bg-slate-700 rounded-lg" />
+                  <div className="space-y-1.5">
+                    <div className="h-4 w-32 bg-slate-200 dark:bg-slate-700 rounded-sm" />
+                    <div className="h-3 w-44 bg-slate-100 dark:bg-slate-800 rounded-sm" />
+                  </div>
+                </div>
+                <div className="h-6 w-28 bg-slate-200 dark:bg-slate-700 rounded-lg" />
+                <div className="h-4 w-28 bg-slate-200 dark:bg-slate-700 rounded-sm" />
+                <div className="h-4 w-24 bg-slate-200 dark:bg-slate-700 rounded-sm" />
+                <div className="h-6 w-16 bg-slate-200 dark:bg-slate-700 rounded-full" />
+                <div className="h-8 w-24 bg-slate-200 dark:bg-slate-700 rounded-lg" />
+              </div>
+            ))}
           </div>
-        ) : staff.length > 0 ? (
+        ) : staff.length === 0 ? (
+          <div className="py-20 text-center text-slate-400">
+            <Users className="h-10 w-10 mx-auto text-slate-300 dark:text-slate-700 mb-3" />
+            <p className="text-base font-bold text-slate-700 dark:text-slate-300">No staff members found</p>
+            <p className="text-xs mt-1">Click "Create Staff" to add team members to your pharmacy.</p>
+          </div>
+        ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="text-xs uppercase bg-slate-50/75 dark:bg-slate-800/50 text-slate-500 border-b border-slate-200 dark:border-slate-800 font-black tracking-wider">
+            <table className="w-full text-left text-sm border-collapse">
+              <thead className="text-[11px] uppercase bg-slate-50 dark:bg-slate-800/50 text-slate-500 border-b border-slate-200 dark:border-slate-800 font-bold tracking-wider">
                 <tr>
-                  <th className="px-6 py-4 font-black">Staff Member</th>
-                  <th className="px-6 py-4 font-black">Assigned Role</th>
-                  <th className="px-6 py-4 font-black">Branch</th>
-                  <th className="px-6 py-4 font-black">Phone</th>
-                  <th className="px-6 py-4 font-black">Status</th>
-                  <th className="px-6 py-4 font-black text-right">Actions</th>
+                  <th className="px-5 py-3.5">Staff Member</th>
+                  <th className="px-5 py-3.5">Assigned Role</th>
+                  <th className="px-5 py-3.5">Branch</th>
+                  <th className="px-5 py-3.5">Phone</th>
+                  <th className="px-5 py-3.5">Status</th>
+                  <th className="px-5 py-3.5 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
-                {staff.map((member) => {
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300 font-medium">
+                {paginatedStaff.map((member) => {
                   const isOwnerMember = member.role === "COMPANY_OWNER";
                   const roleTitle = isOwnerMember
                     ? "Pharmacy Owner"
@@ -381,10 +469,10 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
 
                   return (
                     <tr key={member.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
-                      <td className="px-6 py-4">
+                      <td className="px-5 py-3.5">
                         <div className="flex items-center gap-3">
                           <div
-                            className={`h-9 w-9 rounded-xl flex items-center justify-center font-black text-sm ${
+                            className={`h-9 w-9 rounded-lg flex items-center justify-center font-bold text-sm ${
                               isOwnerMember
                                 ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
                                 : "bg-brand-primary/10 text-brand-primary"
@@ -393,49 +481,51 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
                             {(member.name || member.username || "S").charAt(0).toUpperCase()}
                           </div>
                           <div>
-                            <div className="font-bold text-base text-slate-900 dark:text-white">
+                            <div className="font-bold text-sm text-slate-900 dark:text-white">
                               {member.name || member.username}
                             </div>
-                            <div className="text-xs text-slate-400 font-medium">{member.email || member.username}</div>
+                            <div className="text-xs text-slate-400 font-mono">{member.email || member.username}</div>
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-5 py-3.5">
                         <span
-                          className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold ${
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold ${
                             isOwnerMember
                               ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20"
                               : "bg-brand-primary/10 text-brand-primary border border-brand-primary/20"
                           }`}
                         >
-                          <ShieldCheck className="h-4 w-4" />
+                          <ShieldCheck className="h-3.5 w-3.5" />
                           <span>{roleTitle}</span>
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-sm font-semibold text-slate-700 dark:text-slate-300">
+                      <td className="px-5 py-3.5 text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300">
                         {member.branch?.name || (isOwnerMember ? "All Branches (Owner)" : "HQ / Main Branch")}
                       </td>
-                      <td className="px-6 py-4 text-sm font-medium text-slate-600 dark:text-slate-400">{member.phone || "—"}</td>
-                      <td className="px-6 py-4">
+                      <td className="px-5 py-3.5 text-xs sm:text-sm font-mono text-slate-600 dark:text-slate-400">
+                        {member.phone || "—"}
+                      </td>
+                      <td className="px-5 py-3.5">
                         <span
-                          className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${
                             member.isActive
                               ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
                               : "bg-red-500/10 text-red-600 dark:text-red-400"
                           }`}
                         >
-                          <span className={`h-2 w-2 rounded-full ${member.isActive ? "bg-emerald-500" : "bg-red-500"}`} />
+                          <span className={`h-1.5 w-1.5 rounded-full ${member.isActive ? "bg-emerald-500" : "bg-red-500"}`} />
                           {member.isActive ? "Active" : "Disabled"}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-right">
+                      <td className="px-5 py-3.5 text-right">
                         {!isOwnerMember && user?.role !== "AUDITOR" && (
                           <div className="inline-flex items-center gap-2">
                             {/* Edit Action */}
                             <button
                               type="button"
                               onClick={() => handleOpenEdit(member)}
-                              className="h-9 px-3.5 rounded-xl text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 transition"
+                              className="h-8 px-3 rounded-lg text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition"
                             >
                               Edit
                             </button>
@@ -444,7 +534,7 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
                             <button
                               type="button"
                               onClick={() => handleToggleStatus(member)}
-                              className={`h-9 px-3.5 rounded-xl text-xs font-bold transition ${
+                              className={`h-8 px-3 rounded-lg text-xs font-bold transition ${
                                 member.isActive
                                   ? "bg-amber-50 text-amber-700 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-300"
                                   : "bg-emerald-50 text-emerald-600 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300"
@@ -459,10 +549,14 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
                                 type="button"
                                 disabled={deletingId === member.id}
                                 onClick={() => handleDeleteStaff(member)}
-                                className="h-9 w-9 flex items-center justify-center rounded-xl text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50 transition disabled:opacity-50"
+                                className="h-8 w-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50 transition disabled:opacity-50"
                                 title="Delete Staff Member"
                               >
-                                <Trash2 className="h-4 w-4" />
+                                {deletingId === member.id ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin text-red-500" />
+                                ) : (
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                )}
                               </button>
                             )}
                           </div>
@@ -474,33 +568,37 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
               </tbody>
             </table>
           </div>
-        ) : (
-          <div className="py-20 text-center text-slate-400">
-            <Users className="h-10 w-10 mx-auto text-slate-300 dark:text-slate-700 mb-3" />
-            <p className="text-base font-bold text-slate-700 dark:text-slate-300">No staff members found</p>
-            <p className="text-xs mt-1">Click "Create Staff" to add team members to your pharmacy.</p>
-          </div>
         )}
+
+        {/* Pagination Controls */}
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalItems={staff.length}
+          pageSize={pageSize}
+          onPageChange={setCurrentPage}
+          alwaysShow={true}
+        />
       </div>
 
-      {/* Add / Edit Staff Modal */}
+      {/* Quick Add / Edit Staff Modal */}
       {modalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="max-w-xl w-full rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 sm:p-7 space-y-5 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+          <div className="max-w-xl w-full rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 sm:p-6 space-y-4 shadow-xl animate-in fade-in zoom-in-95 duration-150 max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <h3 className="text-xl font-black text-slate-900 dark:text-white">
-                {editingStaff ? "Edit Staff Member" : "Add New Staff Member"}
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+                {editingStaff ? "Edit Staff Member" : "Quick Add Staff Member"}
               </h3>
               <button
                 onClick={() => setModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg"
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
             {error && (
-              <div className="p-3 rounded-xl bg-red-500/10 text-red-600 text-xs flex items-center gap-2">
+              <div className="p-3 rounded-lg bg-red-500/10 text-red-600 text-xs flex items-center gap-2">
                 <AlertCircle className="h-4 w-4 shrink-0" />
                 <span>{error}</span>
               </div>
@@ -508,25 +606,25 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
 
             <form onSubmit={handleSave} className="space-y-4">
               <div>
-                <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
+                <label className="block text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200 mb-1">
                   Full Name *
                 </label>
                 <div className="relative flex items-center">
-                  <User className="h-5 w-5 text-slate-400 absolute left-3.5 pointer-events-none" />
+                  <User className="h-4 w-4 text-slate-400 absolute left-3.5 pointer-events-none" />
                   <input
                     type="text"
                     required
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     placeholder="e.g. Shakil Ahmed"
-                    className="w-full h-12 pl-11 pr-4 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-base font-bold text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary"
+                    className="w-full h-11 pl-10 pr-3.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
+                  <label className="block text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200 mb-1">
                     Email *
                   </label>
                   <input
@@ -535,34 +633,40 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value, username: e.target.value })}
                     placeholder="name@pharmacy.com"
-                    className="w-full h-12 px-4 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-base font-bold text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary"
+                    className="w-full h-11 px-3.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
-                    Phone Number
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200">
+                      Phone Number
+                    </label>
+                    <span className="text-[10px] text-slate-400">11-12 digits</span>
+                  </div>
                   <input
                     type="tel"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={12}
                     value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    onChange={handlePhoneChange}
                     placeholder="01700000000"
-                    className="w-full h-12 px-4 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-base font-bold text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary"
+                    className="w-full h-11 px-3.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary"
                   />
                 </div>
               </div>
 
               {/* Select Role */}
               <div>
-                <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
+                <label className="block text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200 mb-1">
                   Select Role *
                 </label>
                 <select
                   value={formData.role}
                   required
                   onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                  className="w-full h-12 px-4 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-base font-bold text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary cursor-pointer"
+                  className="w-full h-11 px-3.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary cursor-pointer"
                 >
                   {roles.map((r) => (
                     <option key={r.id} value={r.id}>
@@ -574,7 +678,7 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
 
               {/* Branch Assignment */}
               <div>
-                <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
+                <label className="block text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200 mb-1">
                   Assign to Branch
                 </label>
                 {isManager ? (
@@ -582,13 +686,13 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
                     type="text"
                     disabled
                     value={branches.find((b) => b.id === user?.branchId)?.name || "Your Branch"}
-                    className="w-full h-12 px-4 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-base font-bold text-slate-600 dark:text-slate-400"
+                    className="w-full h-11 px-3.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-sm font-semibold text-slate-600 dark:text-slate-400"
                   />
                 ) : (
                   <select
                     value={formData.branchId}
                     onChange={(e) => setFormData({ ...formData, branchId: e.target.value })}
-                    className="w-full h-12 px-4 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-base font-bold text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary cursor-pointer"
+                    className="w-full h-11 px-3.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary cursor-pointer"
                   >
                     <option value="">HQ / Main Branch</option>
                     {branches.map((b) => (
@@ -600,29 +704,56 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
                 )}
               </div>
 
-              {/* Password */}
-              <div>
-                <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
-                  {editingStaff ? "Reset Password (leave empty to keep current)" : "Password *"}
-                </label>
-                <div className="relative flex items-center">
-                  <Lock className="h-5 w-5 text-slate-400 absolute left-3.5 pointer-events-none" />
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    required={!editingStaff}
-                    minLength={6}
-                    value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    placeholder="Min 6 characters"
-                    className="w-full h-12 pl-11 pr-11 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-base font-bold text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary font-mono"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3.5 text-slate-400 hover:text-slate-600"
-                  >
-                    {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                  </button>
+              {/* Password & Confirm Password */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200 mb-1">
+                    {editingStaff ? "Reset Password" : "Password *"}
+                  </label>
+                  <div className="relative flex items-center">
+                    <Lock className="h-4 w-4 text-slate-400 absolute left-3.5 pointer-events-none" />
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      required={!editingStaff}
+                      minLength={6}
+                      value={formData.password}
+                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                      placeholder={editingStaff ? "Leave blank to keep" : "Min 6 chars"}
+                      className="w-full h-11 pl-10 pr-9 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200 mb-1">
+                    {editingStaff ? "Confirm Reset Password" : "Confirm Password *"}
+                  </label>
+                  <div className="relative flex items-center">
+                    <Lock className="h-4 w-4 text-slate-400 absolute left-3.5 pointer-events-none" />
+                    <input
+                      type={showConfirmPassword ? "text" : "password"}
+                      required={!editingStaff && Boolean(formData.password)}
+                      minLength={6}
+                      value={formData.confirmPassword}
+                      onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+                      placeholder="Re-type password"
+                      className="w-full h-11 pl-10 pr-9 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="absolute right-3 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                    >
+                      {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -630,16 +761,17 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
                 <button
                   type="button"
                   onClick={() => setModalOpen(false)}
-                  className="h-11 px-5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-sm transition"
+                  className="h-10 px-4 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs sm:text-sm transition"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={saving}
-                  className="h-11 px-6 rounded-xl bg-brand-primary text-white font-black hover:bg-brand-primary-hover transition text-sm shadow-sm"
+                  className="h-10 px-5 rounded-lg bg-brand-primary text-white font-bold hover:bg-brand-primary-hover transition text-xs sm:text-sm shadow-xs flex items-center gap-2"
                 >
-                  {saving ? "Saving..." : editingStaff ? "Save Changes" : "Create Staff"}
+                  {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+                  <span>{editingStaff ? "Save Changes" : "Create Staff"}</span>
                 </button>
               </div>
             </form>

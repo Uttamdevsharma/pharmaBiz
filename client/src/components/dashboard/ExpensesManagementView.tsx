@@ -26,8 +26,10 @@ import {
   FileText,
   Clock,
   ArrowUpRight,
+  Download,
 } from "lucide-react";
 import { Pagination } from "@/components/common/Pagination";
+import { showAlert } from "@/lib/swal";
 
 interface ExpensesManagementViewProps {
   selectedBranchId?: string;
@@ -322,6 +324,64 @@ export function ExpensesManagementView({ selectedBranchId, onNavigate }: Expense
 
   const selectedAccount = financialAccounts.find((a) => a.id === recordAccountId);
 
+  const [isExportingExpenses, setIsExportingExpenses] = useState(false);
+
+  const handleExportExpensesCsv = () => {
+    try {
+      setIsExportingExpenses(true);
+      const list = filteredExpenses.length > 0 ? filteredExpenses : expenses;
+
+      if (!list || list.length === 0) {
+        showAlert.info("No Expenses", "No expense records available to export for this month.");
+        return;
+      }
+
+      const headers = [
+        "Voucher / Ref No",
+        "Expense Month",
+        "Category",
+        "Title / Description",
+        "Amount (BDT)",
+        "Paid From Account",
+        "Notes",
+      ];
+
+      const escapeVal = (val: any) => {
+        if (val === null || val === undefined) return '""';
+        const str = String(val);
+        return `"${str.replace(/"/g, '""')}"`;
+      };
+
+      const rows = list.map((item) => [
+        escapeVal(item.voucherNo || item.reference || item.id.slice(-6)),
+        escapeVal(item.expenseMonth),
+        escapeVal(CATEGORY_META[item.category]?.label || item.category),
+        escapeVal(item.title),
+        Number(item.amount || 0).toFixed(2),
+        escapeVal(item.financialAccount?.name || "Direct Cash"),
+        escapeVal(item.notes || ""),
+      ]);
+
+      const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join("\r\n");
+      const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `pharmabiz_expenses_${currentMonth}_${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      showAlert.toast(`Exported ${list.length} expenses to CSV!`, "success");
+    } catch (err: any) {
+      console.error("Export expenses error:", err);
+      showAlert.error("Export Failed", err.message || "Failed to export expenses.");
+    } finally {
+      setIsExportingExpenses(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Top Header */}
@@ -336,7 +396,22 @@ export function ExpensesManagementView({ selectedBranchId, onNavigate }: Expense
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <button
+            type="button"
+            onClick={handleExportExpensesCsv}
+            disabled={isExportingExpenses}
+            className="px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 shadow-xs flex items-center gap-2 transition cursor-pointer active:scale-95 disabled:opacity-50"
+            title="Download expenses report as CSV"
+          >
+            {isExportingExpenses ? (
+              <Loader2 className="h-4 w-4 animate-spin text-brand-primary" />
+            ) : (
+              <Download className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+            )}
+            <span>Export Expenses CSV</span>
+          </button>
+
           <button
             onClick={() => {
               setRecordCategory("SHOP_RENT");
@@ -345,14 +420,14 @@ export function ExpensesManagementView({ selectedBranchId, onNavigate }: Expense
               setRecordRecurringId(null);
               setIsRecordModalOpen(true);
             }}
-            className="px-4 py-2 rounded-xl text-xs sm:text-sm font-bold bg-brand-primary hover:bg-brand-primary/90 text-white shadow-sm flex items-center gap-2 transition"
+            className="px-4 py-2 rounded-xl text-xs sm:text-sm font-bold bg-brand-primary hover:bg-brand-primary/90 text-white shadow-sm flex items-center gap-2 transition cursor-pointer"
           >
             <Plus className="h-4 w-4" />
             Record Payment
           </button>
           <button
             onClick={() => setIsRecurringModalOpen(true)}
-            className="px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 shadow-xs flex items-center gap-2 transition"
+            className="px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 shadow-xs flex items-center gap-2 transition cursor-pointer"
           >
             <CalendarDays className="h-4 w-4 text-slate-500" />
             Set Recurring Bill

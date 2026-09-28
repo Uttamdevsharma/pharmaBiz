@@ -47,6 +47,7 @@ import {
   Eye,
   ShieldAlert,
   Check,
+  Download,
 } from "lucide-react";
 
 export interface BatchStockItem extends InventoryItem {
@@ -55,6 +56,8 @@ export interface BatchStockItem extends InventoryItem {
   inRackQty: number;
   notInRackQty: number;
   primaryLocation: string;
+  storageGroupName?: string;
+  storageLocationDetails?: string | null;
 }
 
 export interface ProductStockGroup {
@@ -73,6 +76,8 @@ export interface ProductStockGroup {
   stripsPerBox?: number | null;
   tabletsPerStrip?: number | null;
   minStockLevel?: number;
+  shopMinStockAlert?: number;
+  godownMinStockAlert?: number;
   totalQuantity: number;
   totalGodownQuantity: number;
   totalRackQuantity: number;
@@ -80,7 +85,13 @@ export interface ProductStockGroup {
   hasExpired: boolean;
   hasExpiringSoon: boolean;
   hasLowStock: boolean;
+  hasShopStock: boolean;
   hasGodownStock: boolean;
+  isShopLowStock: boolean;
+  isGodownLowStock: boolean;
+  primaryLocation?: string;
+  storageGroupName?: string;
+  storageLocationDetails?: string | null;
   earliestExpiry: Date | null;
   supplierName?: string | null;
   supplierPhone?: string | null;
@@ -174,25 +185,38 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
       }
       const notInRackQty = Math.max(0, (item.quantity || 0) - inRackQty);
 
-      // Primary location summary (Clean Rack + Optional Shelf + Optional Bin)
+      // Primary location summary (Group Name + Location Details)
       let primaryLocation = "Not in Rack";
+      let storageGroupName = "";
+      let storageLocationDetails: string | null = null;
+
       if (item.locations && item.locations.length > 0) {
-        const first = item.locations[0];
-        const rName = first.rack?.name || first.rackName || "Rack R01";
-        const rLoc = first.rack?.location;
-        const sName = first.shelf?.name || first.shelfName || "";
-        const bName = first.bin?.name || first.binName || "";
-        const cleanBin = bName && bName.toLowerCase() !== "none" && bName.toLowerCase() !== "n/a" && bName !== "B01" ? bName : "";
-        if (sName && sName !== "S01") {
-          primaryLocation = cleanBin ? `${rName} › ${sName} › ${cleanBin}` : `${rName} › ${sName}`;
-        } else if (rLoc) {
-          primaryLocation = `${rName} (${rLoc})`;
+        const placed = item.locations.find((l: any) => (l.quantity || 0) > 0) || item.locations[0];
+        const rName = placed.rack?.name || (placed.rackName && placed.rackName !== "—" ? placed.rackName : "");
+        const rLoc = placed.rack?.location;
+        const sName = placed.shelf?.name || (placed.shelfName && placed.shelfName !== "—" ? placed.shelfName : "");
+        const bName = placed.bin?.name || (placed.binName && placed.binName !== "—" ? placed.binName : "");
+
+        const cleanShelf = sName && sName !== "S01" && sName !== "—" && sName.toLowerCase() !== "none" ? sName : "";
+        const cleanBin = bName && bName.toLowerCase() !== "none" && bName.toLowerCase() !== "n/a" && bName !== "B01" && bName !== "—" ? bName : "";
+
+        storageGroupName = rName || "Shop Shelf";
+
+        if (rLoc && rLoc.trim()) {
+          storageLocationDetails = rLoc.trim();
+          if (cleanShelf && !rLoc.toLowerCase().includes(cleanShelf.toLowerCase())) {
+            storageLocationDetails += ` • ${cleanShelf}`;
+          }
+          if (cleanBin) {
+            storageLocationDetails += ` • ${cleanBin}`;
+          }
+        } else if (cleanShelf) {
+          storageLocationDetails = cleanBin ? `${cleanShelf} › ${cleanBin}` : cleanShelf;
         } else {
-          primaryLocation = rName;
+          storageLocationDetails = null;
         }
-        if (item.locations.length > 1) {
-          primaryLocation += ` (+${item.locations.length - 1} more)`;
-        }
+
+        primaryLocation = storageLocationDetails ? `${storageGroupName} (${storageLocationDetails})` : storageGroupName;
       }
 
       return {
@@ -202,6 +226,8 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
         inRackQty,
         notInRackQty,
         primaryLocation,
+        storageGroupName,
+        storageLocationDetails,
       };
     });
 
@@ -213,12 +239,13 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
   }, [rawInventory]);
 
   // ══════════════════════════════════════════════════════════════════════════
-  // IN-PLACE MOVE STOCK TO SUPERSHOP MODAL LOGIC
+  // IN-PLACE MOVE STOCK TO SHOP MODAL LOGIC
   // ══════════════════════════════════════════════════════════════════════════
   const [storageGroups, setStorageGroups] = useState<any[]>([]);
   const [moveModalOpen, setMoveModalOpen] = useState(false);
   const [movingProduct, setMovingProduct] = useState<ProductStockGroup | null>(null);
   const [movingBatchId, setMovingBatchId] = useState<string>("");
+  const [isBatchPreselected, setIsBatchPreselected] = useState<boolean>(false);
   const [movingTargetGroupId, setMovingTargetGroupId] = useState<string>("");
   const [groupSearchQuery, setGroupSearchQuery] = useState<string>("");
   const [movingQuantity, setMovingQuantity] = useState<number>(1);
@@ -244,9 +271,15 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
     loadStorageGroups();
   }, [effectiveBranchId]);
 
-  // Open Move to Supershop modal with pre-selected batch and auto-suggested group
+  // Open Move to Shop modal with pre-selected batch and auto-suggested group
   const handleOpenMoveModal = (product: ProductStockGroup, specificBatchId?: string) => {
-    const availableBatches = product.batches.filter((b) => b.notInRackQty > 0);
+    const availableBatches = [...product.batches]
+      .filter((b) => b.notInRackQty > 0)
+      .sort((a, b) => {
+        if (!a.expiryDate) return 1;
+        if (!b.expiryDate) return -1;
+        return new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime();
+      });
     const targetBatch =
       (specificBatchId ? product.batches.find((b) => b.id === specificBatchId) : null) ||
       availableBatches[0] ||
@@ -254,6 +287,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
 
     setMovingProduct(product);
     setMovingBatchId(targetBatch?.id || "");
+    setIsBatchPreselected(Boolean(specificBatchId));
     setMovingQuantity(1);
 
     const u = (product.unit || "").toLowerCase();
@@ -276,11 +310,29 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
     setMoveModalOpen(true);
   };
 
+  // Batches for the moving product, sorted by expiry date ascending (FEFO)
+  const sortedMovingBatches = useMemo(() => {
+    if (!movingProduct) return [];
+    return [...movingProduct.batches]
+      .filter((b) => b.notInRackQty > 0)
+      .sort((a, b) => {
+        if (!a.expiryDate) return 1;
+        if (!b.expiryDate) return -1;
+        return new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime();
+      });
+  }, [movingProduct]);
+
+  // Total Godown stock across all batches for the moving product
+  const totalGodownUnitsAcrossBatches = useMemo(() => {
+    if (!movingProduct) return 0;
+    return movingProduct.batches.reduce((sum, b) => sum + (b.notInRackQty || 0), 0);
+  }, [movingProduct]);
+
   // Selected batch inside the move modal
   const selectedMovingBatch = useMemo(() => {
     if (!movingProduct) return null;
-    return movingProduct.batches.find((b) => b.id === movingBatchId) || movingProduct.batches[0] || null;
-  }, [movingProduct, movingBatchId]);
+    return movingProduct.batches.find((b) => b.id === movingBatchId) || sortedMovingBatches[0] || movingProduct.batches[0] || null;
+  }, [movingProduct, movingBatchId, sortedMovingBatches]);
 
   // Godown quantity and live packaging calculations
   const godownAvailableUnits = selectedMovingBatch?.notInRackQty || 0;
@@ -318,7 +370,11 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
     if (!groupSearchQuery.trim()) return storageGroups;
     const q = groupSearchQuery.toLowerCase().trim();
     return storageGroups.filter(
-      (g) => (g.name || "").toLowerCase().includes(q) || (g.type || "").toLowerCase().includes(q)
+      (g) =>
+        (g.name || "").toLowerCase().includes(q) ||
+        (g.type || "").toLowerCase().includes(q) ||
+        (g.location || "").toLowerCase().includes(q) ||
+        (g.description || "").toLowerCase().includes(q)
     );
   }, [storageGroups, groupSearchQuery]);
 
@@ -337,7 +393,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
   const handleConfirmMoveStock = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedMovingBatch || !movingTargetGroupId) {
-      showAlert.error("Missing Group", "Please select which Supershop Group to allocate this medicine into.");
+      showAlert.error("Missing Group", "Please select which Shop Group to allocate this medicine into.");
       return;
     }
     if (baseUnitsToMove <= 0 || isMoveOverLimit) {
@@ -360,7 +416,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
 
       if (res?.success || (res as any)?.location || (res as any)?.data) {
         showAlert.success(
-          "Stock Moved to Supershop!",
+          "Stock Moved to Shop!",
           `Successfully moved ${baseUnitsToMove.toLocaleString()} ${movingProduct?.unit || "units"} into front store group.`,
           { timer: 2000 }
         );
@@ -380,7 +436,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
   // ══════════════════════════════════════════════════════════════════════════
   // MASTER STOCK TABLE: GROUPING, FILTERS, SEARCH & PAGINATION
   // ══════════════════════════════════════════════════════════════════════════
-  type StockFilterType = "ALL" | "IN_GODOWN" | "LOW_STOCK";
+  type StockFilterType = "ALL" | "IN_SHOP" | "IN_GODOWN" | "SHOP_LOW" | "GODOWN_LOW";
   const [activeFilter, setActiveFilter] = useState<StockFilterType>("ALL");
   const [selectedCompany, setSelectedCompany] = useState<string>("ALL");
   const [page, setPage] = useState<number>(1);
@@ -428,6 +484,8 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
           stripsPerBox: batch.stripsPerBox || null,
           tabletsPerStrip: batch.tabletsPerStrip || null,
           minStockLevel: (batch as any).product?.minStockAlert ?? (batch as any).minStockAlert ?? (batch as any).minStockLevel ?? 10,
+          shopMinStockAlert: (batch as any).product?.shopMinStockAlert ?? (batch as any).shopMinStockAlert ?? (batch as any).product?.minStockAlert ?? 10,
+          godownMinStockAlert: (batch as any).product?.godownMinStockAlert ?? (batch as any).godownMinStockAlert ?? 50,
           totalQuantity: 0,
           totalGodownQuantity: 0,
           totalRackQuantity: 0,
@@ -435,7 +493,13 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
           hasExpired: false,
           hasExpiringSoon: false,
           hasLowStock: false,
+          hasShopStock: false,
           hasGodownStock: false,
+          isShopLowStock: false,
+          isGodownLowStock: false,
+          primaryLocation: "Not in Rack",
+          storageGroupName: "",
+          storageLocationDetails: null,
           earliestExpiry: null,
           supplierName: rawSupplier,
           supplierPhone: batch.supplier?.phone || batch.receivingRecords?.[0]?.supplier?.phone || null,
@@ -480,12 +544,30 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
       }
     }
 
-    // Accurate Product-level Low Stock evaluation: across all batches
+    // Accurate Product-level Low Stock evaluation: across shop & godown
     const list = Array.from(map.values());
     for (const grp of list) {
-      if (grp.totalQuantity <= (grp.minStockLevel || 10)) {
-        grp.hasLowStock = true;
-      }
+      const shopAlert = grp.shopMinStockAlert ?? grp.minStockLevel ?? 10;
+      const godownAlert = grp.godownMinStockAlert ?? 50;
+      
+      grp.hasShopStock = grp.totalRackQuantity > 0;
+      grp.hasGodownStock = grp.totalGodownQuantity > 0;
+
+      // Shop Low Stock: if shop stock is low (<= shopAlert, or 0 while godown has stock)
+      grp.isShopLowStock = grp.totalRackQuantity <= shopAlert || (grp.totalRackQuantity === 0 && grp.totalGodownQuantity > 0);
+
+      // Godown Low Stock: if godown stock is low (<= godownAlert)
+      grp.isGodownLowStock = grp.totalGodownQuantity <= godownAlert;
+
+      // Overall Low Stock flag
+      grp.hasLowStock = grp.totalQuantity <= (grp.minStockLevel || godownAlert) || grp.isShopLowStock || grp.isGodownLowStock;
+
+      // Resolve primary rack/shelf location
+      const placedBatch = grp.batches.find((b) => b.inRackQty > 0 && b.storageGroupName && b.storageGroupName !== "Not in Rack");
+      const defaultBatch = grp.batches[0];
+      grp.storageGroupName = placedBatch?.storageGroupName || defaultBatch?.storageGroupName || "Not in Rack";
+      grp.storageLocationDetails = placedBatch?.storageLocationDetails ?? defaultBatch?.storageLocationDetails ?? null;
+      grp.primaryLocation = placedBatch?.primaryLocation || defaultBatch?.primaryLocation || "Not in Rack";
     }
 
     return list;
@@ -506,18 +588,24 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
 
   // Counts for Quick Filter Tabs
   const filterCounts = useMemo(() => {
-    let low = 0;
-    let godown = 0;
+    let inShop = 0;
+    let inGodown = 0;
+    let shopLow = 0;
+    let godownLow = 0;
 
     for (const p of productGroups) {
-      if (p.hasLowStock) low++;
-      if (p.hasGodownStock) godown++;
+      if (p.hasShopStock) inShop++;
+      if (p.hasGodownStock) inGodown++;
+      if (p.isShopLowStock) shopLow++;
+      if (p.isGodownLowStock) godownLow++;
     }
 
     return {
       all: productGroups.length,
-      inGodown: godown,
-      lowStock: low,
+      inShop,
+      inGodown,
+      shopLow,
+      godownLow,
     };
   }, [productGroups]);
 
@@ -533,10 +621,14 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
       );
     }
 
-    if (activeFilter === "LOW_STOCK") {
-      list = list.filter((p) => p.hasLowStock);
+    if (activeFilter === "IN_SHOP") {
+      list = list.filter((p) => p.hasShopStock);
     } else if (activeFilter === "IN_GODOWN") {
       list = list.filter((p) => p.hasGodownStock);
+    } else if (activeFilter === "SHOP_LOW") {
+      list = list.filter((p) => p.isShopLowStock);
+    } else if (activeFilter === "GODOWN_LOW") {
+      list = list.filter((p) => p.isGodownLowStock);
     }
 
     if (search.trim()) {
@@ -570,8 +662,14 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
     }
 
     // Sort order
-    if (activeFilter === "LOW_STOCK") {
-      return list.sort((a, b) => a.totalQuantity - b.totalQuantity);
+    if (activeFilter === "SHOP_LOW") {
+      return list.sort((a, b) => a.totalRackQuantity - b.totalRackQuantity);
+    }
+    if (activeFilter === "GODOWN_LOW") {
+      return list.sort((a, b) => a.totalGodownQuantity - b.totalGodownQuantity);
+    }
+    if (activeFilter === "IN_SHOP") {
+      return list.sort((a, b) => b.totalRackQuantity - a.totalRackQuantity);
     }
     if (activeFilter === "IN_GODOWN") {
       return list.sort((a, b) => b.totalGodownQuantity - a.totalGodownQuantity);
@@ -592,6 +690,76 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
     return filteredProducts.slice(start, start + pageSize);
   }, [filteredProducts, page, pageSize]);
 
+  const [isExportingStock, setIsExportingStock] = useState(false);
+
+  const handleExportStockCsv = () => {
+    try {
+      setIsExportingStock(true);
+      const list = filteredProducts.length > 0 ? filteredProducts : productGroups;
+
+      if (!list || list.length === 0) {
+        showAlert.info("No Stock", "No stock items available to export.");
+        return;
+      }
+
+      const headers = [
+        "Medicine Name",
+        "Generic Name",
+        "Manufacturer / Company",
+        "Total Stock (Units)",
+        "In Shop (Units)",
+        "In Godown (Units)",
+        "Shop Storage Location",
+        "Supplier",
+        "Stock Status",
+      ];
+
+      const escapeVal = (val: any) => {
+        if (val === null || val === undefined) return '""';
+        const str = String(val);
+        return `"${str.replace(/"/g, '""')}"`;
+      };
+
+      const rows = list.map((p) => {
+        let status = "In Stock";
+        if (p.isShopLowStock && p.isGodownLowStock) status = "Critical Low";
+        else if (p.isShopLowStock) status = "Shop Low";
+        else if (p.isGodownLowStock) status = "Godown Low";
+        if (p.hasExpired) status += " (Has Expired Batch)";
+        else if (p.hasExpiringSoon) status += " (Expiring Soon)";
+
+        return [
+          escapeVal(p.productName),
+          escapeVal(p.genericName || ""),
+          escapeVal(p.brandName || ""),
+          p.totalQuantity,
+          p.totalRackQuantity,
+          p.totalGodownQuantity,
+          escapeVal(p.storageGroupName || p.primaryLocation || "Not in Rack"),
+          escapeVal(p.supplierName || ""),
+          escapeVal(status),
+        ];
+      });
+
+      const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join("\r\n");
+      const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `pharmabiz_stock_report_${activeFilter.toLowerCase()}_${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      showAlert.toast(`Exported ${list.length} stock items to CSV!`, "success");
+    } catch (err: any) {
+      console.error("Export stock error:", err);
+      showAlert.error("Export Failed", err.message || "Failed to export stock.");
+    } finally {
+      setIsExportingStock(false);
+    }
+  };
 
   const handleAllocateProduct = (p: ProductStockGroup) => {
     handleOpenMoveModal(p);
@@ -705,6 +873,397 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
       suppliersList,
     };
   }, [selectedProduct]);
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // DEDICATED FULL-PAGE VIEW: MOVE STOCK TO SHOP
+  // ══════════════════════════════════════════════════════════════════════════
+  if (moveModalOpen && movingProduct && selectedMovingBatch) {
+    return (
+      <div className="space-y-6 max-w-6xl mx-auto py-2 px-1">
+        {/* Top Header & Breadcrumb */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
+          <div>
+            <button
+              type="button"
+              onClick={() => setMoveModalOpen(false)}
+              className="inline-flex items-center gap-2 text-sm sm:text-base font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition mb-2 cursor-pointer"
+            >
+              <ArrowLeft className="h-4 w-4 sm:h-5 sm:w-5" />
+              <span>Back to Stock List</span>
+            </button>
+            <h1 className="text-2xl sm:text-3xl lg:text-[32px] font-bold text-slate-900 dark:text-white tracking-tight">
+              Move Stock to Shop
+            </h1>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setMoveModalOpen(false)}
+              className="px-5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 text-sm sm:text-base font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleConfirmMoveStock}
+              disabled={moveSubmitting || !movingTargetGroupId || baseUnitsToMove <= 0 || isMoveOverLimit}
+              style={{ backgroundColor: "var(--primary-color, #059669)" }}
+              className="px-6 py-2.5 rounded-lg text-white text-sm sm:text-base font-bold shadow-sm hover:opacity-90 disabled:opacity-50 transition cursor-pointer flex items-center gap-2 active:scale-95"
+            >
+              {moveSubmitting ? (
+                <>
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  <span>Moving Stock...</span>
+                </>
+              ) : (
+                <>
+                  <Check className="h-5 w-5 stroke-[2.5]" />
+                  <span>Confirm &amp; Move to Shop</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Form Body */}
+        <form onSubmit={handleConfirmMoveStock}>
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            {/* Left Column: Medicine Details & Quantity */}
+            <div className="lg:col-span-6 space-y-6">
+              {/* Medicine Card */}
+              <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 p-5 sm:p-6 space-y-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">
+                      {movingProduct.productName}
+                      {movingProduct.size && (
+                        <span className="ml-2 text-base font-medium text-slate-500 dark:text-slate-400">
+                          ({movingProduct.size})
+                        </span>
+                      )}
+                    </h2>
+                    <p className="text-sm sm:text-base text-slate-500 dark:text-slate-400 mt-1">
+                      {movingProduct.genericName ? `${movingProduct.genericName} • ` : ""}
+                      {movingProduct.manufacturer || movingProduct.brandName || "Standard"}
+                    </p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <span className="px-3.5 py-1.5 rounded-md text-sm sm:text-base font-mono font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 block shadow-2xs">
+                      Total Godown: {totalGodownUnitsAcrossBatches.toLocaleString()} {movingProduct.unit}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Batch Information */}
+                {isBatchPreselected && selectedMovingBatch ? (
+                  <div className="pt-3 border-t border-slate-200 dark:border-slate-800">
+                    <label className="text-sm sm:text-base font-bold text-slate-700 dark:text-slate-300 block mb-2">
+                      Selected Batch:
+                    </label>
+                    <div className="flex items-center justify-between p-3.5 rounded-lg bg-emerald-50/70 dark:bg-emerald-950/40 border border-brand-primary ring-1 ring-brand-primary">
+                      <div>
+                        <div className="text-base sm:text-lg font-mono font-bold text-slate-900 dark:text-white">
+                          Batch #{selectedMovingBatch.batchNumber || "Default"}
+                        </div>
+                        <div className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+                          Exp: {selectedMovingBatch.expiryDate ? new Date(selectedMovingBatch.expiryDate).toLocaleDateString() : "No Expiry"}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-sm sm:text-base font-mono font-bold text-amber-700 dark:text-amber-300">
+                          {selectedMovingBatch.notInRackQty.toLocaleString()} {movingProduct.unit}
+                        </div>
+                        <div className="text-[11px] text-slate-500 dark:text-slate-400">Available in Batch</div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="pt-3 border-t border-slate-200 dark:border-slate-800 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm sm:text-base font-bold text-slate-700 dark:text-slate-300">
+                        Select Batch <span className="text-rose-500">*</span>
+                      </label>
+                      <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+                        Earliest expiry first (FEFO)
+                      </span>
+                    </div>
+
+                    {/* Scrollable Batch List with visible scrollbar */}
+                    <div className="max-h-56 overflow-y-auto space-y-2 p-1.5 border border-slate-200 dark:border-slate-800 rounded-lg [scrollbar-width:thin] [scrollbar-color:#94a3b8_#f1f5f9] dark:[scrollbar-color:#64748b_#1e293b] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:bg-slate-300 dark:[&::-webkit-scrollbar-thumb]:bg-slate-600 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-track]:bg-slate-100 dark:[&::-webkit-scrollbar-track]:bg-slate-800">
+                      {sortedMovingBatches.length === 0 ? (
+                        <div className="py-6 text-center text-xs text-slate-400">
+                          No batch with godown stock available.
+                        </div>
+                      ) : (
+                        sortedMovingBatches.map((b, idx) => {
+                          const isSelected = movingBatchId === b.id;
+                          const isFirst = idx === 0;
+
+                          return (
+                            <button
+                              key={b.id}
+                              type="button"
+                              onClick={() => setMovingBatchId(b.id)}
+                              className={`w-full text-left p-3 rounded-lg border transition flex items-center justify-between gap-3 cursor-pointer ${
+                                isSelected
+                                  ? "bg-emerald-50/80 dark:bg-emerald-950/40 border-brand-primary ring-1 ring-brand-primary"
+                                  : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700/80 hover:bg-slate-50 dark:hover:bg-slate-800/60"
+                              }`}
+                            >
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-sm sm:text-base font-mono font-bold text-slate-900 dark:text-white">
+                                    Batch #{b.batchNumber || "Default"}
+                                  </span>
+                                  {isFirst && (
+                                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300">
+                                      Earliest Expiry
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+                                  Exp: {b.expiryDate ? new Date(b.expiryDate).toLocaleDateString() : "No Expiry"}
+                                </div>
+                              </div>
+
+                              <div className="shrink-0 flex items-center gap-3">
+                                <div className="text-right">
+                                  <div className="text-sm sm:text-base font-mono font-bold text-amber-700 dark:text-amber-300">
+                                    {b.notInRackQty.toLocaleString()} {movingProduct.unit}
+                                  </div>
+                                  <div className="text-[11px] text-slate-500 dark:text-slate-400">Available</div>
+                                </div>
+                                {isSelected ? (
+                                  <CheckCircle2 className="h-5 w-5 text-brand-primary shrink-0" />
+                                ) : (
+                                  <div className="h-5 w-5 rounded-full border border-slate-300 dark:border-slate-600 shrink-0" />
+                                )}
+                              </div>
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Quantity to Move Card */}
+              <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 p-5 sm:p-6 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white">
+                    Quantity to Move <span className="text-rose-500">*</span>
+                  </h3>
+                  <span className="text-sm sm:text-base text-slate-500 dark:text-slate-400">
+                    Moving: <strong className="text-brand-primary font-mono text-base sm:text-lg">{baseUnitsToMove.toLocaleString()}</strong> {movingProduct.unit}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <input
+                      type="number"
+                      required
+                      min={1}
+                      value={movingQuantity}
+                      onChange={(e) => setMovingQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+                      className="w-full h-12 px-4 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-lg font-bold text-slate-900 dark:text-white outline-none focus:border-brand-primary font-mono"
+                    />
+                  </div>
+
+                  {/* Unit Selector Toggle */}
+                  {isTabletPackaging ? (
+                    <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg">
+                      {(["BOX", "STRIP", "TABLET"] as const).map((u) => (
+                        <button
+                          key={u}
+                          type="button"
+                          onClick={() => setMovingUnitType(u)}
+                          className={`py-2 rounded-md text-sm font-bold transition cursor-pointer text-center ${
+                            movingUnitType === u
+                              ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-xs"
+                              : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                          }`}
+                        >
+                          {u === "BOX" ? "Box" : u === "STRIP" ? "Strip" : "Tab"}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="h-12 px-4 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-sm sm:text-base font-bold text-slate-600 dark:text-slate-300">
+                      Unit: {movingProduct.unit}
+                    </div>
+                  )}
+                </div>
+
+                {/* Live Stock Remaining Calculation Box */}
+                <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-lg border border-slate-200 dark:border-slate-700 text-sm space-y-2">
+                  <div className="flex items-center justify-between text-slate-600 dark:text-slate-400">
+                    <span>Available in Selected Batch:</span>
+                    <span className="font-mono font-bold text-slate-900 dark:text-white">
+                      {isTabletPackaging && availableBoxesCount > 0
+                        ? `${availableBoxesCount} Box${availableBoxesCount !== 1 ? "es" : ""}${availableLooseTabsCount > 0 ? ` + ${availableLooseTabsCount} ${movingProduct.unit}` : ""} (${godownAvailableUnits.toLocaleString()} ${movingProduct.unit})`
+                        : `${godownAvailableUnits.toLocaleString()} ${movingProduct.unit}`}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-emerald-600 dark:text-emerald-400 font-bold">
+                    <span>Moving to Shop:</span>
+                    <span className="font-mono">
+                      + {baseUnitsToMove.toLocaleString()} {movingProduct.unit}
+                    </span>
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between font-bold">
+                    <span className="text-slate-700 dark:text-slate-300">Remaining in Selected Batch:</span>
+                    <span
+                      className={`font-mono text-base ${
+                        isMoveOverLimit ? "text-rose-600" : "text-amber-600 dark:text-amber-400"
+                      }`}
+                    >
+                      {isTabletPackaging && remainingBoxesCount >= 0
+                        ? `${remainingBoxesCount} Box${remainingBoxesCount !== 1 ? "es" : ""}${remainingLooseTabsCount > 0 ? ` + ${remainingLooseTabsCount} ${movingProduct.unit}` : ""} (${remainingGodownUnits.toLocaleString()} ${movingProduct.unit})`
+                        : `${remainingGodownUnits.toLocaleString()} ${movingProduct.unit}`}
+                    </span>
+                  </div>
+
+                  {isMoveOverLimit && (
+                    <div className="pt-1.5 text-xs text-rose-600 dark:text-rose-400 font-bold flex items-center gap-1.5">
+                      <AlertTriangle className="h-4 w-4 shrink-0" />
+                      <span>Exceeds selected batch stock! Max available in this batch is {godownAvailableUnits.toLocaleString()} {movingProduct.unit}.</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Right Column: Location */}
+            <div className="lg:col-span-6 space-y-6">
+              <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 p-5 sm:p-6 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white">
+                    Location <span className="text-rose-500">*</span>
+                  </h3>
+                </div>
+
+                {/* Instant Search Bar */}
+                <div className="relative">
+                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Search location or group (e.g. Beximco, Rack 02)..."
+                    value={groupSearchQuery}
+                    onChange={(e) => setGroupSearchQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        if (filteredModalGroups.length > 0) {
+                          setMovingTargetGroupId(filteredModalGroups[0].id);
+                        }
+                      }
+                    }}
+                    className="w-full h-11 pl-10 pr-9 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-sm sm:text-base outline-none focus:border-brand-primary text-slate-800 dark:text-slate-200"
+                  />
+                  {groupSearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setGroupSearchQuery("")}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Direct 1-Click Selectable Location List with visible scrollbar */}
+                <div className="max-h-[460px] overflow-y-auto space-y-2 p-1.5 border border-slate-200 dark:border-slate-800 rounded-lg [scrollbar-width:thin] [scrollbar-color:#94a3b8_#f1f5f9] dark:[scrollbar-color:#64748b_#1e293b] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:bg-slate-300 dark:[&::-webkit-scrollbar-thumb]:bg-slate-600 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-track]:bg-slate-100 dark:[&::-webkit-scrollbar-track]:bg-slate-800">
+                  {filteredModalGroups.length === 0 ? (
+                    <div className="py-10 text-center text-sm text-slate-400">
+                      No location matching &quot;{groupSearchQuery}&quot;
+                    </div>
+                  ) : (
+                    filteredModalGroups.map((g) => {
+                      const isSelected = movingTargetGroupId === g.id;
+
+                      return (
+                        <button
+                          key={g.id}
+                          type="button"
+                          onClick={() => setMovingTargetGroupId(g.id)}
+                          className={`w-full text-left p-3.5 rounded-lg border transition flex items-center justify-between gap-3 cursor-pointer ${
+                            isSelected
+                              ? "bg-emerald-50/80 dark:bg-emerald-950/40 border-brand-primary ring-1 ring-brand-primary"
+                              : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700/80 hover:border-slate-300 dark:hover:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800/60"
+                          }`}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <span
+                              className={`text-base sm:text-lg font-bold truncate block ${
+                                isSelected
+                                  ? "text-brand-primary dark:text-emerald-400"
+                                  : "text-slate-900 dark:text-white"
+                              }`}
+                            >
+                              {g.name}
+                            </span>
+                            {/* Physical rack/shelf location */}
+                            <div className="flex items-center gap-1.5 text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
+                              <MapPin className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                              <span className="truncate">
+                                {g.location || g.description || "Counter / Shelf"}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="shrink-0 flex items-center">
+                            {isSelected ? (
+                              <CheckCircle2 className="h-5 w-5 text-brand-primary" />
+                            ) : (
+                              <div className="h-5 w-5 rounded-full border border-slate-300 dark:border-slate-600" />
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Bottom Actions Bar */}
+          <div className="mt-6 flex items-center justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-800">
+            <button
+              type="button"
+              onClick={() => setMoveModalOpen(false)}
+              className="px-6 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 text-sm sm:text-base font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={moveSubmitting || !movingTargetGroupId || baseUnitsToMove <= 0 || isMoveOverLimit}
+              style={{ backgroundColor: "var(--primary-color, #059669)" }}
+              className="px-8 py-2.5 rounded-lg text-white text-sm sm:text-base font-bold shadow-sm hover:opacity-90 disabled:opacity-50 transition cursor-pointer flex items-center gap-2 active:scale-95"
+            >
+              {moveSubmitting ? (
+                <>
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  <span>Moving Stock...</span>
+                </>
+              ) : (
+                <>
+                  <Check className="h-5 w-5 stroke-[2.5]" />
+                  <span>Confirm &amp; Move to Shop</span>
+                </>
+              )}
+            </button>
+          </div>
+        </form>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -964,12 +1523,12 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
               </div>
             </div>
 
-            {/* Card 2: In Supershop / Front Counter (Shop Stock) */}
+            {/* Card 2: In Shop / Front Counter (Shop Stock) */}
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 shadow-xs flex flex-col justify-between space-y-3">
               <div className="space-y-1">
                 <p className="text-xs font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
                   <Store className="h-3.5 w-3.5" />
-                  <span>In Supershop (Shelves & Racks)</span>
+                  <span>In Shop (Shelves &amp; Racks)</span>
                 </p>
                 <div className="flex items-baseline gap-2">
                   <span className="text-3xl sm:text-4xl font-black font-mono text-emerald-600 dark:text-emerald-400">
@@ -1024,10 +1583,11 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                   <button
                     type="button"
                     onClick={() => handleOpenMoveModal(selectedProduct)}
-                    className="w-full h-9 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition flex items-center justify-center gap-2 cursor-pointer shadow-xs active:scale-95"
+                    style={{ backgroundColor: "var(--primary-color, #059669)" }}
+                    className="w-full h-9 rounded-xl hover:opacity-90 text-white font-bold text-xs transition flex items-center justify-center gap-2 cursor-pointer shadow-xs active:scale-95"
                   >
                     <Store className="h-3.5 w-3.5" />
-                    <span>Move to Supershop</span>
+                    <span>Move to Shop</span>
                   </button>
                 ) : (
                   <span className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-400">
@@ -1175,10 +1735,11 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                                 <button
                                   type="button"
                                   onClick={() => handleOpenMoveModal(selectedProduct, b.id)}
-                                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs sm:text-sm font-bold transition flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-2xs"
+                                  style={{ backgroundColor: "var(--primary-color, #059669)" }}
+                                  className="px-3 py-1.5 hover:opacity-90 text-white rounded-xl text-xs sm:text-sm font-bold transition flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-2xs"
                                 >
                                   <Store className="h-3.5 w-3.5" />
-                                  <span>Move to Supershop</span>
+                                  <span>Move to Shop</span>
                                 </button>
                               )}
 
@@ -1268,6 +1829,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
         <div className="space-y-4">
           {/* Quick KPI Filter Tabs */}
           <div className="flex items-center gap-2 overflow-x-auto pb-1 content-scrollbar">
+            {/* All Stock */}
             <button
               type="button"
               onClick={() => setActiveFilter("ALL")}
@@ -1286,39 +1848,79 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
               </span>
             </button>
 
+            {/* In Shop */}
+            <button
+              type="button"
+              onClick={() => setActiveFilter("IN_SHOP")}
+              className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition flex items-center gap-2 shrink-0 cursor-pointer ${
+                activeFilter === "IN_SHOP"
+                  ? "bg-emerald-600 text-white shadow-sm shadow-emerald-600/30"
+                  : "bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/50 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+              }`}
+            >
+              <Store className="h-4 w-4" />
+              <span>In Shop</span>
+              <span className={`px-2 py-0.5 rounded-full text-xs font-mono font-extrabold ${
+                activeFilter === "IN_SHOP" ? "bg-white/20 text-white" : "bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300"
+              }`}>
+                {filterCounts.inShop}
+              </span>
+            </button>
+
+            {/* In Godown */}
             <button
               type="button"
               onClick={() => setActiveFilter("IN_GODOWN")}
               className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition flex items-center gap-2 shrink-0 cursor-pointer ${
                 activeFilter === "IN_GODOWN"
-                  ? "bg-amber-600 text-white shadow-sm shadow-amber-600/30"
-                  : "bg-white dark:bg-slate-900 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-900/50 hover:bg-amber-50 dark:hover:bg-amber-950/30"
+                  ? "bg-blue-600 text-white shadow-sm shadow-blue-600/30"
+                  : "bg-white dark:bg-slate-900 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-900/50 hover:bg-blue-50 dark:hover:bg-blue-950/30"
               }`}
             >
               <Warehouse className="h-4 w-4" />
-              <span>In Godown (Needs Shelf)</span>
+              <span>In Godown</span>
               <span className={`px-2 py-0.5 rounded-full text-xs font-mono font-extrabold ${
-                activeFilter === "IN_GODOWN" ? "bg-white/20 text-white" : "bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300"
+                activeFilter === "IN_GODOWN" ? "bg-white/20 text-white" : "bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300"
               }`}>
                 {filterCounts.inGodown}
               </span>
             </button>
 
+            {/* Shop Low Stock */}
             <button
               type="button"
-              onClick={() => setActiveFilter("LOW_STOCK")}
+              onClick={() => setActiveFilter("SHOP_LOW")}
               className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition flex items-center gap-2 shrink-0 cursor-pointer ${
-                activeFilter === "LOW_STOCK"
-                  ? "bg-orange-600 text-white shadow-sm shadow-orange-600/30"
-                  : "bg-white dark:bg-slate-900 text-orange-700 dark:text-orange-400 border border-orange-200 dark:border-orange-900/50 hover:bg-orange-50 dark:hover:bg-orange-950/30"
+                activeFilter === "SHOP_LOW"
+                  ? "bg-amber-600 text-white shadow-sm shadow-amber-600/30"
+                  : "bg-white dark:bg-slate-900 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-900/50 hover:bg-amber-50 dark:hover:bg-amber-950/30"
               }`}
             >
               <AlertTriangle className="h-4 w-4" />
-              <span>Low Stock</span>
+              <span>Shop Low Stock</span>
               <span className={`px-2 py-0.5 rounded-full text-xs font-mono font-extrabold ${
-                activeFilter === "LOW_STOCK" ? "bg-white/20 text-white" : "bg-orange-100 dark:bg-orange-950 text-orange-800 dark:text-orange-300"
+                activeFilter === "SHOP_LOW" ? "bg-white/20 text-white" : "bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300"
               }`}>
-                {filterCounts.lowStock}
+                {filterCounts.shopLow}
+              </span>
+            </button>
+
+            {/* Godown Low Stock */}
+            <button
+              type="button"
+              onClick={() => setActiveFilter("GODOWN_LOW")}
+              className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition flex items-center gap-2 shrink-0 cursor-pointer ${
+                activeFilter === "GODOWN_LOW"
+                  ? "bg-rose-600 text-white shadow-sm shadow-rose-600/30"
+                  : "bg-white dark:bg-slate-900 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+              }`}
+            >
+              <ShieldAlert className="h-4 w-4" />
+              <span>Godown Low Stock</span>
+              <span className={`px-2 py-0.5 rounded-full text-xs font-mono font-extrabold ${
+                activeFilter === "GODOWN_LOW" ? "bg-white/20 text-white" : "bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-300"
+              }`}>
+                {filterCounts.godownLow}
               </span>
             </button>
           </div>
@@ -1360,8 +1962,25 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
               )}
             </div>
 
-            <div className="text-xs font-bold text-slate-500 dark:text-slate-400 font-mono">
-              Showing {filteredProducts.length === 0 ? 0 : (page - 1) * pageSize + 1}–{Math.min(page * pageSize, filteredProducts.length)} of {filteredProducts.length} products
+            <div className="flex items-center gap-3 flex-wrap">
+              <button
+                type="button"
+                onClick={handleExportStockCsv}
+                disabled={isExportingStock}
+                className="px-3 py-1.5 rounded-xl bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 transition flex items-center gap-1.5 cursor-pointer shadow-2xs active:scale-95 disabled:opacity-50"
+                title="Download current stock report as CSV"
+              >
+                {isExportingStock ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-brand-primary" />
+                ) : (
+                  <Download className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                )}
+                <span>Export Stock CSV</span>
+              </button>
+
+              <div className="text-xs font-bold text-slate-500 dark:text-slate-400 font-mono">
+                Showing {filteredProducts.length === 0 ? 0 : (page - 1) * pageSize + 1}–{Math.min(page * pageSize, filteredProducts.length)} of {filteredProducts.length} products
+              </div>
             </div>
           </div>
 
@@ -1373,26 +1992,59 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                   style={{ backgroundColor: "var(--primary-color, #059669)" }}
                   className="bg-emerald-600 dark:bg-emerald-700 text-white font-bold text-sm tracking-wide shadow-sm select-none"
                 >
-                  <tr>
-                    <th className="py-3.5 px-4 font-bold text-sm">Medicine Name &amp; Generic</th>
-                    <th className="py-3.5 px-3 text-right whitespace-nowrap font-bold text-sm">In Godown</th>
-                    <th className="py-3.5 px-3 text-right whitespace-nowrap font-bold text-sm">In Shop (Shelf)</th>
-                    <th className="py-3.5 px-4 text-right whitespace-nowrap font-bold text-sm">Total Stock</th>
-                    <th className="py-3.5 px-3 text-center whitespace-nowrap font-bold text-sm">Status</th>
-                    <th className="py-3.5 px-4 text-center whitespace-nowrap font-bold text-sm">Action</th>
-                  </tr>
+                  {activeFilter === "IN_SHOP" ? (
+                    <tr>
+                      <th className="py-3.5 px-4 font-bold text-sm">Medicine Name &amp; Generic</th>
+                      <th className="py-3.5 px-3 text-left whitespace-nowrap font-bold text-sm">Location</th>
+                      <th className="py-3.5 px-4 text-right whitespace-nowrap font-bold text-sm">In Shop Stock</th>
+                      <th className="py-3.5 px-4 text-center whitespace-nowrap font-bold text-sm">Action</th>
+                    </tr>
+                  ) : activeFilter === "IN_GODOWN" ? (
+                    <tr>
+                      <th className="py-3.5 px-4 font-bold text-sm">Medicine Name &amp; Company</th>
+                      <th className="py-3.5 px-3 text-left whitespace-nowrap font-bold text-sm">Supplier / Sourcing</th>
+                      <th className="py-3.5 px-4 text-right whitespace-nowrap font-bold text-sm">In Godown Stock</th>
+                      <th className="py-3.5 px-4 text-center whitespace-nowrap font-bold text-sm">Action</th>
+                    </tr>
+                  ) : activeFilter === "SHOP_LOW" ? (
+                    <tr>
+                      <th className="py-3.5 px-4 font-bold text-sm">Medicine Name &amp; Generic</th>
+                      <th className="py-3.5 px-3 text-right whitespace-nowrap font-bold text-sm">Current Shop Stock</th>
+                      <th className="py-3.5 px-3 text-center whitespace-nowrap font-bold text-sm">Available in Godown</th>
+                      <th className="py-3.5 px-3 text-left whitespace-nowrap font-bold text-sm">Location</th>
+                      <th className="py-3.5 px-4 text-center whitespace-nowrap font-bold text-sm">Quick Action</th>
+                    </tr>
+                  ) : activeFilter === "GODOWN_LOW" ? (
+                    /* 4 clean main columns as requested */
+                    <tr>
+                      <th className="py-3.5 px-4 font-bold text-sm">Medicine Name &amp; Company</th>
+                      <th className="py-3.5 px-4 text-right whitespace-nowrap font-bold text-sm">Godown Stock</th>
+                      <th className="py-3.5 px-4 text-right whitespace-nowrap font-bold text-sm">Running in Shop</th>
+                      <th className="py-3.5 px-4 text-center whitespace-nowrap font-bold text-sm">Action</th>
+                    </tr>
+                  ) : (
+                    /* ALL STOCK (Default) */
+                    <tr>
+                      <th className="py-3.5 px-4 font-bold text-sm">Medicine Name &amp; Generic</th>
+                      <th className="py-3.5 px-3 text-right whitespace-nowrap font-bold text-sm">In Godown</th>
+                      <th className="py-3.5 px-3 text-right whitespace-nowrap font-bold text-sm">In Shop (Shelf)</th>
+                      <th className="py-3.5 px-4 text-right whitespace-nowrap font-bold text-sm">Total Stock</th>
+                      <th className="py-3.5 px-3 text-center whitespace-nowrap font-bold text-sm">Status</th>
+                      <th className="py-3.5 px-4 text-center whitespace-nowrap font-bold text-sm">Action</th>
+                    </tr>
+                  )}
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-900 dark:text-slate-100">
                   {loading ? (
                     <tr>
-                      <td colSpan={6} className="py-16 text-center text-slate-400">
+                      <td colSpan={activeFilter === "ALL" ? 6 : activeFilter === "SHOP_LOW" ? 5 : 4} className="py-16 text-center text-slate-400">
                         <Loader2 className="h-8 w-8 animate-spin mx-auto text-brand-primary mb-2" />
                         <p className="text-base font-bold text-slate-700 dark:text-slate-300">Loading stock inventory...</p>
                       </td>
                     </tr>
                   ) : paginatedProducts.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-16 text-center text-slate-400">
+                      <td colSpan={activeFilter === "ALL" ? 6 : activeFilter === "SHOP_LOW" ? 5 : 4} className="py-16 text-center text-slate-400">
                         <Package className="h-10 w-10 mx-auto text-slate-300 dark:text-slate-600 mb-2" />
                         <p className="text-base font-bold text-slate-700 dark:text-slate-300">No matching stock items found</p>
                         <p className="text-sm text-slate-400 mt-1">Try adjusting your search query or reset the filters above.</p>
@@ -1400,6 +2052,283 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                     </tr>
                   ) : (
                     paginatedProducts.map((p) => {
+                      /* ----------------------------------------------------------- */
+                      /* 1. VIEW: IN SHOP                                            */
+                      /* ----------------------------------------------------------- */
+                      if (activeFilter === "IN_SHOP") {
+                        return (
+                          <tr key={p.productId} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition">
+                            <td
+                              onClick={() => setSelectedProductId(p.productId)}
+                              className="py-3.5 px-4 cursor-pointer group"
+                            >
+                              <div className="font-bold text-base text-slate-900 dark:text-white group-hover:text-brand-primary transition leading-snug">
+                                {p.productName}
+                              </div>
+                              <div className="flex items-center gap-2 mt-1 flex-wrap text-xs sm:text-sm">
+                                {p.genericName && (
+                                  <span className="text-emerald-600 dark:text-emerald-400 font-bold">
+                                    {p.genericName}
+                                  </span>
+                                )}
+                                {(p.brandName || p.supplierName) && (
+                                  <span className="px-2 py-0.5 rounded-md text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                                    {p.brandName || p.supplierName}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+
+                            <td className="py-3.5 px-3 text-left whitespace-nowrap">
+                              <div className="flex flex-col">
+                                <div className="flex items-center gap-1.5 text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200">
+                                  <MapPin className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                                  <span>{p.storageGroupName || p.primaryLocation || "Front Counter"}</span>
+                                </div>
+                                {p.storageLocationDetails && (
+                                  <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 pl-5">
+                                    {p.storageLocationDetails}
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+
+                            <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                              <span className="font-mono font-black text-emerald-600 dark:text-emerald-400 text-base sm:text-lg">
+                                {p.totalRackQuantity.toLocaleString()}
+                              </span>
+                              <span className="text-xs sm:text-sm text-slate-400 font-sans ml-1 font-medium">
+                                {p.unit}
+                              </span>
+                            </td>
+
+                            <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                              <button
+                                type="button"
+                                onClick={() => setSelectedProductId(p.productId)}
+                                className="px-3.5 py-1.5 bg-slate-100 hover:bg-brand-primary hover:text-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5 mx-auto"
+                              >
+                                <Eye className="h-3.5 w-3.5" />
+                                <span>Details</span>
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      }
+
+                      /* ----------------------------------------------------------- */
+                      /* 2. VIEW: IN GODOWN                                          */
+                      /* ----------------------------------------------------------- */
+                      if (activeFilter === "IN_GODOWN") {
+                        return (
+                          <tr key={p.productId} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition">
+                            <td
+                              onClick={() => setSelectedProductId(p.productId)}
+                              className="py-3.5 px-4 cursor-pointer group"
+                            >
+                              <div className="font-bold text-base text-slate-900 dark:text-white group-hover:text-brand-primary transition leading-snug">
+                                {p.productName}
+                              </div>
+                              <div className="flex items-center gap-2 mt-1 flex-wrap text-xs sm:text-sm">
+                                {p.genericName && (
+                                  <span className="text-emerald-600 dark:text-emerald-400 font-bold">
+                                    {p.genericName}
+                                  </span>
+                                )}
+                                {(p.brandName || p.supplierName) && (
+                                  <span className="px-2 py-0.5 rounded-md text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                                    {p.brandName || p.supplierName}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+
+                            <td className="py-3.5 px-3 text-left whitespace-nowrap">
+                              <span className="text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-300">
+                                {p.supplierName || "Direct Warehouse"}
+                              </span>
+                            </td>
+
+                            <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                              <span className="font-mono font-black text-blue-600 dark:text-blue-400 text-base sm:text-lg">
+                                {p.totalGodownQuantity.toLocaleString()}
+                              </span>
+                              <span className="text-xs sm:text-sm text-slate-400 font-sans ml-1 font-medium">
+                                {p.unit}
+                              </span>
+                            </td>
+
+                            <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                              <div className="flex items-center justify-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleAllocateProduct(p)}
+                                  style={{ backgroundColor: "var(--primary-color, #059669)" }}
+                                  className="px-3.5 py-1.5 hover:opacity-90 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95"
+                                  title="Move stock from Godown into Shop"
+                                >
+                                  <ArrowRightLeft className="h-3.5 w-3.5" />
+                                  <span>Move to Shop</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedProductId(p.productId)}
+                                  className="p-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-xl transition cursor-pointer"
+                                  title="Details"
+                                >
+                                  <Eye className="h-4 w-4" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      }
+
+                      /* ----------------------------------------------------------- */
+                      /* 3. VIEW: SHOP LOW STOCK                                     */
+                      /* ----------------------------------------------------------- */
+                      if (activeFilter === "SHOP_LOW") {
+                        return (
+                          <tr key={p.productId} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition">
+                            <td
+                              onClick={() => setSelectedProductId(p.productId)}
+                              className="py-3.5 px-4 cursor-pointer group"
+                            >
+                              <div className="font-bold text-base text-slate-900 dark:text-white group-hover:text-brand-primary transition leading-snug">
+                                {p.productName}
+                              </div>
+                              <div className="flex items-center gap-2 mt-1 flex-wrap text-xs sm:text-sm">
+                                {p.genericName && (
+                                  <span className="text-emerald-600 dark:text-emerald-400 font-bold">
+                                    {p.genericName}
+                                  </span>
+                                )}
+                                {(p.brandName || p.supplierName) && (
+                                  <span className="px-2 py-0.5 rounded-md text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                                    {p.brandName || p.supplierName}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+
+                            <td className="py-3.5 px-3 text-right whitespace-nowrap">
+                              <div className="font-mono font-bold text-sm sm:text-base text-slate-900 dark:text-white">
+                                {p.totalRackQuantity.toLocaleString()} {p.unit}
+                              </div>
+                              <div className="text-[11px] text-slate-400 font-medium mt-0.5">
+                                Shop Min: {p.shopMinStockAlert ?? p.minStockLevel ?? 10}
+                              </div>
+                            </td>
+
+                            <td className="py-3.5 px-3 text-center whitespace-nowrap">
+                              <div className="font-mono font-bold text-sm sm:text-base text-slate-900 dark:text-white">
+                                {p.totalGodownQuantity.toLocaleString()} {p.unit}
+                              </div>
+                              <div className="text-[11px] text-slate-400 font-medium mt-0.5">
+                                Godown Min: {p.godownMinStockAlert ?? 50}
+                              </div>
+                            </td>
+
+                            <td className="py-3.5 px-3 text-left whitespace-nowrap">
+                              <div className="flex flex-col">
+                                <div className="flex items-center gap-1.5 text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200">
+                                  <MapPin className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                                  <span>{p.storageGroupName || p.primaryLocation || "Front Counter"}</span>
+                                </div>
+                                {p.storageLocationDetails && (
+                                  <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 pl-5">
+                                    {p.storageLocationDetails}
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+
+                            <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                              {p.totalGodownQuantity > 0 ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleAllocateProduct(p)}
+                                  style={{ backgroundColor: "var(--primary-color, #059669)" }}
+                                  className="px-3.5 py-1.5 hover:opacity-90 text-white rounded-lg text-xs sm:text-sm font-bold transition flex items-center gap-1.5 mx-auto shadow-2xs cursor-pointer active:scale-95"
+                                  title="Bring medicine from Godown into Shop"
+                                >
+                                  <ArrowRightLeft className="h-3.5 w-3.5" />
+                                  <span>Move to Shop</span>
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedProductId(p.productId)}
+                                  className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-bold transition mx-auto"
+                                >
+                                  Details
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      }
+
+                      /* ----------------------------------------------------------- */
+                      /* 4. VIEW: GODOWN LOW STOCK (Just 4 clean main columns)       */
+                      /* ----------------------------------------------------------- */
+                      if (activeFilter === "GODOWN_LOW") {
+                        return (
+                          <tr key={p.productId} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition">
+                            {/* Col 1: Medicine & Company */}
+                            <td
+                              onClick={() => setSelectedProductId(p.productId)}
+                              className="py-3.5 px-4 cursor-pointer group"
+                            >
+                              <div className="font-bold text-base text-slate-900 dark:text-white group-hover:text-brand-primary transition leading-snug">
+                                {p.productName}
+                              </div>
+                              <div className="flex items-center gap-2 mt-1 flex-wrap text-xs sm:text-sm">
+                                {p.genericName && (
+                                  <span className="text-emerald-600 dark:text-emerald-400 font-bold">
+                                    {p.genericName}
+                                  </span>
+                                )}
+                                {(p.brandName || p.supplierName) && (
+                                  <span className="px-2 py-0.5 rounded-md text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                                    {p.brandName || p.supplierName}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Col 2: Godown Stock */}
+                            <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                              <span className="font-mono font-bold text-slate-900 dark:text-white text-sm sm:text-base">
+                                {p.totalGodownQuantity.toLocaleString()} {p.unit}
+                              </span>
+                            </td>
+
+                            {/* Col 3: Running in Shop */}
+                            <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                              <span className="font-mono font-bold text-slate-800 dark:text-slate-200 text-sm sm:text-base">
+                                {p.totalRackQuantity.toLocaleString()} {p.unit}
+                              </span>
+                            </td>
+
+                            {/* Col 4: Action */}
+                            <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                              <button
+                                type="button"
+                                onClick={() => setSelectedProductId(p.productId)}
+                                className="px-3.5 py-1.5 bg-slate-100 hover:bg-brand-primary hover:text-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5 mx-auto cursor-pointer"
+                              >
+                                <Eye className="h-3.5 w-3.5" />
+                                <span>Details</span>
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      }
+
+                      /* ----------------------------------------------------------- */
+                      /* 5. VIEW: ALL STOCK (Full 6 columns)                         */
+                      /* ----------------------------------------------------------- */
                       return (
                         <tr
                           key={p.productId}
@@ -1468,8 +2397,11 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                           {/* Status */}
                           <td className="py-3.5 px-3 text-center whitespace-nowrap">
                             {p.hasLowStock ? (
-                              <span className="px-3 py-1 rounded-lg text-xs sm:text-sm font-black bg-orange-50 text-orange-700 dark:bg-orange-950/40 dark:text-orange-300 border border-orange-200 dark:border-orange-900/50">
-                                Low Stock (&le;{p.minStockLevel || 10})
+                              <span
+                                title={`Shop Alert: ≤${p.shopMinStockAlert ?? p.minStockLevel ?? 10} | Godown Alert: ≤${p.godownMinStockAlert ?? 50}`}
+                                className="px-3 py-1 rounded-lg text-xs sm:text-sm font-black bg-orange-50 text-orange-700 dark:bg-orange-950/40 dark:text-orange-300 border border-orange-200 dark:border-orange-900/50"
+                              >
+                                Low Stock ({p.isShopLowStock && p.isGodownLowStock ? "Shop & Godown" : p.isShopLowStock ? "Shop Low" : "Godown Low"})
                               </span>
                             ) : p.totalGodownQuantity > 0 && p.totalRackQuantity === 0 ? (
                               <span className="px-3 py-1 rounded-lg text-xs sm:text-sm font-bold bg-purple-50 text-purple-700 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800">
@@ -1600,257 +2532,6 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                 </div>
               </div>
             )}
-          </div>
-        </div>
-      )}
-
-      {/* ══════════════════════════════════════════════════════════════════════════
-          MOVE STOCK TO SUPERSHOP MODAL
-          ══════════════════════════════════════════════════════════════════════════ */}
-      {moveModalOpen && movingProduct && selectedMovingBatch && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 overflow-y-auto animate-in fade-in">
-          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-lg w-full my-auto overflow-hidden animate-in zoom-in-95">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between p-5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
-                  <Store className="h-5 w-5" />
-                </div>
-                <div>
-                  <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white">
-                    Move Stock to Supershop
-                  </h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Refill medicine from Godown into your front counter shelves.
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setMoveModalOpen(false)}
-                className="h-8 w-8 flex items-center justify-center rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleConfirmMoveStock} className="p-5 sm:p-6 space-y-4 max-h-[80vh] overflow-y-auto">
-              {/* Step 1: Selected Medicine & Batch (Locked Card) */}
-              <div className="p-4 bg-slate-50/80 dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700/80 space-y-2">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500 block mb-0.5">
-                      Selected Medicine &amp; Batch
-                    </span>
-                    <h4 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-1.5 flex-wrap">
-                      <span>{movingProduct.productName}</span>
-                      {movingProduct.size && (
-                        <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200">
-                          {movingProduct.size}
-                        </span>
-                      )}
-                    </h4>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                      {movingProduct.genericName ? `${movingProduct.genericName} • ` : ""}
-                      {movingProduct.manufacturer || movingProduct.brandName || "Standard"}
-                    </p>
-                  </div>
-
-                  <span className="px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 shrink-0">
-                    Godown: {godownAvailableUnits.toLocaleString()} {movingProduct.unit}
-                  </span>
-                </div>
-
-                {/* If multiple batches exist with Godown stock, let user pick batch */}
-                {movingProduct.batches.filter((b) => b.notInRackQty > 0).length > 1 ? (
-                  <div className="pt-2 border-t border-slate-200 dark:border-slate-700">
-                    <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400 block mb-1">
-                      Choose Specific Batch:
-                    </label>
-                    <select
-                      value={movingBatchId}
-                      onChange={(e) => setMovingBatchId(e.target.value)}
-                      className="w-full h-9 px-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-200 outline-none"
-                    >
-                      {movingProduct.batches
-                        .filter((b) => b.notInRackQty > 0)
-                        .map((b) => (
-                          <option key={b.id} value={b.id}>
-                            Batch #{b.batchNumber || "Default"} (Godown: {b.notInRackQty.toLocaleString()} {b.unit} | Exp: {b.expiryDate ? new Date(b.expiryDate).toLocaleDateString() : "No Exp"})
-                          </option>
-                        ))}
-                    </select>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2 pt-1 text-xs text-slate-600 dark:text-slate-300 font-mono">
-                    <span className="font-bold">Batch #{selectedMovingBatch.batchNumber || "Default"}</span>
-                    <span>•</span>
-                    <span>Exp: {selectedMovingBatch.expiryDate ? new Date(selectedMovingBatch.expiryDate).toLocaleDateString() : "No Expiry"}</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Step 2: Target Storage Group (Searchable) */}
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-black uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                    Target Storage Group <span className="text-rose-500">*</span>
-                  </label>
-                  {autoSuggestedGroup && autoSuggestedGroup.id === movingTargetGroupId && (
-                    <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 px-2 py-0.5 rounded-lg flex items-center gap-1 shadow-2xs">
-                      <Sparkles className="h-3 w-3 text-emerald-500" />
-                      <span>Auto-suggested</span>
-                    </span>
-                  )}
-                </div>
-
-                {/* Search Bar for Group selection */}
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-                  <input
-                    type="text"
-                    placeholder="Search group name..."
-                    value={groupSearchQuery}
-                    onChange={(e) => setGroupSearchQuery(e.target.value)}
-                    className="w-full h-9 pl-9 pr-3 mb-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none focus:border-brand-primary"
-                  />
-                </div>
-
-                <select
-                  required
-                  value={movingTargetGroupId}
-                  onChange={(e) => setMovingTargetGroupId(e.target.value)}
-                  className="w-full h-11 px-3.5 bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm font-bold text-slate-900 dark:text-white outline-none focus:border-brand-primary cursor-pointer"
-                >
-                  <option value="">-- Choose Storage Group / Shelf --</option>
-                  {filteredModalGroups.map((g) => (
-                    <option key={g.id} value={g.id}>
-                      {g.name} ({g.type || "ZONE"})
-                    </option>
-                  ))}
-                </select>
-                {filteredModalGroups.length === 0 && (
-                  <p className="text-xs text-rose-500">No group matching &quot;{groupSearchQuery}&quot;</p>
-                )}
-              </div>
-
-              {/* Step 3: Quantity & Packaging Unit */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-black uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                    Quantity to Move <span className="text-rose-500">*</span>
-                  </label>
-                  <span className="text-xs text-slate-500 dark:text-slate-400">
-                    Moving: <strong className="text-brand-primary font-mono">{baseUnitsToMove.toLocaleString()}</strong> {movingProduct.unit}
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <input
-                      type="number"
-                      required
-                      min={1}
-                      value={movingQuantity}
-                      onChange={(e) => setMovingQuantity(Math.max(1, parseInt(e.target.value) || 1))}
-                      className="w-full h-11 px-3.5 bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-sm font-black text-slate-900 dark:text-white outline-none focus:border-brand-primary font-mono"
-                    />
-                  </div>
-
-                  {/* Unit Selector Toggle */}
-                  {isTabletPackaging ? (
-                    <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl">
-                      {(["BOX", "STRIP", "TABLET"] as const).map((u) => (
-                        <button
-                          key={u}
-                          type="button"
-                          onClick={() => setMovingUnitType(u)}
-                          className={`py-1.5 rounded-lg text-xs font-bold transition cursor-pointer text-center ${
-                            movingUnitType === u
-                              ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-2xs"
-                              : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
-                          }`}
-                        >
-                          {u === "BOX" ? "Box" : u === "STRIP" ? "Strip" : "Tab"}
-                        </button>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="h-11 px-3 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-xs font-bold text-slate-600 dark:text-slate-300">
-                      Unit: {movingProduct.unit}
-                    </div>
-                  )}
-                </div>
-
-                {/* Live Stock Remaining Calculation Box */}
-                <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700 text-xs space-y-1.5">
-                  <div className="flex items-center justify-between text-slate-600 dark:text-slate-400">
-                    <span>Available in Godown:</span>
-                    <span className="font-mono font-bold text-slate-900 dark:text-white">
-                      {isTabletPackaging && availableBoxesCount > 0
-                        ? `${availableBoxesCount} Box${availableBoxesCount !== 1 ? "es" : ""}${availableLooseTabsCount > 0 ? ` + ${availableLooseTabsCount} ${movingProduct.unit}` : ""} (${godownAvailableUnits.toLocaleString()} ${movingProduct.unit})`
-                        : `${godownAvailableUnits.toLocaleString()} ${movingProduct.unit}`}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between text-emerald-600 dark:text-emerald-400 font-bold">
-                    <span>Moving to Supershop:</span>
-                    <span className="font-mono">
-                      + {baseUnitsToMove.toLocaleString()} {movingProduct.unit}
-                    </span>
-                  </div>
-
-                  <div className="pt-1 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between font-bold">
-                    <span className="text-slate-700 dark:text-slate-300">Remaining in Godown:</span>
-                    <span
-                      className={`font-mono text-sm ${
-                        isMoveOverLimit ? "text-rose-600" : "text-amber-600 dark:text-amber-400"
-                      }`}
-                    >
-                      {isTabletPackaging && remainingBoxesCount >= 0
-                        ? `${remainingBoxesCount} Box${remainingBoxesCount !== 1 ? "es" : ""}${remainingLooseTabsCount > 0 ? ` + ${remainingLooseTabsCount} ${movingProduct.unit}` : ""} (${remainingGodownUnits.toLocaleString()} ${movingProduct.unit})`
-                        : `${remainingGodownUnits.toLocaleString()} ${movingProduct.unit}`}
-                    </span>
-                  </div>
-
-                  {isMoveOverLimit && (
-                    <div className="pt-1 text-[11px] text-rose-600 dark:text-rose-400 font-bold flex items-center gap-1">
-                      <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                      <span>Exceeds Godown stock! Max available is {godownAvailableUnits.toLocaleString()} {movingProduct.unit}.</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Modal Actions */}
-              <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => setMoveModalOpen(false)}
-                  className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
-                >
-                  Cancel
-                </button>
-
-                <button
-                  type="submit"
-                  disabled={moveSubmitting || !movingTargetGroupId || baseUnitsToMove <= 0 || isMoveOverLimit}
-                  className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-black shadow-md transition cursor-pointer flex items-center gap-2 active:scale-95"
-                >
-                  {moveSubmitting ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      <span>Moving Stock...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Check className="h-4 w-4 stroke-[3]" />
-                      <span>Confirm &amp; Move to Supershop</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}

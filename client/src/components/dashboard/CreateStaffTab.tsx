@@ -20,7 +20,6 @@ import {
   Users,
   ArrowRight,
   PlusCircle,
-  Sparkles,
 } from "lucide-react";
 import { getClientPlanConfig } from "@/lib/planLimits";
 
@@ -45,6 +44,7 @@ export function CreateStaffTab({ onNavigate }: CreateStaffTabProps) {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [createdSuccess, setCreatedSuccess] = useState<any | null>(null);
 
@@ -56,6 +56,7 @@ export function CreateStaffTab({ onNavigate }: CreateStaffTabProps) {
     username: "",
     phone: "",
     password: "",
+    confirmPassword: "",
     role: "",
     branchId: user?.branchId || "",
   });
@@ -99,6 +100,12 @@ export function CreateStaffTab({ onNavigate }: CreateStaffTabProps) {
   const maxStaff = isTrial ? 1 : planConfig.maxTotalStaff || 999;
   const isTotalLimitReached = staffCount >= maxStaff;
 
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // Strictly numeric only, discard any non-digit chars like letters a, b, etc. Max 12 digits.
+    const digitsOnly = e.target.value.replace(/\D/g, "").slice(0, 12);
+    setFormData((prev) => ({ ...prev, phone: digitsOnly }));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -111,6 +118,24 @@ export function CreateStaffTab({ onNavigate }: CreateStaffTabProps) {
 
     if (!formData.role) {
       setError("Please select a role for the new staff member.");
+      return;
+    }
+
+    // Phone number validation: 11 or 12 digits
+    if (formData.phone && (formData.phone.length < 11 || formData.phone.length > 12)) {
+      setError("Phone number must be either 11 or 12 digits (e.g. 01712345678).");
+      return;
+    }
+
+    // Password validation: minimum 6 characters
+    if (formData.password.length < 6) {
+      setError("Password must be at least 6 characters long.");
+      return;
+    }
+
+    // Confirm password matching validation
+    if (formData.password !== formData.confirmPassword) {
+      setError("Passwords do not match. Please verify your confirm password.");
       return;
     }
 
@@ -146,6 +171,7 @@ export function CreateStaffTab({ onNavigate }: CreateStaffTabProps) {
           username: "",
           phone: "",
           password: "",
+          confirmPassword: "",
           role: roles[0]?.id || "",
           branchId: user?.branchId || "",
         });
@@ -192,13 +218,16 @@ export function CreateStaffTab({ onNavigate }: CreateStaffTabProps) {
             <Users className="h-7 w-7 text-brand-primary" />
             Create Staff Member
           </h1>
+          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+            Add team members, assign their branch and designate their operational role.
+          </p>
         </div>
 
         {onNavigate && (
           <button
             type="button"
             onClick={() => onNavigate("staff")}
-            className="h-11 px-5 rounded-xl text-sm font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 transition flex items-center gap-2"
+            className="h-10 px-4 rounded-lg text-xs sm:text-sm font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 transition flex items-center gap-2"
           >
             <span>View Staff List</span>
             <ArrowRight className="h-4 w-4" />
@@ -208,7 +237,7 @@ export function CreateStaffTab({ onNavigate }: CreateStaffTabProps) {
 
       {/* Capacity Alert */}
       {isTotalLimitReached && (
-        <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-300 text-xs flex items-center gap-3">
+        <div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-300 text-xs flex items-center gap-3">
           <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0" />
           <div>
             <strong>Staff Capacity Limit Reached ({staffCount}/{maxStaff})</strong>
@@ -223,7 +252,7 @@ export function CreateStaffTab({ onNavigate }: CreateStaffTabProps) {
 
       {/* Success Notification */}
       {createdSuccess && (
-        <div className="p-5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-xs space-y-3 animate-in fade-in">
+        <div className="p-4 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-xs space-y-3 animate-in fade-in">
           <div className="flex items-center gap-2.5">
             <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
             <div>
@@ -239,7 +268,7 @@ export function CreateStaffTab({ onNavigate }: CreateStaffTabProps) {
               <button
                 type="button"
                 onClick={() => onNavigate("staff")}
-                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition"
+                className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition"
               >
                 Go to Staff List
               </button>
@@ -247,7 +276,7 @@ export function CreateStaffTab({ onNavigate }: CreateStaffTabProps) {
             <button
               type="button"
               onClick={() => setCreatedSuccess(null)}
-              className="px-4 py-2 rounded-xl bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 text-emerald-800 dark:text-emerald-300 font-semibold text-xs hover:bg-emerald-50 transition"
+              className="px-4 py-2 rounded-lg bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 text-emerald-800 dark:text-emerald-300 font-semibold text-xs hover:bg-emerald-50 transition"
             >
               Add Another Staff
             </button>
@@ -257,41 +286,41 @@ export function CreateStaffTab({ onNavigate }: CreateStaffTabProps) {
 
       {/* Error Alert */}
       {error && (
-        <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 text-xs flex items-center gap-2.5">
+        <div className="p-4 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 text-xs flex items-center gap-2.5">
           <AlertCircle className="h-4 w-4 shrink-0 text-rose-500" />
           <span className="font-semibold">{error}</span>
         </div>
       )}
 
       {/* Create Staff Form Card */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 lg:p-8 shadow-sm">
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+      <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 p-5 sm:p-7 shadow-xs">
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
             {/* Full Name */}
             <div>
-              <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-2">
+              <label className="block text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
                 Full Name *
               </label>
               <div className="relative flex items-center">
-                <User className="h-5 w-5 text-slate-400 absolute left-3.5 pointer-events-none" />
+                <User className="h-4 w-4 text-slate-400 absolute left-3.5 pointer-events-none" />
                 <input
                   type="text"
                   required
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   placeholder="e.g. Shakil Ahmed"
-                  className="w-full h-12 pl-11 pr-4 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-base font-bold text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary"
+                  className="w-full h-11 pl-10 pr-3.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary"
                 />
               </div>
             </div>
 
             {/* Email Address */}
             <div>
-              <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-2">
+              <label className="block text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
                 Email Address *
               </label>
               <div className="relative flex items-center">
-                <Mail className="h-5 w-5 text-slate-400 absolute left-3.5 pointer-events-none" />
+                <Mail className="h-4 w-4 text-slate-400 absolute left-3.5 pointer-events-none" />
                 <input
                   type="email"
                   required
@@ -304,64 +333,96 @@ export function CreateStaffTab({ onNavigate }: CreateStaffTabProps) {
                     })
                   }
                   placeholder="name@pharmacy.com"
-                  className="w-full h-12 pl-11 pr-4 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-base font-bold text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary"
+                  className="w-full h-11 pl-10 pr-3.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary"
                 />
               </div>
             </div>
 
-            {/* Phone Number */}
+            {/* Phone Number (Strictly Digits Only, 11-12 digits) */}
             <div>
-              <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-2">
-                Phone Number
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200">
+                  Phone Number
+                </label>
+                <span className="text-[11px] text-slate-400 font-medium">11 or 12 digits</span>
+              </div>
               <div className="relative flex items-center">
-                <Phone className="h-5 w-5 text-slate-400 absolute left-3.5 pointer-events-none" />
+                <Phone className="h-4 w-4 text-slate-400 absolute left-3.5 pointer-events-none" />
                 <input
                   type="tel"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={12}
                   value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  onChange={handlePhoneChange}
                   placeholder="01700000000"
-                  className="w-full h-12 pl-11 pr-4 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-base font-bold text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary"
+                  className="w-full h-11 pl-10 pr-3.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary"
                 />
               </div>
             </div>
 
             {/* Password */}
             <div>
-              <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-2">
+              <label className="block text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
                 Password *
               </label>
               <div className="relative flex items-center">
-                <Lock className="h-5 w-5 text-slate-400 absolute left-3.5 pointer-events-none" />
+                <Lock className="h-4 w-4 text-slate-400 absolute left-3.5 pointer-events-none" />
                 <input
                   type={showPassword ? "text" : "password"}
                   required
                   minLength={6}
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  placeholder="Minimum 6 characters"
-                  className="w-full h-12 pl-11 pr-11 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-base font-bold text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary font-mono"
+                  placeholder="Min. 6 characters"
+                  className="w-full h-11 pl-10 pr-10 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3.5 p-1 rounded-lg text-slate-400 hover:text-slate-600"
+                  className="absolute right-3 p-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
                 >
-                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+
+            {/* Confirm Password */}
+            <div>
+              <label className="block text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
+                Confirm Password *
+              </label>
+              <div className="relative flex items-center">
+                <Lock className="h-4 w-4 text-slate-400 absolute left-3.5 pointer-events-none" />
+                <input
+                  type={showConfirmPassword ? "text" : "password"}
+                  required
+                  minLength={6}
+                  value={formData.confirmPassword}
+                  onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+                  placeholder="Re-type password"
+                  className="w-full h-11 pl-10 pr-10 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-3 p-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                >
+                  {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
             </div>
 
             {/* Select Role */}
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="block text-sm font-bold text-slate-800 dark:text-slate-200">
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200">
                   Select Role *
                 </label>
                 {onNavigate && (
                   <button
                     type="button"
-                    onClick={() => onNavigate("roles")}
+                    onClick={() => onNavigate("create_role")}
                     className="text-xs font-bold text-brand-primary hover:underline flex items-center gap-1"
                   >
                     <span>Manage Roles</span>
@@ -369,12 +430,12 @@ export function CreateStaffTab({ onNavigate }: CreateStaffTabProps) {
                 )}
               </div>
               <div className="relative flex items-center">
-                <KeyRound className="h-5 w-5 text-slate-400 absolute left-3.5 pointer-events-none" />
+                <KeyRound className="h-4 w-4 text-slate-400 absolute left-3.5 pointer-events-none" />
                 <select
                   required
                   value={formData.role}
                   onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                  className="w-full h-12 pl-11 pr-4 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-base font-bold text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary cursor-pointer"
+                  className="w-full h-11 pl-10 pr-3.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary cursor-pointer"
                 >
                   {roles.map((r) => (
                     <option key={r.id} value={r.id}>
@@ -386,24 +447,24 @@ export function CreateStaffTab({ onNavigate }: CreateStaffTabProps) {
             </div>
 
             {/* Branch Assignment */}
-            <div>
-              <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-2">
+            <div className="md:col-span-2 lg:col-span-3">
+              <label className="block text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
                 Assign to Branch
               </label>
-              <div className="relative flex items-center">
-                <Building className="h-5 w-5 text-slate-400 absolute left-3.5 pointer-events-none" />
+              <div className="relative flex items-center max-w-md">
+                <Building className="h-4 w-4 text-slate-400 absolute left-3.5 pointer-events-none" />
                 {isManager ? (
                   <input
                     type="text"
                     disabled
                     value={branches.find((b) => b.id === user?.branchId)?.name || "Your Branch"}
-                    className="w-full h-12 pl-11 pr-4 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-base font-bold text-slate-600 dark:text-slate-400"
+                    className="w-full h-11 pl-10 pr-3.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-sm font-semibold text-slate-600 dark:text-slate-400"
                   />
                 ) : (
                   <select
                     value={formData.branchId}
                     onChange={(e) => setFormData({ ...formData, branchId: e.target.value })}
-                    className="w-full h-12 pl-11 pr-4 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-base font-bold text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary cursor-pointer"
+                    className="w-full h-11 pl-10 pr-3.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary cursor-pointer"
                   >
                     <option value="">HQ / Main Branch</option>
                     {branches.map((b) => (
@@ -419,10 +480,10 @@ export function CreateStaffTab({ onNavigate }: CreateStaffTabProps) {
 
           {/* Role Preview Card */}
           {selectedRoleObj && (
-            <div className="p-4 rounded-xl bg-brand-primary/5 dark:bg-brand-primary/10 border border-brand-primary/20 flex flex-wrap items-center justify-between gap-3">
+            <div className="p-3.5 rounded-lg bg-brand-primary/5 dark:bg-brand-primary/10 border border-brand-primary/20 flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2">
-                <ShieldCheck className="h-5 w-5 text-brand-primary" />
-                <span className="text-sm font-black text-slate-900 dark:text-white">
+                <ShieldCheck className="h-4 w-4 text-brand-primary" />
+                <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">
                   Assigned Role: {selectedRoleObj.name}
                 </span>
                 {selectedRoleObj.description && (
@@ -431,19 +492,19 @@ export function CreateStaffTab({ onNavigate }: CreateStaffTabProps) {
                   </span>
                 )}
               </div>
-              <span className="px-3 py-1 rounded-full text-xs font-bold bg-brand-primary/15 text-brand-primary">
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-brand-primary/15 text-brand-primary">
                 {selectedRoleObj.permissions?.length || 0} Modules Permitted
               </span>
             </div>
           )}
 
           {/* Submit Action */}
-          <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+          <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
             {onNavigate && (
               <button
                 type="button"
                 onClick={() => onNavigate("staff")}
-                className="h-12 px-6 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-black text-sm transition"
+                className="h-10 px-5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs sm:text-sm transition"
               >
                 Cancel
               </button>
@@ -452,16 +513,16 @@ export function CreateStaffTab({ onNavigate }: CreateStaffTabProps) {
             <button
               type="submit"
               disabled={submitting || isTotalLimitReached}
-              className="h-12 px-7 rounded-xl bg-brand-primary hover:bg-brand-primary-hover text-white font-black text-sm shadow-sm transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="h-10 px-6 rounded-lg bg-brand-primary hover:bg-brand-primary-hover text-white font-bold text-xs sm:text-sm shadow-xs transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {submitting ? (
                 <>
-                  <Loader2 className="h-5 w-5 animate-spin" />
+                  <Loader2 className="h-4 w-4 animate-spin" />
                   <span>Creating Staff...</span>
                 </>
               ) : (
                 <>
-                  <PlusCircle className="h-5 w-5" />
+                  <PlusCircle className="h-4 w-4" />
                   <span>Create Staff Member</span>
                 </>
               )}

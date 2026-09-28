@@ -8,6 +8,7 @@ export const MODULE_TO_PATH: Record<OwnerModule, string> = {
   overview: "/dashboard",
 
   // Sales & POS
+  medicine_locator: "/dashboard/sales/locator",
   pos: "/dashboard/pos",
   pos_sale: "/dashboard/pos",
   pos_history: "/dashboard/pos/history",

@@ -18,6 +18,12 @@ import {
   Pill,
   Droplets,
   Syringe,
+  Download,
+  Upload,
+  FileSpreadsheet,
+  CheckCircle2,
+  AlertTriangle,
+  FileUp,
 } from "lucide-react";
 
 interface ProductListViewProps {
@@ -31,6 +37,250 @@ let cachedProductsList: Product[] = [];
 let cachedCategoriesList: Category[] = [];
 let cachedTotalPages = 1;
 let cachedTotalItems = 0;
+
+/**
+ * Robust RFC-4180 CSV Text Parser (handles quoted strings, commas, linebreaks, empty lines)
+ */
+function parseCsv(text: string): string[][] {
+  const p: string[][] = [];
+  let row: string[] = [""];
+  let inQuotes = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    const next = text[i + 1];
+
+    if (c === '"') {
+      if (inQuotes && next === '"') {
+        row[row.length - 1] += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (c === "," && !inQuotes) {
+      row.push("");
+    } else if ((c === "\r" || c === "\n") && !inQuotes) {
+      if (c === "\r" && next === "\n") i++;
+      if (row.length > 1 || row[0].trim() !== "") {
+        p.push(row);
+      }
+      row = [""];
+    } else {
+      row[row.length - 1] += c;
+    }
+  }
+  if (row.length > 1 || row[0].trim() !== "") {
+    p.push(row);
+  }
+  return p;
+}
+
+/**
+ * Maps parsed CSV rows into product objects with validation
+ */
+function mapCsvRowsToProducts(rows: string[][]): {
+  valid: any[];
+  invalid: { row: number; error: string; raw: any }[];
+} {
+  if (rows.length < 2) return { valid: [], invalid: [] };
+  const rawHeaders = rows[0].map((h) => h.trim().toLowerCase().replace(/[^a-z0-9]/g, ""));
+
+  const headerMap: { [key: string]: number } = {};
+  rawHeaders.forEach((h, idx) => {
+    if (["productname", "name", "medicine", "medicinename", "itemname"].includes(h)) headerMap["name"] = idx;
+    else if (["genericname", "generic", "genericgroup"].includes(h)) headerMap["genericName"] = idx;
+    else if (["category", "maincategory"].includes(h)) headerMap["category"] = idx;
+    else if (["subcategory", "subcat"].includes(h)) headerMap["subcategory"] = idx;
+    else if (["manufacturer", "company", "brand", "brandname", "mfg"].includes(h)) headerMap["manufacturer"] = idx;
+    else if (["size", "strength", "mg", "ml"].includes(h)) headerMap["size"] = idx;
+    else if (["unit", "packagingunit"].includes(h)) headerMap["unit"] = idx;
+    else if (["defaultpacktype", "packtype"].includes(h)) headerMap["defaultPackType"] = idx;
+    else if (["stripsperbox", "strips"].includes(h)) headerMap["stripsPerBox"] = idx;
+    else if (["tabletsperstrip", "tablets"].includes(h)) headerMap["tabletsPerStrip"] = idx;
+    else if (["basemrpprice", "baseprice", "price", "mrp", "unitprice"].includes(h)) headerMap["basePrice"] = idx;
+    else if (["barcode"].includes(h)) headerMap["barcode"] = idx;
+    else if (["sku", "productcode", "code"].includes(h)) headerMap["sku"] = idx;
+    else if (["minstockalert", "minstock", "alertqty"].includes(h)) headerMap["minStockAlert"] = idx;
+    else if (["prescriptionrequired", "requiresprescription", "rx", "prescription"].includes(h))
+      headerMap["requiresPrescription"] = idx;
+  });
+
+  if (headerMap["name"] === undefined) {
+    throw new Error("Could not find 'Product Name' or 'Name' column in CSV header.");
+  }
+
+  const valid: any[] = [];
+  const invalid: { row: number; error: string; raw: any }[] = [];
+
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i];
+    if (r.every((c) => !c.trim())) continue;
+
+    const getVal = (field: string) => {
+      const idx = headerMap[field];
+      return idx !== undefined && r[idx] !== undefined ? r[idx].trim() : "";
+    };
+
+    const name = getVal("name");
+    if (!name || name.length < 2) {
+      invalid.push({ row: i + 1, error: "Product name is required (min 2 characters)", raw: r });
+      continue;
+    }
+
+    const priceNum = parseFloat(getVal("basePrice"));
+    const basePrice = !isNaN(priceNum) && priceNum >= 0 ? priceNum : 0;
+
+    const stripsNum = parseInt(getVal("stripsPerBox"), 10);
+    const stripsPerBox = !isNaN(stripsNum) && stripsNum > 0 ? stripsNum : 10;
+
+    const tabsNum = parseInt(getVal("tabletsPerStrip"), 10);
+    const tabletsPerStrip = !isNaN(tabsNum) && tabsNum > 0 ? tabsNum : 10;
+
+    const minAlertNum = parseInt(getVal("minStockAlert"), 10);
+    const minStockAlert = !isNaN(minAlertNum) && minAlertNum >= 0 ? minAlertNum : 10;
+
+    const rxVal = getVal("requiresPrescription").toLowerCase();
+    const requiresPrescription = ["yes", "true", "1", "y"].includes(rxVal);
+
+    const category = getVal("category") || "Medicine";
+    const subcategory = getVal("subcategory") || null;
+    const genericName = getVal("genericName") || null;
+    const manufacturer = getVal("manufacturer") || null;
+    const size = getVal("size") || null;
+    const unit = getVal("unit") || "tablet";
+    const defaultPackType = (getVal("defaultPackType") || "BOX").toUpperCase();
+    const barcode = getVal("barcode") || null;
+    const sku = getVal("sku") || null;
+
+    valid.push({
+      name,
+      genericName,
+      category,
+      subcategory,
+      manufacturer,
+      brandName: manufacturer,
+      size,
+      unit,
+      defaultPackType,
+      stripsPerBox,
+      tabletsPerStrip,
+      basePrice,
+      barcode,
+      sku,
+      minStockAlert,
+      shopMinStockAlert: minStockAlert,
+      godownMinStockAlert: Math.max(50, minStockAlert * 3),
+      requiresPrescription,
+    });
+  }
+
+  return { valid, invalid };
+}
+
+/**
+ * Downloads a sample product CSV template
+ */
+function downloadSampleCsv() {
+  const sampleHeaders = [
+    "Product Name",
+    "Generic Name",
+    "Category",
+    "Subcategory",
+    "Manufacturer",
+    "Size",
+    "Unit",
+    "Default Pack Type",
+    "Strips Per Box",
+    "Tablets Per Strip",
+    "Base MRP Price",
+    "Barcode",
+    "SKU",
+    "Min Stock Alert",
+    "Prescription Required",
+  ];
+
+  const sampleRows = [
+    [
+      '"Napa 500mg"',
+      '"Paracetamol"',
+      '"Medicine"',
+      '"Antipyretics & Pain Relief"',
+      '"Beximco Pharmaceuticals"',
+      '"500mg"',
+      '"tablet"',
+      '"BOX"',
+      "10",
+      "10",
+      "12.00",
+      '"8901234567890"',
+      '"NAPA-500"',
+      "20",
+      '"No"',
+    ],
+    [
+      '"Seclo 20mg"',
+      '"Omeprazole"',
+      '"Medicine"',
+      '"Gastrointestinal & Antacids"',
+      '"Square Pharmaceuticals"',
+      '"20mg"',
+      '"capsule"',
+      '"BOX"',
+      "10",
+      "10",
+      "60.00",
+      '"8901234567891"',
+      '"SECLO-20"',
+      "30",
+      '"No"',
+    ],
+    [
+      '"Ace Plus"',
+      '"Paracetamol + Caffeine"',
+      '"Medicine"',
+      '"Antipyretics & Pain Relief"',
+      '"Square Pharmaceuticals"',
+      '"Standard"',
+      '"tablet"',
+      '"BOX"',
+      "10",
+      "10",
+      "25.00",
+      '"8901234567892"',
+      '"ACE-PLUS"',
+      "15",
+      '"No"',
+    ],
+    [
+      '"Tofen Syrup 100ml"',
+      '"Ketotifen"',
+      '"Syrup"',
+      '"Pediatric Syrups & Drops"',
+      '"Beximco Pharmaceuticals"',
+      '"100ml"',
+      '"bottle"',
+      '"BOTTLE"',
+      "1",
+      "1",
+      "85.00",
+      '"8901234567893"',
+      '"TOFEN-100"',
+      "10",
+      '"No"',
+    ],
+  ];
+
+  const csv = [sampleHeaders.join(","), ...sampleRows.map((r) => r.join(","))].join("\r\n");
+  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "pharmabiz_product_import_sample.csv";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
 
 export function ProductListView({ onNavigate, onEditProduct }: ProductListViewProps) {
   const [products, setProducts] = useState<Product[]>(() => cachedProductsList);
@@ -60,8 +310,19 @@ export function ProductListView({ onNavigate, onEditProduct }: ProductListViewPr
     stripsPerBox: 10,
     tabletsPerStrip: 10,
     minStockAlert: 10,
+    shopMinStockAlert: 10,
+    godownMinStockAlert: 50,
     requiresPrescription: false,
   });
+
+  // CSV Export & Import State
+  const [isExporting, setIsExporting] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [importFileName, setImportFileName] = useState("");
+  const [parsedValidProducts, setParsedValidProducts] = useState<any[]>([]);
+  const [parsedInvalidRows, setParsedInvalidRows] = useState<{ row: number; error: string; raw: any }[]>([]);
+  const [isImportSubmitting, setIsImportSubmitting] = useState(false);
+  const [importPreviewTab, setImportPreviewTab] = useState<"VALID" | "INVALID">("VALID");
 
   const loadVariants = useCallback(async () => {
     try {
@@ -161,6 +422,8 @@ export function ProductListView({ onNavigate, onEditProduct }: ProductListViewPr
       stripsPerBox: p.stripsPerBox || 10,
       tabletsPerStrip: p.tabletsPerStrip || 10,
       minStockAlert: (p as any).minStockAlert ?? 10,
+      shopMinStockAlert: (p as any).shopMinStockAlert ?? (p as any).minStockAlert ?? 10,
+      godownMinStockAlert: (p as any).godownMinStockAlert ?? 50,
       requiresPrescription: Boolean(p.requiresPrescription),
     });
     setEditingProduct(p);
@@ -263,6 +526,8 @@ export function ProductListView({ onNavigate, onEditProduct }: ProductListViewPr
         qtyPerLevel3: strips,
         qtyPerLevel4: tablets,
         minStockAlert: Number(editFormData.minStockAlert) >= 0 ? Number(editFormData.minStockAlert) : 10,
+        shopMinStockAlert: Number(editFormData.shopMinStockAlert) >= 0 ? Number(editFormData.shopMinStockAlert) : (Number(editFormData.minStockAlert) >= 0 ? Number(editFormData.minStockAlert) : 10),
+        godownMinStockAlert: Number(editFormData.godownMinStockAlert) >= 0 ? Number(editFormData.godownMinStockAlert) : 50,
         requiresPrescription: editFormData.requiresPrescription,
       };
 
@@ -293,6 +558,161 @@ export function ProductListView({ onNavigate, onEditProduct }: ProductListViewPr
     }
   };
 
+  // Export All Products to CSV
+  const handleExportCsv = async () => {
+    try {
+      setIsExporting(true);
+      const res = await fetchApi<any>("/products?limit=10000");
+      const list: any[] = res.success && Array.isArray(res.data) ? res.data : products;
+
+      if (!list || list.length === 0) {
+        showAlert.info("No Products", "No products available to export.");
+        return;
+      }
+
+      const headers = [
+        "Product Name",
+        "Generic Name",
+        "Category",
+        "Subcategory",
+        "Manufacturer",
+        "Size",
+        "Unit",
+        "Default Pack Type",
+        "Strips Per Box",
+        "Tablets Per Strip",
+        "Base MRP Price",
+        "Barcode",
+        "SKU",
+        "Min Stock Alert",
+        "Prescription Required",
+      ];
+
+      const escapeVal = (val: any) => {
+        if (val === null || val === undefined) return '""';
+        const str = String(val);
+        return `"${str.replace(/"/g, '""')}"`;
+      };
+
+      const rows = list.map((p: any) => [
+        escapeVal(p.name || ""),
+        escapeVal(p.genericName || ""),
+        escapeVal(p.category || (p.categoryRef ? p.categoryRef.name : "")),
+        escapeVal(p.subcategory || (p.subcategoryRef ? p.subcategoryRef.name : "")),
+        escapeVal(p.manufacturer || p.brandName || ""),
+        escapeVal(p.size || ""),
+        escapeVal(p.unit || "piece"),
+        escapeVal(p.defaultPackType || "BOX"),
+        p.stripsPerBox || 10,
+        p.tabletsPerStrip || 10,
+        Number(p.basePrice || 0).toFixed(2),
+        escapeVal(p.barcode || ""),
+        escapeVal(p.sku || ""),
+        p.minStockAlert || 10,
+        escapeVal(p.requiresPrescription ? "Yes" : "No"),
+      ]);
+
+      const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join("\r\n");
+      const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `pharmabiz_products_${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      showAlert.toast(`Exported ${list.length} products to CSV!`, "success");
+    } catch (err: any) {
+      console.error("Export CSV error:", err);
+      showAlert.error("Export Failed", err.message || "Failed to export products.");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  // Handle CSV file selection and parsing
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.toLowerCase().endsWith(".csv")) {
+      showAlert.error("Invalid File", "Please upload a valid .csv file.");
+      return;
+    }
+
+    setImportFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const text = evt.target?.result as string;
+        const matrix = parseCsv(text);
+        if (matrix.length < 2) {
+          showAlert.error("Empty CSV", "The selected CSV file has no product rows.");
+          setParsedValidProducts([]);
+          setParsedInvalidRows([]);
+          return;
+        }
+
+        const { valid, invalid } = mapCsvRowsToProducts(matrix);
+        setParsedValidProducts(valid);
+        setParsedInvalidRows(invalid);
+        setImportPreviewTab(valid.length > 0 ? "VALID" : "INVALID");
+
+        if (valid.length === 0) {
+          showAlert.error(
+            "Validation Failed",
+            "No valid products found in this CSV. Please check required columns like 'Product Name'."
+          );
+        }
+      } catch (err: any) {
+        console.error("Failed to parse CSV", err);
+        showAlert.error("CSV Parse Error", err.message || "Could not read this CSV file.");
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  };
+
+  // Confirm and submit bulk import
+  const handleConfirmImport = async () => {
+    if (parsedValidProducts.length === 0) {
+      showAlert.error("No Products", "No valid products to import.");
+      return;
+    }
+
+    try {
+      setIsImportSubmitting(true);
+      const res = await fetchApi<any>("/products/bulk", {
+        method: "POST",
+        body: JSON.stringify({
+          products: parsedValidProducts,
+        }),
+      });
+
+      if (res.success || (res as any)?.totalProcessed || (res as any)?.createdCount !== undefined) {
+        showAlert.success(
+          "Import Successful!",
+          `Successfully processed ${parsedValidProducts.length} products.`,
+          { timer: 2000 }
+        );
+        setIsImportModalOpen(false);
+        setImportFileName("");
+        setParsedValidProducts([]);
+        setParsedInvalidRows([]);
+        await loadProducts();
+      } else {
+        throw new Error(res.message || "Bulk import failed.");
+      }
+    } catch (err: any) {
+      console.error("Bulk import error:", err);
+      showAlert.error("Import Failed", err.message || "Failed to import products via CSV.");
+    } finally {
+      setIsImportSubmitting(false);
+    }
+  };
+
   const activeCategoryObj = categories.find((c) => c.id === categoryFilter);
   const availableSubcategories = activeCategoryObj ? activeCategoryObj.subcategories || [] : [];
 
@@ -315,20 +735,51 @@ export function ProductListView({ onNavigate, onEditProduct }: ProductListViewPr
           </h2>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <button
+            type="button"
+            onClick={handleExportCsv}
+            disabled={isExporting}
+            className="h-11 px-4 bg-white dark:bg-slate-850 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold transition flex items-center gap-2 shadow-2xs cursor-pointer active:scale-95 disabled:opacity-50"
+            title="Download all products in CSV format"
+          >
+            {isExporting ? (
+              <Loader2 className="h-4 w-4 animate-spin text-brand-primary" />
+            ) : (
+              <Download className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+            )}
+            <span>Export CSV</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setIsImportModalOpen(true);
+              setImportFileName("");
+              setParsedValidProducts([]);
+              setParsedInvalidRows([]);
+            }}
+            className="h-11 px-4 bg-white dark:bg-slate-850 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold transition flex items-center gap-2 shadow-2xs cursor-pointer active:scale-95"
+            title="Import products from a CSV file"
+          >
+            <Upload className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+            <span>Import CSV</span>
+          </button>
+
           <button
             onClick={() => onNavigate("inv_variants")}
-            className="h-11 px-5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-xl text-sm font-bold transition flex items-center gap-2"
+            className="h-11 px-4 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-xl text-sm font-bold transition flex items-center gap-2 cursor-pointer"
           >
             <FolderTree className="h-4 w-4 text-brand-primary" />
-            Manage Categories
+            <span>Categories</span>
           </button>
+
           <button
             onClick={() => onNavigate("inv_add_product")}
-            className="h-11 px-5 bg-brand-primary hover:bg-brand-primary-hover text-white rounded-xl text-sm font-bold transition flex items-center gap-2 shadow-sm"
+            className="h-11 px-5 bg-brand-primary hover:bg-brand-primary-hover text-white rounded-xl text-sm font-bold transition flex items-center gap-2 shadow-sm cursor-pointer active:scale-95"
           >
             <Plus className="h-4 w-4" />
-            Add Product
+            <span>Add Product</span>
           </button>
         </div>
       </div>
@@ -484,14 +935,14 @@ export function ProductListView({ onNavigate, onEditProduct }: ProductListViewPr
                               Rx
                             </span>
                           )}
-                          {p.minStockAlert !== undefined && (
-                            <span
-                              title={`Low stock alert triggers when total units drop to ${p.minStockAlert} or less`}
-                              className="bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-900/60 text-[11px] px-2 py-0.5 rounded-md font-bold"
-                            >
-                              Alert ≤ {p.minStockAlert}
-                            </span>
-                          )}
+                          <span
+                            title={`Shop/Rack alert triggers at ≤ ${p.shopMinStockAlert ?? p.minStockAlert ?? 10} units. Godown alert triggers at ≤ ${p.godownMinStockAlert ?? 50} units.`}
+                            className="bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-900/60 text-[11px] px-2 py-0.5 rounded-md font-bold flex items-center gap-1"
+                          >
+                            <span>Shop ≤ {p.shopMinStockAlert ?? p.minStockAlert ?? 10}</span>
+                            <span className="text-slate-300 dark:text-slate-600">|</span>
+                            <span>Godown ≤ {p.godownMinStockAlert ?? 50}</span>
+                          </span>
                         </div>
                       </td>
 
@@ -664,32 +1115,56 @@ export function ProductListView({ onNavigate, onEditProduct }: ProductListViewPr
                   </select>
                 </div>
 
-                {/* Low Stock Alert Limit */}
-                <div className="sm:col-span-2">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-200">
-                      Low Stock Alert Limit (Min Units)
+                {/* Shop Low Stock Alert Limit */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200">
+                      Shop Alert Limit
                     </label>
-                    <span className="text-xs text-slate-500 dark:text-slate-400">
-                      Default: 10 units
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+                      Shop / Shelf
                     </span>
                   </div>
                   <input
                     type="number"
                     min="0"
-                    placeholder="e.g. 50 or 100"
-                    value={editFormData.minStockAlert}
+                    placeholder="e.g. 10 or 20 (Default: 10)"
+                    value={editFormData.shopMinStockAlert}
+                    onChange={(e) => {
+                      const val = e.target.value === "" ? 0 : Number(e.target.value);
+                      setEditFormData({
+                        ...editFormData,
+                        shopMinStockAlert: val,
+                        minStockAlert: val,
+                      });
+                    }}
+                    className="w-full h-11 sm:h-12 px-3.5 bg-slate-50 hover:bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-sm sm:text-base font-semibold text-slate-900 dark:text-white placeholder:text-xs sm:placeholder:text-sm placeholder:text-slate-400 outline-none focus:border-brand-primary transition"
+                  />
+                </div>
+
+                {/* Godown Low Stock Alert Limit */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200">
+                      Godown Alert Limit
+                    </label>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300">
+                      Warehouse
+                    </span>
+                  </div>
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="e.g. 50 or 100 (Default: 50)"
+                    value={editFormData.godownMinStockAlert}
                     onChange={(e) =>
                       setEditFormData({
                         ...editFormData,
-                        minStockAlert: e.target.value === "" ? 0 : Number(e.target.value),
+                        godownMinStockAlert: e.target.value === "" ? 0 : Number(e.target.value),
                       })
                     }
                     className="w-full h-11 sm:h-12 px-3.5 bg-slate-50 hover:bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-sm sm:text-base font-semibold text-slate-900 dark:text-white placeholder:text-xs sm:placeholder:text-sm placeholder:text-slate-400 outline-none focus:border-brand-primary transition"
                   />
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-                    মোট স্টক (দোকান ও গোডাউন মিলিয়ে) এই পরিমাণের সমান বা নিচে নামলে প্রডাক্টটি &quot;Low Stock&quot; সতর্কবার্তা দেখাবে।
-                  </p>
                 </div>
               </div>
 
@@ -855,6 +1330,219 @@ export function ProductListView({ onNavigate, onEditProduct }: ProductListViewPr
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* CSV Import Modal */}
+      {isImportModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400">
+                  <Upload className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                    Bulk Import Products (.CSV)
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Upload a spreadsheet to bulk create or update your medicine catalog
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsImportModalOpen(false);
+                  setImportFileName("");
+                  setParsedValidProducts([]);
+                  setParsedInvalidRows([]);
+                }}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 space-y-5 overflow-y-auto flex-1">
+              {/* Template Download Prompt */}
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <div className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">
+                    Need the standard column format?
+                  </div>
+                  <div className="text-xs text-slate-500">
+                    Download our sample template with pre-filled sample medicine columns.
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={downloadSampleCsv}
+                  className="px-3.5 py-2 rounded-lg bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 text-xs font-bold transition flex items-center gap-1.5 shrink-0 cursor-pointer shadow-2xs"
+                >
+                  <Download className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                  <span>Download Sample CSV</span>
+                </button>
+              </div>
+
+              {/* Upload Dropzone */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2">
+                  Select CSV File <span className="text-rose-500">*</span>
+                </label>
+                <label className="border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-brand-primary dark:hover:border-brand-primary bg-slate-50/50 dark:bg-slate-850/50 hover:bg-slate-50 dark:hover:bg-slate-850 rounded-2xl p-6 flex flex-col items-center justify-center text-center cursor-pointer transition group">
+                  <input
+                    type="file"
+                    accept=".csv"
+                    onChange={handleFileSelect}
+                    className="hidden"
+                  />
+                  <div className="p-3 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 mb-2 group-hover:scale-110 transition">
+                    <FileUp className="h-6 w-6" />
+                  </div>
+                  {importFileName ? (
+                    <div>
+                      <span className="text-sm font-bold text-slate-900 dark:text-white block">
+                        {importFileName}
+                      </span>
+                      <span className="text-xs text-indigo-600 dark:text-indigo-400 font-semibold mt-0.5 inline-block">
+                        Click to choose a different file
+                      </span>
+                    </div>
+                  ) : (
+                    <div>
+                      <span className="text-sm font-bold text-slate-800 dark:text-slate-200 block">
+                        Click to browse or drop CSV file here
+                      </span>
+                      <span className="text-xs text-slate-400 mt-0.5 block">
+                        Supported file format: .csv (Comma Separated Values)
+                      </span>
+                    </div>
+                  )}
+                </label>
+              </div>
+
+              {/* Validation Summary & Preview */}
+              {(parsedValidProducts.length > 0 || parsedInvalidRows.length > 0) && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                      File Analysis &amp; Validation
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 flex items-center gap-1">
+                        <CheckCircle2 className="h-3 w-3" />
+                        {parsedValidProducts.length} Valid
+                      </span>
+                      {parsedInvalidRows.length > 0 && (
+                        <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 flex items-center gap-1">
+                          <AlertTriangle className="h-3 w-3" />
+                          {parsedInvalidRows.length} Skipped / Error
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Invalid Rows Warning */}
+                  {parsedInvalidRows.length > 0 && (
+                    <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-200 space-y-1">
+                      <div className="font-bold flex items-center gap-1.5">
+                        <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
+                        <span>The following rows have issues and will be skipped:</span>
+                      </div>
+                      <ul className="list-disc pl-5 space-y-0.5 text-xs text-amber-700 dark:text-amber-300 max-h-24 overflow-y-auto">
+                        {parsedInvalidRows.map((inv, idx) => (
+                          <li key={idx}>
+                            Row {inv.row}: {inv.error}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Valid Products Preview Table */}
+                  {parsedValidProducts.length > 0 && (
+                    <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
+                      <div className="px-3.5 py-2 bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-750 text-xs font-bold text-slate-600 dark:text-slate-300">
+                        Preview of Valid Medicines to Import (Showing first {Math.min(5, parsedValidProducts.length)} of {parsedValidProducts.length})
+                      </div>
+                      <div className="max-h-48 overflow-y-auto">
+                        <table className="w-full text-left text-xs">
+                          <thead className="bg-slate-100/70 dark:bg-slate-850 text-slate-500 font-semibold border-b border-slate-200 dark:border-slate-800">
+                            <tr>
+                              <th className="py-2 px-3">Medicine Name</th>
+                              <th className="py-2 px-3">Generic</th>
+                              <th className="py-2 px-3">Category</th>
+                              <th className="py-2 px-3">Manufacturer</th>
+                              <th className="py-2 px-3 text-right">Price</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
+                            {parsedValidProducts.slice(0, 5).map((p, idx) => (
+                              <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-850">
+                                <td className="py-2 px-3 font-bold text-slate-900 dark:text-white">
+                                  {p.name}
+                                </td>
+                                <td className="py-2 px-3 text-slate-600 dark:text-slate-300">
+                                  {p.genericName || "—"}
+                                </td>
+                                <td className="py-2 px-3 text-slate-500">
+                                  {p.category || "Medicine"}
+                                </td>
+                                <td className="py-2 px-3 text-slate-500">
+                                  {p.manufacturer || "—"}
+                                </td>
+                                <td className="py-2 px-3 text-right font-mono font-bold text-slate-900 dark:text-white">
+                                  ৳{Number(p.basePrice || 0).toFixed(2)}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Footer Actions */}
+            <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-3 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsImportModalOpen(false);
+                  setImportFileName("");
+                  setParsedValidProducts([]);
+                  setParsedInvalidRows([]);
+                }}
+                className="h-10 px-4 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmImport}
+                disabled={isImportSubmitting || parsedValidProducts.length === 0}
+                className="h-10 px-5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-sm cursor-pointer active:scale-95"
+              >
+                {isImportSubmitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Importing {parsedValidProducts.length} Products...</span>
+                  </>
+                ) : (
+                  <>
+                    <Upload className="h-4 w-4" />
+                    <span>Import {parsedValidProducts.length > 0 ? `${parsedValidProducts.length} ` : ""}Products</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

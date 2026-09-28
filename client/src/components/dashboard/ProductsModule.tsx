@@ -62,6 +62,8 @@ export function ProductsModule({ subAction }: ProductsModuleProps = {}) {
     tabletsPerStrip: 10,
     shelfLocation: "Rack A-1",
     minStockAlert: 20,
+    shopMinStockAlert: 10,
+    godownMinStockAlert: 50,
     description: "",
     isControlled: false,
     requiresPrescription: false,
@@ -208,6 +210,8 @@ export function ProductsModule({ subAction }: ProductsModuleProps = {}) {
       tabletsPerStrip: 10,
       shelfLocation: "Rack A-1",
       minStockAlert: 20,
+      shopMinStockAlert: 10,
+      godownMinStockAlert: 50,
       description: "",
       isControlled: false,
       requiresPrescription: false,
@@ -235,6 +239,8 @@ export function ProductsModule({ subAction }: ProductsModuleProps = {}) {
       tabletsPerStrip: p.tabletsPerStrip || 10,
       shelfLocation: p.shelfLocation || "",
       minStockAlert: p.minStockAlert || 10,
+      shopMinStockAlert: (p as any).shopMinStockAlert || p.minStockAlert || 10,
+      godownMinStockAlert: (p as any).godownMinStockAlert || 50,
       description: p.description || "",
       isControlled: Boolean(p.isControlled),
       requiresPrescription: Boolean(p.requiresPrescription),
@@ -267,6 +273,8 @@ export function ProductsModule({ subAction }: ProductsModuleProps = {}) {
         tabletsPerStrip: isMedicineCategory ? Number(formData.tabletsPerStrip) : null,
         shelfLocation: formData.shelfLocation || null,
         minStockAlert: Number(formData.minStockAlert),
+        shopMinStockAlert: Number(formData.shopMinStockAlert) || Number(formData.minStockAlert) || 10,
+        godownMinStockAlert: Number(formData.godownMinStockAlert) || 50,
         description: formData.description || null,
         isControlled: formData.isControlled,
         requiresPrescription: formData.requiresPrescription,
@@ -914,14 +922,29 @@ export function ProductsModule({ subAction }: ProductsModuleProps = {}) {
 
                 <div>
                   <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Min Stock Threshold Alert
+                    Shop Alert Limit
                   </label>
                   <input
                     type="number"
                     min="1"
-                    value={formData.minStockAlert}
+                    value={formData.shopMinStockAlert}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10) || 10;
+                      setFormData({ ...formData, shopMinStockAlert: val, minStockAlert: val });
+                    }}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Godown Alert Limit
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={formData.godownMinStockAlert}
                     onChange={(e) =>
-                      setFormData({ ...formData, minStockAlert: parseInt(e.target.value, 10) || 10 })
+                      setFormData({ ...formData, godownMinStockAlert: parseInt(e.target.value, 10) || 50 })
                     }
                     className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white outline-none"
                   />

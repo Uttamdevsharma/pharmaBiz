@@ -58,6 +58,8 @@ export const createProductSchema = z.object({
   tabletsPerStrip: z.number().int().positive().optional().nullable(),
 
   minStockAlert: z.number().int().nonnegative().optional().default(10),
+  shopMinStockAlert: z.number().int().nonnegative().optional().default(10),
+  godownMinStockAlert: z.number().int().nonnegative().optional().default(50),
   description: z.string().optional().nullable(),
   isControlled: z.boolean().optional().default(false),
   requiresPrescription: z.boolean().default(false),

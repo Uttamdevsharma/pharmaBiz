@@ -35,6 +35,12 @@ export const PHARMACY_MODULE_PERMISSIONS: PermissionDef[] = [
 
   // 2. Sales & POS
   {
+    id: "medicine.locator",
+    name: "Medicine Locator",
+    category: "Sales & POS",
+    description: "Search medicines, find physical rack/fridge locations, check shop stock, and view generic alternatives.",
+  },
+  {
     id: "pos.manage",
     name: "Sales / POS",
     category: "Sales & POS",
@@ -545,6 +551,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     "reports.stock",
   ],
   CASHIER: [
+    "medicine.locator",
     "pos.manage",
     "pos.history",
     "sales.pos",

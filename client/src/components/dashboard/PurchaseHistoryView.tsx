@@ -22,8 +22,11 @@ import {
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
+  Download,
+  Loader2,
 } from "lucide-react";
 import { useBranchContext } from "@/context/BranchContext";
+import { showAlert } from "@/lib/swal";
 
 type DateFilterPreset = "today" | "yesterday" | "this_month" | "this_year" | "custom";
 
@@ -167,6 +170,78 @@ export function PurchaseHistoryView({ onNavigate, selectedBranchId: propBranchId
     return purchases.slice((page - 1) * pageSize, page * pageSize);
   }, [purchases, page, pageSize]);
 
+  const [isExportingPurchases, setIsExportingPurchases] = useState(false);
+
+  const handleExportPurchasesCsv = () => {
+    try {
+      setIsExportingPurchases(true);
+      if (!purchases || purchases.length === 0) {
+        showAlert.info("No Purchases", "No purchase records available to export.");
+        return;
+      }
+
+      const headers = [
+        "Invoice / Receipt No",
+        "Purchase Date",
+        "Branch",
+        "Supplier Name",
+        "Contact Person",
+        "Total Amount (BDT)",
+        "Paid Amount (BDT)",
+        "Due Amount (BDT)",
+        "Payment Status",
+      ];
+
+      const escapeVal = (val: any) => {
+        if (val === null || val === undefined) return '""';
+        const str = String(val);
+        return `"${str.replace(/"/g, '""')}"`;
+      };
+
+      const rows = purchases.map((p) => {
+        const total = Number(p.totalAmount || 0);
+        const paid = Number(p.paidAmount || 0);
+        const due = Number(p.dueAmount || 0);
+        const status = due === 0 ? "PAID" : paid > 0 ? "PARTIAL" : "UNPAID";
+        const contactName =
+          p.contactPerson?.name ||
+          p.contactPersonName ||
+          p.supplier?.contactPerson ||
+          "Direct / General";
+
+        return [
+          escapeVal(p.invoiceNumber || `PUR-${p.id.slice(-6)}`),
+          escapeVal(new Date(p.purchaseDate || p.createdAt).toLocaleDateString()),
+          escapeVal(p.branch?.name || "Main Branch"),
+          escapeVal(p.supplier?.name || "Unknown Supplier"),
+          escapeVal(contactName),
+          total.toFixed(2),
+          paid.toFixed(2),
+          due.toFixed(2),
+          escapeVal(status),
+        ];
+      });
+
+      const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join("\r\n");
+      const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `pharmabiz_purchases_report_${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      showAlert.toast(`Exported ${purchases.length} purchase records to CSV!`, "success");
+    } catch (err: any) {
+      console.error("Export purchases error:", err);
+      showAlert.error("Export Failed", err.message || "Failed to export purchases.");
+    } finally {
+      setIsExportingPurchases(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Top Header */}
@@ -183,17 +258,32 @@ export function PurchaseHistoryView({ onNavigate, selectedBranchId: propBranchId
           </h2>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          <button
+            type="button"
+            onClick={handleExportPurchasesCsv}
+            disabled={isExportingPurchases}
+            className="h-11 px-4 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold transition flex items-center gap-2 cursor-pointer shadow-2xs active:scale-95 disabled:opacity-50"
+            title="Download purchase invoices report as CSV"
+          >
+            {isExportingPurchases ? (
+              <Loader2 className="h-4 w-4 animate-spin text-brand-primary" />
+            ) : (
+              <Download className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+            )}
+            <span>Export Purchases CSV</span>
+          </button>
+
           <button
             onClick={() => onNavigate("sup_payments_due")}
-            className="h-11 px-5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl text-sm font-bold transition flex items-center gap-2"
+            className="h-11 px-5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl text-sm font-bold transition flex items-center gap-2 cursor-pointer"
           >
             <CreditCard className="h-4 w-4" />
             Payments / Due
           </button>
           <button
             onClick={() => onNavigate("stock_add_stock")}
-            className="h-11 px-5 bg-brand-primary hover:bg-brand-primary-hover text-white rounded-xl text-sm font-bold transition flex items-center gap-2 shadow-sm"
+            className="h-11 px-5 bg-brand-primary hover:bg-brand-primary-hover text-white rounded-xl text-sm font-bold transition flex items-center gap-2 shadow-sm cursor-pointer active:scale-95"
           >
             <Plus className="h-4 w-4" />
             New Stock Inward

@@ -118,6 +118,8 @@ export interface Product {
   tabletsPerStrip?: number | null;
   shelfLocation?: string | null;
   minStockAlert: number;
+  shopMinStockAlert?: number | null;
+  godownMinStockAlert?: number | null;
   description?: string | null;
   isControlled: boolean;
   requiresPrescription: boolean;

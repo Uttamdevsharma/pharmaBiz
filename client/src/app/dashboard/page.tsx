@@ -64,6 +64,7 @@ import { TransactionHistoryView } from "@/components/dashboard/TransactionHistor
 import { SalesHistoryView } from "@/components/dashboard/SalesHistoryView";
 import { DueSalesView } from "@/components/dashboard/DueSalesView";
 import { VatSettingsView } from "@/components/dashboard/VatSettingsView";
+import { MedicineLocatorView } from "@/components/dashboard/MedicineLocatorView";
 import { ExpensesManagementView } from "@/components/dashboard/ExpensesManagementView";
 import { BillListView } from "@/components/dashboard/BillListView";
 import { PayBillView } from "@/components/dashboard/PayBillView";
@@ -888,6 +889,9 @@ export default function RoleBasedDashboard() {
         return <OverviewModule onNavigate={handleNavigate} />;
 
       // 🛒 Sales & POS Subpages
+      case "medicine_locator":
+        return <MedicineLocatorView selectedBranchId={selectedBranchId} onNavigate={handleNavigate} />;
+
       case "pos":
       case "pos_sale":
         if (!isOwner && !hasPermission("pos.manage")) {

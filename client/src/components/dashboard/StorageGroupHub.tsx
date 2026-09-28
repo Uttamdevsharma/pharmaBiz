@@ -576,10 +576,10 @@ export function StorageGroupHub({
       });
 
       if (!res.success) {
-        throw new Error(res.message || "Failed to move stock to supershop group");
+        throw new Error(res.message || "Failed to move stock to shop group");
       }
 
-      showAlert.success("Stock Moved to Supershop!", `Successfully placed ${moveQuantity} ${moveUnitType}s into group.`);
+      showAlert.success("Stock Moved to Shop!", `Successfully placed ${moveQuantity} ${moveUnitType}s into group.`);
       loadData();
       setViewMode("GROUP_DETAIL");
       setActiveGroupId(moveTargetGroupId);
@@ -668,7 +668,7 @@ export function StorageGroupHub({
 
             <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
               <div className="flex items-center justify-between text-slate-400 mb-2">
-                <span className="text-xs font-black uppercase tracking-wider">In Supershop</span>
+                <span className="text-xs font-black uppercase tracking-wider">In Shop</span>
                 <Store className="h-5 w-5 text-emerald-500" />
               </div>
               <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400">
@@ -690,7 +690,7 @@ export function StorageGroupHub({
 
             <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
               <div className="flex items-center justify-between text-slate-400 mb-2">
-                <span className="text-xs font-black uppercase tracking-wider">Supershop Value</span>
+                <span className="text-xs font-black uppercase tracking-wider">Shop Value</span>
                 <TrendingUp className="h-5 w-5 text-indigo-500" />
               </div>
               <div className="text-2xl font-black text-indigo-600 dark:text-indigo-400">
@@ -1023,16 +1023,7 @@ export function StorageGroupHub({
                       </span>
 
                       <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setMoveTargetGroupId(group.id);
-                            setViewMode("MOVE_STOCK");
-                          }}
-                          className="px-2.5 py-1.5 rounded-lg text-xs font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 transition cursor-pointer"
-                        >
-                          + Refill
-                        </button>
+
 
                         <button
                           type="button"
@@ -1127,7 +1118,7 @@ export function StorageGroupHub({
               </div>
               <div className="h-8 w-px bg-slate-200 dark:bg-slate-800" />
               <div>
-                <span className="text-xs text-slate-400 block font-bold">In Supershop</span>
+                <span className="text-xs text-slate-400 block font-bold">In Shop</span>
                 <span className="text-xl font-black text-emerald-600 dark:text-emerald-400">
                   {selectedGroupProducts.reduce((sum, p) => sum + p.shopUnits, 0).toLocaleString()}
                 </span>
@@ -1159,7 +1150,7 @@ export function StorageGroupHub({
                     <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850">
                       <th className="py-2.5 px-3 font-black text-slate-600 dark:text-slate-300">Company / Brand</th>
                       <th className="py-2.5 px-3 font-black text-slate-600 dark:text-slate-300">Medicines</th>
-                      <th className="py-2.5 px-3 font-black text-emerald-600 text-right">In Supershop</th>
+                      <th className="py-2.5 px-3 font-black text-emerald-600 text-right">In Shop</th>
                       <th className="py-2.5 px-3 font-black text-amber-600 text-right">In Godown</th>
                       <th className="py-2.5 px-3 font-black text-slate-900 dark:text-white text-right">Total Available</th>
                     </tr>
@@ -1211,7 +1202,7 @@ export function StorageGroupHub({
                     <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850">
                       <th className="py-3 px-4 font-black text-slate-600 dark:text-slate-300">Medicine Name</th>
                       <th className="py-3 px-3 font-black text-slate-600 dark:text-slate-300">Generic & Company</th>
-                      <th className="py-3 px-3 font-black text-emerald-600 text-right">In Supershop</th>
+                      <th className="py-3 px-3 font-black text-emerald-600 text-right">In Shop</th>
                       <th className="py-3 px-3 font-black text-amber-600 text-right">In Godown</th>
                       <th className="py-3 px-3 font-black text-slate-900 dark:text-white text-right">Total Units</th>
                       <th className="py-3 px-4 font-black text-slate-600 text-center">Action</th>
@@ -1281,7 +1272,7 @@ export function StorageGroupHub({
               <span>Back to Storage Groups Hub</span>
             </button>
             <span className="text-xs font-black text-brand-primary uppercase tracking-wider">
-              Godown &rarr; Supershop Transfer
+              Godown &rarr; Shop Transfer
             </span>
           </div>
 
@@ -1289,7 +1280,7 @@ export function StorageGroupHub({
             <div>
               <h2 className="text-2xl font-black text-slate-900 dark:text-white flex items-center gap-3">
                 <Store className="h-7 w-7 text-emerald-600" />
-                Move Stock from Godown to Supershop
+                Move Stock from Godown to Shop
               </h2>
               <p className="text-xs text-slate-500 mt-1">
                 Refill medicine from central warehouse bulk into your front store group with zero rack complexity.
@@ -1343,7 +1334,7 @@ export function StorageGroupHub({
               {/* Step 2: Select Target Storage Group */}
               <div>
                 <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-2">
-                  2. Destination Storage Group in Supershop <span className="text-rose-500">*</span>
+                  2. Destination Storage Group in Shop <span className="text-rose-500">*</span>
                 </label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 max-h-56 overflow-y-auto pr-1">
                   {groups.map((g) => {
@@ -1418,12 +1409,12 @@ export function StorageGroupHub({
                   {moveSubmitting ? (
                     <>
                       <Loader2 className="h-5 w-5 animate-spin" />
-                      <span>Moving to Supershop...</span>
+                      <span>Moving to Shop...</span>
                     </>
                   ) : (
                     <>
                       <Store className="h-5 w-5" />
-                      <span>Move Stock into Supershop Group</span>
+                      <span>Move Stock into Shop Group</span>
                     </>
                   )}
                 </button>

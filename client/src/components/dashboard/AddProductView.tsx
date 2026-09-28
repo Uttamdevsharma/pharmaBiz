@@ -69,6 +69,8 @@ export function AddProductView({
     unit: editingProduct?.unit || "tablet",
     size: editingProduct?.size || "500mg",
     minStockAlert: (editingProduct as any)?.minStockAlert ?? 10,
+    shopMinStockAlert: (editingProduct as any)?.shopMinStockAlert ?? (editingProduct as any)?.minStockAlert ?? 10,
+    godownMinStockAlert: (editingProduct as any)?.godownMinStockAlert ?? 50,
     defaultPackType: "BOX",
     stripsPerBox: editingProduct?.stripsPerBox || 10,
     tabletsPerStrip: editingProduct?.tabletsPerStrip || 10,
@@ -143,6 +145,8 @@ export function AddProductView({
         unit: editingProduct.unit || "tablet",
         size: editingProduct.size || "500mg",
         minStockAlert: (editingProduct as any)?.minStockAlert ?? 10,
+        shopMinStockAlert: (editingProduct as any)?.shopMinStockAlert ?? (editingProduct as any)?.minStockAlert ?? 10,
+        godownMinStockAlert: (editingProduct as any)?.godownMinStockAlert ?? 50,
         defaultPackType: editingProduct.defaultPackType || "BOX",
         stripsPerBox: editingProduct.stripsPerBox || 10,
         tabletsPerStrip: editingProduct.tabletsPerStrip || 10,
@@ -384,6 +388,8 @@ export function AddProductView({
         qtyPerLevel3: strips,
         qtyPerLevel4: tablets,
         minStockAlert: Number(formData.minStockAlert) >= 0 ? Number(formData.minStockAlert) : 10,
+        shopMinStockAlert: Number(formData.shopMinStockAlert) >= 0 ? Number(formData.shopMinStockAlert) : (Number(formData.minStockAlert) >= 0 ? Number(formData.minStockAlert) : 10),
+        godownMinStockAlert: Number(formData.godownMinStockAlert) >= 0 ? Number(formData.godownMinStockAlert) : 50,
         description: formData.description || null,
         requiresPrescription: formData.requiresPrescription,
       };
@@ -444,6 +450,8 @@ export function AddProductView({
       description: "",
       requiresPrescription: false,
       minStockAlert: 10,
+      shopMinStockAlert: 10,
+      godownMinStockAlert: 50,
     });
   };
 
@@ -622,24 +630,49 @@ export function AddProductView({
               />
             </div>
 
-            {/* Low Stock Alert Threshold */}
+            {/* Shop Low Stock Alert */}
             <div className="space-y-1.5">
-              <label className="block text-sm sm:text-base xl:text-lg font-bold text-slate-800 dark:text-slate-200">
-                Low Stock Alert Limit (Units)
+              <label className="block text-sm sm:text-base xl:text-lg font-bold text-slate-800 dark:text-slate-200 flex items-center justify-between">
+                <span>Shop Alert Limit</span>
+                <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+                  Shop / Shelf
+                </span>
               </label>
               <input
                 type="number"
                 min="0"
-                placeholder="e.g. 50 or 100 (Default: 10)"
-                value={formData.minStockAlert}
-                onChange={(e) =>
-                  setFormData({ ...formData, minStockAlert: e.target.value === "" ? "" : Number(e.target.value) })
-                }
-                className="w-full h-12 sm:h-12 xl:h-13 px-4 bg-slate-50/70 hover:bg-slate-50 dark:bg-slate-800/60 dark:hover:bg-slate-800/80 focus:bg-white dark:focus:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-sm sm:text-base xl:text-lg font-semibold text-slate-900 dark:text-white placeholder:text-xs sm:placeholder:text-sm xl:placeholder:text-base placeholder:font-normal placeholder:text-slate-400 dark:placeholder:text-slate-500 outline-none focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20 transition-all"
+                placeholder="e.g. 10 or 20 (Default: 10)"
+                value={formData.shopMinStockAlert}
+                onChange={(e) => {
+                  const val = e.target.value === "" ? "" : Number(e.target.value);
+                  setFormData({
+                    ...formData,
+                    shopMinStockAlert: val,
+                    minStockAlert: val !== "" ? val : formData.minStockAlert,
+                  });
+                }}
+                className="w-full h-12 sm:h-12 xl:h-13 px-4 bg-slate-50/70 hover:bg-slate-50 dark:bg-slate-800/60 dark:hover:bg-slate-800/80 focus:bg-white dark:focus:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-sm sm:text-base xl:text-lg font-semibold text-slate-900 dark:text-white placeholder:text-xs sm:placeholder:text-sm placeholder:text-slate-400 outline-none focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20 transition-all"
               />
-              <p className="text-[11px] text-slate-400">
-                Triggers &quot;Low Stock&quot; warning when total stock falls below this amount.
-              </p>
+            </div>
+
+            {/* Godown Low Stock Alert */}
+            <div className="space-y-1.5">
+              <label className="block text-sm sm:text-base xl:text-lg font-bold text-slate-800 dark:text-slate-200 flex items-center justify-between">
+                <span>Godown Alert Limit</span>
+                <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300">
+                  Godown / Bulk
+                </span>
+              </label>
+              <input
+                type="number"
+                min="0"
+                placeholder="e.g. 50 or 100 (Default: 50)"
+                value={formData.godownMinStockAlert}
+                onChange={(e) =>
+                  setFormData({ ...formData, godownMinStockAlert: e.target.value === "" ? "" : Number(e.target.value) })
+                }
+                className="w-full h-12 sm:h-12 xl:h-13 px-4 bg-slate-50/70 hover:bg-slate-50 dark:bg-slate-800/60 dark:hover:bg-slate-800/80 focus:bg-white dark:focus:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-sm sm:text-base xl:text-lg font-semibold text-slate-900 dark:text-white placeholder:text-xs sm:placeholder:text-sm placeholder:text-slate-400 outline-none focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20 transition-all"
+              />
             </div>
 
             {/* Doctor Prescription Rx Checkbox */}

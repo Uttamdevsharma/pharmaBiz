@@ -7,6 +7,7 @@ import { useAuth } from "@/context/AuthContext";
 import { OwnerModule } from "./DashboardSidebar";
 import { Pagination } from "@/components/common/Pagination";
 import { offlineDb } from "@/lib/offlineDb";
+import { showAlert } from "@/lib/swal";
 import {
   History,
   Search,
@@ -244,6 +245,87 @@ export function SalesHistoryView({ selectedBranchId: propBranchId, onNavigate }:
     }
   };
 
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExportSalesCsv = async () => {
+    try {
+      setIsExporting(true);
+      const params = new URLSearchParams();
+      params.append("page", "1");
+      params.append("limit", "10000");
+      if (startDate) params.append("startDate", startDate);
+      if (endDate) params.append("endDate", endDate);
+      if (paymentMethod !== "ALL") params.append("paymentMethod", paymentMethod);
+      if (paymentStatus !== "ALL") params.append("paymentStatus", paymentStatus);
+      if (debouncedSearch) params.append("search", debouncedSearch);
+      if (effectiveBranchId && effectiveBranchId !== "all") {
+        params.append("branchId", effectiveBranchId);
+      }
+
+      const res = await fetchApi<any>(`/sales?${params.toString()}`);
+      const list: SaleRecord[] = res.success && Array.isArray(res.data) ? res.data : sales;
+
+      if (!list || list.length === 0) {
+        showAlert.info("No Sales", "No sales records found to export.");
+        return;
+      }
+
+      const headers = [
+        "Receipt / Invoice No",
+        "Date & Time",
+        "Customer Name",
+        "Customer Phone",
+        "Payment Method",
+        "Total Amount (BDT)",
+        "Discount (BDT)",
+        "Paid Amount (BDT)",
+        "Due Amount (BDT)",
+        "Status",
+        "Billed By",
+        "Branch",
+      ];
+
+      const escapeVal = (val: any) => {
+        if (val === null || val === undefined) return '""';
+        const str = String(val);
+        return `"${str.replace(/"/g, '""')}"`;
+      };
+
+      const rows = list.map((s) => [
+        escapeVal(s.receiptNo),
+        escapeVal(new Date(s.createdAt).toLocaleString()),
+        escapeVal(s.customerName || "Walk-in Customer"),
+        escapeVal(s.customerPhone || ""),
+        escapeVal(formatPaymentMethod(s.paymentMethod, s.notes || undefined, s.bankName || undefined)),
+        s.totalAmount.toFixed(2),
+        s.discount.toFixed(2),
+        s.paidAmount.toFixed(2),
+        s.dueAmount.toFixed(2),
+        escapeVal(s.status),
+        escapeVal(s.user?.name || s.user?.username || "Staff"),
+        escapeVal(s.branch?.name || "Main Branch"),
+      ]);
+
+      const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join("\r\n");
+      const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `pharmabiz_sales_report_${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      showAlert.toast(`Exported ${list.length} sales records to CSV!`, "success");
+    } catch (err: any) {
+      console.error("Failed to export sales", err);
+      showAlert.error("Export Failed", err.message || "Could not export sales.");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   useEffect(() => {
     loadSales();
   }, [page, limit, periodPreset, startDate, endDate, paymentMethod, paymentStatus, debouncedSearch, effectiveBranchId]);
@@ -297,7 +379,22 @@ export function SalesHistoryView({ selectedBranchId: propBranchId, onNavigate }:
           </h1>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          <button
+            type="button"
+            onClick={handleExportSalesCsv}
+            disabled={isExporting}
+            className="h-11 px-4 rounded-xl bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/60 text-slate-700 dark:text-slate-300 text-sm font-bold shadow-xs transition flex items-center gap-2 cursor-pointer disabled:opacity-50 active:scale-95"
+            title="Download sales report as CSV"
+          >
+            {isExporting ? (
+              <Loader2 className="h-4 w-4 animate-spin text-brand-primary" />
+            ) : (
+              <Download className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+            )}
+            <span>Export Sales CSV</span>
+          </button>
+
           {onNavigate && (
             <button
               onClick={() => onNavigate("pos")}
