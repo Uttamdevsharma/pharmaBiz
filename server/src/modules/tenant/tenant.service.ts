@@ -103,7 +103,9 @@ export class TenantService {
     const planConfig = getPlanConfig(tier);
     const maxBranches = activeSub?.plan?.maxBranches || planConfig.maxBranches;
     const branchCount = tenant.branches ? tenant.branches.length : 0;
-    const nonOwnerStaff = (tenant.users || []).filter((u: any) => u.role !== "COMPANY_OWNER");
+    const nonOwnerStaff = (tenant.users || []).filter(
+      (u: any) => u.role !== "COMPANY_OWNER" && u.role !== "SUPER_ADMIN" && !u.username?.startsWith("deleted_")
+    );
     const staffCount = nonOwnerStaff.length;
     const maxStaff = tier === "TRIAL" ? 1 : planConfig.maxTotalStaff || 999;
 

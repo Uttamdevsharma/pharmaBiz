@@ -216,8 +216,13 @@ export async function checkCanAddStaff(
     planFeatures.maxTotalStaff ?? (activeSub?.plan as any)?.maxTotalStaff ?? planConfig.maxTotalStaff ?? (tier === "TRIAL" ? 1 : 999)
   );
 
-  // Exclude owner from staff count limit check
-  const nonOwnerUsers = (tenant.users || []).filter((u: any) => u.role !== "COMPANY_OWNER");
+  // Exclude owner, super admin, and deleted users from staff count limit check
+  const nonOwnerUsers = (tenant.users || []).filter(
+    (u: any) =>
+      u.role !== "COMPANY_OWNER" &&
+      u.role !== "SUPER_ADMIN" &&
+      !u.username?.startsWith("deleted_")
+  );
   const totalStaffCount = nonOwnerUsers.length;
 
   // 1. Overall tenant staff limit check
@@ -226,7 +231,7 @@ export async function checkCanAddStaff(
       allowed: false,
       currentStaff: totalStaffCount,
       maxStaff: maxTotalStaff,
-      message: `Staff limit reached (${totalStaffCount}/${maxTotalStaff} on ${planName}). Please upgrade your plan or adjust limits to add more staff members.`,
+      message: `Staff limit reached: Maximum ${maxTotalStaff} staff members allowed on the ${planName} plan. Upgrade plan to add more.`,
     };
   }
 
@@ -238,7 +243,7 @@ export async function checkCanAddStaff(
         allowed: false,
         currentStaff: branchStaff.length,
         maxStaff: maxStaffPerBranch,
-        message: `Branch staff limit reached (${branchStaff.length}/${maxStaffPerBranch} staff for this branch on ${planName}). Please upgrade your plan or adjust branch staff limits.`,
+        message: `Branch staff limit reached: Maximum ${maxStaffPerBranch} staff members allowed for this branch on the ${planName} plan.`,
       };
     }
   }

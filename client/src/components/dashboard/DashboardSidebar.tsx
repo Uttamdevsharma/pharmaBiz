@@ -381,25 +381,18 @@ export function DashboardSidebar({
   ].filter((item) => item.visible);
 
   // 3. Location Management Section (Rack Management & Others)
-  const hasRackPerm = isOwner || hasPermission("location.create_rack") || hasPermission("location.rack_list");
-  const hasCustomPerm =
-    isOwner ||
-    hasPermission("location.create_custom") ||
-    hasPermission("location.custom_list") ||
-    hasPermission("location.rack_list");
-
   const locationChildren: SubMenuItem[] = [
     {
       id: "loc_create_group" as OwnerModule,
       label: "Create Group",
       icon: PlusCircle,
-      visible: isOwner || hasPermission("location.create_rack") || hasPermission("location.create_custom") || true,
+      visible: isOwner || hasPermission("location.create_rack") || hasPermission("location.create_custom"),
     },
     {
       id: "loc_group_list" as OwnerModule,
       label: "Group List",
       icon: List,
-      visible: isOwner || hasPermission("location.rack_list") || hasPermission("location.custom_list") || true,
+      visible: isOwner || hasPermission("location.rack_list") || hasPermission("location.custom_list"),
     },
   ].filter((item) => item.visible);
 
@@ -453,7 +446,7 @@ export function DashboardSidebar({
       id: "stock_allocation_history" as OwnerModule,
       label: "Allocation History",
       icon: History,
-      visible: isOwner || hasPermission("stock.allocation_history") || hasPermission("stock.stock_history") || true,
+      visible: isOwner || hasPermission("stock.allocation_history") || hasPermission("stock.stock_history"),
     },
     {
       id: "stock_stock_history" as OwnerModule,
@@ -465,7 +458,7 @@ export function DashboardSidebar({
       id: "stock_expired_stock" as OwnerModule,
       label: "Expiry & Near Expiry",
       icon: CalendarX2,
-      visible: isOwner || hasPermission("stock.stock_list") || hasPermission("inventory.product_list") || true,
+      visible: isOwner || hasPermission("stock.stock_list"),
     },
     {
       id: "stock_transfer_stock" as OwnerModule,
@@ -541,12 +534,6 @@ export function DashboardSidebar({
       id: "pos_history" as OwnerModule,
       label: "Sales History",
       icon: History,
-      visible: isOwner || hasPermission("pos.history"),
-    },
-    {
-      id: "pos_due_sales" as OwnerModule,
-      label: "Due Sales",
-      icon: BadgeAlert,
       visible: isOwner || hasPermission("pos.history"),
     },
     {

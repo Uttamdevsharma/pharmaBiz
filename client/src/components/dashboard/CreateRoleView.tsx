@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { fetchApi } from "@/lib/api";
+import { showAlert } from "@/lib/swal";
 import {
   ShieldPlus,
   Edit2,
@@ -162,7 +163,13 @@ export function CreateRoleView() {
   };
 
   const handleDeleteRole = async (role: PharmacyRole) => {
-    const confirmed = window.confirm(`Are you sure you want to delete role "${role.name}"?`);
+    const confirmed = await showAlert.confirm(
+      "Delete Role",
+      `Are you sure you want to delete role "${role.name}"? Staff assigned to this role will lose their custom permissions.`,
+      "Yes, Delete Role",
+      "Cancel",
+      true
+    );
     if (!confirmed) return;
 
     try {

@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { fetchApi } from "@/lib/api";
 import { OwnerModule } from "./DashboardSidebar";
+import { useBranchContext } from "@/context/BranchContext";
 import {
   Wallet,
   Building2,
@@ -13,15 +14,14 @@ import {
   Calendar,
   Loader2,
   Store,
-  BarChart3,
   Banknote,
-  Layers,
-  LayoutDashboard,
+  AlertCircle,
+  PlusCircle,
+  ArrowRightLeft,
+  ChevronDown,
+  PieChart as PieIcon,
+  BarChart3,
 } from "lucide-react";
-
-interface AccountsOverviewViewProps {
-  onNavigate?: (module: OwnerModule) => void;
-}
 
 interface FinancialAccount {
   id: string;
@@ -35,9 +35,9 @@ interface FinancialAccount {
   isDefault: boolean;
   isActive: boolean;
   description?: string | null;
+  branchId?: string;
+  branchNameStr?: string;
 }
-
-import { useBranchContext } from "@/context/BranchContext";
 
 interface AccountsOverviewViewProps {
   onNavigate?: (module: OwnerModule) => void;
@@ -45,23 +45,60 @@ interface AccountsOverviewViewProps {
 }
 
 export function AccountsOverviewView({ onNavigate, selectedBranchId: propBranchId }: AccountsOverviewViewProps = {}) {
-  const { selectedBranchId: contextBranchId, currentBranch, isAllBranches } = useBranchContext();
-  const effectiveBranchId = propBranchId !== undefined ? propBranchId : contextBranchId;
+  const {
+    branches,
+    selectedBranchId: contextBranchId,
+    setSelectedBranchId: setContextBranchId,
+    canSwitchBranch,
+  } = useBranchContext();
 
-  // Time filter state for KPI summary
-  const [periodPreset, setPeriodPreset] = useState<"thisMonth" | "lastMonth" | "last6Months" | "thisYear" | "custom">("thisMonth");
+  // Default to 'all' so Accounts Overview provides a consolidated multi-branch financial view
+  const [localBranchId, setLocalBranchId] = useState<string>(
+    propBranchId !== undefined ? propBranchId : "all"
+  );
+
+  useEffect(() => {
+    if (propBranchId !== undefined) {
+      setLocalBranchId(propBranchId);
+    }
+  }, [propBranchId]);
+
+  // Filters
+  const [periodPreset, setPeriodPreset] = useState<"today" | "thisWeek" | "thisMonth" | "custom">("thisMonth");
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
 
-  // Accounts & Telemetry data
+  // Chart timeframe state
+  const [chartTimeframe, setChartTimeframe] = useState<"week" | "month">("week");
+
+  // Accounts & Overview Data
   const [accounts, setAccounts] = useState<FinancialAccount[]>([]);
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Active chart timeframe tab: Day (Hourly) | Week (7 Days) | Month (30 Days) | 6-Month Trend
-  const [chartTimeframe, setChartTimeframe] = useState<"day" | "week" | "month" | "6month">("week");
-  const [chartMetric, setChartMetric] = useState<"revenue" | "salesCount">("revenue");
+  // Active hover point for bar chart tooltip
+  const [hoveredBarIndex, setHoveredBarIndex] = useState<number | null>(null);
+
+  const handlePeriodChange = (preset: "today" | "thisWeek" | "thisMonth" | "custom") => {
+    setPeriodPreset(preset);
+    const now = new Date();
+
+    if (preset === "today") {
+      const todayStr = now.toISOString().split("T")[0];
+      setStartDate(todayStr);
+      setEndDate(todayStr);
+    } else if (preset === "thisWeek") {
+      const firstDay = new Date(now);
+      firstDay.setDate(now.getDate() - now.getDay());
+      setStartDate(firstDay.toISOString().split("T")[0]);
+      setEndDate(now.toISOString().split("T")[0]);
+    } else if (preset === "thisMonth") {
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
+      setStartDate(startOfMonth);
+      setEndDate(now.toISOString().split("T")[0]);
+    }
+  };
 
   const loadFinancialOverview = async (isManual = false) => {
     try {
@@ -69,23 +106,46 @@ export function AccountsOverviewView({ onNavigate, selectedBranchId: propBranchI
       else setLoading(true);
 
       const params = new URLSearchParams();
-      if (effectiveBranchId && effectiveBranchId !== "all") {
-        params.append("branchId", effectiveBranchId);
+      if (localBranchId && localBranchId !== "all") {
+        params.append("branchId", localBranchId);
       }
-      if (periodPreset !== "custom") params.append("period", periodPreset);
+      if (periodPreset !== "custom") {
+        params.append("period", periodPreset);
+      }
       if (startDate) params.append("startDate", startDate);
       if (endDate) params.append("endDate", endDate);
 
-      const accountsUrl = (effectiveBranchId && effectiveBranchId !== "all")
-        ? `/accounting/accounts?branchId=${effectiveBranchId}`
-        : "/accounting/accounts";
+      const accountsUrl =
+        localBranchId && localBranchId !== "all"
+          ? `/accounting/accounts?branchId=${localBranchId}`
+          : "/accounting/accounts";
 
-      const [res, accRes] = await Promise.all([
+      const suppliersUrl =
+        localBranchId && localBranchId !== "all"
+          ? `/suppliers?branchId=${localBranchId}`
+          : "/suppliers";
+
+      const [res, accRes, supRes] = await Promise.all([
         fetchApi<any>(`/accounting/overview?${params.toString()}`),
         fetchApi<FinancialAccount[]>(accountsUrl),
+        fetchApi<any>(suppliersUrl),
       ]);
 
+      let supplierDueFromSuppliersList = 0;
+      if (supRes?.success && Array.isArray(supRes?.data)) {
+        supplierDueFromSuppliersList = supRes.data.reduce(
+          (sum: number, s: any) => sum + Number(s.totalDue || s.periodDue || 0),
+          0
+        );
+      }
+
       if (res.success && res.data) {
+        if (res.data.summary) {
+          res.data.summary.totalSupplierDues = Math.max(
+            Number(res.data.summary.totalSupplierDues || 0),
+            supplierDueFromSuppliersList
+          );
+        }
         setData(res.data);
       }
       if (accRes.success && accRes.data) {
@@ -101,316 +161,270 @@ export function AccountsOverviewView({ onNavigate, selectedBranchId: propBranchI
 
   useEffect(() => {
     loadFinancialOverview();
-  }, [periodPreset, startDate, endDate, effectiveBranchId]);
+  }, [localBranchId, periodPreset, startDate, endDate]);
 
-  const handlePeriodChange = (preset: "thisMonth" | "lastMonth" | "last6Months" | "thisYear" | "custom") => {
-    setPeriodPreset(preset);
-    const now = new Date();
-
-    if (preset === "thisMonth") {
-      const s = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
-      const e = now.toISOString().split("T")[0];
-      setStartDate(s);
-      setEndDate(e);
-    } else if (preset === "lastMonth") {
-      const s = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().split("T")[0];
-      const e = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().split("T")[0];
-      setStartDate(s);
-      setEndDate(e);
-    } else if (preset === "last6Months") {
-      const s = new Date(now.getFullYear(), now.getMonth() - 5, 1).toISOString().split("T")[0];
-      const e = now.toISOString().split("T")[0];
-      setStartDate(s);
-      setEndDate(e);
-    } else if (preset === "thisYear") {
-      const s = new Date(now.getFullYear(), 0, 1).toISOString().split("T")[0];
-      const e = new Date(now.getFullYear(), 11, 31).toISOString().split("T")[0];
-      setStartDate(s);
-      setEndDate(e);
+  const handleBranchChange = (newBranchId: string) => {
+    setLocalBranchId(newBranchId);
+    if (canSwitchBranch) {
+      setContextBranchId(newBranchId === "all" ? "" : newBranchId);
     }
   };
 
+  // Data computations
   const summary = data?.summary || {
     totalSales: 0,
-    cashSales: 0,
-    bkashSales: 0,
-    nagadSales: 0,
-    bankSales: 0,
-    otherSales: 0,
-    totalTransactions: 0,
+    totalExpenses: 0,
+    netInflow: 0,
     totalSupplierDues: 0,
+    totalCustomerDues: 0,
     todayRevenue: 0,
-    todaySalesCount: 0,
-    todayCash: 0,
-    todayBkash: 0,
-    todayNagad: 0,
-    todayBank: 0,
+    todayExpenses: 0,
+    todayNet: 0,
   };
 
-  // Exact live accounts and balance calculations matching Financial Accounts view
   const rawAccounts: FinancialAccount[] = accounts.length > 0 ? accounts : (data?.accounts || []);
-
   const totalBalance = rawAccounts.reduce((sum, a) => sum + Number(a.balance || 0), 0);
-  const totalCash = rawAccounts
-    .filter((a) => a.type === "CASH")
-    .reduce((sum, a) => sum + Number(a.balance || 0), 0);
-  const totalBank = rawAccounts
-    .filter((a) => a.type === "BANK" || a.type === "CARD_SETTLEMENT")
-    .reduce((sum, a) => sum + Number(a.balance || 0), 0);
-  const totalMobile = rawAccounts
-    .filter(
-      (a) =>
-        a.type === "BKASH" ||
-        a.type === "NAGAD" ||
-        a.type === "MOBILE" ||
-        a.name?.toLowerCase().includes("bkash") ||
-        a.name?.toLowerCase().includes("nagad")
-    )
-    .reduce((sum, a) => sum + Number(a.balance || 0), 0);
 
-  // Real recorded sales datasets from backend
-  const todayHourly: any[] = data?.todayHourly || [];
-  const last7Days: any[] = data?.last7Days || [];
-  const last30Days: any[] = data?.last30Days || [];
-  const monthlyTrend: any[] = data?.monthlyTrend || [];
+  // Fund category aggregates for the Donut Chart
+  const fundCategories = useMemo(() => {
+    let cash = 0;
+    let bkash = 0;
+    let nagad = 0;
+    let bank = 0;
+    let other = 0;
 
-  let activeChartData: { label: string; subLabel?: string; revenue: number; count: number; dateKey?: string }[] = [];
-  if (chartTimeframe === "day") {
-    activeChartData = todayHourly.map((h) => ({
-      label: h.label,
-      revenue: Number(h.revenue || 0),
-      count: Number(h.salesCount || 0),
-    }));
-  } else if (chartTimeframe === "week") {
-    activeChartData = last7Days.map((d) => ({
-      label: d.dayName,
-      subLabel: d.date,
-      dateKey: d.dateKey,
-      revenue: Number(d.revenue || 0),
-      count: Number(d.orderCount || 0),
-    }));
-  } else if (chartTimeframe === "month") {
-    activeChartData = (last30Days.length > 0 ? last30Days : last7Days).map((d) => ({
-      label: d.date,
-      subLabel: d.dayName,
-      dateKey: d.dateKey,
-      revenue: Number(d.revenue || 0),
-      count: Number(d.orderCount || 0),
-    }));
-  } else {
-    activeChartData = monthlyTrend.map((m) => ({
-      label: m.monthShort,
-      subLabel: m.month,
-      dateKey: m.monthKey,
-      revenue: Number(m.revenue || 0),
-      count: Number(m.salesCount || 0),
-    }));
-  }
+    for (const acc of rawAccounts) {
+      const b = Number(acc.balance || 0);
+      const t = String(acc.type || "").toUpperCase();
+      const n = (acc.name || "").toLowerCase();
 
-  const maxVal = Math.max(
-    ...activeChartData.map((d) => (chartMetric === "revenue" ? d.revenue : d.count)),
+      if (t === "CASH") cash += b;
+      else if (t === "BKASH" || n.includes("bkash")) bkash += b;
+      else if (t === "NAGAD" || n.includes("nagad")) nagad += b;
+      else if (t === "BANK" || t === "CARD_SETTLEMENT") bank += b;
+      else other += b;
+    }
+
+    const items = [
+      { id: "cash", label: "Cash Drawer", amount: cash, color: "#10b981", borderClass: "border-emerald-500", bgClass: "bg-emerald-500" },
+      { id: "bkash", label: "bKash", amount: bkash, color: "#ec4899", borderClass: "border-pink-500", bgClass: "bg-pink-500" },
+      { id: "nagad", label: "Nagad", amount: nagad, color: "#f97316", borderClass: "border-orange-500", bgClass: "bg-orange-500" },
+      { id: "bank", label: "Bank Accounts", amount: bank, color: "#3b82f6", borderClass: "border-blue-500", bgClass: "bg-blue-500" },
+      { id: "other", label: "Other Accounts", amount: other, color: "#8b5cf6", borderClass: "border-purple-500", bgClass: "bg-purple-500" },
+    ].filter((i) => i.amount > 0);
+
+    return items;
+  }, [rawAccounts]);
+
+  // Chart data
+  const chartDataList = chartTimeframe === "week" ? (data?.last7Days || []) : (data?.last30Days || []);
+  const maxChartVal = Math.max(
+    ...chartDataList.map((d: any) => Math.max(Number(d.revenue || 0), Number(d.expense || 0))),
     1
   );
 
-  const totalChartRevenue = activeChartData.reduce((acc, c) => acc + c.revenue, 0);
-  const totalChartOrders = activeChartData.reduce((acc, c) => acc + c.count, 0);
-  const totalAccountLiquidity = totalBalance > 0 ? totalBalance : rawAccounts.reduce((sum, a) => sum + Number(a.balance || 0), 0);
+  // Donut chart math
+  const donutRadius = 60;
+  const donutCircumference = 2 * Math.PI * donutRadius;
+  let accumulatedLength = 0;
 
   return (
-    <div className="space-y-6 2xl:space-y-8 w-full max-w-[1920px] 2xl:max-w-[2560px] mx-auto">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
+    <div className="space-y-5 w-full max-w-[1920px] mx-auto pb-10">
+      {/* 1. Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-slate-200 dark:border-slate-800">
         <div>
-          <div className="flex items-center gap-2 text-xs xl:text-sm text-slate-400 mb-1">
-            <span>Accounts & Finance</span>
+          <div className="flex items-center gap-1.5 text-xs text-slate-400 mb-0.5">
+            <span>Accounts</span>
             <span>/</span>
-            <span className="text-slate-700 dark:text-slate-300 font-bold">Overview</span>
+            <span className="text-slate-700 dark:text-slate-300 font-semibold">Overview</span>
           </div>
-          <h1 className="text-2xl xl:text-3xl font-black tracking-tight text-slate-900 dark:text-slate-100 flex items-center gap-2.5">
-            <LayoutDashboard className="h-7 w-7 xl:h-8 xl:w-8 text-emerald-600 dark:text-emerald-400" />
-            Financial Overview
+          <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-slate-100 flex items-center gap-2">
+            <Wallet className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+            Accounts Overview
           </h1>
-          <p className="text-xs sm:text-sm xl:text-base text-slate-500 dark:text-slate-400 mt-1">
-            Live financial telemetry, revenue trends, real account balances, and sales velocity.
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Real-time balances, income vs expense telemetry, and multi-channel liquidity.
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        {/* Quick Top Actions */}
+        <div className="flex items-center gap-2 flex-wrap">
           {onNavigate && (
             <>
               <button
                 onClick={() => onNavigate("acc_expenses")}
-                className="px-3.5 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 text-slate-700 dark:text-slate-200 text-xs font-bold transition flex items-center gap-1.5 shadow-xs"
+                className="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 text-slate-700 dark:text-slate-200 text-xs font-semibold transition flex items-center gap-1.5 shadow-xs"
               >
-                <span>Expenses & Bills</span>
+                <PlusCircle className="h-3.5 w-3.5 text-rose-500" />
+                <span>New Expense</span>
               </button>
               <button
-                onClick={() => onNavigate("acc_salaries")}
-                className="px-3.5 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 text-slate-700 dark:text-slate-200 text-xs font-bold transition flex items-center gap-1.5 shadow-xs"
+                onClick={() => onNavigate("acc_fund_transfer")}
+                className="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 text-slate-700 dark:text-slate-200 text-xs font-semibold transition flex items-center gap-1.5 shadow-xs"
               >
-                <span>Salary Management</span>
+                <ArrowRightLeft className="h-3.5 w-3.5 text-blue-500" />
+                <span>Transfer</span>
               </button>
             </>
           )}
+
           <button
             onClick={() => loadFinancialOverview(true)}
             disabled={refreshing}
-            className="px-3.5 py-2 xl:px-4 xl:py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs xl:text-sm font-bold transition flex items-center gap-1.5"
+            className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold transition flex items-center gap-1.5"
+            title="Refresh Overview"
           >
-            <RefreshCw className={`h-3.5 w-3.5 xl:h-4 xl:w-4 ${refreshing ? "animate-spin text-emerald-600" : ""}`} />
+            <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin text-emerald-600" : ""}`} />
             <span>Refresh</span>
           </button>
         </div>
       </div>
 
-      {/* Interactive Period Filter Bar */}
-      <div className="p-4 sm:p-5 2xl:p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-        {/* Preset Buttons */}
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs xl:text-sm font-bold text-slate-400 uppercase tracking-wider mr-1">Period:</span>
+      {/* 2. Filter Bar */}
+      <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+        {/* Branch Filter */}
+        <div className="flex items-center gap-2">
+          <Store className="h-4 w-4 text-emerald-600 shrink-0" />
+          <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Branch:</span>
+          <div className="relative">
+            <select
+              value={localBranchId}
+              onChange={(e) => handleBranchChange(e.target.value)}
+              className="appearance-none bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 text-xs font-semibold py-1.5 pl-2.5 pr-7 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+            >
+              <option value="all">All Branches (Consolidated)</option>
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="h-3 w-3 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+          </div>
+        </div>
+
+        {/* Time Period Filter */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-xs font-bold text-slate-500 dark:text-slate-400 mr-1">Period:</span>
           {[
+            { id: "today", label: "Today" },
+            { id: "thisWeek", label: "This Week" },
             { id: "thisMonth", label: "This Month" },
-            { id: "lastMonth", label: "Last Month" },
-            { id: "last6Months", label: "Last 6 Months" },
-            { id: "thisYear", label: "This Year" },
-            { id: "custom", label: "Custom Range" },
+            { id: "custom", label: "Custom" },
           ].map((p) => (
             <button
               key={p.id}
               onClick={() => handlePeriodChange(p.id as any)}
-              className={`px-3 py-1.5 xl:px-3.5 xl:py-2 rounded-xl text-xs xl:text-sm font-bold transition ${
+              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition ${
                 periodPreset === p.id
-                  ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-sm"
+                  ? "bg-emerald-600 text-white shadow-xs"
                   : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
               }`}
             >
               {p.label}
             </button>
           ))}
-        </div>
 
-        {/* Date Pickers & Branch Filter */}
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800/80 px-3 py-1.5 xl:py-2 rounded-xl border border-slate-200 dark:border-slate-700">
-            <Calendar className="h-4 w-4 text-slate-400" />
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => {
-                setStartDate(e.target.value);
-                setPeriodPreset("custom");
-              }}
-              className="bg-transparent text-xs xl:text-sm font-bold text-slate-800 dark:text-slate-200 outline-none"
-            />
-            <span className="text-xs text-slate-400">to</span>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => {
-                setEndDate(e.target.value);
-                setPeriodPreset("custom");
-              }}
-              className="bg-transparent text-xs xl:text-sm font-bold text-slate-800 dark:text-slate-200 outline-none"
-            />
-          </div>
-
-          <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800/80 px-3 py-1.5 xl:py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs xl:text-sm text-slate-600 dark:text-slate-300">
-            <Store className="h-4 w-4 text-emerald-500" />
-            <span>Scope:</span>
-            <span className="font-bold text-slate-900 dark:text-white">
-              {isAllBranches ? "All Branches" : (currentBranch?.name || "Selected Branch")}
-            </span>
-          </div>
+          {periodPreset === "custom" && (
+            <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 text-xs ml-1">
+              <Calendar className="h-3.5 w-3.5 text-slate-400" />
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="bg-transparent text-xs font-semibold text-slate-800 dark:text-slate-200 outline-hidden"
+              />
+              <span className="text-slate-400">to</span>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="bg-transparent text-xs font-semibold text-slate-800 dark:text-slate-200 outline-hidden"
+              />
+            </div>
+          )}
         </div>
       </div>
 
       {loading ? (
-        <div className="flex flex-col items-center justify-center py-24 text-slate-500 gap-3">
-          <Loader2 className="h-8 w-8 animate-spin text-emerald-600" />
-          <span className="text-xs xl:text-sm font-bold">Querying financial analytics & account balances...</span>
+        <div className="flex flex-col items-center justify-center py-20 text-slate-500 gap-2">
+          <Loader2 className="h-7 w-7 animate-spin text-emerald-600" />
+          <span className="text-xs font-semibold">Loading accounts data...</span>
         </div>
       ) : (
         <>
-          {/* 5 EXECUTIVE SUMMARY KPI CARDS */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5 gap-4 2xl:gap-5">
-            {/* Total Liquid Funds */}
-            <div className="p-5 xl:p-6 rounded-3xl bg-gradient-to-br from-emerald-600 to-teal-700 text-white shadow-lg space-y-1 relative overflow-hidden">
-              <div className="flex items-center justify-between opacity-80 text-[10px] xl:text-xs font-black uppercase tracking-wider">
-                <span>Total Liquid Funds</span>
-                <Wallet className="h-4 w-4" />
+          {/* 3. Primary KPI Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5">
+            {/* Total Balance */}
+            <div className="p-6 sm:p-7 rounded-xl bg-slate-900 text-white border border-slate-800 shadow-sm space-y-2.5 relative overflow-hidden">
+              <div className="flex items-center justify-between text-xs sm:text-sm font-bold text-slate-400 uppercase tracking-wider">
+                <span>Total Balance</span>
+                <div className="p-2.5 bg-emerald-500/10 text-emerald-400 rounded-lg">
+                  <Wallet className="h-5 w-5 sm:h-6 sm:w-6" />
+                </div>
               </div>
-              <div className="text-xl xl:text-2xl 2xl:text-3xl font-black font-mono truncate">
+              <div className="text-3xl sm:text-4xl lg:text-5xl font-black font-mono tracking-tight text-white">
                 ৳{totalBalance.toLocaleString("en-BD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
-              <div className="text-[10px] xl:text-xs opacity-85 font-medium">Drawer + Banks + Wallets</div>
+              <div className="text-xs sm:text-sm text-slate-400">Cash Drawers + Bank Accounts + Digital Wallets</div>
             </div>
 
-            {/* Cash in Drawer */}
-            <div className="p-5 xl:p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
-              <div className="flex items-center justify-between text-slate-400 text-[10px] xl:text-xs font-black uppercase tracking-wider">
-                <span>Cash in Hand</span>
-                <Banknote className="h-4 w-4 text-emerald-500" />
+            {/* Total Inflow */}
+            <div className="p-6 sm:p-7 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-2.5">
+              <div className="flex items-center justify-between text-xs sm:text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                <span>Total Inflow (Cash In)</span>
+                <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 rounded-lg">
+                  <TrendingUp className="h-5 w-5 sm:h-6 sm:w-6" />
+                </div>
               </div>
-              <div className="text-xl xl:text-2xl 2xl:text-3xl font-black text-emerald-600 dark:text-emerald-400 font-mono truncate">
-                ৳{totalCash.toLocaleString("en-BD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              <div className="text-3xl sm:text-4xl lg:text-5xl font-black text-emerald-600 dark:text-emerald-400 font-mono tracking-tight">
+                +৳{Number(summary.totalSales || 0).toLocaleString("en-BD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
-              <div className="text-[10px] xl:text-xs text-slate-400 font-medium">Physical till cash</div>
+              <div className="flex items-center justify-between text-xs sm:text-sm text-slate-400">
+                <span>Sales, Collections & Deposits</span>
+                {summary.todayRevenue > 0 && (
+                  <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                    Today: ৳{Number(summary.todayRevenue).toLocaleString("en-BD")}
+                  </span>
+                )}
+              </div>
             </div>
 
-            {/* Bank Accounts Total */}
-            <div className="p-5 xl:p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
-              <div className="flex items-center justify-between text-slate-400 text-[10px] xl:text-xs font-black uppercase tracking-wider">
-                <span>Bank Accounts</span>
-                <Building2 className="h-4 w-4 text-blue-500" />
+            {/* Total Outflow */}
+            <div className="p-6 sm:p-7 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-2.5">
+              <div className="flex items-center justify-between text-xs sm:text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                <span>Total Outflow (Cash Out)</span>
+                <div className="p-2.5 bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 rounded-lg">
+                  <TrendingDown className="h-5 w-5 sm:h-6 sm:w-6" />
+                </div>
               </div>
-              <div className="text-xl xl:text-2xl 2xl:text-3xl font-black text-blue-600 dark:text-blue-400 font-mono truncate">
-                ৳{totalBank.toLocaleString("en-BD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              <div className="text-3xl sm:text-4xl lg:text-5xl font-black text-rose-600 dark:text-rose-400 font-mono tracking-tight">
+                -৳{Number(summary.totalExpenses || 0).toLocaleString("en-BD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
-              <div className="text-[10px] xl:text-xs text-slate-400 font-medium">DBBL, City, BRAC, etc.</div>
-            </div>
-
-            {/* Digital Wallets Total */}
-            <div className="p-5 xl:p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
-              <div className="flex items-center justify-between text-slate-400 text-[10px] xl:text-xs font-black uppercase tracking-wider">
-                <span>bKash & Nagad</span>
-                <Smartphone className="h-4 w-4 text-pink-500" />
+              <div className="flex items-center justify-between text-xs sm:text-sm text-slate-400">
+                <span>Bills, Rent, Salaries & Expenses</span>
+                <span className="font-bold text-slate-700 dark:text-slate-300">
+                  Net: ৳{(Number(summary.totalSales || 0) - Number(summary.totalExpenses || 0)).toLocaleString("en-BD")}
+                </span>
               </div>
-              <div className="text-xl xl:text-2xl 2xl:text-3xl font-black text-pink-600 dark:text-pink-400 font-mono truncate">
-                ৳{totalMobile.toLocaleString("en-BD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </div>
-              <div className="text-[10px] xl:text-xs text-slate-400 font-medium">Merchant wallets</div>
-            </div>
-
-            {/* Supplier Payables */}
-            <div className="p-5 xl:p-6 rounded-3xl bg-white dark:bg-slate-900 border border-rose-200 dark:border-rose-950 shadow-sm space-y-1">
-              <div className="flex items-center justify-between text-rose-500 text-[10px] xl:text-xs font-black uppercase tracking-wider">
-                <span>Supplier Payables</span>
-                <TrendingDown className="h-4 w-4 text-rose-500" />
-              </div>
-              <div className="text-xl xl:text-2xl 2xl:text-3xl font-black text-rose-600 dark:text-rose-400 font-mono truncate">
-                ৳{(summary.totalSupplierDues || 0).toLocaleString("en-BD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </div>
-              <div className="text-[10px] xl:text-xs text-slate-400 font-medium">Pending supplier dues</div>
             </div>
           </div>
 
-          {/* REAL CREATED FINANCIAL ACCOUNTS LIVE BALANCES */}
-          <div className="p-6 2xl:p-8 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-base xl:text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
-                  <Wallet className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-                  Pharmacy Financial Accounts & Balances
-                </h3>
-                <p className="text-xs xl:text-sm text-slate-400">
-                  Current balances across all accounts created by your pharmacy.
-                </p>
+          {/* 4. Dynamic Financial Accounts Section */}
+          <div className="p-5 sm:p-6 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <Banknote className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white">Active Financial Accounts</h3>
+                <span className="text-xs bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-2.5 py-0.5 rounded-full font-bold">
+                  {rawAccounts.length}
+                </span>
               </div>
 
               {onNavigate && (
                 <button
                   onClick={() => onNavigate("acc_financial_accounts")}
-                  className="text-xs xl:text-sm font-bold text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1"
+                  className="text-xs sm:text-sm font-bold text-emerald-600 dark:text-emerald-400 hover:underline"
                 >
                   Manage Accounts &rarr;
                 </button>
@@ -418,33 +432,36 @@ export function AccountsOverviewView({ onNavigate, selectedBranchId: propBranchI
             </div>
 
             {rawAccounts.length === 0 ? (
-              <div className="p-8 text-center bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700">
-                <p className="text-xs xl:text-sm text-slate-500 font-medium">No financial accounts have been created yet.</p>
+              <div className="p-8 text-center bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-dashed border-slate-200 dark:border-slate-700">
+                <Wallet className="h-8 w-8 text-slate-400 mx-auto mb-2 opacity-60" />
+                <p className="text-sm font-bold text-slate-600 dark:text-slate-300">No financial accounts found</p>
                 {onNavigate && (
                   <button
                     onClick={() => onNavigate("acc_financial_accounts")}
-                    className="mt-2 text-xs xl:text-sm font-bold text-emerald-600 hover:underline"
+                    className="mt-3 px-4 py-1.5 bg-emerald-600 text-white text-xs sm:text-sm font-bold rounded-lg hover:bg-emerald-700 transition"
                   >
-                    + Create your first account
+                    + Create First Account
                   </button>
                 )}
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6 gap-3.5 xl:gap-4 2xl:gap-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 {rawAccounts.map((acc: any) => {
                   const isBank = acc.type === "BANK" || acc.type === "CARD_SETTLEMENT";
                   const isBkash = acc.type === "BKASH" || acc.name.toLowerCase().includes("bkash");
                   const isNagad = acc.type === "NAGAD" || acc.name.toLowerCase().includes("nagad");
+                  const bal = Number(acc.balance || 0);
+                  const pct = totalBalance > 0 ? Math.round((bal / totalBalance) * 100) : 0;
 
                   return (
                     <div
                       key={acc.id}
-                      className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 flex flex-col justify-between space-y-3 hover:border-emerald-500/50 transition shadow-2xs"
+                      className="p-4 sm:p-5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex flex-col justify-between space-y-3.5 hover:border-slate-400 dark:hover:border-slate-600 transition shadow-2xs"
                     >
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-center gap-2.5">
+                      <div className="flex items-start justify-between gap-2.5">
+                        <div className="flex items-center gap-2.5 min-w-0">
                           <div
-                            className={`p-2.5 rounded-xl ${
+                            className={`p-2.5 rounded-lg shrink-0 ${
                               isBank
                                 ? "bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-400"
                                 : isBkash
@@ -455,34 +472,49 @@ export function AccountsOverviewView({ onNavigate, selectedBranchId: propBranchI
                             }`}
                           >
                             {isBank ? (
-                              <Building2 className="h-4 w-4" />
+                              <Building2 className="h-5 w-5" />
                             ) : isBkash || isNagad ? (
-                              <Smartphone className="h-4 w-4" />
+                              <Smartphone className="h-5 w-5" />
                             ) : (
-                              <Banknote className="h-4 w-4" />
+                              <Banknote className="h-5 w-5" />
                             )}
                           </div>
-                          <div>
-                            <div className="font-extrabold text-xs text-slate-900 dark:text-white truncate max-w-[140px]">
+                          <div className="min-w-0">
+                            <div className="font-bold text-sm sm:text-base text-slate-900 dark:text-white truncate">
                               {acc.name}
                             </div>
-                            <div className="text-[10px] text-slate-400 font-mono">
-                              {acc.accountNumber || acc.bankName || acc.type}
+                            <div className="text-xs text-slate-400 font-mono truncate">
+                              {isBank
+                                ? acc.bankName || "Bank"
+                                : isBkash
+                                ? "bKash Wallet"
+                                : isNagad
+                                ? "Nagad Wallet"
+                                : "Cash Till"}
                             </div>
                           </div>
                         </div>
 
-                        {acc.isDefault && (
-                          <span className="text-[9px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold px-1.5 py-0.5 rounded">
-                            Default
-                          </span>
-                        )}
+                        <div className="flex flex-col items-end gap-1 shrink-0">
+                          {acc.isDefault && (
+                            <span className="text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold px-2 py-0.5 rounded">
+                              Default
+                            </span>
+                          )}
+                          {acc.branchNameStr && (
+                            <span className="text-[10px] bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-medium px-2 py-0.5 rounded truncate max-w-[85px]">
+                              {acc.branchNameStr}
+                            </span>
+                          )}
+                        </div>
                       </div>
 
-                      <div className="pt-2 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase">Balance</span>
-                        <span className="font-black text-sm font-mono text-slate-900 dark:text-white">
-                          ৳{Number(acc.balance || 0).toLocaleString("en-BD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      <div className="pt-2.5 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-slate-400 uppercase">
+                          Balance <span className="text-slate-400 font-normal">({pct}%)</span>
+                        </span>
+                        <span className="font-black text-base sm:text-lg lg:text-xl font-mono text-slate-900 dark:text-white">
+                          ৳{bal.toLocaleString("en-BD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </span>
                       </div>
                     </div>
@@ -492,133 +524,126 @@ export function AccountsOverviewView({ onNavigate, selectedBranchId: propBranchI
             )}
           </div>
 
-          {/* DYNAMIC REAL-DATA SALES GRAPH & ACCOUNT DISTRIBUTION SECTION */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 2xl:gap-8">
-            {/* Left 8 Cols: Sales Velocity & Revenue Trends Bar Chart */}
-            <div className="lg:col-span-8 p-6 2xl:p-8 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-6 flex flex-col justify-between">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                  <h3 className="text-base xl:text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
-                    <BarChart3 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-                    Sales Velocity & Revenue Trends
-                  </h3>
-                  <p className="text-xs xl:text-sm text-slate-400 mt-0.5">
-                    Real recorded sales categorized across hourly, daily, and monthly intervals.
-                  </p>
+          {/* 5. Supplier Payables (Dues) */}
+          <div className="p-5 sm:p-6 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5">
+              <div className="p-3 bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 rounded-xl shrink-0">
+                <AlertCircle className="h-6 w-6" />
+              </div>
+              <div>
+                <span className="text-xs sm:text-sm font-bold text-rose-500 uppercase tracking-wider block">
+                  Supplier Payables (Company Dues)
+                </span>
+                <div className="text-2xl sm:text-3xl lg:text-4xl font-black text-rose-600 dark:text-rose-400 font-mono mt-0.5">
+                  ৳{Number(summary.totalSupplierDues || 0).toLocaleString("en-BD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+              </div>
+            </div>
+
+            {onNavigate && (
+              <button
+                onClick={() => onNavigate("sup_payments_due")}
+                className="px-4 py-2 rounded-lg bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 text-xs sm:text-sm font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/50 transition flex items-center gap-1.5 self-start sm:self-auto shadow-2xs"
+              >
+                <span>View Due Invoices</span>
+                <span>&rarr;</span>
+              </button>
+            )}
+          </div>
+
+          {/* 6. Visual Charts Section: Income vs Expense & Fund Distribution Pie */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+            {/* Left 7 cols: Income vs Expense Bar Visualizer */}
+            <div className="lg:col-span-7 p-4 sm:p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4 flex flex-col justify-between">
+              <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-slate-100 dark:border-slate-800">
+                <div className="flex items-center gap-2">
+                  <BarChart3 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  <h3 className="text-sm font-black text-slate-900 dark:text-white">Income vs Expense</h3>
                 </div>
 
-                <div className="flex items-center gap-2.5 flex-wrap">
-                  {/* Timeframe Filter (Day / Week / Month / 6-Month) */}
-                  <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
-                    {[
-                      { id: "day", label: "Today" },
-                      { id: "week", label: "Last 7 Days" },
-                      { id: "month", label: "Last 30 Days" },
-                      { id: "6month", label: "6 Months" },
-                    ].map((t) => (
-                      <button
-                        key={t.id}
-                        onClick={() => setChartTimeframe(t.id as any)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
-                          chartTimeframe === t.id
-                            ? "bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-xs"
-                            : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
-                        }`}
-                      >
-                        {t.label}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Metric Toggle */}
-                  <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
-                    <button
-                      onClick={() => setChartMetric("revenue")}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
-                        chartMetric === "revenue"
-                          ? "bg-emerald-600 text-white shadow-xs"
-                          : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
-                      }`}
-                    >
-                      ৳ Revenue
-                    </button>
-                    <button
-                      onClick={() => setChartMetric("salesCount")}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
-                        chartMetric === "salesCount"
-                          ? "bg-emerald-600 text-white shadow-xs"
-                          : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
-                      }`}
-                    >
-                      Orders
-                    </button>
-                  </div>
+                <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg">
+                  <button
+                    onClick={() => setChartTimeframe("week")}
+                    className={`px-2.5 py-1 rounded-md text-xs font-semibold transition ${
+                      chartTimeframe === "week"
+                        ? "bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-xs"
+                        : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
+                    }`}
+                  >
+                    7 Days
+                  </button>
+                  <button
+                    onClick={() => setChartTimeframe("month")}
+                    className={`px-2.5 py-1 rounded-md text-xs font-semibold transition ${
+                      chartTimeframe === "month"
+                        ? "bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-xs"
+                        : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
+                    }`}
+                  >
+                    30 Days
+                  </button>
                 </div>
               </div>
 
-              {/* Chart Visualizer */}
-              <div className="h-72 sm:h-80 pt-6 pb-2 border-b border-slate-100 dark:border-slate-800 flex items-end justify-between gap-1.5 sm:gap-3 2xl:gap-4 relative">
-                {/* Background Reference Lines */}
-                <div className="absolute inset-x-0 top-6 bottom-8 flex flex-col justify-between pointer-events-none opacity-30">
-                  <div className="border-b border-dashed border-slate-300 dark:border-slate-700 w-full" />
-                  <div className="border-b border-dashed border-slate-300 dark:border-slate-700 w-full" />
-                  <div className="border-b border-slate-200 dark:border-slate-800 w-full" />
+              {/* Bar Chart Canvas */}
+              <div className="h-56 sm:h-64 pt-2 pb-1 border-b border-slate-100 dark:border-slate-800 flex items-end justify-between gap-1 sm:gap-2 relative">
+                {/* Horizontal reference grid lines */}
+                <div className="absolute inset-x-0 top-3 bottom-5 flex flex-col justify-between pointer-events-none opacity-20">
+                  <div className="border-b border-dashed border-slate-400 dark:border-slate-600 w-full" />
+                  <div className="border-b border-dashed border-slate-400 dark:border-slate-600 w-full" />
+                  <div className="border-b border-slate-300 dark:border-slate-700 w-full" />
                 </div>
 
-                {activeChartData.length === 0 ? (
-                  <div className="w-full h-full flex items-center justify-center text-slate-400 text-xs font-bold z-10">
-                    No sales recorded for this timeframe.
+                {chartDataList.length === 0 ? (
+                  <div className="w-full h-full flex items-center justify-center text-slate-400 text-xs font-semibold z-10">
+                    No transaction telemetry for this timeframe.
                   </div>
                 ) : (
-                  activeChartData.map((d, idx) => {
-                    const currentVal = chartMetric === "revenue" ? d.revenue : d.count;
-                    const heightPct = maxVal > 0 && currentVal > 0 ? Math.min(100, Math.max(8, Math.round((currentVal / maxVal) * 100))) : 0;
-                    const hasSales = currentVal > 0;
-                    const isLatest = idx === activeChartData.length - 1;
+                  chartDataList.map((d: any, idx: number) => {
+                    const rev = Number(d.revenue || 0);
+                    const exp = Number(d.expense || 0);
+                    const revPct = maxChartVal > 0 && rev > 0 ? Math.min(100, Math.max(5, Math.round((rev / maxChartVal) * 100))) : 0;
+                    const expPct = maxChartVal > 0 && exp > 0 ? Math.min(100, Math.max(5, Math.round((exp / maxChartVal) * 100))) : 0;
+                    const isHovered = hoveredBarIndex === idx;
 
                     return (
-                      <div key={d.label + idx} className="flex-1 flex flex-col items-center h-full justify-end group z-10 min-w-0">
-                        {/* Hover Tooltip Floating Card */}
-                        <div className="text-[11px] font-mono font-bold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 shadow-md border border-slate-200 dark:border-slate-700 px-2 py-0.5 rounded-md opacity-0 group-hover:opacity-100 transition-opacity mb-1 whitespace-nowrap text-center pointer-events-none z-20">
-                          {chartMetric === "revenue"
-                            ? `৳${d.revenue.toLocaleString("en-BD", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
-                            : `${d.count} orders`}
+                      <div
+                        key={d.dateKey || d.date || idx}
+                        className="flex-1 flex flex-col items-center h-full justify-end relative z-10 min-w-0"
+                        onMouseEnter={() => setHoveredBarIndex(idx)}
+                        onMouseLeave={() => setHoveredBarIndex(null)}
+                      >
+                        {/* Hover Tooltip */}
+                        {isHovered && (
+                          <div className="absolute -top-12 z-30 bg-slate-900 text-white text-[10px] font-mono py-1 px-2 rounded-md shadow-lg border border-slate-700 whitespace-nowrap pointer-events-none text-center">
+                            <span className="block font-bold text-emerald-400">In: ৳{rev.toLocaleString("en-BD")}</span>
+                            <span className="block font-bold text-rose-400">Out: ৳{exp.toLocaleString("en-BD")}</span>
+                          </div>
+                        )}
+
+                        {/* Dual Pillar */}
+                        <div className="w-full max-w-[32px] rounded-lg flex items-end justify-center gap-1 p-0.5 h-44 sm:h-48 bg-slate-50 dark:bg-slate-800/40">
+                          {/* Income Bar (Green) */}
+                          <div
+                            style={{ height: `${revPct}%` }}
+                            className={`flex-1 rounded-t-sm transition-all duration-300 ${
+                              rev > 0 ? "bg-emerald-500 hover:bg-emerald-600" : "bg-transparent"
+                            }`}
+                          />
+                          {/* Expense Bar (Rose) */}
+                          <div
+                            style={{ height: `${expPct}%` }}
+                            className={`flex-1 rounded-t-sm transition-all duration-300 ${
+                              exp > 0 ? "bg-rose-500 hover:bg-rose-600" : "bg-transparent"
+                            }`}
+                          />
                         </div>
 
-                        {/* Bar Pillar */}
-                        <div className="w-full max-w-[48px] rounded-2xl flex flex-col justify-end p-0.5 relative h-52 sm:h-56 bg-slate-50 dark:bg-slate-800/40">
-                          {hasSales ? (
-                            <div
-                              style={{ height: `${heightPct}%` }}
-                              className={`w-full rounded-xl transition-all duration-500 flex flex-col justify-between p-1 ${
-                                isLatest
-                                  ? "bg-gradient-to-t from-emerald-600 to-teal-500 shadow-md shadow-emerald-600/30"
-                                  : "bg-gradient-to-t from-slate-700 to-slate-500 hover:from-emerald-700 hover:to-emerald-500"
-                              }`}
-                            >
-                              {heightPct > 30 ? (
-                                <div className="text-[9px] font-black text-white text-center font-mono truncate">
-                                  {chartMetric === "revenue"
-                                    ? `৳${d.revenue >= 1000 ? `${(d.revenue / 1000).toFixed(1)}k` : d.revenue}`
-                                    : d.count}
-                                </div>
-                              ) : null}
-                            </div>
-                          ) : (
-                            <div className="w-full h-1 bg-slate-200 dark:bg-slate-700 rounded-full my-auto opacity-60" />
-                          )}
-                        </div>
-
-                        {/* Label & Date */}
-                        <div className="mt-2 text-center w-full truncate">
-                          <span className="text-[11px] xl:text-xs font-bold text-slate-700 dark:text-slate-300 block truncate leading-tight">
-                            {d.label}
+                        {/* Label */}
+                        <div className="mt-1.5 text-center w-full truncate">
+                          <span className="text-[10px] font-semibold text-slate-600 dark:text-slate-400 block truncate">
+                            {chartTimeframe === "week" ? d.dayName : d.date}
                           </span>
-                          {d.subLabel && chartTimeframe !== "month" && (
-                            <span className="text-[9px] text-slate-400 block truncate font-medium">
-                              {d.subLabel}
-                            </span>
-                          )}
                         </div>
                       </div>
                     );
@@ -626,97 +651,112 @@ export function AccountsOverviewView({ onNavigate, selectedBranchId: propBranchI
                 )}
               </div>
 
-              {/* Quick Summary footnote */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between text-xs xl:text-sm text-slate-400 gap-2 pt-1">
-                <span>
-                  Showing:{" "}
-                  <strong className="text-slate-700 dark:text-slate-300">
-                    {chartTimeframe === "day"
-                      ? "Today's Hourly Sales"
-                      : chartTimeframe === "week"
-                      ? "Last 7 Days Sales"
-                      : chartTimeframe === "month"
-                      ? "Last 30 Days Sales"
-                      : "Last 6 Months Trend"}
-                  </strong>
-                </span>
-                <span className="font-mono font-bold text-slate-700 dark:text-slate-300">
-                  Total in view: ৳{totalChartRevenue.toLocaleString("en-BD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ({totalChartOrders} {totalChartOrders === 1 ? "order" : "orders"})
+              {/* Chart Legend */}
+              <div className="flex items-center justify-between text-xs text-slate-500 pt-0.5">
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2.5 h-2.5 rounded-xs bg-emerald-500" />
+                    <span className="font-semibold text-slate-700 dark:text-slate-300">Sales Inflow</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2.5 h-2.5 rounded-xs bg-rose-500" />
+                    <span className="font-semibold text-slate-700 dark:text-slate-300">Expenses Outflow</span>
+                  </div>
+                </div>
+                <span className="text-[11px] text-slate-400 font-mono">
+                  {chartTimeframe === "week" ? "Last 7 Days" : "Last 30 Days"}
                 </span>
               </div>
             </div>
 
-            {/* Right 4 Cols: Account Balance Distribution */}
-            <div className="lg:col-span-4 p-6 2xl:p-8 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-5 flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-                  <h3 className="text-sm xl:text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
-                    <Layers className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                    Account Balance Distribution
-                  </h3>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase">Share of Funds</span>
+            {/* Right 5 cols: Fund Distribution Donut Chart */}
+            <div className="lg:col-span-5 p-4 sm:p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4 flex flex-col justify-between">
+              <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 dark:border-slate-800">
+                <div className="flex items-center gap-2">
+                  <PieIcon className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  <h3 className="text-sm font-black text-slate-900 dark:text-white">Fund Distribution</h3>
                 </div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Share of Capital</span>
+              </div>
 
-                {rawAccounts.length === 0 ? (
-                  <div className="p-8 text-center text-xs text-slate-400 font-medium">
-                    No financial accounts created yet.
+              {fundCategories.length === 0 ? (
+                <div className="p-8 text-center text-xs text-slate-400 font-semibold my-auto">
+                  No account funds recorded.
+                </div>
+              ) : (
+                <div className="flex flex-col sm:flex-row items-center justify-around gap-4 py-2">
+                  {/* SVG Donut Circle */}
+                  <div className="relative w-40 h-40 shrink-0">
+                    <svg className="w-full h-full" viewBox="0 0 160 160">
+                      {/* Background track */}
+                      <circle
+                        cx="80"
+                        cy="80"
+                        r={donutRadius}
+                        fill="transparent"
+                        stroke="#e2e8f0"
+                        className="dark:stroke-slate-800"
+                        strokeWidth="18"
+                      />
+
+                      {/* Dynamic Segments */}
+                      {fundCategories.map((cat) => {
+                        const pct = totalBalance > 0 ? cat.amount / totalBalance : 0;
+                        const dashLength = pct * donutCircumference;
+                        const dashOffset = -accumulatedLength;
+                        accumulatedLength += dashLength;
+
+                        return (
+                          <circle
+                            key={cat.id}
+                            cx="80"
+                            cy="80"
+                            r={donutRadius}
+                            fill="transparent"
+                            stroke={cat.color}
+                            strokeWidth="18"
+                            strokeDasharray={`${dashLength} ${donutCircumference - dashLength}`}
+                            strokeDashoffset={dashOffset}
+                            transform="rotate(-90 80 80)"
+                            className="transition-all duration-500"
+                          />
+                        );
+                      })}
+                    </svg>
+
+                    {/* Donut Center Info */}
+                    <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total</span>
+                      <span className="text-xs font-black font-mono text-slate-900 dark:text-white truncate max-w-[100px]">
+                        ৳{totalBalance >= 100000 ? `${(totalBalance / 1000).toFixed(0)}k` : totalBalance.toFixed(0)}
+                      </span>
+                    </div>
                   </div>
-                ) : (
-                  <div className="space-y-4 pt-4">
-                    {rawAccounts.map((acc: any) => {
-                      const bal = Number(acc.balance || 0);
-                      const pct = totalAccountLiquidity > 0 ? Math.round((bal / totalAccountLiquidity) * 100) : 0;
-                      const isBank = acc.type === "BANK" || acc.type === "CARD_SETTLEMENT";
-                      const isBkash = acc.type === "BKASH" || acc.name.toLowerCase().includes("bkash");
-                      const isNagad = acc.type === "NAGAD" || acc.name.toLowerCase().includes("nagad");
 
+                  {/* Category Legend List */}
+                  <div className="space-y-2 w-full max-w-[210px]">
+                    {fundCategories.map((cat) => {
+                      const pct = totalBalance > 0 ? Math.round((cat.amount / totalBalance) * 100) : 0;
                       return (
-                        <div key={acc.id} className="space-y-1.5">
-                          <div className="flex items-center justify-between text-xs xl:text-sm">
-                            <div className="flex items-center gap-2 truncate max-w-[170px]">
-                              <div
-                                className={`w-2 h-2 rounded-full shrink-0 ${
-                                  isBank
-                                    ? "bg-blue-500"
-                                    : isBkash
-                                    ? "bg-pink-500"
-                                    : isNagad
-                                    ? "bg-orange-500"
-                                    : "bg-emerald-500"
-                                }`}
-                              />
-                              <span className="font-bold text-slate-700 dark:text-slate-300 truncate">
-                                {acc.name}
-                              </span>
-                            </div>
-                            <span className="font-mono font-bold text-slate-900 dark:text-white">
-                              ৳{bal.toLocaleString("en-BD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{" "}
-                              <span className="text-[10px] text-slate-400 font-normal">({pct}%)</span>
+                        <div key={cat.id} className="flex items-center justify-between text-xs">
+                          <div className="flex items-center gap-1.5 truncate">
+                            <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${cat.bgClass}`} />
+                            <span className="font-semibold text-slate-700 dark:text-slate-300 truncate">
+                              {cat.label}
                             </span>
                           </div>
-                          <div className="w-full h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                            <div
-                              style={{ width: `${Math.min(100, Math.max(bal > 0 ? 3 : 0, pct))}%` }}
-                              className={`h-full rounded-full transition-all duration-500 ${
-                                isBank
-                                  ? "bg-blue-500"
-                                  : isBkash
-                                  ? "bg-pink-500"
-                                  : isNagad
-                                  ? "bg-orange-500"
-                                  : "bg-emerald-500"
-                              }`}
-                            />
-                          </div>
+                          <span className="font-mono font-bold text-slate-900 dark:text-white shrink-0 ml-2">
+                            {pct}%
+                          </span>
                         </div>
                       );
                     })}
                   </div>
-                )}
-              </div>
+                </div>
+              )}
 
-              <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-slate-500">
-                <span>Total Liquid Capital</span>
+              <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-slate-500">
+                <span>Consolidated Net Liquidity</span>
                 <span className="font-mono font-bold text-slate-900 dark:text-white">
                   ৳{totalBalance.toLocaleString("en-BD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>

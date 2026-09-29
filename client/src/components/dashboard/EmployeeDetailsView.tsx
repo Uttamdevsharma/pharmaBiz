@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { fetchApi } from "@/lib/api";
+import { showAlert } from "@/lib/swal";
 import { useAuth } from "@/context/AuthContext";
 import {
   ArrowLeft,
@@ -32,6 +33,10 @@ import {
   Lock,
   CalendarCheck,
   Sparkles,
+  Eye,
+  FileCheck,
+  ExternalLink,
+  X,
 } from "lucide-react";
 
 interface EmployeeDetailsViewProps {
@@ -75,6 +80,12 @@ interface EmployeeData {
   avatarUrl?: string;
   createdAt: string;
   isActive: boolean;
+  nidNumber?: string | null;
+  nidFrontUrl?: string | null;
+  nidFrontPublicId?: string | null;
+  nidBackUrl?: string | null;
+  nidBackPublicId?: string | null;
+  documentsSubmitted?: boolean;
   resignationDate?: string | null;
   resignationReason?: string | null;
   deactivatedAt?: string | null;
@@ -127,6 +138,7 @@ export function EmployeeDetailsView({ employeeId, selectedBranchId, onBack }: Em
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [previewImage, setPreviewImage] = useState<{ url: string; title: string } | null>(null);
 
   // Active view tab
   const [activeTab, setActiveTab] = useState<"attendance_calc" | "allowances" | "disbursements">("attendance_calc");
@@ -243,6 +255,14 @@ export function EmployeeDetailsView({ employeeId, selectedBranchId, onBack }: Em
     e.preventDefault();
     const branch = selectedBranchId || employee?.branch?.id;
     if (!branch) return;
+    if (!employee?.documentsSubmitted) {
+      setError("Employee has not submitted the required certificates/documents. Salary disbursement blocked.");
+      showAlert.warning(
+        "Documents Pending",
+        "This employee has not submitted the required certificates and documents. Salary disbursement is blocked."
+      );
+      return;
+    }
     if (!payAccountId) {
       setError("Please select a financial account for payment.");
       return;
@@ -501,6 +521,13 @@ export function EmployeeDetailsView({ employeeId, selectedBranchId, onBack }: Em
           {isManager && employee.isActive && (
             <button
               onClick={() => {
+                if (!employee.documentsSubmitted) {
+                  showAlert.warning(
+                    "Documents Pending",
+                    `"${employee.name || employee.username}" has not submitted the required certificates & documents. Salary disbursement is blocked until verified.`
+                  );
+                  return;
+                }
                 setPayAmount(m ? m.dueAmount : "");
                 setIsPayModalOpen(true);
               }}
@@ -634,6 +661,132 @@ export function EmployeeDetailsView({ employeeId, selectedBranchId, onBack }: Em
         </div>
       </div>
 
+      {/* Identity & Verification Documents Section */}
+      <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+          <div>
+            <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
+              <CreditCard className="w-5 h-5 text-brand-primary" />
+              <span>National ID & Verification Documents</span>
+            </h3>
+          </div>
+
+          {employee.nidNumber && (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 font-mono text-xs font-bold text-slate-700 dark:text-slate-200">
+              <span className="text-slate-400 font-sans">NID No:</span>
+              <span>{employee.nidNumber}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Verification Status Banner */}
+        <div className={`p-3.5 rounded-2xl border flex items-center justify-between gap-3 ${
+          employee.documentsSubmitted
+            ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800"
+            : "bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800"
+        }`}>
+          <div className="flex items-center gap-2.5">
+            {employee.documentsSubmitted ? (
+              <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
+            ) : (
+              <AlertCircle className="h-5 w-5 text-amber-600 shrink-0" />
+            )}
+            <span className="text-sm font-bold text-slate-900 dark:text-white">
+              {employee.documentsSubmitted
+                ? "Certificates & Documents: Verified (Salary Enabled)"
+                : "Certificates & Documents: Pending (Salary Blocked)"}
+            </span>
+          </div>
+        </div>
+
+        {/* NID Images Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+          {/* Front Side */}
+          <div className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-brand-primary"></span>
+                <span>NID Front Side</span>
+              </span>
+              {employee.nidFrontUrl && (
+                <button
+                  type="button"
+                  onClick={() => setPreviewImage({ url: employee.nidFrontUrl!, title: `${employee.name || employee.username} - NID Front Side` })}
+                  className="text-xs font-bold text-brand-primary hover:underline flex items-center gap-1 cursor-pointer"
+                >
+                  <ExternalLink className="h-3 w-3" />
+                  <span>View Large</span>
+                </button>
+              )}
+            </div>
+
+            {employee.nidFrontUrl ? (
+              <div
+                onClick={() => setPreviewImage({ url: employee.nidFrontUrl!, title: `${employee.name || employee.username} - NID Front Side` })}
+                className="relative h-48 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-white cursor-pointer group shadow-xs"
+              >
+                <img
+                  src={employee.nidFrontUrl}
+                  alt="NID Front"
+                  className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-200"
+                />
+                <div className="absolute inset-0 bg-black/35 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-bold gap-1.5">
+                  <Eye className="h-4 w-4" />
+                  <span>Click to zoom in</span>
+                </div>
+              </div>
+            ) : (
+              <div className="h-48 rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center text-slate-400 gap-2 text-xs">
+                <CreditCard className="h-8 w-8 text-slate-300 dark:text-slate-600" />
+                <span>NID Front side photo not uploaded</span>
+              </div>
+            )}
+          </div>
+
+          {/* Back Side */}
+          <div className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-purple-500"></span>
+                <span>NID Back Side</span>
+              </span>
+              {employee.nidBackUrl && (
+                <button
+                  type="button"
+                  onClick={() => setPreviewImage({ url: employee.nidBackUrl!, title: `${employee.name || employee.username} - NID Back Side` })}
+                  className="text-xs font-bold text-brand-primary hover:underline flex items-center gap-1 cursor-pointer"
+                >
+                  <ExternalLink className="h-3 w-3" />
+                  <span>View Large</span>
+                </button>
+              )}
+            </div>
+
+            {employee.nidBackUrl ? (
+              <div
+                onClick={() => setPreviewImage({ url: employee.nidBackUrl!, title: `${employee.name || employee.username} - NID Back Side` })}
+                className="relative h-48 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-white cursor-pointer group shadow-xs"
+              >
+                <img
+                  src={employee.nidBackUrl}
+                  alt="NID Back"
+                  className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-200"
+                />
+                <div className="absolute inset-0 bg-black/35 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-bold gap-1.5">
+                  <Eye className="h-4 w-4" />
+                  <span>Click to zoom in</span>
+                </div>
+              </div>
+            ) : (
+              <div className="h-48 rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center text-slate-400 gap-2 text-xs">
+                <CreditCard className="h-8 w-8 text-slate-300 dark:text-slate-600" />
+                <span>NID Back side photo not uploaded</span>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
       {/* Tabs */}
       <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3 flex-wrap gap-3">
         <div className="flex items-center gap-2">
@@ -706,6 +859,13 @@ export function EmployeeDetailsView({ employeeId, selectedBranchId, onBack }: Em
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => {
+                      if (!employee.documentsSubmitted) {
+                        showAlert.warning(
+                          "Documents Pending",
+                          `"${employee.name || employee.username}" has not submitted the required certificates & documents. Salary disbursement is blocked until verified.`
+                        );
+                        return;
+                      }
                       const due = m?.dueAmount ?? 0;
                       setPayAmount(due > 0 ? due : m?.finalPayable || "");
                       setPayRef("");
@@ -1484,6 +1644,47 @@ export function EmployeeDetailsView({ employeeId, selectedBranchId, onBack }: Em
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Full Image Preview Lightbox Modal */}
+      {previewImage && (
+        <div className="fixed inset-0 z-60 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="relative max-w-4xl w-full bg-slate-900 rounded-2xl overflow-hidden border border-slate-800 shadow-2xl p-4 space-y-3">
+            <div className="flex items-center justify-between text-white pb-2 border-b border-slate-800">
+              <span className="text-sm font-bold">{previewImage.title}</span>
+              <button
+                onClick={() => setPreviewImage(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="flex items-center justify-center bg-black/40 rounded-xl overflow-hidden max-h-[75vh]">
+              <img
+                src={previewImage.url}
+                alt={previewImage.title}
+                className="max-h-[75vh] w-auto object-contain rounded-lg"
+              />
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <a
+                href={previewImage.url}
+                target="_blank"
+                rel="noreferrer"
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-brand-primary text-white hover:bg-brand-primary-hover flex items-center gap-1.5 cursor-pointer"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                <span>Open Full Size in Tab</span>
+              </a>
+              <button
+                onClick={() => setPreviewImage(null)}
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-slate-800 text-slate-300 hover:bg-slate-700 cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -20,8 +20,12 @@ import {
   Users,
   ArrowRight,
   PlusCircle,
+  FileCheck,
+  CreditCard,
+  FileText,
 } from "lucide-react";
 import { getClientPlanConfig } from "@/lib/planLimits";
+import { ImageUploader } from "@/components/common/ImageUploader";
 
 interface PharmacyRole {
   id: string;
@@ -59,6 +63,13 @@ export function CreateStaffTab({ onNavigate }: CreateStaffTabProps) {
     confirmPassword: "",
     role: "",
     branchId: user?.branchId || "",
+    nidNumber: "",
+    nidFrontUrl: "",
+    nidFrontPublicId: "",
+    nidBackUrl: "",
+    nidBackPublicId: "",
+    documentsSubmitted: false,
+    grossSalary: "",
   });
 
   const loadData = async () => {
@@ -77,10 +88,17 @@ export function CreateStaffTab({ onNavigate }: CreateStaffTabProps) {
           setFormData((prev) => ({ ...prev, role: rRes.data![0].id }));
         }
       }
-      if (bRes.success && bRes.data) setBranches(bRes.data);
+      if (bRes.success && bRes.data && bRes.data.length > 0) {
+        const branchList = bRes.data;
+        setBranches(branchList);
+        const defaultBranchId = user?.branchId || branchList[0]?.id || "";
+        setFormData((prev) => ({ ...prev, branchId: prev.branchId || defaultBranchId }));
+      }
       if (pRes.success && pRes.data) setProfile(pRes.data);
       if (sRes.success && sRes.data) {
-        const nonOwner = (sRes.data || []).filter((s: any) => s.role !== "COMPANY_OWNER");
+        const nonOwner = (sRes.data || []).filter(
+          (s: any) => s.role !== "COMPANY_OWNER" && s.role !== "SUPER_ADMIN"
+        );
         setStaffCount(nonOwner.length);
       }
     } catch (err: any) {
@@ -153,6 +171,13 @@ export function CreateStaffTab({ onNavigate }: CreateStaffTabProps) {
           password: formData.password,
           role: formData.role,
           branchId: targetBranchId,
+          nidNumber: formData.nidNumber.trim() || null,
+          nidFrontUrl: formData.nidFrontUrl || null,
+          nidFrontPublicId: formData.nidFrontPublicId || null,
+          nidBackUrl: formData.nidBackUrl || null,
+          nidBackPublicId: formData.nidBackPublicId || null,
+          documentsSubmitted: formData.documentsSubmitted,
+          grossSalary: formData.grossSalary ? Number(formData.grossSalary) : null,
         }),
       });
 
@@ -174,6 +199,13 @@ export function CreateStaffTab({ onNavigate }: CreateStaffTabProps) {
           confirmPassword: "",
           role: roles[0]?.id || "",
           branchId: user?.branchId || "",
+          nidNumber: "",
+          nidFrontUrl: "",
+          nidFrontPublicId: "",
+          nidBackUrl: "",
+          nidBackPublicId: "",
+          documentsSubmitted: false,
+          grossSalary: "",
         });
         // Automatically navigate to Staff List
         if (onNavigate) {
@@ -182,12 +214,20 @@ export function CreateStaffTab({ onNavigate }: CreateStaffTabProps) {
       } else {
         const msg = res.message || "Failed to create staff member";
         setError(msg);
-        showAlert.error("Creation Failed", msg);
+        if (msg.toLowerCase().includes("limit")) {
+          await showAlert.warning("Staff Limit Reached", msg);
+        } else {
+          showAlert.error("Creation Failed", msg);
+        }
       }
     } catch (err: any) {
       const msg = err.message || "An unexpected error occurred";
       setError(msg);
-      showAlert.error("Creation Error", msg);
+      if (msg.toLowerCase().includes("limit")) {
+        await showAlert.warning("Staff Limit Reached", msg);
+      } else {
+        showAlert.error("Creation Error", msg);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -447,11 +487,11 @@ export function CreateStaffTab({ onNavigate }: CreateStaffTabProps) {
             </div>
 
             {/* Branch Assignment */}
-            <div className="md:col-span-2 lg:col-span-3">
+            <div>
               <label className="block text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
                 Assign to Branch
               </label>
-              <div className="relative flex items-center max-w-md">
+              <div className="relative flex items-center">
                 <Building className="h-4 w-4 text-slate-400 absolute left-3.5 pointer-events-none" />
                 {isManager ? (
                   <input
@@ -462,19 +502,140 @@ export function CreateStaffTab({ onNavigate }: CreateStaffTabProps) {
                   />
                 ) : (
                   <select
-                    value={formData.branchId}
+                    value={formData.branchId || branches[0]?.id || ""}
                     onChange={(e) => setFormData({ ...formData, branchId: e.target.value })}
                     className="w-full h-11 pl-10 pr-3.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary cursor-pointer"
                   >
-                    <option value="">HQ / Main Branch</option>
+                    {branches.length === 0 && <option value="">No branch available</option>}
                     {branches.map((b) => (
                       <option key={b.id} value={b.id}>
-                        {b.name} ({b.location || "Branch"})
+                        {b.name}{b.location ? ` (${b.location})` : ""}
                       </option>
                     ))}
                   </select>
                 )}
               </div>
+            </div>
+
+            {/* Gross Salary */}
+            <div>
+              <label className="block text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
+                Gross Monthly Salary (৳)
+              </label>
+              <div className="relative flex items-center">
+                <span className="absolute left-3.5 text-sm font-bold text-slate-400 pointer-events-none font-mono">৳</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="100"
+                  value={formData.grossSalary}
+                  onChange={(e) => setFormData({ ...formData, grossSalary: e.target.value })}
+                  placeholder="e.g. 25000"
+                  className="w-full h-11 pl-9 pr-3.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary font-mono"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Section: Staff NID & Verification Documents */}
+          <div className="pt-4 border-t border-slate-200 dark:border-slate-800 space-y-4">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <CreditCard className="h-4 w-4 text-brand-primary" />
+                <span>National ID & Verification Documents</span>
+              </h3>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* NID Number */}
+              <div className="md:col-span-3 max-w-md">
+                <label className="block text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
+                  NID Card Number
+                </label>
+                <div className="relative flex items-center">
+                  <CreditCard className="h-4 w-4 text-slate-400 absolute left-3.5 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={formData.nidNumber}
+                    onChange={(e) => setFormData({ ...formData, nidNumber: e.target.value })}
+                    placeholder="e.g. 19901234567890123"
+                    className="w-full h-11 pl-10 pr-3.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* NID Front Side Upload */}
+              <div className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2 flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-brand-primary"></span>
+                  <span>NID Front Side</span>
+                </label>
+                <ImageUploader
+                  value={formData.nidFrontUrl}
+                  publicId={formData.nidFrontPublicId}
+                  folder="pharmacy_saas/staff_nid"
+                  label="Upload NID Front"
+                  hint="PNG, JPG, WebP up to 5MB"
+                  aspectRatio="wide"
+                  onChange={(img) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      nidFrontUrl: img?.url || "",
+                      nidFrontPublicId: img?.publicId || "",
+                    }))
+                  }
+                />
+              </div>
+
+              {/* NID Back Side Upload */}
+              <div className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2 flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-purple-500"></span>
+                  <span>NID Back Side</span>
+                </label>
+                <ImageUploader
+                  value={formData.nidBackUrl}
+                  publicId={formData.nidBackPublicId}
+                  folder="pharmacy_saas/staff_nid"
+                  label="Upload NID Back"
+                  hint="PNG, JPG, WebP up to 5MB"
+                  aspectRatio="wide"
+                  onChange={(img) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      nidBackUrl: img?.url || "",
+                      nidBackPublicId: img?.publicId || "",
+                    }))
+                  }
+                />
+              </div>
+            </div>
+
+            {/* Document Submission Checkbox / Terms */}
+            <div className={`p-4 rounded-xl border transition-all ${
+              formData.documentsSubmitted
+                ? "bg-emerald-50/60 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800"
+                : "bg-amber-50/60 dark:bg-amber-950/30 border-amber-300 dark:border-amber-800"
+            }`}>
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={formData.documentsSubmitted}
+                  onChange={(e) => setFormData({ ...formData, documentsSubmitted: e.target.checked })}
+                  className="mt-1 h-4 w-4 rounded border-slate-300 text-brand-primary focus:ring-brand-primary cursor-pointer shrink-0"
+                />
+                <div className="space-y-0.5">
+                  <div className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <FileCheck className={`h-4 w-4 ${formData.documentsSubmitted ? "text-emerald-600" : "text-amber-600"}`} />
+                    <span>All required certificates & documents submitted</span>
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    {formData.documentsSubmitted
+                      ? "Verified — Staff is eligible for salary disbursement."
+                      : "Unchecked — Salary disbursement blocked until verified."}
+                  </p>
+                </div>
+              </label>
             </div>
           </div>
 

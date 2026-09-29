@@ -80,7 +80,7 @@ export const getPackagingModel = (prod?: Product | null, packageType?: string): 
     return "VIAL";
   }
 
-  // 3. Piece / Unit checks (Diaper, Syringe, Bandage, Equipment, Surgical)
+  // 3. Piece / Unit checks (Toothpaste, Soap, Diaper, Syringe, Bandage, Equipment, Surgical, FMCG, Lifestyle)
   if (
     packType === "PIECE" ||
     packageType === "PIECE" ||
@@ -88,6 +88,7 @@ export const getPackagingModel = (prod?: Product | null, packageType?: string): 
     unit === "pack" ||
     unit === "unit" ||
     unit === "pcs" ||
+    unit === "tube" ||
     pType === "EQUIPMENT" ||
     cat.includes("diaper") ||
     cat.includes("equip") ||
@@ -95,12 +96,19 @@ export const getPackagingModel = (prod?: Product | null, packageType?: string): 
     cat.includes("care") ||
     cat.includes("surgical") ||
     cat.includes("hygiene") ||
+    cat.includes("paste") ||
+    cat.includes("soap") ||
+    cat.includes("cosmetic") ||
+    cat.includes("lifestyle") ||
+    cat.includes("fmcg") ||
+    name.includes("paste") ||
+    name.includes("soap") ||
+    name.includes("shampoo") ||
+    name.includes("cream") ||
+    name.includes("lotion") ||
     name.includes("diaper") ||
-    generic.includes("diaper") ||
     name.includes("syringe") ||
-    generic.includes("syringe") ||
-    name.includes("bandage") ||
-    generic.includes("bandage")
+    name.includes("bandage")
   ) {
     return "PIECE";
   }
@@ -220,7 +228,6 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
 
         if (sRes.success && sRes.data && sRes.data.length > 0) {
           setSuppliers(sRes.data);
-          setSelectedSupplierId(sRes.data[0].id);
         }
       } catch (err) {
         console.error("Failed to load initial purchase setup", err);
@@ -367,58 +374,18 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
 
     if (model === "TABLET") {
       const tabsPerBox = (stripsPerBx || 10) * (tabsPerStr || 10);
-      if (mode === "CARTON") {
-        totalBoxesOrPacks = qty * (boxesPerCtn || 10);
-      } else {
-        totalBoxesOrPacks = qty;
-      }
-      totalLowestUnits = totalBoxesOrPacks * tabsPerBox;
-
-      lineTotal = Math.round(totalBoxesOrPacks * costNet * 100) / 100;
+      totalBoxesOrPacks = qty;
+      totalLowestUnits = qty * tabsPerBox;
+      lineTotal = Math.round(qty * costNet * 100) / 100;
       lowestUnitCost = tabsPerBox > 0 ? Math.round((costNet / tabsPerBox) * 1000) / 1000 : costNet;
       lowestUnitSelling = tabsPerBox > 0 ? Math.round((selling / tabsPerBox) * 1000) / 1000 : selling;
-    } else if (model === "BOTTLE") {
-      if (mode === "CARTON") {
-        const bottlesPerCtn = boxesPerCtn || 12;
-        totalLowestUnits = qty * bottlesPerCtn;
-        totalBoxesOrPacks = qty;
-      } else {
-        totalLowestUnits = qty;
-        totalBoxesOrPacks = 0;
-      }
-      lineTotal = Math.round(totalLowestUnits * costNet * 100) / 100;
+    } else {
+      // Direct Unit (Piece, Bottle, Tube, Yard/Goj, Roll, Vial, etc.)
+      totalBoxesOrPacks = 0;
+      totalLowestUnits = qty;
+      lineTotal = Math.round(qty * costNet * 100) / 100;
       lowestUnitCost = costNet;
       lowestUnitSelling = selling;
-    } else if (model === "PIECE") {
-      if (mode === "PACK") {
-        const pcsPerPack = stripsPerBx || 10;
-        totalBoxesOrPacks = qty;
-        totalLowestUnits = qty * pcsPerPack;
-        lineTotal = Math.round(qty * costNet * 100) / 100;
-        lowestUnitCost = pcsPerPack > 0 ? Math.round((costNet / pcsPerPack) * 100) / 100 : costNet;
-        lowestUnitSelling = pcsPerPack > 0 ? Math.round((selling / pcsPerPack) * 100) / 100 : selling;
-      } else {
-        totalLowestUnits = qty;
-        totalBoxesOrPacks = 0;
-        lineTotal = Math.round(qty * costNet * 100) / 100;
-        lowestUnitCost = costNet;
-        lowestUnitSelling = selling;
-      }
-    } else {
-      if (mode === "BOX" || mode === "CARTON") {
-        const vialsPerBox = stripsPerBx || 10;
-        totalBoxesOrPacks = qty;
-        totalLowestUnits = qty * vialsPerBox;
-        lineTotal = Math.round(qty * costNet * 100) / 100;
-        lowestUnitCost = vialsPerBox > 0 ? Math.round((costNet / vialsPerBox) * 100) / 100 : costNet;
-        lowestUnitSelling = vialsPerBox > 0 ? Math.round((selling / vialsPerBox) * 100) / 100 : selling;
-      } else {
-        totalLowestUnits = qty;
-        totalBoxesOrPacks = 0;
-        lineTotal = Math.round(qty * costNet * 100) / 100;
-        lowestUnitCost = costNet;
-        lowestUnitSelling = selling;
-      }
     }
 
     return {
@@ -462,9 +429,14 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
       initialSelling = baseSelling;
       initialCost = Math.round(initialSelling * 0.85 * 100) / 100;
     } else {
-      defaultMode = "VIAL";
-      initialSelling = baseSelling;
-      initialCost = Math.round(initialSelling * 0.85 * 100) / 100;
+      defaultMode = stripsPerBox > 1 ? "BOX" : "VIAL";
+      if (defaultMode === "BOX") {
+        initialSelling = Math.round(baseSelling * stripsPerBox * 100) / 100;
+        initialCost = Math.round(initialSelling * 0.85 * 100) / 100;
+      } else {
+        initialSelling = baseSelling;
+        initialCost = Math.round(initialSelling * 0.85 * 100) / 100;
+      }
     }
 
     const currentStock = getProductStockCount(prod);
@@ -629,9 +601,8 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
       const selectedContact = supplierContacts.find((c) => c.id === selectedContactId);
 
       const preparedItems = lineItems.map((item) => {
-        const isCarton = item.receivingMode === "CARTON";
-        const isBox = item.receivingMode === "BOX" || item.receivingMode === "PACK";
-        const receivingUnit = isCarton ? "CARTON" : (isBox ? "BOX" : "PIECE");
+        const isBox = item.receivingMode === "BOX";
+        const receivingUnit = isBox ? "BOX" : "PIECE";
 
         return {
           productId: item.productId,
@@ -641,8 +612,8 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
           expiryDate: item.expiryDate || null,
           packageType: item.product.productType || "Medicine",
           receivingUnit,
-          cartonQuantity: isCarton ? item.enteredQuantity : null,
-          boxQuantity: isBox ? item.enteredQuantity : (isCarton ? item.totalBoxesOrPacks : null),
+          cartonQuantity: null,
+          boxQuantity: isBox ? item.enteredQuantity : null,
           stripsPerBox: item.stripsPerBox,
           tabletsPerStrip: item.tabletsPerStrip,
           quantity: item.totalLowestUnits,
@@ -778,16 +749,21 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
 
           {/* Supplier */}
           <div>
-            <label className="block text-sm font-black text-slate-800 dark:text-slate-200 mb-2 flex items-center gap-1.5">
-              <Building className="w-4 h-4 text-slate-400" />
-              Supplier *
+            <label className="block text-sm font-black text-slate-800 dark:text-slate-200 mb-2 flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <Building className="w-4 h-4 text-slate-400" />
+                Supplier
+              </span>
+              <span className="text-xs font-normal text-slate-400">
+                (Optional)
+              </span>
             </label>
             <select
               value={selectedSupplierId}
               onChange={(e) => setSelectedSupplierId(e.target.value)}
               className="w-full text-sm font-bold bg-slate-50 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 h-11"
             >
-              <option value="">-- Select Supplier --</option>
+              <option value="">-- Local Market / Cash Purchase --</option>
               {suppliers.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name} {s.company ? `(${s.company})` : ""}
@@ -803,16 +779,23 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
               Representative (MR / SR)
             </label>
             <select
+              disabled={!selectedSupplierId}
               value={selectedContactId}
               onChange={(e) => setSelectedContactId(e.target.value)}
-              className="w-full text-sm font-bold bg-slate-50 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 h-11"
+              className="w-full text-sm font-bold bg-slate-50 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-slate-100 dark:disabled:bg-slate-900 h-11"
             >
-              <option value="">-- Direct / General --</option>
-              {supplierContacts.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name} {c.phone ? `(${c.phone})` : ""}
-                </option>
-              ))}
+              {!selectedSupplierId ? (
+                <option value="">N/A (Local / Cash Purchase)</option>
+              ) : (
+                <>
+                  <option value="">-- Direct / General --</option>
+                  {supplierContacts.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} {c.phone ? `(${c.phone})` : ""}
+                    </option>
+                  ))}
+                </>
+              )}
             </select>
           </div>
 
@@ -991,12 +974,12 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
             <thead>
               <tr className="bg-brand-primary text-white text-xs sm:text-sm font-black tracking-wider divide-x divide-white/20 shadow-xs">
                 <th className="py-3.5 px-3 text-center w-12">#</th>
-                <th className="py-3.5 px-4 min-w-[220px]">Product / Medicine</th>
-                <th className="py-3.5 px-4 min-w-[240px]">Stock In Unit &amp; Intake Qty</th>
-                <th className="py-3.5 px-3.5 min-w-[140px]">Purchase Cost (৳)</th>
-                <th className="py-3.5 px-4 min-w-[130px] text-right">Total (৳)</th>
-                <th className="py-3.5 px-3.5 min-w-[140px]">Selling Price (MRP)</th>
-                <th className="py-3.5 px-3.5 min-w-[170px]">Lot / Batch &amp; EXP Date</th>
+                <th className="py-3.5 px-4 min-w-[220px]">Product</th>
+                <th className="py-3.5 px-4 min-w-[220px]">Qty &amp; Unit</th>
+                <th className="py-3.5 px-3.5 min-w-[130px]">Unit Cost (৳)</th>
+                <th className="py-3.5 px-4 min-w-[120px] text-right">Total (৳)</th>
+                <th className="py-3.5 px-3.5 min-w-[130px]">MRP (৳)</th>
+                <th className="py-3.5 px-3.5 min-w-[160px]">Batch &amp; EXP Date</th>
                 <th className="py-3.5 px-2 text-center w-12">
                   <Trash2 className="w-4 h-4 mx-auto text-white/80" />
                 </th>
@@ -1062,117 +1045,22 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
                       </td>
 
                       {/* Stock In Unit & Intake Qty Input */}
-                      <td className="py-4 px-3.5 space-y-2.5">
-                        {/* Packaging Unit Switcher Pill */}
-                        <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-black">
-                          {isTablet && (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => updateLineItem(item.id, { receivingMode: "BOX" })}
-                                className={`flex-1 py-1.5 px-2 rounded-lg text-center transition ${
-                                  item.receivingMode === "BOX"
-                                    ? "bg-white dark:bg-slate-900 text-brand-primary shadow-xs"
-                                    : "text-slate-500 hover:text-slate-900"
-                                }`}
-                              >
-                                🗃️ Box Intake
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => updateLineItem(item.id, { receivingMode: "CARTON" })}
-                                className={`flex-1 py-1.5 px-2 rounded-lg text-center transition ${
-                                  item.receivingMode === "CARTON"
-                                    ? "bg-white dark:bg-slate-900 text-brand-primary shadow-xs"
-                                    : "text-slate-500 hover:text-slate-900"
-                                }`}
-                              >
-                                📦 Carton Intake
-                              </button>
-                            </>
-                          )}
-
-                          {isBottle && (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => updateLineItem(item.id, { receivingMode: "BOTTLE" })}
-                                className={`flex-1 py-1.5 px-2 rounded-lg text-center transition ${
-                                  item.receivingMode === "BOTTLE"
-                                    ? "bg-white dark:bg-slate-900 text-brand-primary shadow-xs"
-                                    : "text-slate-500 hover:text-slate-900"
-                                }`}
-                              >
-                                🍾 Bottle
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => updateLineItem(item.id, { receivingMode: "CARTON" })}
-                                className={`flex-1 py-1.5 px-2 rounded-lg text-center transition ${
-                                  item.receivingMode === "CARTON"
-                                    ? "bg-white dark:bg-slate-900 text-brand-primary shadow-xs"
-                                    : "text-slate-500 hover:text-slate-900"
-                                }`}
-                              >
-                                📦 Carton ({item.boxesPerCarton} btl)
-                              </button>
-                            </>
-                          )}
-
-                          {isPiece && (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => updateLineItem(item.id, { receivingMode: "PIECE" })}
-                                className={`flex-1 py-1.5 px-2 rounded-lg text-center transition ${
-                                  item.receivingMode === "PIECE"
-                                    ? "bg-white dark:bg-slate-900 text-brand-primary shadow-xs"
-                                    : "text-slate-500 hover:text-slate-900"
-                                }`}
-                              >
-                                🧩 Piece / Unit
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => updateLineItem(item.id, { receivingMode: "PACK" })}
-                                className={`flex-1 py-1.5 px-2 rounded-lg text-center transition ${
-                                  item.receivingMode === "PACK"
-                                    ? "bg-white dark:bg-slate-900 text-brand-primary shadow-xs"
-                                    : "text-slate-500 hover:text-slate-900"
-                                }`}
-                              >
-                                📦 Pack ({item.stripsPerBox} pcs)
-                              </button>
-                            </>
-                          )}
-
-                          {isVial && (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => updateLineItem(item.id, { receivingMode: "VIAL" })}
-                                className={`flex-1 py-1.5 px-2 rounded-lg text-center transition ${
-                                  item.receivingMode === "VIAL"
-                                    ? "bg-white dark:bg-slate-900 text-brand-primary shadow-xs"
-                                    : "text-slate-500 hover:text-slate-900"
-                                }`}
-                              >
-                                💉 Vial
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => updateLineItem(item.id, { receivingMode: "BOX" })}
-                                className={`flex-1 py-1.5 px-2 rounded-lg text-center transition ${
-                                  item.receivingMode === "BOX"
-                                    ? "bg-white dark:bg-slate-900 text-brand-primary shadow-xs"
-                                    : "text-slate-500 hover:text-slate-900"
-                                }`}
-                              >
-                                📦 Box ({item.stripsPerBox} vials)
-                              </button>
-                            </>
-                          )}
-                        </div>
+                      <td className="py-4 px-3.5 space-y-2">
+                        {isTablet ? (
+                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 font-bold text-xs border border-blue-200 dark:border-blue-800">
+                            <span>Box Intake</span>
+                            <span className="text-[11px] text-blue-500 dark:text-blue-400 font-mono">
+                              ({item.stripsPerBox * item.tabletsPerStrip} tabs/box)
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs border border-slate-200 dark:border-slate-700 capitalize">
+                            <span>Unit:</span>
+                            <span className="font-mono text-brand-primary">
+                              {item.product.unit || "Piece"}
+                            </span>
+                          </div>
+                        )}
 
                         {/* Quantity Input */}
                         <div className="flex items-center gap-2">
@@ -1188,39 +1076,24 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
                             }
                             className="w-24 sm:w-28 h-10 text-sm sm:text-base font-black text-slate-900 dark:text-white bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-3 text-right focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20 font-mono shadow-xs outline-none"
                           />
-                          <span className="text-sm font-black text-slate-800 dark:text-slate-200">
-                            {item.receivingMode === "CARTON"
-                              ? "Cartons"
-                              : item.receivingMode === "BOX"
-                              ? "Boxes"
-                              : item.receivingMode === "PACK"
-                              ? "Packs"
-                              : item.receivingMode === "BOTTLE"
-                              ? "Bottles"
-                              : "Pieces"}
+                          <span className="text-sm font-black text-slate-800 dark:text-slate-200 capitalize">
+                            {isTablet
+                              ? item.enteredQuantity > 1
+                                ? "Boxes"
+                                : "Box"
+                              : `${item.product.unit || "Piece"}${item.enteredQuantity > 1 ? "s" : ""}`}
                           </span>
                         </div>
 
-                        {/* Breakdown Calculation Banner */}
-                        <div className="text-xs font-black text-slate-700 dark:text-slate-300">
-                          {isTablet && (
+                        {/* Breakdown Calculation */}
+                        <div className="text-xs font-bold text-slate-600 dark:text-slate-400">
+                          {isTablet ? (
                             <span>
-                              = {item.totalBoxesOrPacks} Boxes ({item.totalLowestUnits.toLocaleString()} Tablets)
+                              = {item.totalLowestUnits.toLocaleString()} Tablets
                             </span>
-                          )}
-                          {isBottle && (
-                            <span>
-                              = {item.totalLowestUnits} Bottles
-                            </span>
-                          )}
-                          {isPiece && (
-                            <span>
-                              = {item.totalLowestUnits} Pieces
-                            </span>
-                          )}
-                          {isVial && (
-                            <span>
-                              = {item.totalLowestUnits} Vials
+                          ) : (
+                            <span className="capitalize">
+                              = {item.totalLowestUnits.toLocaleString()} {item.product.unit || "Piece"}{item.totalLowestUnits > 1 ? "s" : ""}
                             </span>
                           )}
                         </div>
@@ -1229,14 +1102,10 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
                       {/* Purchase Cost */}
                       <td className="py-4 px-3.5">
                         <div className="max-w-[130px]">
-                          <div className="text-xs font-black text-slate-500 dark:text-slate-400 mb-1.5 whitespace-nowrap">
+                          <div className="text-xs font-black text-slate-500 dark:text-slate-400 mb-1.5 whitespace-nowrap capitalize">
                             {isTablet
                               ? "Cost / Box (৳):"
-                              : isBottle
-                              ? "Cost / Bottle (৳):"
-                              : item.receivingMode === "PACK"
-                              ? "Cost / Pack (৳):"
-                              : "Cost / Piece (৳):"}
+                              : `Cost / ${item.product.unit || "Unit"} (৳):`}
                           </div>
                           <input
                             type="number"
@@ -1270,14 +1139,10 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
                       {/* Selling Price / MRP */}
                       <td className="py-4 px-3.5">
                         <div className="max-w-[130px]">
-                          <div className="text-xs font-black text-slate-500 dark:text-slate-400 mb-1.5 whitespace-nowrap">
+                          <div className="text-xs font-black text-slate-500 dark:text-slate-400 mb-1.5 whitespace-nowrap capitalize">
                             {isTablet
                               ? "MRP / Box (৳):"
-                              : isBottle
-                              ? "MRP / Bottle (৳):"
-                              : item.receivingMode === "PACK"
-                              ? "MRP / Pack (৳):"
-                              : "MRP / Piece (৳):"}
+                              : `MRP / ${item.product.unit || "Unit"} (৳):`}
                           </div>
                           <input
                             type="number"

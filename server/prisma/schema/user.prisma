@@ -28,6 +28,13 @@ model User {
   email            String?
   phone            String?
   avatarUrl        String?
+  nidNumber        String?
+  nidFrontUrl      String?
+  nidFrontPublicId String?
+  nidBackUrl       String?
+  nidBackPublicId  String?
+  documentsSubmitted Boolean   @default(false)
+  grossSalary      Decimal?      @db.Decimal(15, 2)
   isActive         Boolean       @default(true)
   resignationDate  DateTime?
   resignationReason String?

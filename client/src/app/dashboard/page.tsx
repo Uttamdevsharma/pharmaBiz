@@ -1203,6 +1203,9 @@ export default function RoleBasedDashboard() {
         return <StockHistoryView />;
 
       case "stock_expired_stock":
+        if (!isOwner && !hasPermission("stock.stock_list")) {
+          return <TenantAccessRestricted moduleName="Expiry & Near Expiry" requiredPerm="stock.stock_list" />;
+        }
         return <ExpiredProductsView />;
 
       case "stock_transfer_stock":
@@ -1250,6 +1253,9 @@ export default function RoleBasedDashboard() {
 
       // 📍 Location & Storage Groups Subpages
       case "loc_create_group":
+        if (!isOwner && !hasPermission("location.create_rack") && !hasPermission("location.create_custom")) {
+          return <TenantAccessRestricted moduleName="Create Storage Group" requiredPerm="location.create_rack" />;
+        }
         return (
           <CreateStorageGroupView
             selectedBranchId={selectedBranchId}
@@ -1259,6 +1265,9 @@ export default function RoleBasedDashboard() {
 
       case "loc_group_list":
       case "loc_storage_groups":
+        if (!isOwner && !hasPermission("location.rack_list") && !hasPermission("location.custom_list")) {
+          return <TenantAccessRestricted moduleName="Storage Group List" requiredPerm="location.rack_list" />;
+        }
         return (
           <StorageGroupListView
             selectedBranchId={selectedBranchId}

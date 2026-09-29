@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { fetchApi } from "@/lib/api";
+import { showAlert } from "@/lib/swal";
 import {
   Plus,
   Loader2,
@@ -21,9 +22,14 @@ import {
   Edit2,
   X,
   Phone,
+  CreditCard,
+  FileCheck,
+  FileText,
+  ExternalLink,
 } from "lucide-react";
 import { getClientPlanConfig } from "@/lib/planLimits";
 import { Pagination } from "@/components/common/Pagination";
+import { ImageUploader } from "@/components/common/ImageUploader";
 
 interface PharmacyRole {
   id: string;
@@ -56,6 +62,8 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [viewingStaff, setViewingStaff] = useState<any | null>(null);
+  const [previewImage, setPreviewImage] = useState<{ url: string; title: string } | null>(null);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -73,6 +81,13 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
     confirmPassword: "",
     role: "",
     branchId: user?.branchId || "",
+    nidNumber: "",
+    nidFrontUrl: "",
+    nidFrontPublicId: "",
+    nidBackUrl: "",
+    nidBackPublicId: "",
+    documentsSubmitted: false,
+    grossSalary: "",
   });
 
   const loadData = async () => {
@@ -93,7 +108,13 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
         setStaff(sRes.data || []);
         cachedStaff = sRes.data || [];
       }
-      if (bRes.success) {
+      if (bRes.success && bRes.data && bRes.data.length > 0) {
+        const branchList = bRes.data;
+        setBranches(branchList);
+        cachedStaffBranches = branchList;
+        const defaultBranchId = user?.branchId || branchList[0]?.id || "";
+        setFormData((prev) => ({ ...prev, branchId: prev.branchId || defaultBranchId }));
+      } else if (bRes.success) {
         setBranches(bRes.data || []);
         cachedStaffBranches = bRes.data || [];
       }
@@ -120,16 +141,19 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
   const planConfig = getClientPlanConfig(tier);
   const isTrial = tier === "TRIAL";
 
-  const nonOwnerStaff = staff.filter((s) => s.role !== "COMPANY_OWNER");
+  const nonOwnerStaff = staff.filter(
+    (s) => s.role !== "COMPANY_OWNER" && s.role !== "SUPER_ADMIN"
+  );
   const maxStaff = isTrial ? 1 : planConfig.maxTotalStaff || 999;
   const isTotalLimitReached = nonOwnerStaff.length >= maxStaff;
 
   const handleOpenCreate = () => {
     if (isTotalLimitReached) {
-      alert(
+      showAlert.warning(
+        "Staff Limit Reached",
         isTrial
           ? `Plan 0 - Free Trial allows a maximum of 1 staff member. Please upgrade to a paid plan to add more staff.`
-          : `You have reached the staff limit for ${planConfig.name}. Please upgrade to a higher plan to add more staff.`
+          : `You have reached the overall staff limit for ${planConfig.name} (${nonOwnerStaff.length}/${maxStaff} staff members). Please upgrade to a higher plan to add more staff.`
       );
       return;
     }
@@ -143,6 +167,13 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
       confirmPassword: "",
       role: roles[0]?.id || "",
       branchId: user?.branchId || branches[0]?.id || "",
+      nidNumber: "",
+      nidFrontUrl: "",
+      nidFrontPublicId: "",
+      nidBackUrl: "",
+      nidBackPublicId: "",
+      documentsSubmitted: false,
+      grossSalary: "",
     });
     setError(null);
     setShowPassword(false);
@@ -161,6 +192,13 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
       confirmPassword: "",
       role: member.pharmacyRoleId || member.role || roles[0]?.id || "",
       branchId: member.branchId || "",
+      nidNumber: member.nidNumber || "",
+      nidFrontUrl: member.nidFrontUrl || "",
+      nidFrontPublicId: member.nidFrontPublicId || "",
+      nidBackUrl: member.nidBackUrl || "",
+      nidBackPublicId: member.nidBackPublicId || "",
+      documentsSubmitted: !!member.documentsSubmitted,
+      grossSalary: member.grossSalary !== undefined && member.grossSalary !== null ? String(member.grossSalary) : "",
     });
     setError(null);
     setShowPassword(false);
@@ -215,6 +253,27 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
       let res;
       const targetBranchId = isManager ? user?.branchId : formData.branchId;
 
+      // Check branch-specific staff limit before creating
+      if (!editingStaff && targetBranchId) {
+        const maxBranchStaff = Number(profile?.planConfig?.maxStaffPerBranch ?? planConfig.maxStaffPerBranch ?? 1);
+        if (maxBranchStaff < 999) {
+          const branchStaffCount = staff.filter(
+            (s) => s.branchId === targetBranchId && s.role !== "COMPANY_OWNER" && s.role !== "SUPER_ADMIN"
+          ).length;
+          if (branchStaffCount >= maxBranchStaff) {
+            const branchObj = branches.find((b) => b.id === targetBranchId);
+            const branchName = branchObj ? branchObj.name : "This branch";
+            await showAlert.warning(
+              "Branch Staff Limit Reached",
+              `Branch "${branchName}" has reached its maximum staff limit of ${maxBranchStaff} (${planConfig.name}). Upgrade your plan or select another branch.`
+            );
+            setError(`Branch staff limit reached for "${branchName}" (${branchStaffCount}/${maxBranchStaff} staff).`);
+            setSaving(false);
+            return;
+          }
+        }
+      }
+
       if (editingStaff) {
         res = await fetchApi(`/users/${editingStaff.id}`, {
           method: "PATCH",
@@ -224,6 +283,13 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
             phone: formData.phone,
             role: formData.role,
             branchId: targetBranchId || null,
+            nidNumber: formData.nidNumber.trim() || null,
+            nidFrontUrl: formData.nidFrontUrl || null,
+            nidFrontPublicId: formData.nidFrontPublicId || null,
+            nidBackUrl: formData.nidBackUrl || null,
+            nidBackPublicId: formData.nidBackPublicId || null,
+            documentsSubmitted: formData.documentsSubmitted,
+            grossSalary: formData.grossSalary ? Number(formData.grossSalary) : null,
             ...(formData.password ? { password: formData.password } : {}),
           }),
         });
@@ -238,21 +304,34 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
             password: formData.password,
             role: formData.role,
             branchId: targetBranchId || null,
+            nidNumber: formData.nidNumber.trim() || null,
+            nidFrontUrl: formData.nidFrontUrl || null,
+            nidFrontPublicId: formData.nidFrontPublicId || null,
+            nidBackUrl: formData.nidBackUrl || null,
+            nidBackPublicId: formData.nidBackPublicId || null,
+            documentsSubmitted: formData.documentsSubmitted,
+            grossSalary: formData.grossSalary ? Number(formData.grossSalary) : null,
           }),
         });
       }
 
       if (res.success) {
         setModalOpen(false);
-        setFeedback({
-          type: "success",
-          text: `Staff member "${formData.name}" ${editingStaff ? "updated" : "created"} successfully.`,
-        });
+        await showAlert.success(
+          "Success",
+          `Staff member "${formData.name}" ${editingStaff ? "updated" : "created"} successfully.`
+        );
         await loadData();
       } else {
+        if (res.message?.toLowerCase().includes("limit")) {
+          await showAlert.warning("Staff Limit Reached", res.message);
+        }
         setError(res.message || "Failed to save staff member");
       }
     } catch (err: any) {
+      if (err.message?.toLowerCase().includes("limit")) {
+        await showAlert.warning("Staff Limit Reached", err.message);
+      }
       setError(err.message || "Error occurred");
     } finally {
       setSaving(false);
@@ -283,14 +362,18 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
 
   const handleDeleteStaff = async (member: any) => {
     if (member.role === "COMPANY_OWNER") {
-      setFeedback({ type: "error", text: "Pharmacy Owner account cannot be deleted." });
+      await showAlert.error("Action Prohibited", "Pharmacy Owner account cannot be deleted.");
       return;
     }
 
-    const confirmed = window.confirm(
+    const confirmed = await showAlert.confirm(
+      "Delete Staff Member",
       `Are you sure you want to permanently delete staff member "${
         member.name || member.username
-      }"? This action will remove their system access immediately.`
+      }"? This action will remove their system access immediately.`,
+      "Yes, Delete Staff",
+      "Cancel",
+      true
     );
     if (!confirmed) return;
 
@@ -301,16 +384,16 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
       });
 
       if (res.success) {
-        setFeedback({
-          type: "success",
-          text: res.message || `Staff member "${member.name || member.username}" deleted successfully.`,
-        });
+        await showAlert.success(
+          "Staff Deleted",
+          res.message || `Staff member "${member.name || member.username}" deleted successfully.`
+        );
         await loadData();
       } else {
-        setFeedback({ type: "error", text: res.message || "Failed to delete staff member" });
+        await showAlert.error("Delete Failed", res.message || "Failed to delete staff member");
       }
     } catch (err: any) {
-      setFeedback({ type: "error", text: err.message || "Error deleting staff member" });
+      await showAlert.error("Delete Error", err.message || "Error deleting staff member");
     } finally {
       setDeletingId(null);
     }
@@ -456,6 +539,8 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
                   <th className="px-5 py-3.5">Assigned Role</th>
                   <th className="px-5 py-3.5">Branch</th>
                   <th className="px-5 py-3.5">Phone</th>
+                  <th className="px-5 py-3.5">Gross Salary</th>
+                  <th className="px-5 py-3.5">NID & Papers</th>
                   <th className="px-5 py-3.5">Status</th>
                   <th className="px-5 py-3.5 text-right">Actions</th>
                 </tr>
@@ -470,19 +555,24 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
                   return (
                     <tr key={member.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
                       <td className="px-5 py-3.5">
-                        <div className="flex items-center gap-3">
+                        <div
+                          className="flex items-center gap-3 cursor-pointer group"
+                          onClick={() => setViewingStaff(member)}
+                          title="Click to view staff details & NID"
+                        >
                           <div
-                            className={`h-9 w-9 rounded-lg flex items-center justify-center font-bold text-sm ${
+                            className={`h-9 w-9 rounded-lg flex items-center justify-center font-bold text-sm shrink-0 ${
                               isOwnerMember
                                 ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
-                                : "bg-brand-primary/10 text-brand-primary"
+                                : "bg-brand-primary/10 text-brand-primary group-hover:scale-105 transition-transform"
                             }`}
                           >
                             {(member.name || member.username || "S").charAt(0).toUpperCase()}
                           </div>
                           <div>
-                            <div className="font-bold text-sm text-slate-900 dark:text-white">
-                              {member.name || member.username}
+                            <div className="font-bold text-sm text-slate-900 dark:text-white group-hover:text-brand-primary transition-colors flex items-center gap-1.5">
+                              <span>{member.name || member.username}</span>
+                              <Eye className="h-3 w-3 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity" />
                             </div>
                             <div className="text-xs text-slate-400 font-mono">{member.email || member.username}</div>
                           </div>
@@ -501,10 +591,42 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
                         </span>
                       </td>
                       <td className="px-5 py-3.5 text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300">
-                        {member.branch?.name || (isOwnerMember ? "All Branches (Owner)" : "HQ / Main Branch")}
+                        {member.branch?.name || (isOwnerMember ? "All Branches (Owner)" : branches[0]?.name || "Main Branch")}
                       </td>
                       <td className="px-5 py-3.5 text-xs sm:text-sm font-mono text-slate-600 dark:text-slate-400">
                         {member.phone || "—"}
+                      </td>
+                      <td className="px-5 py-3.5 text-xs sm:text-sm font-mono font-semibold">
+                        {member.grossSalary ? (
+                          <span className="text-emerald-600 dark:text-emerald-400 font-bold">
+                            ৳{Number(member.grossSalary).toLocaleString()}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 text-xs italic">—</span>
+                        )}
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <div className="flex flex-col gap-1">
+                          {member.documentsSubmitted ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 w-fit">
+                              <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                              <span>Docs Submitted</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200 dark:border-amber-800 w-fit">
+                              <AlertCircle className="h-3 w-3 text-amber-600" />
+                              <span>Docs Pending</span>
+                            </span>
+                          )}
+                          {member.nidNumber || member.nidFrontUrl ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+                              <CreditCard className="h-2.5 w-2.5 text-brand-primary" />
+                              <span className="font-mono">{member.nidNumber ? member.nidNumber.slice(0, 10) + (member.nidNumber.length > 10 ? "..." : "") : "NID Attached"}</span>
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-slate-400 italic">No NID</span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-5 py-3.5">
                         <span
@@ -519,48 +641,61 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
                         </span>
                       </td>
                       <td className="px-5 py-3.5 text-right">
-                        {!isOwnerMember && user?.role !== "AUDITOR" && (
-                          <div className="inline-flex items-center gap-2">
-                            {/* Edit Action */}
-                            <button
-                              type="button"
-                              onClick={() => handleOpenEdit(member)}
-                              className="h-8 px-3 rounded-lg text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition"
-                            >
-                              Edit
-                            </button>
+                        <div className="inline-flex items-center gap-1.5">
+                          {/* Details Action */}
+                          <button
+                            type="button"
+                            onClick={() => setViewingStaff(member)}
+                            className="h-8 px-2.5 rounded-lg text-xs font-bold bg-brand-primary/10 text-brand-primary hover:bg-brand-primary/20 transition flex items-center gap-1"
+                            title="View Staff Profile & NID"
+                          >
+                            <Eye className="h-3.5 w-3.5" />
+                            <span>Details</span>
+                          </button>
 
-                            {/* Deactivate / Activate Action */}
-                            <button
-                              type="button"
-                              onClick={() => handleToggleStatus(member)}
-                              className={`h-8 px-3 rounded-lg text-xs font-bold transition ${
-                                member.isActive
-                                  ? "bg-amber-50 text-amber-700 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-300"
-                                  : "bg-emerald-50 text-emerald-600 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300"
-                              }`}
-                            >
-                              {member.isActive ? "Deactivate" : "Activate"}
-                            </button>
-
-                            {/* Delete Action */}
-                            {isOwner && (
+                          {!isOwnerMember && user?.role !== "AUDITOR" && (
+                            <>
+                              {/* Edit Action */}
                               <button
                                 type="button"
-                                disabled={deletingId === member.id}
-                                onClick={() => handleDeleteStaff(member)}
-                                className="h-8 w-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50 transition disabled:opacity-50"
-                                title="Delete Staff Member"
+                                onClick={() => handleOpenEdit(member)}
+                                className="h-8 px-2.5 rounded-lg text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition"
                               >
-                                {deletingId === member.id ? (
-                                  <Loader2 className="h-3.5 w-3.5 animate-spin text-red-500" />
-                                ) : (
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                )}
+                                Edit
                               </button>
-                            )}
-                          </div>
-                        )}
+
+                              {/* Deactivate / Activate Action */}
+                              <button
+                                type="button"
+                                onClick={() => handleToggleStatus(member)}
+                                className={`h-8 px-2.5 rounded-lg text-xs font-bold transition ${
+                                  member.isActive
+                                    ? "bg-amber-50 text-amber-700 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-300"
+                                    : "bg-emerald-50 text-emerald-600 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300"
+                                }`}
+                              >
+                                {member.isActive ? "Deactivate" : "Activate"}
+                              </button>
+
+                              {/* Delete Action */}
+                              {isOwner && (
+                                <button
+                                  type="button"
+                                  disabled={deletingId === member.id}
+                                  onClick={() => handleDeleteStaff(member)}
+                                  className="h-8 w-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50 transition disabled:opacity-50"
+                                  title="Delete Staff Member"
+                                >
+                                  {deletingId === member.id ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin text-red-500" />
+                                  ) : (
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  )}
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -676,32 +811,52 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
                 </select>
               </div>
 
-              {/* Branch Assignment */}
-              <div>
-                <label className="block text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200 mb-1">
-                  Assign to Branch
-                </label>
-                {isManager ? (
-                  <input
-                    type="text"
-                    disabled
-                    value={branches.find((b) => b.id === user?.branchId)?.name || "Your Branch"}
-                    className="w-full h-11 px-3.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-sm font-semibold text-slate-600 dark:text-slate-400"
-                  />
-                ) : (
-                  <select
-                    value={formData.branchId}
-                    onChange={(e) => setFormData({ ...formData, branchId: e.target.value })}
-                    className="w-full h-11 px-3.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary cursor-pointer"
-                  >
-                    <option value="">HQ / Main Branch</option>
-                    {branches.map((b) => (
-                      <option key={b.id} value={b.id}>
-                        {b.name}
-                      </option>
-                    ))}
-                  </select>
-                )}
+              {/* Branch Assignment & Gross Salary */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200 mb-1">
+                    Assign to Branch
+                  </label>
+                  {isManager ? (
+                    <input
+                      type="text"
+                      disabled
+                      value={branches.find((b) => b.id === user?.branchId)?.name || "Your Branch"}
+                      className="w-full h-11 px-3.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-sm font-semibold text-slate-600 dark:text-slate-400"
+                    />
+                  ) : (
+                    <select
+                      value={formData.branchId || branches[0]?.id || ""}
+                      onChange={(e) => setFormData({ ...formData, branchId: e.target.value })}
+                      className="w-full h-11 px-3.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary cursor-pointer"
+                    >
+                      {branches.length === 0 && <option value="">No branch available</option>}
+                      {branches.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.name}{b.location ? ` (${b.location})` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200 mb-1">
+                    Gross Monthly Salary (৳)
+                  </label>
+                  <div className="relative flex items-center">
+                    <span className="absolute left-3.5 text-xs sm:text-sm font-bold text-slate-400 pointer-events-none font-mono">৳</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="100"
+                      value={formData.grossSalary}
+                      onChange={(e) => setFormData({ ...formData, grossSalary: e.target.value })}
+                      placeholder="e.g. 25000"
+                      className="w-full h-11 pl-9 pr-3.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary font-mono"
+                    />
+                  </div>
+                </div>
               </div>
 
               {/* Password & Confirm Password */}
@@ -757,6 +912,105 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
                 </div>
               </div>
 
+              {/* Section: Staff NID & Verification Documents */}
+              <div className="pt-3 border-t border-slate-200 dark:border-slate-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <CreditCard className="h-4 w-4 text-brand-primary" />
+                    <span>National ID & Verification Documents</span>
+                  </h4>
+                </div>
+
+                {/* NID Number */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
+                    NID Card Number
+                  </label>
+                  <div className="relative flex items-center">
+                    <CreditCard className="h-4 w-4 text-slate-400 absolute left-3.5 pointer-events-none" />
+                    <input
+                      type="text"
+                      value={formData.nidNumber}
+                      onChange={(e) => setFormData({ ...formData, nidNumber: e.target.value })}
+                      placeholder="e.g. 19901234567890123"
+                      className="w-full h-10 pl-10 pr-3.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs sm:text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary font-mono"
+                    />
+                  </div>
+                </div>
+
+                {/* NID Upload Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
+                    <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-brand-primary"></span>
+                      <span>NID Front Side</span>
+                    </label>
+                    <ImageUploader
+                      value={formData.nidFrontUrl}
+                      publicId={formData.nidFrontPublicId}
+                      folder="pharmacy_saas/staff_nid"
+                      label="Upload Front"
+                      hint="Up to 5MB"
+                      aspectRatio="wide"
+                      onChange={(img) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          nidFrontUrl: img?.url || "",
+                          nidFrontPublicId: img?.publicId || "",
+                        }))
+                      }
+                    />
+                  </div>
+
+                  <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
+                    <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-purple-500"></span>
+                      <span>NID Back Side</span>
+                    </label>
+                    <ImageUploader
+                      value={formData.nidBackUrl}
+                      publicId={formData.nidBackPublicId}
+                      folder="pharmacy_saas/staff_nid"
+                      label="Upload Back"
+                      hint="Up to 5MB"
+                      aspectRatio="wide"
+                      onChange={(img) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          nidBackUrl: img?.url || "",
+                          nidBackPublicId: img?.publicId || "",
+                        }))
+                      }
+                    />
+                  </div>
+                </div>
+
+                {/* Document Submission Checkbox / Terms */}
+                <div className={`p-3 rounded-lg border transition-all ${
+                  formData.documentsSubmitted
+                    ? "bg-emerald-50/60 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800"
+                    : "bg-amber-50/60 dark:bg-amber-950/30 border-amber-300 dark:border-amber-800"
+                }`}>
+                  <label className="flex items-start gap-2.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.documentsSubmitted}
+                      onChange={(e) => setFormData({ ...formData, documentsSubmitted: e.target.checked })}
+                      className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-primary focus:ring-brand-primary cursor-pointer shrink-0"
+                    />
+                    <div className="space-y-0.5">
+                      <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                        <FileCheck className={`h-3.5 w-3.5 ${formData.documentsSubmitted ? "text-emerald-600" : "text-amber-600"}`} />
+                        <span>All required certificates & documents submitted</span>
+                      </div>
+                      <p className="text-[11px] text-slate-500">
+                        {formData.documentsSubmitted ? "Verified — Salary enabled" : "Unchecked — Salary blocked"}
+                      </p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
                 <button
                   type="button"
@@ -775,6 +1029,264 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Staff Details & NID Modal */}
+      {viewingStaff && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="max-w-2xl w-full rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 space-y-6 shadow-2xl animate-in fade-in zoom-in-95 duration-150 max-h-[92vh] overflow-y-auto">
+            {/* Header */}
+            <div className="flex items-start justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-3.5">
+                <div className="h-12 w-12 rounded-xl bg-brand-primary/10 text-brand-primary font-black text-lg flex items-center justify-center">
+                  {(viewingStaff.name || viewingStaff.username || "S").charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
+                    <span>{viewingStaff.name || viewingStaff.username}</span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-brand-primary/10 text-brand-primary border border-brand-primary/20">
+                      {viewingStaff.role === "COMPANY_OWNER"
+                        ? "Pharmacy Owner"
+                        : viewingStaff.pharmacyRoleName || viewingStaff.role?.replace("_", " ")}
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-400 font-mono">@{viewingStaff.username}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setViewingStaff(null)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-lg"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Profile Info Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">Email Address</span>
+                <span className="text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-200 mt-0.5 block font-mono">
+                  {viewingStaff.email || "—"}
+                </span>
+              </div>
+
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">Phone Number</span>
+                <span className="text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-200 mt-0.5 block font-mono">
+                  {viewingStaff.phone || "—"}
+                </span>
+              </div>
+
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">Assigned Branch</span>
+                <span className="text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-200 mt-0.5 block">
+                  {viewingStaff.branch?.name || (viewingStaff.role === "COMPANY_OWNER" ? "All Branches (Owner)" : "Main Branch")}
+                </span>
+              </div>
+
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">Gross Salary</span>
+                <span className="text-xs sm:text-sm font-bold text-emerald-600 dark:text-emerald-400 mt-0.5 block font-mono">
+                  {viewingStaff.grossSalary ? `৳${Number(viewingStaff.grossSalary).toLocaleString()}` : "Not configured"}
+                </span>
+              </div>
+
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">Account Status</span>
+                <span className="mt-0.5 inline-flex items-center gap-1.5 text-xs font-bold text-emerald-600">
+                  <span className={`h-2 w-2 rounded-full ${viewingStaff.isActive ? "bg-emerald-500" : "bg-red-500"}`} />
+                  <span>{viewingStaff.isActive ? "Active Staff" : "Disabled"}</span>
+                </span>
+              </div>
+            </div>
+
+            {/* Document Submission Status Badge */}
+            <div className={`p-3 rounded-xl border flex items-center justify-between gap-3 ${
+              viewingStaff.documentsSubmitted
+                ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800"
+                : "bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800"
+            }`}>
+              <div className="flex items-center gap-2">
+                {viewingStaff.documentsSubmitted ? (
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                ) : (
+                  <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
+                )}
+                <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">
+                  {viewingStaff.documentsSubmitted
+                    ? "Certificates & Documents: Verified (Salary Enabled)"
+                    : "Certificates & Documents: Pending (Salary Blocked)"}
+                </span>
+              </div>
+            </div>
+
+            {/* NID Card Section */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <CreditCard className="h-4 w-4 text-brand-primary" />
+                  <span>National ID Card</span>
+                </h4>
+                {viewingStaff.nidNumber && (
+                  <span className="text-xs font-mono font-bold px-2.5 py-1 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200">
+                    NID: {viewingStaff.nidNumber}
+                  </span>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Front Side */}
+                <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-brand-primary"></span>
+                      <span>Front Side</span>
+                    </span>
+                    {viewingStaff.nidFrontUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setPreviewImage({ url: viewingStaff.nidFrontUrl, title: `${viewingStaff.name || viewingStaff.username} - NID Front Side` })}
+                        className="text-[11px] font-bold text-brand-primary hover:underline flex items-center gap-1 cursor-pointer"
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                        <span>View Large</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {viewingStaff.nidFrontUrl ? (
+                    <div
+                      onClick={() => setPreviewImage({ url: viewingStaff.nidFrontUrl, title: `${viewingStaff.name || viewingStaff.username} - NID Front Side` })}
+                      className="relative h-44 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 bg-white cursor-pointer group shadow-xs"
+                    >
+                      <img
+                        src={viewingStaff.nidFrontUrl}
+                        alt="NID Front"
+                        className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-200"
+                      />
+                      <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-bold gap-1">
+                        <Eye className="h-4 w-4" />
+                        <span>Click to zoom</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="h-44 rounded-lg border-2 border-dashed border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center text-slate-400 gap-1.5 text-xs">
+                      <CreditCard className="h-8 w-8 text-slate-300 dark:text-slate-600" />
+                      <span>No Front side uploaded</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Back Side */}
+                <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-purple-500"></span>
+                      <span>Back Side</span>
+                    </span>
+                    {viewingStaff.nidBackUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setPreviewImage({ url: viewingStaff.nidBackUrl, title: `${viewingStaff.name || viewingStaff.username} - NID Back Side` })}
+                        className="text-[11px] font-bold text-brand-primary hover:underline flex items-center gap-1 cursor-pointer"
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                        <span>View Large</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {viewingStaff.nidBackUrl ? (
+                    <div
+                      onClick={() => setPreviewImage({ url: viewingStaff.nidBackUrl, title: `${viewingStaff.name || viewingStaff.username} - NID Back Side` })}
+                      className="relative h-44 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 bg-white cursor-pointer group shadow-xs"
+                    >
+                      <img
+                        src={viewingStaff.nidBackUrl}
+                        alt="NID Back"
+                        className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-200"
+                      />
+                      <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-bold gap-1">
+                        <Eye className="h-4 w-4" />
+                        <span>Click to zoom</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="h-44 rounded-lg border-2 border-dashed border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center text-slate-400 gap-1.5 text-xs">
+                      <CreditCard className="h-8 w-8 text-slate-300 dark:text-slate-600" />
+                      <span>No Back side uploaded</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => {
+                  const staffToEdit = viewingStaff;
+                  setViewingStaff(null);
+                  handleOpenEdit(staffToEdit);
+                }}
+                className="h-10 px-4 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 transition flex items-center gap-2 cursor-pointer"
+              >
+                <Edit2 className="h-3.5 w-3.5" />
+                <span>Edit Staff & Documents</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setViewingStaff(null)}
+                className="h-10 px-6 rounded-xl text-xs font-bold bg-brand-primary text-white hover:bg-brand-primary-hover transition cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Full Image Preview Modal */}
+      {previewImage && (
+        <div className="fixed inset-0 z-60 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="relative max-w-4xl w-full bg-slate-900 rounded-2xl overflow-hidden border border-slate-800 shadow-2xl p-4 space-y-3">
+            <div className="flex items-center justify-between text-white pb-2 border-b border-slate-800">
+              <span className="text-sm font-bold">{previewImage.title}</span>
+              <button
+                onClick={() => setPreviewImage(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="flex items-center justify-center bg-black/40 rounded-xl overflow-hidden max-h-[75vh]">
+              <img
+                src={previewImage.url}
+                alt={previewImage.title}
+                className="max-h-[75vh] w-auto object-contain rounded-lg"
+              />
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <a
+                href={previewImage.url}
+                target="_blank"
+                rel="noreferrer"
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-brand-primary text-white hover:bg-brand-primary-hover flex items-center gap-1.5 cursor-pointer"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                <span>Open Full Size in Tab</span>
+              </a>
+              <button
+                onClick={() => setPreviewImage(null)}
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-slate-800 text-slate-300 hover:bg-slate-700 cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { fetchApi } from "@/lib/api";
+import { showAlert } from "@/lib/swal";
 import {
   ShieldCheck,
   KeyRound,
@@ -282,7 +283,13 @@ export function RolesModule() {
       return;
     }
 
-    const confirmed = window.confirm(`Are you sure you want to delete role "${role.name}"?`);
+    const confirmed = await showAlert.confirm(
+      "Delete Role",
+      `Are you sure you want to delete role "${role.name}"?`,
+      "Yes, Delete Role",
+      "Cancel",
+      true
+    );
     if (!confirmed) return;
 
     try {

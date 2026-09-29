@@ -64,6 +64,10 @@ interface EmployeeItem {
   branchName?: string;
   createdAt: string;
   isActive?: boolean;
+  documentsSubmitted?: boolean;
+  nidNumber?: string | null;
+  nidFrontUrl?: string | null;
+  nidBackUrl?: string | null;
   resignationDate?: string | null;
   resignationReason?: string | null;
   deactivatedAt?: string | null;
@@ -436,10 +440,25 @@ export function EmployeeListView({
                             )}
                           </div>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                            <UserCheck className="w-3 h-3" />
-                            Active
-                          </span>
+                          <div className="space-y-1">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                              <UserCheck className="w-3 h-3" />
+                              Active
+                            </span>
+                            <div>
+                              {emp.documentsSubmitted ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
+                                  <CheckCircle2 className="w-2.5 h-2.5" />
+                                  Docs Verified
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-800">
+                                  <AlertCircle className="w-2.5 h-2.5" />
+                                  Docs Pending
+                                </span>
+                              )}
+                            </div>
+                          </div>
                         )}
                       </td>
 

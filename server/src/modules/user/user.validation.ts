@@ -22,6 +22,13 @@ export const createUserSchema = z.object({
   phone: z.string().optional(),
   role: z.string().min(1, "Role is required"),
   branchId: z.string().nullable().optional(),
+  nidNumber: z.string().nullable().optional(),
+  nidFrontUrl: z.string().nullable().optional(),
+  nidFrontPublicId: z.string().nullable().optional(),
+  nidBackUrl: z.string().nullable().optional(),
+  nidBackPublicId: z.string().nullable().optional(),
+  documentsSubmitted: z.boolean().optional(),
+  grossSalary: z.coerce.number().min(0, "Gross salary must be a positive number").nullable().optional(),
 });
 
 export const updateUserSchema = z.object({
@@ -32,6 +39,13 @@ export const updateUserSchema = z.object({
   branchId: z.string().nullable().optional(),
   password: z.string().min(6).optional(),
   isActive: z.boolean().optional(),
+  nidNumber: z.string().nullable().optional(),
+  nidFrontUrl: z.string().nullable().optional(),
+  nidFrontPublicId: z.string().nullable().optional(),
+  nidBackUrl: z.string().nullable().optional(),
+  nidBackPublicId: z.string().nullable().optional(),
+  documentsSubmitted: z.boolean().optional(),
+  grossSalary: z.coerce.number().min(0, "Gross salary must be a positive number").nullable().optional(),
 });
 
 export const createPharmacyRoleSchema = z.object({

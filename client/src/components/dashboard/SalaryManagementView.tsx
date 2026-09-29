@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { fetchApi } from "@/lib/api";
+import { showAlert } from "@/lib/swal";
 import { useAuth } from "@/context/AuthContext";
 import { useBranchContext } from "@/context/BranchContext";
 import { OwnerModule } from "./DashboardSidebar";
@@ -83,6 +84,10 @@ interface EmployeeItem {
   branchId?: string;
   branchName?: string;
   createdAt: string;
+  nidNumber?: string | null;
+  nidFrontUrl?: string | null;
+  nidBackUrl?: string | null;
+  documentsSubmitted?: boolean;
   salaryConfig?: SalaryConfig | null;
   monthStatus?: MonthStatus | null;
 }
@@ -201,6 +206,13 @@ export function SalaryManagementView({
 
   // Open Quick Pay Modal
   const openPayModal = (emp: EmployeeItem) => {
+    if (!emp.documentsSubmitted) {
+      showAlert.warning(
+        "Documents Pending",
+        `"${emp.name || emp.username}" has not submitted the required certificates & documents. Salary disbursement is blocked until verified.`
+      );
+      return;
+    }
     setPayEmployee(emp);
     const due = emp.monthStatus?.dueAmount ?? 0;
     setPayAmount(due > 0 ? due : (emp.monthStatus?.netSalary || ""));
@@ -304,6 +316,14 @@ export function SalaryManagementView({
     e.preventDefault();
     const targetBranch = payEmployee?.branchId || (effectiveBranchId && effectiveBranchId !== "all" ? effectiveBranchId : branches[0]?.id);
     if (!payEmployee || !targetBranch) return;
+    if (!payEmployee.documentsSubmitted) {
+      setError("Employee has not submitted the required certificates/documents. Salary disbursement blocked.");
+      showAlert.warning(
+        "Documents Pending",
+        "This employee has not submitted the required certificates and documents. Salary disbursement is blocked."
+      );
+      return;
+    }
     if (!payAccountId) {
       setError("Please select a valid financial account to disburse salary.");
       return;
@@ -560,6 +580,19 @@ export function SalaryManagementView({
                             <div className="text-[11px] text-slate-400 font-mono">
                               {emp.phone || `@${emp.username}`}
                             </div>
+                            <div className="mt-1">
+                              {emp.documentsSubmitted ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
+                                  <CheckCircle2 className="w-2.5 h-2.5" />
+                                  <span>Docs Submitted</span>
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-800" title="Documents pending — salary disbursement blocked">
+                                  <AlertCircle className="w-2.5 h-2.5" />
+                                  <span>Docs Pending (Salary Blocked)</span>
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </td>
@@ -677,9 +710,15 @@ export function SalaryManagementView({
                         <div className="flex items-center justify-end gap-2">
                           <button
                             onClick={() => openPayModal(emp)}
-                            className="px-3 py-1.5 rounded-lg text-xs font-bold bg-brand-primary hover:bg-brand-primary/90 text-white shadow-xs transition"
+                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition shadow-xs flex items-center gap-1.5 ${
+                              emp.documentsSubmitted
+                                ? "bg-brand-primary hover:bg-brand-primary/90 text-white"
+                                : "bg-amber-100 hover:bg-amber-200 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300 border border-amber-300 dark:border-amber-700"
+                            }`}
+                            title={emp.documentsSubmitted ? "Pay Salary" : "Documents pending — salary disbursement blocked"}
                           >
-                            Pay Salary
+                            {!emp.documentsSubmitted && <AlertCircle className="w-3 h-3 text-amber-600" />}
+                            <span>{emp.documentsSubmitted ? "Pay Salary" : "Docs Pending"}</span>
                           </button>
                           <button
                             onClick={() => openAllowanceModal(emp)}

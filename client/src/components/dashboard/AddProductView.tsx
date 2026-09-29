@@ -198,8 +198,8 @@ export function AddProductView({
       defaultUnit = "bottle";
       defaultSize = "100ml";
       packType = "BOTTLE";
-      items = 12;
-      strips = 12;
+      items = 1;
+      strips = 1;
       tablets = 1;
     } else if (
       lowerName.includes("inject") ||
@@ -212,8 +212,8 @@ export function AddProductView({
       defaultUnit = "vial";
       defaultSize = "1g";
       packType = "BOX";
-      items = 10;
-      strips = 10;
+      items = 1;
+      strips = 1;
       tablets = 1;
     } else if (
       lowerName.includes("equip") ||
@@ -222,7 +222,13 @@ export function AddProductView({
       lowerName.includes("diaper") ||
       lowerName.includes("surgical") ||
       lowerName.includes("essential") ||
-      lowerName.includes("hygiene")
+      lowerName.includes("hygiene") ||
+      lowerName.includes("lifestyle") ||
+      lowerName.includes("cosmetic") ||
+      lowerName.includes("paste") ||
+      lowerName.includes("soap") ||
+      lowerName.includes("general") ||
+      lowerName.includes("fmcg")
     ) {
       detectedType = "PIECE";
       defaultUnit = "piece";
@@ -266,37 +272,13 @@ export function AddProductView({
         stripsPerBox: prev.stripsPerBox || 10,
         tabletsPerStrip: prev.tabletsPerStrip || 10,
       }));
-    } else if (type === "BOTTLE") {
-      const bItems = itemsPerBox && itemsPerBox > 1 ? itemsPerBox : 12;
-      setItemsPerBox(bItems);
+    } else {
+      setItemsPerBox(1);
       setFormData((prev) => ({
         ...prev,
-        unit: "bottle",
-        defaultPackType: "BOTTLE",
-        size: prev.size && prev.size.includes("ml") ? prev.size : "100ml",
-        stripsPerBox: bItems,
-        tabletsPerStrip: 1,
-      }));
-    } else if (type === "PIECE") {
-      const pItems = itemsPerBox && itemsPerBox > 0 ? itemsPerBox : 1;
-      setItemsPerBox(pItems);
-      setFormData((prev) => ({
-        ...prev,
-        unit: "piece",
+        unit: prev.unit && prev.unit !== "tablet" ? prev.unit : "piece",
         defaultPackType: "PIECE",
-        size: "Standard",
-        stripsPerBox: pItems,
-        tabletsPerStrip: 1,
-      }));
-    } else if (type === "VIAL") {
-      const vItems = itemsPerBox && itemsPerBox > 1 ? itemsPerBox : 10;
-      setItemsPerBox(vItems);
-      setFormData((prev) => ({
-        ...prev,
-        unit: "vial",
-        defaultPackType: "BOX",
-        size: prev.size && (prev.size.includes("g") || prev.size.includes("ml")) ? prev.size : "1g",
-        stripsPerBox: vItems,
+        stripsPerBox: 1,
         tabletsPerStrip: 1,
       }));
     }
@@ -351,20 +333,10 @@ export function AddProductView({
         defaultPackType = "BOX";
         strips = Number(formData.stripsPerBox) || 10;
         tablets = Number(formData.tabletsPerStrip) || 10;
-      } else if (isBottle) {
-        finalUnit = "bottle";
-        defaultPackType = "BOTTLE";
-        strips = Number(itemsPerBox) || 1;
-        tablets = 1;
-      } else if (isPiece) {
+      } else {
         finalUnit = formData.unit || "piece";
         defaultPackType = "PIECE";
-        strips = Number(itemsPerBox) || 1;
-        tablets = 1;
-      } else if (isVial) {
-        finalUnit = "vial";
-        defaultPackType = "VIAL";
-        strips = Number(itemsPerBox) || 1;
+        strips = 1;
         tablets = 1;
       }
 
@@ -553,7 +525,7 @@ export function AddProductView({
             {/* Generic Name */}
             <div>
               <label className="block text-sm sm:text-base xl:text-lg font-bold text-slate-800 dark:text-slate-200 mb-2">
-                Generic Name
+                Generic Name <span className="text-xs font-normal text-slate-400">(Optional)</span>
               </label>
               <input
                 type="text"
@@ -568,7 +540,7 @@ export function AddProductView({
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <label className="block text-sm sm:text-base xl:text-lg font-bold text-slate-800 dark:text-slate-200">
-                  Company / Supplier <span className="text-rose-500">*</span>
+                  Company / Supplier <span className="text-xs font-normal text-slate-400">(Optional)</span>
                 </label>
                 <button
                   type="button"
@@ -583,7 +555,6 @@ export function AddProductView({
               <div className="relative">
                 <Building2 className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400 pointer-events-none" />
                 <select
-                  required
                   value={formData.supplierId}
                   onChange={(e) => {
                     const sId = e.target.value;
@@ -596,7 +567,7 @@ export function AddProductView({
                   }}
                   className="w-full h-12 sm:h-12 xl:h-13 pl-11 pr-4 bg-slate-50/70 hover:bg-slate-50 dark:bg-slate-800/60 dark:hover:bg-slate-800/80 focus:bg-white dark:focus:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-sm sm:text-base xl:text-lg font-semibold text-slate-900 dark:text-white outline-none focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20 transition-all cursor-pointer"
                 >
-                  <option value="">-- Select Company / Supplier --</option>
+                  <option value="">-- None / Local / General --</option>
                   {suppliers.map((s) => {
                     const label = s.company && s.company !== s.name
                       ? `${s.company} (${s.name})`
@@ -793,111 +764,61 @@ export function AddProductView({
             <label className="block text-sm sm:text-base xl:text-lg font-bold text-slate-800 dark:text-slate-200 mb-2.5">
               Select Packaging Type <span className="text-rose-500">*</span>
             </label>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {/* Option 1: Strip & Tablet */}
               <button
                 type="button"
                 disabled={!isPackagingEditing}
                 onClick={() => handleSelectPackagingType("TABLET")}
-                className={`p-3.5 sm:p-4 xl:p-5 rounded-2xl border-2 text-left transition flex flex-col gap-1.5 disabled:opacity-75 ${
+                className={`p-4 sm:p-5 rounded-2xl border-2 text-left transition flex flex-col gap-2 disabled:opacity-75 ${
                   packagingType === "TABLET"
                     ? "bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-500 text-emerald-950 dark:text-emerald-200 ring-2 ring-emerald-500/20 shadow-sm"
                     : "bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-slate-300"
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 font-black text-sm sm:text-base xl:text-lg">
-                    <Pill className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-600 shrink-0" />
+                  <div className="flex items-center gap-2.5 font-black text-base sm:text-lg">
+                    <Pill className="h-5 w-5 text-emerald-600 shrink-0" />
                     <span>Tablet / Capsule</span>
                   </div>
                   {packagingType === "TABLET" && (
-                    <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                    <span className="h-3 w-3 rounded-full bg-emerald-500" />
                   )}
                 </div>
                 <span className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-medium">
-                  Box & Strips
+                  Multi-pack hierarchy: Box → Strips → Tablets
                 </span>
               </button>
 
-              {/* Option 2: Bottle / Liquid */}
-              <button
-                type="button"
-                disabled={!isPackagingEditing}
-                onClick={() => handleSelectPackagingType("BOTTLE")}
-                className={`p-3.5 sm:p-4 xl:p-5 rounded-2xl border-2 text-left transition flex flex-col gap-1.5 disabled:opacity-75 ${
-                  packagingType === "BOTTLE"
-                    ? "bg-blue-50/80 dark:bg-blue-950/30 border-blue-500 text-blue-950 dark:text-blue-200 ring-2 ring-blue-500/20 shadow-sm"
-                    : "bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-slate-300"
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 font-black text-sm sm:text-base xl:text-lg">
-                    <Droplets className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 shrink-0" />
-                    <span>Syrup / Bottle</span>
-                  </div>
-                  {packagingType === "BOTTLE" && (
-                    <span className="h-2.5 w-2.5 rounded-full bg-blue-500" />
-                  )}
-                </div>
-                <span className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-medium">
-                  Bottles / Liquid
-                </span>
-              </button>
-
-              {/* Option 3: Piece / Equipment */}
+              {/* Option 2: Piece */}
               <button
                 type="button"
                 disabled={!isPackagingEditing}
                 onClick={() => handleSelectPackagingType("PIECE")}
-                className={`p-3.5 sm:p-4 xl:p-5 rounded-2xl border-2 text-left transition flex flex-col gap-1.5 disabled:opacity-75 ${
-                  packagingType === "PIECE"
+                className={`p-4 sm:p-5 rounded-2xl border-2 text-left transition flex flex-col gap-2 disabled:opacity-75 ${
+                  packagingType !== "TABLET"
                     ? "bg-purple-50/80 dark:bg-purple-950/30 border-purple-500 text-purple-950 dark:text-purple-200 ring-2 ring-purple-500/20 shadow-sm"
                     : "bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-slate-300"
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 font-black text-sm sm:text-base xl:text-lg">
-                    <Package className="h-4 w-4 sm:h-5 sm:w-5 text-purple-600 shrink-0" />
-                    <span>Piece / Unit</span>
+                  <div className="flex items-center gap-2.5 font-black text-base sm:text-lg">
+                    <Package className="h-5 w-5 text-purple-600 shrink-0" />
+                    <span>Piece</span>
                   </div>
-                  {packagingType === "PIECE" && (
-                    <span className="h-2.5 w-2.5 rounded-full bg-purple-500" />
+                  {packagingType !== "TABLET" && (
+                    <span className="h-3 w-3 rounded-full bg-purple-500" />
                   )}
                 </div>
                 <span className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-medium">
-                  Single item or pack
-                </span>
-              </button>
-
-              {/* Option 4: Vial / Injection */}
-              <button
-                type="button"
-                disabled={!isPackagingEditing}
-                onClick={() => handleSelectPackagingType("VIAL")}
-                className={`p-3.5 sm:p-4 xl:p-5 rounded-2xl border-2 text-left transition flex flex-col gap-1.5 disabled:opacity-75 ${
-                  packagingType === "VIAL"
-                    ? "bg-amber-50/80 dark:bg-amber-950/30 border-amber-500 text-amber-950 dark:text-amber-200 ring-2 ring-amber-500/20 shadow-sm"
-                    : "bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-slate-300"
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 font-black text-sm sm:text-base xl:text-lg">
-                    <Syringe className="h-4 w-4 sm:h-5 sm:w-5 text-amber-600 shrink-0" />
-                    <span>Injection / Vial</span>
-                  </div>
-                  {packagingType === "VIAL" && (
-                    <span className="h-2.5 w-2.5 rounded-full bg-amber-500" />
-                  )}
-                </div>
-                <span className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-medium">
-                  Ampoule / Vial
+                  Individual item (Cotton, Syrup, Toothpaste, Tube, Soap, Gauze)
                 </span>
               </button>
             </div>
           </div>
 
-          {/* Unit Quantity Inputs */}
-          {packagingType === "TABLET" && (
+          {/* Unit Configuration */}
+          {packagingType === "TABLET" ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 pt-3">
               <div>
                 <label className="block text-sm sm:text-base xl:text-lg font-bold text-slate-800 dark:text-slate-200 mb-2">
@@ -933,87 +854,34 @@ export function AddProductView({
                 />
               </div>
             </div>
-          )}
-
-          {packagingType === "BOTTLE" && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 pt-3">
-              <div>
-                <label className="block text-sm sm:text-base xl:text-lg font-bold text-slate-800 dark:text-slate-200 mb-2">
-                  Bottles per Carton <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  required
-                  disabled={!isPackagingEditing}
-                  value={itemsPerBox}
-                  onChange={(e) => setItemsPerBox(parseInt(e.target.value) || 1)}
-                  className="w-full h-12 sm:h-12 xl:h-13 px-4 bg-slate-50/70 hover:bg-slate-50 dark:bg-slate-800/60 dark:hover:bg-slate-800/80 focus:bg-white dark:focus:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-sm sm:text-base xl:text-lg font-semibold text-slate-900 dark:text-white outline-none focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20 transition-all disabled:opacity-60"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm sm:text-base xl:text-lg font-bold text-slate-800 dark:text-slate-200 mb-2">
-                  Sales Unit
-                </label>
-                <div className="w-full h-12 sm:h-12 xl:h-13 px-4 bg-slate-100 dark:bg-slate-800/60 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-sm sm:text-base xl:text-lg font-bold text-slate-700 dark:text-slate-300 flex items-center">
-                  Single Bottle
+          ) : (
+            <div className="pt-2">
+              <div className="p-4 rounded-xl bg-purple-50/60 dark:bg-purple-950/30 border-2 border-purple-200/80 dark:border-purple-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm sm:text-base font-bold text-purple-950 dark:text-purple-200 flex items-center gap-2">
+                    <span>📦 1 Piece = 1 Individual Item</span>
+                  </div>
+                  <p className="text-xs text-purple-700 dark:text-purple-300 mt-0.5">
+                    Stocked as 1 Piece and sold as 1 Piece. No box or strip division needed.
+                  </p>
                 </div>
-              </div>
-            </div>
-          )}
-
-          {packagingType === "PIECE" && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 pt-3">
-              <div>
-                <label className="block text-sm sm:text-base xl:text-lg font-bold text-slate-800 dark:text-slate-200 mb-2">
-                  Pieces per Box / Pack <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  required
-                  disabled={!isPackagingEditing}
-                  value={itemsPerBox}
-                  onChange={(e) => setItemsPerBox(parseInt(e.target.value) || 1)}
-                  className="w-full h-12 sm:h-12 xl:h-13 px-4 bg-slate-50/70 hover:bg-slate-50 dark:bg-slate-800/60 dark:hover:bg-slate-800/80 focus:bg-white dark:focus:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-sm sm:text-base xl:text-lg font-semibold text-slate-900 dark:text-white outline-none focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20 transition-all disabled:opacity-60"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm sm:text-base xl:text-lg font-bold text-slate-800 dark:text-slate-200 mb-2">
-                  Sales Unit
-                </label>
-                <div className="w-full h-12 sm:h-12 xl:h-13 px-4 bg-slate-100 dark:bg-slate-800/60 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-sm sm:text-base xl:text-lg font-bold text-slate-700 dark:text-slate-300 flex items-center">
-                  Single Piece / Unit
-                </div>
-              </div>
-            </div>
-          )}
-
-          {packagingType === "VIAL" && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 pt-3">
-              <div>
-                <label className="block text-sm sm:text-base xl:text-lg font-bold text-slate-800 dark:text-slate-200 mb-2">
-                  Vials / Ampoules per Box <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  required
-                  disabled={!isPackagingEditing}
-                  value={itemsPerBox}
-                  onChange={(e) => setItemsPerBox(parseInt(e.target.value) || 1)}
-                  className="w-full h-12 sm:h-12 xl:h-13 px-4 bg-slate-50/70 hover:bg-slate-50 dark:bg-slate-800/60 dark:hover:bg-slate-800/80 focus:bg-white dark:focus:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-sm sm:text-base xl:text-lg font-semibold text-slate-900 dark:text-white outline-none focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20 transition-all disabled:opacity-60"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm sm:text-base xl:text-lg font-bold text-slate-800 dark:text-slate-200 mb-2">
-                  Sales Unit
-                </label>
-                <div className="w-full h-12 sm:h-12 xl:h-13 px-4 bg-slate-100 dark:bg-slate-800/60 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-sm sm:text-base xl:text-lg font-bold text-slate-700 dark:text-slate-300 flex items-center">
-                  Single Vial / Ampoule
+                <div className="flex items-center gap-2 shrink-0">
+                  <label className="text-xs font-bold text-slate-600 dark:text-slate-400">
+                    Unit Name:
+                  </label>
+                  <select
+                    disabled={!isPackagingEditing}
+                    value={formData.unit}
+                    onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
+                    className="h-10 px-3 bg-white dark:bg-slate-900 border-2 border-purple-300 dark:border-purple-700 rounded-xl text-xs sm:text-sm font-bold text-purple-900 dark:text-purple-200 outline-none cursor-pointer capitalize shadow-2xs"
+                  >
+                    <option value="piece">Piece (Default)</option>
+                    <option value="bottle">Bottle</option>
+                    <option value="tube">Tube</option>
+                    <option value="yard">Yard / Goj</option>
+                    <option value="roll">Roll</option>
+                    <option value="vial">Vial</option>
+                  </select>
                 </div>
               </div>
             </div>
@@ -1022,24 +890,13 @@ export function AddProductView({
           {/* Quick Summary Pill */}
           <div className="p-4 bg-slate-50 dark:bg-slate-800/40 border-2 border-slate-200/80 dark:border-slate-700/80 rounded-xl text-xs sm:text-sm xl:text-base font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2">
             <span className="font-bold text-slate-900 dark:text-white">Summary:</span>
-            {packagingType === "TABLET" && (
+            {packagingType === "TABLET" ? (
               <span>
-                1 Box = {formData.stripsPerBox || 10} Strips ({Number(formData.stripsPerBox || 10) * Number(formData.tabletsPerStrip || 10)} Tablets total)
+                1 Box = {formData.stripsPerBox || 10} Strips ({Number(formData.stripsPerBox || 10) * Number(formData.tabletsPerStrip || 10)} Tablets total). Stocked by Box, sold by Tablet or Strip.
               </span>
-            )}
-            {packagingType === "BOTTLE" && (
-              <span>
-                1 Carton = {itemsPerBox || 12} Bottles (dispensed per single bottle)
-              </span>
-            )}
-            {packagingType === "PIECE" && (
-              <span>
-                1 Box = {itemsPerBox || 1} Pieces
-              </span>
-            )}
-            {packagingType === "VIAL" && (
-              <span>
-                1 Box = {itemsPerBox || 10} Vials / Ampoules
+            ) : (
+              <span className="capitalize">
+                1:1 Individual Item. Stocked and sold per {formData.unit || "piece"}.
               </span>
             )}
           </div>

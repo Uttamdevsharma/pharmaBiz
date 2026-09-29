@@ -6,7 +6,6 @@ import { fetchApi } from "@/lib/api";
 import {
   FileText,
   Calendar,
-  Store,
   Printer,
   Loader2,
   ArrowLeft,
@@ -18,6 +17,10 @@ import {
   BarChart3,
   Wallet,
   RefreshCw,
+  PieChart as PieIcon,
+  Zap,
+  Flame,
+  Clock,
 } from "lucide-react";
 
 interface ReportsModuleProps {
@@ -39,19 +42,213 @@ function KpiCard({
   color: string;
 }) {
   return (
-    <div className={`p-4 rounded-2xl border bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-sm print:shadow-none print:border print:border-slate-300 print:bg-white`}>
-      <div className={`inline-flex items-center justify-center w-9 h-9 rounded-xl mb-3 ${color}`}>
-        <Icon className="h-4.5 w-4.5" />
+    <div className="p-5 rounded-2xl border bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-sm print:shadow-none print:border print:border-slate-300 print:bg-white">
+      <div className={`inline-flex items-center justify-center w-10 h-10 rounded-xl mb-3 ${color}`}>
+        <Icon className="h-5 w-5" />
       </div>
-      <div className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 print:text-slate-600 tracking-wide mb-0.5">
+      <div className="text-[11px] uppercase font-bold text-slate-400 dark:text-slate-500 print:text-slate-600 tracking-wide mb-1">
         {label}
       </div>
-      <div className="text-xl font-black font-mono text-slate-900 dark:text-white print:text-black">
+      <div className="text-2xl font-black font-mono text-slate-900 dark:text-white print:text-black">
         {value}
       </div>
       {sub && (
-        <div className="text-[10px] text-slate-400 print:text-slate-500 mt-0.5">{sub}</div>
+        <div className="text-xs text-slate-400 print:text-slate-500 mt-1">{sub}</div>
       )}
+    </div>
+  );
+}
+
+// ─── SVG DONUT CHART COMPONENT ───────────────────────────────────────────────
+function DonutChart({
+  data,
+  total,
+}: {
+  data: { name: string; revenue: number; color: string; pct: number }[];
+  total: number;
+}) {
+  const radius = 60;
+  const circumference = 2 * Math.PI * radius;
+  let accumulatedPct = 0;
+
+  return (
+    <div className="relative w-44 h-44 flex items-center justify-center shrink-0 mx-auto sm:mx-0">
+      <svg className="w-full h-full -rotate-90" viewBox="0 0 160 160">
+        <circle
+          cx="80"
+          cy="80"
+          r={radius}
+          className="stroke-slate-100 dark:stroke-slate-800 print:stroke-slate-200"
+          strokeWidth="20"
+          fill="transparent"
+        />
+        {total > 0 &&
+          data.map((item, idx) => {
+            if (item.revenue <= 0) return null;
+            const strokeDasharray = `${(item.pct / 100) * circumference} ${circumference}`;
+            const strokeDashoffset = -((accumulatedPct / 100) * circumference);
+            accumulatedPct += item.pct;
+
+            return (
+              <circle
+                key={idx}
+                cx="80"
+                cy="80"
+                r={radius}
+                stroke={item.color}
+                strokeWidth="20"
+                strokeDasharray={strokeDasharray}
+                strokeDashoffset={strokeDashoffset}
+                strokeLinecap="butt"
+                fill="transparent"
+                className="transition-all duration-700 hover:opacity-90"
+              />
+            );
+          })}
+      </svg>
+      {/* Center Text */}
+      <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-2 pointer-events-none">
+        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 print:text-slate-600">Total Sales</span>
+        <span className="text-sm font-black font-mono text-slate-900 dark:text-white print:text-black">
+          ৳{Math.round(total).toLocaleString()}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ─── SVG SMOOTH AREA & LINE CHART COMPONENT ─────────────────────────────────
+function HourlyAreaChart({
+  hourlyStats,
+  maxHourRevenue,
+  peakHour,
+}: {
+  hourlyStats: { hour: number; formattedTime: string; revenue: number; count: number }[];
+  maxHourRevenue: number;
+  peakHour: any;
+}) {
+  const svgWidth = 800;
+  const svgHeight = 170;
+  const padLeft = 35;
+  const padRight = 35;
+  const padTop = 30;
+  const padBottom = 30;
+  const graphW = svgWidth - padLeft - padRight;
+  const graphH = svgHeight - padTop - padBottom;
+
+  const points = hourlyStats.map((h, i) => {
+    const x = padLeft + (i / 23) * graphW;
+    const normY = maxHourRevenue > 0 ? h.revenue / maxHourRevenue : 0;
+    const y = padTop + graphH - normY * graphH;
+    return { x, y, ...h };
+  });
+
+  // Construct smooth Bezier path
+  let pathD = `M ${points[0].x},${points[0].y}`;
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[i];
+    const p1 = points[i + 1];
+    const cpX = (p0.x + p1.x) / 2;
+    pathD += ` C ${cpX},${p0.y} ${cpX},${p1.y} ${p1.x},${p1.y}`;
+  }
+
+  const areaD = `${pathD} L ${points[points.length - 1].x},${padTop + graphH} L ${points[0].x},${padTop + graphH} Z`;
+
+  return (
+    <div className="w-full space-y-2">
+      <div className="w-full overflow-x-auto">
+        <div className="min-w-[650px] w-full">
+          <svg className="w-full h-auto" viewBox={`0 0 ${svgWidth} ${svgHeight}`}>
+            <defs>
+              <linearGradient id="hourlyAreaGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#10b981" stopOpacity="0.45" />
+                <stop offset="100%" stopColor="#10b981" stopOpacity="0.0" />
+              </linearGradient>
+              <linearGradient id="hourlyLineGradient" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stopColor="#3b82f6" />
+                <stop offset="50%" stopColor="#8b5cf6" />
+                <stop offset="100%" stopColor="#10b981" />
+              </linearGradient>
+            </defs>
+
+            {/* Grid Lines */}
+            {[0, 0.33, 0.66, 1].map((ratio, idx) => {
+              const y = padTop + graphH * (1 - ratio);
+              return (
+                <line
+                  key={idx}
+                  x1={padLeft}
+                  y1={y}
+                  x2={svgWidth - padRight}
+                  y2={y}
+                  className="stroke-slate-200/70 dark:stroke-slate-800 print:stroke-slate-300"
+                  strokeDasharray="4 4"
+                  strokeWidth="1"
+                />
+              );
+            })}
+
+            {/* Area Fill */}
+            <path d={areaD} fill="url(#hourlyAreaGradient)" />
+
+            {/* Smooth Curve Line */}
+            <path d={pathD} fill="none" stroke="url(#hourlyLineGradient)" strokeWidth="3.5" strokeLinecap="round" />
+
+            {/* Dots for revenue hours */}
+            {points.map((pt) => {
+              const isPeak = peakHour && peakHour.hour === pt.hour && pt.revenue > 0;
+              if (pt.revenue <= 0 && !isPeak) return null;
+
+              return (
+                <g key={pt.hour} className="group cursor-pointer">
+                  {isPeak && (
+                    <circle
+                      cx={pt.x}
+                      cy={pt.y}
+                      r="10"
+                      className="fill-emerald-400/30 animate-ping print:hidden"
+                    />
+                  )}
+                  <circle
+                    cx={pt.x}
+                    cy={pt.y}
+                    r={isPeak ? "6" : "4"}
+                    className={isPeak ? "fill-emerald-500 stroke-white dark:stroke-slate-900 print:fill-black" : "fill-purple-600 stroke-white dark:stroke-slate-900 print:fill-slate-700"}
+                    strokeWidth="2"
+                  />
+                  {pt.revenue > 0 && (
+                    <text
+                      x={pt.x}
+                      y={pt.y - 10}
+                      textAnchor="middle"
+                      className="fill-slate-800 dark:fill-slate-200 print:fill-black font-mono font-bold text-[10px]"
+                    >
+                      ৳{Math.round(pt.revenue).toLocaleString()}
+                    </text>
+                  )}
+                </g>
+              );
+            })}
+
+            {/* X-Axis Time Labels */}
+            {[0, 3, 6, 9, 12, 15, 18, 21, 23].map((hr) => {
+              const pt = points[hr];
+              if (!pt) return null;
+              return (
+                <text
+                  key={hr}
+                  x={pt.x}
+                  y={svgHeight - 6}
+                  textAnchor="middle"
+                  className="fill-slate-500 dark:fill-slate-400 print:fill-slate-700 font-mono text-[10px] font-bold"
+                >
+                  {pt.formattedTime}
+                </text>
+              );
+            })}
+          </svg>
+        </div>
+      </div>
     </div>
   );
 }
@@ -88,17 +285,16 @@ export function ReportsModule({ onNavigate: _onNavigate }: ReportsModuleProps = 
     init();
   }, []);
 
-  const handlePresetSelect = (preset: "today" | "yesterday" | "last7" | "thisMonth" | "lastMonth") => {
+  const handlePresetSelect = (preset: "today" | "yesterday" | "thisMonth" | "lastMonth") => {
     const now = new Date();
     if (preset === "today") {
       const d = now.toISOString().split("T")[0];
-      setStartDate(d); setEndDate(d);
+      setStartDate(d);
+      setEndDate(d);
     } else if (preset === "yesterday") {
       const y = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString().split("T")[0];
-      setStartDate(y); setEndDate(y);
-    } else if (preset === "last7") {
-      setStartDate(new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]);
-      setEndDate(now.toISOString().split("T")[0]);
+      setStartDate(y);
+      setEndDate(y);
     } else if (preset === "thisMonth") {
       setStartDate(new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0]);
       setEndDate(now.toISOString().split("T")[0]);
@@ -132,7 +328,8 @@ export function ReportsModule({ onNavigate: _onNavigate }: ReportsModuleProps = 
   const paymentBreakdown = reportData?.paymentBreakdown || {};
   const productSales: any[] = reportData?.productSales || [];
 
-  const fmtCurrency = (v: number) => `৳${Number(v || 0).toLocaleString("en-BD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const fmtCurrency = (v: number) =>
+    `৳${Number(v || 0).toLocaleString("en-BD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const fmtDate = (d: string) =>
     new Date(d).toLocaleDateString("en-BD", { day: "2-digit", month: "short", year: "numeric" });
 
@@ -141,11 +338,82 @@ export function ReportsModule({ onNavigate: _onNavigate }: ReportsModuleProps = 
       ? fmtDate(startDate)
       : `${fmtDate(startDate)} — ${fmtDate(endDate)}`;
 
-  const totalDiscount = Number(summary.totalDiscounts || 0);
-  const totalVat = Number(summary.totalTaxes || 0);
   const hasCostData = productSales.some((p) => (p.totalCost || 0) > 0);
-
   const pharmacy = reportData?.pharmacy || pharmacyProfile || user?.tenant || {};
+
+  // ── Day of Week Analytics ──
+  const daysOfWeekConfig = [
+    { key: 6, name: "Saturday", short: "Sat", color: "#3b82f6", bg: "bg-blue-500", text: "text-blue-600 dark:text-blue-400" },
+    { key: 0, name: "Sunday", short: "Sun", color: "#8b5cf6", bg: "bg-purple-500", text: "text-purple-600 dark:text-purple-400" },
+    { key: 1, name: "Monday", short: "Mon", color: "#ec4899", bg: "bg-pink-500", text: "text-pink-600 dark:text-pink-400" },
+    { key: 2, name: "Tuesday", short: "Tue", color: "#f59e0b", bg: "bg-amber-500", text: "text-amber-600 dark:text-amber-400" },
+    { key: 3, name: "Wednesday", short: "Wed", color: "#10b981", bg: "bg-emerald-500", text: "text-emerald-600 dark:text-emerald-400" },
+    { key: 4, name: "Thursday", short: "Thu", color: "#06b6d4", bg: "bg-cyan-500", text: "text-cyan-600 dark:text-cyan-400" },
+    { key: 5, name: "Friday", short: "Fri", color: "#6366f1", bg: "bg-indigo-500", text: "text-indigo-600 dark:text-indigo-400" },
+  ];
+
+  const rawDayOfWeekData = reportData?.dayOfWeekBreakdown || {};
+  const dayOfWeekStats = daysOfWeekConfig.map((d) => {
+    const fromBackend = rawDayOfWeekData[d.key];
+    if (fromBackend) {
+      return {
+        ...d,
+        revenue: Number(fromBackend.revenue || 0),
+        count: Number(fromBackend.count || 0),
+      };
+    }
+    let revenue = 0;
+    let count = 0;
+    (reportData?.transactions || []).forEach((t: any) => {
+      const dt = new Date(t.createdAt);
+      if (dt.getDay() === d.key) {
+        revenue += Number(t.totalAmount || 0);
+        count += 1;
+      }
+    });
+    return { ...d, revenue, count };
+  });
+
+  const maxDayRevenue = Math.max(...dayOfWeekStats.map((d) => d.revenue), 1);
+  const totalWeeklySales = dayOfWeekStats.reduce((sum, d) => sum + d.revenue, 0);
+
+  const dayDonutData = dayOfWeekStats.map((d) => ({
+    name: d.name,
+    revenue: d.revenue,
+    color: d.color,
+    pct: totalWeeklySales > 0 ? (d.revenue / totalWeeklySales) * 100 : 0,
+  }));
+
+  const peakDay = dayOfWeekStats.reduce(
+    (max, d) => (d.revenue > max.revenue ? d : max),
+    dayOfWeekStats[0]
+  );
+
+  // ── Hourly / 24-Hour Analytics ──
+  const rawHourlyData = reportData?.hourlyBreakdown || {};
+  const hourlyStats = Array.from({ length: 24 }, (_, hour) => {
+    const data = rawHourlyData[hour] || { count: 0, revenue: 0 };
+    return {
+      hour,
+      label: `${hour.toString().padStart(2, "0")}:00`,
+      formattedTime: `${hour % 12 === 0 ? 12 : hour % 12} ${hour >= 12 ? "PM" : "AM"}`,
+      revenue: Number(data.revenue || 0),
+      count: Number(data.count || 0),
+    };
+  });
+
+  const maxHourRevenue = Math.max(...hourlyStats.map((h) => h.revenue), 1);
+  const peakHour = hourlyStats.reduce(
+    (max, h) => (h.revenue > max.revenue ? h : max),
+    hourlyStats[0]
+  );
+
+  // Shift Calculations
+  const morningSales = hourlyStats.filter((h) => h.hour >= 6 && h.hour < 12).reduce((s, h) => s + h.revenue, 0);
+  const afternoonSales = hourlyStats.filter((h) => h.hour >= 12 && h.hour < 17).reduce((s, h) => s + h.revenue, 0);
+  const eveningSales = hourlyStats.filter((h) => h.hour >= 17 && h.hour < 21).reduce((s, h) => s + h.revenue, 0);
+  const nightSales = hourlyStats.filter((h) => h.hour >= 21 || h.hour < 6).reduce((s, h) => s + h.revenue, 0);
+  const totalDayRevenue = morningSales + afternoonSales + eveningSales + nightSales;
 
   return (
     <div className="space-y-6 w-full">
@@ -181,7 +449,6 @@ export function ReportsModule({ onNavigate: _onNavigate }: ReportsModuleProps = 
                 {[
                   { id: "today", label: "Today" },
                   { id: "yesterday", label: "Yesterday" },
-                  { id: "last7", label: "Last 7 Days" },
                   { id: "thisMonth", label: "This Month" },
                   { id: "lastMonth", label: "Last Month" },
                 ].map((preset) => (
@@ -337,31 +604,18 @@ export function ReportsModule({ onNavigate: _onNavigate }: ReportsModuleProps = 
               </div>
             </div>
 
-            {/* ── KPI SUMMARY ── */}
+            {/* ── KPI SUMMARY (3 Cards) ── */}
             <div>
               <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-white print:text-black mb-3 flex items-center gap-2">
                 <BarChart3 className="h-4 w-4 text-emerald-600" />
                 Summary Overview
               </h3>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <KpiCard
                   label="Total Sales"
                   value={fmtCurrency(summary.totalSales)}
                   icon={DollarSign}
                   color="bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600"
-                />
-                <KpiCard
-                  label="Total Invoices"
-                  value={String(summary.transactionCount || 0)}
-                  sub={summary.transactionCount > 0 ? `Avg ${fmtCurrency(summary.averageOrderValue)} / invoice` : undefined}
-                  icon={FileText}
-                  color="bg-blue-50 dark:bg-blue-950/50 text-blue-600"
-                />
-                <KpiCard
-                  label="Units Sold"
-                  value={String(summary.totalUnitsSold || 0)}
-                  icon={Package}
-                  color="bg-purple-50 dark:bg-purple-950/50 text-purple-600"
                 />
                 <KpiCard
                   label="Cost of Goods"
@@ -382,8 +636,159 @@ export function ReportsModule({ onNavigate: _onNavigate }: ReportsModuleProps = 
               </div>
             </div>
 
+            {/* ── VISUAL ANALYTICS SECTION ── */}
+            <div className="space-y-6 pt-2">
+              <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-white print:text-black border-b border-slate-200 dark:border-slate-800 print:border-slate-300 pb-1.5 flex items-center gap-2">
+                <Zap className="h-4 w-4 text-amber-500" />
+                Sales Graphical View
+              </h3>
+
+              {/* 1. Day of Week Donut & Progress Bar Chart */}
+              <div className="p-6 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 print:bg-white print:border-slate-300 shadow-xs space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400">
+                      <PieIcon className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-black text-slate-900 dark:text-white print:text-black">
+                        Sales by Day of Week
+                      </h4>
+                    </div>
+                  </div>
+
+                  {peakDay && peakDay.revenue > 0 && (
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/20 text-xs font-bold w-fit">
+                      <Flame className="h-4 w-4 text-amber-500" />
+                      <span>Highest Sales: <strong>{peakDay.name}</strong> ({fmtCurrency(peakDay.revenue)})</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Donut Chart + Horizontal Bar Breakdown Grid */}
+                <div className="flex flex-col md:flex-row items-center gap-6 pt-1">
+                  {/* Donut Pie Chart */}
+                  <DonutChart data={dayDonutData} total={totalWeeklySales} />
+
+                  {/* Horizontal Bar Breakdown */}
+                  <div className="flex-1 w-full space-y-2.5">
+                    {dayOfWeekStats.map((d) => {
+                      const isPeak = peakDay.key === d.key && d.revenue > 0;
+                      const pctOfTotal = totalWeeklySales > 0 ? (d.revenue / totalWeeklySales) * 100 : 0;
+                      const pctOfMax = maxDayRevenue > 0 ? (d.revenue / maxDayRevenue) * 100 : 0;
+
+                      return (
+                        <div key={d.key} className="space-y-1">
+                          <div className="flex items-center justify-between text-xs">
+                            <div className="flex items-center gap-2">
+                              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: d.color }} />
+                              <span className={`font-bold ${isPeak ? "text-slate-900 dark:text-white print:text-black font-black" : "text-slate-700 dark:text-slate-300 print:text-black"}`}>
+                                {d.name}
+                              </span>
+                              {isPeak && (
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                                  Peak
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="flex items-center gap-3 font-mono">
+                              <span className="text-slate-500 dark:text-slate-400 text-[11px] hidden sm:inline">
+                                {d.count} {d.count === 1 ? "order" : "orders"}
+                              </span>
+                              <span className="text-slate-400 text-[11px]">
+                                {pctOfTotal.toFixed(1)}%
+                              </span>
+                              <span className="font-bold text-slate-900 dark:text-white print:text-black min-w-[70px] text-right">
+                                {fmtCurrency(d.revenue)}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Smooth Progress Bar */}
+                          <div className="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden print:border print:border-slate-200">
+                            <div
+                              style={{
+                                width: `${Math.max(pctOfMax, d.revenue > 0 ? 3 : 0)}%`,
+                                backgroundColor: d.color,
+                              }}
+                              className="h-full rounded-full transition-all duration-500"
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* 2. 24-Hour Peak Time Area Graph */}
+              <div className="p-6 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 print:bg-white print:border-slate-300 shadow-xs space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                      <Clock className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-black text-slate-900 dark:text-white print:text-black">
+                        24-Hour Sales Trend
+                      </h4>
+                    </div>
+                  </div>
+
+                  {peakHour && peakHour.revenue > 0 && (
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20 text-xs font-bold w-fit">
+                      <span>Peak Hour: <strong>{peakHour.formattedTime}</strong> ({fmtCurrency(peakHour.revenue)})</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Smooth Area Wave Graph */}
+                <HourlyAreaChart hourlyStats={hourlyStats} maxHourRevenue={maxHourRevenue} peakHour={peakHour} />
+
+                {/* 4 Shift Cards */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 print:border-slate-300">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+                      Morning (6AM - 12PM)
+                    </div>
+                    <div className="text-sm font-black font-mono text-slate-900 dark:text-white print:text-black">
+                      {fmtCurrency(morningSales)}
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 print:border-slate-300">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+                      Afternoon (12PM - 5PM)
+                    </div>
+                    <div className="text-sm font-black font-mono text-slate-900 dark:text-white print:text-black">
+                      {fmtCurrency(afternoonSales)}
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 print:border-slate-300">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+                      Evening (5PM - 9PM)
+                    </div>
+                    <div className="text-sm font-black font-mono text-slate-900 dark:text-white print:text-black">
+                      {fmtCurrency(eveningSales)}
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 print:border-slate-300">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+                      Night (9PM - 6AM)
+                    </div>
+                    <div className="text-sm font-black font-mono text-slate-900 dark:text-white print:text-black">
+                      {fmtCurrency(nightSales)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* ── PAYMENT BREAKDOWN ── */}
-            <div className="space-y-2">
+            <div className="space-y-2 pt-2">
               <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-white print:text-black border-b border-slate-200 dark:border-slate-800 print:border-slate-300 pb-1.5 flex items-center gap-2">
                 <Wallet className="h-4 w-4 text-emerald-600" />
                 Payment Collection Breakdown
@@ -427,7 +832,7 @@ export function ReportsModule({ onNavigate: _onNavigate }: ReportsModuleProps = 
             </div>
 
             {/* ── PRODUCT-WISE SALES ── */}
-            <div className="space-y-3">
+            <div className="space-y-3 pt-2">
               <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-white print:text-black border-b border-slate-200 dark:border-slate-800 print:border-slate-300 pb-1.5 flex items-center gap-2">
                 <Package className="h-4 w-4 text-brand-primary" />
                 Product-wise Sales Summary
@@ -500,33 +905,6 @@ export function ReportsModule({ onNavigate: _onNavigate }: ReportsModuleProps = 
               </div>
             </div>
 
-            {/* ── DISCOUNT / VAT SUMMARY (shown only if non-zero) ── */}
-            {(totalDiscount > 0 || totalVat > 0) && (
-              <div className="space-y-2">
-                <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-white print:text-black border-b border-slate-200 dark:border-slate-800 print:border-slate-300 pb-1.5">
-                  Discount / VAT Summary
-                </h3>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
-                  <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 print:border-slate-300">
-                    <div className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">Total Subtotal</div>
-                    <div className="font-mono font-black text-slate-900 dark:text-white print:text-black">{fmtCurrency(summary.totalSubTotal)}</div>
-                  </div>
-                  {totalDiscount > 0 && (
-                    <div className="p-3 rounded-xl border border-emerald-200 dark:border-emerald-800 print:border-slate-300">
-                      <div className="text-[10px] text-emerald-600 font-bold uppercase mb-0.5">Total Discounts</div>
-                      <div className="font-mono font-black text-emerald-700 dark:text-emerald-400 print:text-black">-{fmtCurrency(totalDiscount)}</div>
-                    </div>
-                  )}
-                  {totalVat > 0 && (
-                    <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 print:border-slate-300">
-                      <div className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">Total VAT</div>
-                      <div className="font-mono font-black text-slate-900 dark:text-white print:text-black">{fmtCurrency(totalVat)}</div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
             {/* ── SIGNATURE FOOTER ── */}
             <div className="pt-10 border-t border-slate-200 dark:border-slate-800 print:border-black grid grid-cols-2 gap-12 text-center text-xs">
               <div>
@@ -549,3 +927,5 @@ export function ReportsModule({ onNavigate: _onNavigate }: ReportsModuleProps = 
     </div>
   );
 }
+
+
