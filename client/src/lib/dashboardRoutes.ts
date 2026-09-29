@@ -12,7 +12,6 @@ export const MODULE_TO_PATH: Record<OwnerModule, string> = {
   pos: "/dashboard/pos",
   pos_sale: "/dashboard/pos",
   pos_history: "/dashboard/pos/history",
-  pos_due_sales: "/dashboard/pos/dues",
   pos_vat: "/dashboard/pos/vat",
 
   // Accounts & Finance

@@ -65,7 +65,6 @@ export type OwnerModule =
   | "loc_create_group"
   | "loc_group_list"
   | "pos_history"
-  | "pos_due_sales"
   | "pos_vat"
   | "accounts"
   | "acc_overview"
@@ -195,7 +194,6 @@ export function DashboardSidebar({
     activeModule === "pos" ||
     activeModule === "pos_sale" ||
     activeModule === "pos_history" ||
-    activeModule === "pos_due_sales" ||
     activeModule === "pos_vat" ||
     activeModule === "reports";
 

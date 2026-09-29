@@ -21,6 +21,10 @@ import {
   ChevronDown,
   PieChart as PieIcon,
   BarChart3,
+  FileText,
+  Users,
+  CheckCircle2,
+  ArrowUpRight,
 } from "lucide-react";
 
 interface FinancialAccount {
@@ -80,6 +84,9 @@ export function AccountsOverviewView({ onNavigate, selectedBranchId: propBranchI
   // Active hover point for bar chart tooltip
   const [hoveredBarIndex, setHoveredBarIndex] = useState<number | null>(null);
 
+  // Financial account type filter (All / Bank / Cash / Mobile MFS)
+  const [accountTypeFilter, setAccountTypeFilter] = useState<"all" | "bank" | "cash" | "mobile">("all");
+
   const handlePeriodChange = (preset: "today" | "thisWeek" | "thisMonth" | "custom") => {
     setPeriodPreset(preset);
     const now = new Date();
@@ -106,19 +113,15 @@ export function AccountsOverviewView({ onNavigate, selectedBranchId: propBranchI
       else setLoading(true);
 
       const params = new URLSearchParams();
-      if (localBranchId && localBranchId !== "all") {
-        params.append("branchId", localBranchId);
-      }
+      // Pass branchId explicitly so backend doesn't fallback to stale x-branch-id header
+      params.append("branchId", localBranchId || "all");
       if (periodPreset !== "custom") {
         params.append("period", periodPreset);
       }
       if (startDate) params.append("startDate", startDate);
       if (endDate) params.append("endDate", endDate);
 
-      const accountsUrl =
-        localBranchId && localBranchId !== "all"
-          ? `/accounting/accounts?branchId=${localBranchId}`
-          : "/accounting/accounts";
+      const accountsUrl = `/accounting/accounts?branchId=${localBranchId || "all"}`;
 
       const suppliersUrl =
         localBranchId && localBranchId !== "all"
@@ -126,9 +129,9 @@ export function AccountsOverviewView({ onNavigate, selectedBranchId: propBranchI
           : "/suppliers";
 
       const [res, accRes, supRes] = await Promise.all([
-        fetchApi<any>(`/accounting/overview?${params.toString()}`),
-        fetchApi<FinancialAccount[]>(accountsUrl),
-        fetchApi<any>(suppliersUrl),
+        fetchApi<any>(`/accounting/overview?${params.toString()}`, { skipCache: true }),
+        fetchApi<FinancialAccount[]>(accountsUrl, { skipCache: true }),
+        fetchApi<any>(suppliersUrl, { skipCache: true }),
       ]);
 
       let supplierDueFromSuppliersList = 0;
@@ -216,6 +219,46 @@ export function AccountsOverviewView({ onNavigate, selectedBranchId: propBranchI
     return items;
   }, [rawAccounts]);
 
+  // Account Type Counts & Filtered Accounts
+  const accountCounts = useMemo(() => {
+    let bank = 0;
+    let cash = 0;
+    let mobile = 0;
+    for (const acc of rawAccounts) {
+      const isBank = acc.type === "BANK" || acc.type === "CARD_SETTLEMENT";
+      const isBkash = acc.type === "BKASH" || (acc.name || "").toLowerCase().includes("bkash");
+      const isNagad = acc.type === "NAGAD" || (acc.name || "").toLowerCase().includes("nagad");
+      const isMobile = acc.type === "MOBILE" || isBkash || isNagad;
+      const isCash = acc.type === "CASH";
+
+      if (isBank) bank++;
+      else if (isCash) cash++;
+      else if (isMobile) mobile++;
+    }
+    return { all: rawAccounts.length, bank, cash, mobile };
+  }, [rawAccounts]);
+
+  const filteredAccounts = useMemo(() => {
+    if (accountTypeFilter === "all") return rawAccounts;
+    return rawAccounts.filter((acc) => {
+      const isBank = acc.type === "BANK" || acc.type === "CARD_SETTLEMENT";
+      const isBkash = acc.type === "BKASH" || (acc.name || "").toLowerCase().includes("bkash");
+      const isNagad = acc.type === "NAGAD" || (acc.name || "").toLowerCase().includes("nagad");
+      const isMobile = acc.type === "MOBILE" || isBkash || isNagad;
+      const isCash = acc.type === "CASH";
+
+      if (accountTypeFilter === "bank") return isBank;
+      if (accountTypeFilter === "cash") return isCash;
+      if (accountTypeFilter === "mobile") return isMobile;
+      return true;
+    });
+  }, [rawAccounts, accountTypeFilter]);
+
+  // Branch Cash Drawers (for Multi-Branch monitoring)
+  const branchCashTills = useMemo(() => {
+    return rawAccounts.filter((a) => a.type === "CASH");
+  }, [rawAccounts]);
+
   // Chart data
   const chartDataList = chartTimeframe === "week" ? (data?.last7Days || []) : (data?.last30Days || []);
   const maxChartVal = Math.max(
@@ -252,18 +295,25 @@ export function AccountsOverviewView({ onNavigate, selectedBranchId: propBranchI
           {onNavigate && (
             <>
               <button
-                onClick={() => onNavigate("acc_expenses")}
-                className="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 text-slate-700 dark:text-slate-200 text-xs font-semibold transition flex items-center gap-1.5 shadow-xs"
+                onClick={() => onNavigate("acc_financial_accounts")}
+                className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-xs"
               >
-                <PlusCircle className="h-3.5 w-3.5 text-rose-500" />
-                <span>New Expense</span>
+                <PlusCircle className="h-3.5 w-3.5" />
+                <span>New Account</span>
               </button>
               <button
                 onClick={() => onNavigate("acc_fund_transfer")}
-                className="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 text-slate-700 dark:text-slate-200 text-xs font-semibold transition flex items-center gap-1.5 shadow-xs"
+                className="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-200 text-xs font-semibold transition flex items-center gap-1.5 shadow-xs"
               >
                 <ArrowRightLeft className="h-3.5 w-3.5 text-blue-500" />
-                <span>Transfer</span>
+                <span>Transfer Funds</span>
+              </button>
+              <button
+                onClick={() => onNavigate("acc_expenses")}
+                className="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-200 text-xs font-semibold transition flex items-center gap-1.5 shadow-xs"
+              >
+                <PlusCircle className="h-3.5 w-3.5 text-rose-500" />
+                <span>Record Expense</span>
               </button>
             </>
           )}
@@ -412,51 +462,95 @@ export function AccountsOverviewView({ onNavigate, selectedBranchId: propBranchI
 
           {/* 4. Dynamic Financial Accounts Section */}
           <div className="p-5 sm:p-6 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
               <div className="flex items-center gap-2.5">
                 <Banknote className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-                <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white">Active Financial Accounts</h3>
-                <span className="text-xs bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-2.5 py-0.5 rounded-full font-bold">
-                  {rawAccounts.length}
-                </span>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white">Active Financial Accounts</h3>
+                    <span className="text-xs bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-2 py-0.5 rounded-full font-bold">
+                      {rawAccounts.length}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Individual live balances for each created account across all branches
+                  </p>
+                </div>
               </div>
 
-              {onNavigate && (
+              {/* Account Type Filter Tabs */}
+              <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-lg text-xs font-semibold">
                 <button
-                  onClick={() => onNavigate("acc_financial_accounts")}
-                  className="text-xs sm:text-sm font-bold text-emerald-600 dark:text-emerald-400 hover:underline"
+                  onClick={() => setAccountTypeFilter("all")}
+                  className={`px-2.5 py-1 rounded-md transition ${
+                    accountTypeFilter === "all"
+                      ? "bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-2xs font-bold"
+                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                  }`}
                 >
-                  Manage Accounts &rarr;
+                  All ({accountCounts.all})
                 </button>
-              )}
+                <button
+                  onClick={() => setAccountTypeFilter("bank")}
+                  className={`px-2.5 py-1 rounded-md transition ${
+                    accountTypeFilter === "bank"
+                      ? "bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-2xs font-bold"
+                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                  }`}
+                >
+                  Banks ({accountCounts.bank})
+                </button>
+                <button
+                  onClick={() => setAccountTypeFilter("cash")}
+                  className={`px-2.5 py-1 rounded-md transition ${
+                    accountTypeFilter === "cash"
+                      ? "bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-2xs font-bold"
+                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                  }`}
+                >
+                  Cash Tills ({accountCounts.cash})
+                </button>
+                <button
+                  onClick={() => setAccountTypeFilter("mobile")}
+                  className={`px-2.5 py-1 rounded-md transition ${
+                    accountTypeFilter === "mobile"
+                      ? "bg-white dark:bg-slate-900 text-pink-600 dark:text-pink-400 shadow-2xs font-bold"
+                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                  }`}
+                >
+                  Mobile MFS ({accountCounts.mobile})
+                </button>
+              </div>
             </div>
 
-            {rawAccounts.length === 0 ? (
+            {filteredAccounts.length === 0 ? (
               <div className="p-8 text-center bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-dashed border-slate-200 dark:border-slate-700">
                 <Wallet className="h-8 w-8 text-slate-400 mx-auto mb-2 opacity-60" />
-                <p className="text-sm font-bold text-slate-600 dark:text-slate-300">No financial accounts found</p>
+                <p className="text-sm font-bold text-slate-600 dark:text-slate-300">
+                  {accountTypeFilter === "all" ? "No financial accounts found" : `No ${accountTypeFilter} accounts found`}
+                </p>
                 {onNavigate && (
                   <button
                     onClick={() => onNavigate("acc_financial_accounts")}
                     className="mt-3 px-4 py-1.5 bg-emerald-600 text-white text-xs sm:text-sm font-bold rounded-lg hover:bg-emerald-700 transition"
                   >
-                    + Create First Account
+                    + Create New Account
                   </button>
                 )}
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {rawAccounts.map((acc: any) => {
+                {filteredAccounts.map((acc: any) => {
                   const isBank = acc.type === "BANK" || acc.type === "CARD_SETTLEMENT";
-                  const isBkash = acc.type === "BKASH" || acc.name.toLowerCase().includes("bkash");
-                  const isNagad = acc.type === "NAGAD" || acc.name.toLowerCase().includes("nagad");
+                  const isBkash = acc.type === "BKASH" || (acc.name || "").toLowerCase().includes("bkash");
+                  const isNagad = acc.type === "NAGAD" || (acc.name || "").toLowerCase().includes("nagad");
                   const bal = Number(acc.balance || 0);
                   const pct = totalBalance > 0 ? Math.round((bal / totalBalance) * 100) : 0;
 
                   return (
                     <div
                       key={acc.id}
-                      className="p-4 sm:p-5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex flex-col justify-between space-y-3.5 hover:border-slate-400 dark:hover:border-slate-600 transition shadow-2xs"
+                      className="p-4 sm:p-5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex flex-col justify-between space-y-3.5 hover:border-slate-400 dark:hover:border-slate-600 transition shadow-2xs group"
                     >
                       <div className="flex items-start justify-between gap-2.5">
                         <div className="flex items-center gap-2.5 min-w-0">
@@ -485,12 +579,12 @@ export function AccountsOverviewView({ onNavigate, selectedBranchId: propBranchI
                             </div>
                             <div className="text-xs text-slate-400 font-mono truncate">
                               {isBank
-                                ? acc.bankName || "Bank"
+                                ? acc.accountNumber ? `A/C: ${acc.accountNumber}` : acc.bankName || "Bank Account"
                                 : isBkash
-                                ? "bKash Wallet"
+                                ? acc.accountNumber ? `bKash: ${acc.accountNumber}` : "bKash Wallet"
                                 : isNagad
-                                ? "Nagad Wallet"
-                                : "Cash Till"}
+                                ? acc.accountNumber ? `Nagad: ${acc.accountNumber}` : "Nagad Wallet"
+                                : "Cash Drawer Till"}
                             </div>
                           </div>
                         </div>
@@ -501,21 +595,32 @@ export function AccountsOverviewView({ onNavigate, selectedBranchId: propBranchI
                               Default
                             </span>
                           )}
-                          {acc.branchNameStr && (
-                            <span className="text-[10px] bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-medium px-2 py-0.5 rounded truncate max-w-[85px]">
-                              {acc.branchNameStr}
-                            </span>
-                          )}
+                          <span className="text-[10px] bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-medium px-2 py-0.5 rounded truncate max-w-[100px]">
+                            {acc.branchNameStr || "Company-wide"}
+                          </span>
                         </div>
                       </div>
 
-                      <div className="pt-2.5 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
-                        <span className="text-[11px] font-bold text-slate-400 uppercase">
-                          Balance <span className="text-slate-400 font-normal">({pct}%)</span>
-                        </span>
-                        <span className="font-black text-base sm:text-lg lg:text-xl font-mono text-slate-900 dark:text-white">
-                          ৳{bal.toLocaleString("en-BD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </span>
+                      <div className="pt-2.5 border-t border-slate-200 dark:border-slate-700 flex items-end justify-between">
+                        <div>
+                          <span className="text-[10px] font-bold text-slate-400 uppercase block">
+                            Balance ({pct}%)
+                          </span>
+                          <span className="font-black text-lg lg:text-xl font-mono text-slate-900 dark:text-white">
+                            ৳{bal.toLocaleString("en-BD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                        </div>
+
+                        {onNavigate && (
+                          <button
+                            onClick={() => onNavigate("acc_transaction_history")}
+                            className="text-xs font-bold text-slate-500 hover:text-emerald-600 dark:text-slate-400 dark:hover:text-emerald-400 flex items-center gap-1 transition opacity-80 group-hover:opacity-100"
+                            title="View Transaction History"
+                          >
+                            <span>Ledger</span>
+                            <ArrowUpRight className="h-3.5 w-3.5" />
+                          </button>
+                        )}
                       </div>
                     </div>
                   );
@@ -524,7 +629,7 @@ export function AccountsOverviewView({ onNavigate, selectedBranchId: propBranchI
             )}
           </div>
 
-          {/* 5. Supplier Payables (Dues) */}
+          {/* 5. Supplier Payables (Company Dues) */}
           <div className="p-5 sm:p-6 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3.5">
               <div className="p-3 bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 rounded-xl shrink-0">
@@ -532,11 +637,14 @@ export function AccountsOverviewView({ onNavigate, selectedBranchId: propBranchI
               </div>
               <div>
                 <span className="text-xs sm:text-sm font-bold text-rose-500 uppercase tracking-wider block">
-                  Supplier Payables (Company Dues)
+                  Supplier Payables (Accounts Payable)
                 </span>
                 <div className="text-2xl sm:text-3xl lg:text-4xl font-black text-rose-600 dark:text-rose-400 font-mono mt-0.5">
                   ৳{Number(summary.totalSupplierDues || 0).toLocaleString("en-BD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>
+                <span className="text-xs text-slate-400 mt-0.5 block">
+                  Total pending dues owed to pharmaceutical companies & vendors
+                </span>
               </div>
             </div>
 
@@ -550,6 +658,61 @@ export function AccountsOverviewView({ onNavigate, selectedBranchId: propBranchI
               </button>
             )}
           </div>
+
+          {/* 6. Multi-Branch Counter Cash Monitor (Shown on Consolidated View) */}
+          {localBranchId === "all" && branchCashTills.length > 0 && (
+            <div className="p-5 sm:p-6 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3.5">
+              <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 dark:border-slate-800">
+                <div className="flex items-center gap-2">
+                  <Store className="h-4.5 w-4.5 text-emerald-600 dark:text-emerald-400" />
+                  <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white">
+                    Branch Cash Tills (Counter Drawer Cash)
+                  </h3>
+                </div>
+                <span className="text-xs text-slate-400">
+                  Total Tills: {branchCashTills.length}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                {branchCashTills.map((till: any) => {
+                  const tillBal = Number(till.balance || 0);
+                  const isHighCash = tillBal >= 50000;
+
+                  return (
+                    <div
+                      key={till.id}
+                      className="p-3.5 rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 flex items-center justify-between gap-3"
+                    >
+                      <div className="min-w-0">
+                        <div className="font-bold text-xs sm:text-sm text-slate-900 dark:text-white truncate">
+                          {till.branchNameStr || till.name}
+                        </div>
+                        <div className="text-[11px] text-slate-400 font-mono truncate">
+                          {till.name}
+                        </div>
+                      </div>
+
+                      <div className="text-right shrink-0">
+                        <div className="font-black text-sm sm:text-base font-mono text-emerald-600 dark:text-emerald-400">
+                          ৳{tillBal.toLocaleString("en-BD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
+                        {isHighCash ? (
+                          <span className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold">
+                            Deposit recommended
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-slate-400 font-medium">
+                            Drawer Normal
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* 6. Visual Charts Section: Income vs Expense & Fund Distribution Pie */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">

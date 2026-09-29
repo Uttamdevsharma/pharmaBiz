@@ -509,6 +509,18 @@ export class AccountingService {
         d.setHours(23, 59, 59, 999);
         periodEnd = d;
       }
+    } else if (options?.period === "today") {
+      periodStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+      periodEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    } else if (options?.period === "thisWeek") {
+      const firstDay = new Date(now);
+      firstDay.setDate(now.getDate() - now.getDay());
+      firstDay.setHours(0, 0, 0, 0);
+      periodStart = firstDay;
+      periodEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    } else if (options?.period === "thisMonth") {
+      periodStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+      periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
     } else if (options?.period === "lastMonth") {
       periodStart = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
       periodEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);

@@ -8,11 +8,16 @@ export class AccountingController {
     try {
       const tenantId = req.user!.tenantId;
       const user = req.user!;
-      const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN" || user.role === "REGIONAL_ADMIN";
-      const branchId = isOwner
-        ? ((req.query.branchId as string) || (req.headers["x-branch-id"] as string) || undefined)
-        : (user.branchId || undefined);
-      const cleanBranchId = !branchId || branchId === "all" || branchId === "all-branches" ? undefined : branchId;
+      const isOwner =
+        user.role === "COMPANY_OWNER" ||
+        user.role === "SUPER_ADMIN" ||
+        user.role === "REGIONAL_ADMIN" ||
+        user.role === "ACCOUNTS" ||
+        user.role === "CTO";
+      const queryBranch = req.query.branchId as string | undefined;
+      const headerBranch = req.headers["x-branch-id"] as string | undefined;
+      const rawBranchId = queryBranch !== undefined ? queryBranch : (isOwner ? headerBranch : user.branchId);
+      const cleanBranchId = !rawBranchId || rawBranchId === "all" || rawBranchId === "all-branches" ? undefined : rawBranchId;
       const accounts = await AccountingService.listAccounts(tenantId, cleanBranchId);
       res.json({ success: true, data: accounts });
     } catch (err: any) {
@@ -115,11 +120,16 @@ export class AccountingController {
     try {
       const user = req.user!;
       const tenantId = user.tenantId;
-      const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN" || user.role === "REGIONAL_ADMIN";
-      const branchId = isOwner
-        ? ((req.query.branchId as string) || (req.headers["x-branch-id"] as string) || undefined)
-        : (user.branchId || undefined);
-      const cleanBranchId = !branchId || branchId === "all" || branchId === "all-branches" ? undefined : branchId;
+      const isOwner =
+        user.role === "COMPANY_OWNER" ||
+        user.role === "SUPER_ADMIN" ||
+        user.role === "REGIONAL_ADMIN" ||
+        user.role === "ACCOUNTS" ||
+        user.role === "CTO";
+      const queryBranch = req.query.branchId as string | undefined;
+      const headerBranch = req.headers["x-branch-id"] as string | undefined;
+      const rawBranchId = queryBranch !== undefined ? queryBranch : (isOwner ? headerBranch : user.branchId);
+      const cleanBranchId = !rawBranchId || rawBranchId === "all" || rawBranchId === "all-branches" ? undefined : rawBranchId;
 
       const options = {
         startDate: req.query.startDate as string | undefined,

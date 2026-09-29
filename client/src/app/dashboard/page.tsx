@@ -62,7 +62,6 @@ import { FinancialAccountsView } from "@/components/dashboard/FinancialAccountsV
 import { FundTransferView } from "@/components/dashboard/FundTransferView";
 import { TransactionHistoryView } from "@/components/dashboard/TransactionHistoryView";
 import { SalesHistoryView } from "@/components/dashboard/SalesHistoryView";
-import { DueSalesView } from "@/components/dashboard/DueSalesView";
 import { VatSettingsView } from "@/components/dashboard/VatSettingsView";
 import { MedicineLocatorView } from "@/components/dashboard/MedicineLocatorView";
 import { ExpensesManagementView } from "@/components/dashboard/ExpensesManagementView";
@@ -904,12 +903,6 @@ export default function RoleBasedDashboard() {
           return <TenantAccessRestricted moduleName="Sales History" requiredPerm="pos.history" />;
         }
         return <SalesHistoryView onNavigate={handleNavigate} />;
-
-      case "pos_due_sales":
-        if (!isOwner && !hasPermission("pos.history")) {
-          return <TenantAccessRestricted moduleName="Due Sales & Collections" requiredPerm="pos.history" />;
-        }
-        return <DueSalesView onNavigate={handleNavigate} />;
 
       case "pos_vat":
         if (!isOwner && !hasPermission("pos.vat")) {
