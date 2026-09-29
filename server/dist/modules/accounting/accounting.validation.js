@@ -1,9 +1,9 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.disburseSalarySchema = exports.setSalaryConfigSchema = exports.listExpensesQuerySchema = exports.recordExpensePaymentSchema = exports.updateRecurringExpenseSchema = exports.createRecurringExpenseSchema = exports.listTransactionsQuerySchema = exports.recordTransactionSchema = exports.transferFundsSchema = exports.depositFundsSchema = exports.updateAccountSchema = exports.createAccountSchema = void 0;
+exports.disburseSalarySchema = exports.setSalaryConfigSchema = exports.updateExpensePaymentSchema = exports.listExpensesQuerySchema = exports.recordExpensePaymentSchema = exports.updateRecurringExpenseSchema = exports.createRecurringExpenseSchema = exports.listTransactionsQuerySchema = exports.recordTransactionSchema = exports.transferFundsSchema = exports.depositFundsSchema = exports.updateAccountSchema = exports.createAccountSchema = void 0;
 const zod_1 = require("zod");
 exports.createAccountSchema = zod_1.z.object({
-    branchId: zod_1.z.string().uuid("Invalid branch ID"),
+    branchId: zod_1.z.string().uuid("Invalid branch ID").optional().nullable().or(zod_1.z.literal("")),
     name: zod_1.z.string().min(2, "Account name must be at least 2 characters"),
     type: zod_1.z.enum(["CASH", "BANK", "BKASH", "NAGAD", "MOBILE", "CARD_SETTLEMENT", "OTHER"]),
     accountNumber: zod_1.z.string().optional().nullable(),
@@ -30,7 +30,7 @@ exports.depositFundsSchema = zod_1.z.object({
     description: zod_1.z.string().optional().nullable(),
 });
 exports.transferFundsSchema = zod_1.z.object({
-    branchId: zod_1.z.string().uuid("Invalid branch ID"),
+    branchId: zod_1.z.string().uuid("Invalid branch ID").optional().nullable(),
     sourceAccountId: zod_1.z.string().uuid("Invalid source account ID"),
     destinationAccountId: zod_1.z.string().uuid("Invalid destination account ID"),
     amount: zod_1.z.number().positive("Transfer amount must be greater than 0"),
@@ -48,7 +48,7 @@ exports.recordTransactionSchema = zod_1.z.object({
 exports.listTransactionsQuerySchema = zod_1.z.object({
     branchId: zod_1.z.string().uuid().optional(),
     accountId: zod_1.z.string().uuid().optional(),
-    type: zod_1.z.enum(["INCOME", "EXPENSE", "TRANSFER", "SALE_PAYMENT", "PURCHASE_PAYMENT", "REFUND"]).optional(),
+    type: zod_1.z.string().optional(),
     startDate: zod_1.z.string().datetime().optional().or(zod_1.z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()),
     endDate: zod_1.z.string().datetime().optional().or(zod_1.z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()),
     page: zod_1.z.coerce.number().int().positive().optional().default(1),
@@ -95,6 +95,16 @@ exports.listExpensesQuerySchema = zod_1.z.object({
     endDate: zod_1.z.string().optional().or(zod_1.z.literal("")),
     page: zod_1.z.coerce.number().int().positive().optional().default(1),
     limit: zod_1.z.coerce.number().int().positive().max(500).optional().default(100),
+});
+exports.updateExpensePaymentSchema = zod_1.z.object({
+    title: zod_1.z.string().min(1, "Expense title is required").optional(),
+    expenseMonth: zod_1.z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Format must be YYYY-MM").optional(),
+    amount: zod_1.z.number().positive("Amount must be greater than 0").optional(),
+    financialAccountId: zod_1.z.string().uuid("Invalid financial account ID").optional(),
+    voucherNo: zod_1.z.string().optional().nullable(),
+    reference: zod_1.z.string().optional().nullable(),
+    notes: zod_1.z.string().optional().nullable(),
+    paymentDate: zod_1.z.string().optional(),
 });
 // Employee Salary Structure Config Schema
 exports.setSalaryConfigSchema = zod_1.z.object({

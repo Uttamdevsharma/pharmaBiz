@@ -14,6 +14,7 @@ import {
   createRecurringExpenseSchema,
   updateRecurringExpenseSchema,
   recordExpensePaymentSchema,
+  updateExpensePaymentSchema,
   listExpensesQuerySchema,
   setSalaryConfigSchema,
   disburseSalarySchema,
@@ -135,6 +136,17 @@ router.post(
   requirePermission("expenses.pay"),
   validateRequest({ body: recordExpensePaymentSchema }),
   AccountingController.recordExpense
+);
+router.put(
+  "/expenses/:id",
+  requirePermission("expenses.pay"),
+  validateRequest({ body: updateExpensePaymentSchema }),
+  AccountingController.updateExpense
+);
+router.delete(
+  "/expenses/:id",
+  requirePermission("expenses.pay"),
+  AccountingController.deleteExpense
 );
 router.get(
   "/expenses/summary",

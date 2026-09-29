@@ -88,6 +88,7 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
     nidBackPublicId: "",
     documentsSubmitted: false,
     grossSalary: "",
+    isPermanent: false,
   });
 
   const loadData = async () => {
@@ -174,6 +175,7 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
       nidBackPublicId: "",
       documentsSubmitted: false,
       grossSalary: "",
+      isPermanent: false,
     });
     setError(null);
     setShowPassword(false);
@@ -199,6 +201,7 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
       nidBackPublicId: member.nidBackPublicId || "",
       documentsSubmitted: !!member.documentsSubmitted,
       grossSalary: member.grossSalary !== undefined && member.grossSalary !== null ? String(member.grossSalary) : "",
+      isPermanent: !!member.isPermanent,
     });
     setError(null);
     setShowPassword(false);
@@ -290,6 +293,7 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
             nidBackPublicId: formData.nidBackPublicId || null,
             documentsSubmitted: formData.documentsSubmitted,
             grossSalary: formData.grossSalary ? Number(formData.grossSalary) : null,
+            isPermanent: formData.isPermanent,
             ...(formData.password ? { password: formData.password } : {}),
           }),
         });
@@ -311,6 +315,7 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
             nidBackPublicId: formData.nidBackPublicId || null,
             documentsSubmitted: formData.documentsSubmitted,
             grossSalary: formData.grossSalary ? Number(formData.grossSalary) : null,
+            isPermanent: formData.isPermanent,
           }),
         });
       }
@@ -629,16 +634,28 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
                         </div>
                       </td>
                       <td className="px-5 py-3.5">
-                        <span
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${
-                            member.isActive
-                              ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                              : "bg-red-500/10 text-red-600 dark:text-red-400"
-                          }`}
-                        >
-                          <span className={`h-1.5 w-1.5 rounded-full ${member.isActive ? "bg-emerald-500" : "bg-red-500"}`} />
-                          {member.isActive ? "Active" : "Disabled"}
-                        </span>
+                        <div className="flex flex-col gap-1 items-start">
+                          <span
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-none text-xs font-bold ${
+                              member.isActive
+                                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                                : "bg-red-500/10 text-red-600 dark:text-red-400"
+                            }`}
+                          >
+                            <span className={`h-1.5 w-1.5 rounded-none ${member.isActive ? "bg-emerald-500" : "bg-red-500"}`} />
+                            {member.isActive ? "Active" : "Disabled"}
+                          </span>
+
+                          {member.isPermanent ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-none text-[10px] font-bold bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                              Permanent Staff
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-none text-[10px] font-bold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                              Probation / Contract
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-5 py-3.5 text-right">
                         <div className="inline-flex items-center gap-1.5">
@@ -853,9 +870,38 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
                       value={formData.grossSalary}
                       onChange={(e) => setFormData({ ...formData, grossSalary: e.target.value })}
                       placeholder="e.g. 25000"
-                      className="w-full h-11 pl-9 pr-3.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary font-mono"
+                      className="w-full h-11 pl-9 pr-3.5 rounded-none border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary font-mono"
                     />
                   </div>
+                </div>
+
+                {/* Permanent Employee Option */}
+                <div className="sm:col-span-2 p-3.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-none">
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.isPermanent}
+                      onChange={(e) => setFormData({ ...formData, isPermanent: e.target.checked })}
+                      className="mt-0.5 h-4 w-4 rounded-none border-slate-300 text-brand-primary focus:ring-brand-primary cursor-pointer shrink-0"
+                    />
+                    <div>
+                      <div className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                        <span>Permanent Employee</span>
+                        {formData.isPermanent ? (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-none bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                            Paid Leave Eligible (30 Days/Year)
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-none bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
+                            Probation / Contractual
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                        Permanent employees receive statutory annual paid leaves (default 30 days/year). Marking attendance as Paid Leave will not deduct from their monthly salary.
+                      </p>
+                    </div>
+                  </label>
                 </div>
               </div>
 

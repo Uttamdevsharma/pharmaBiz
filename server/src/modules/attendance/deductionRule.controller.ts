@@ -20,7 +20,14 @@ export class DeductionRuleController {
 
       res.status(200).json({
         success: true,
-        data: rule || { absentRuleRatio: null, lateRuleRatio: null },
+        data: rule || {
+          absentRuleRatio: null,
+          lateRuleRatio: null,
+          annualPaidLeaveDays: 30,
+          taxExemptionAnnual: null,
+          taxRatePercent: null,
+          taxFiscalYear: null,
+        },
       });
     } catch (error: any) {
       console.error("[DeductionRuleController.getRules] Error:", error.message);
@@ -30,7 +37,15 @@ export class DeductionRuleController {
 
   static async setRules(req: Request, res: Response): Promise<void> {
     try {
-      const { branchId, absentRuleRatio, lateRuleRatio } = req.body;
+      const {
+        branchId,
+        absentRuleRatio,
+        lateRuleRatio,
+        annualPaidLeaveDays,
+        taxExemptionAnnual,
+        taxRatePercent,
+        taxFiscalYear,
+      } = req.body;
       const user = req.user!;
       const tenantId = user.tenantId;
 
@@ -47,18 +62,30 @@ export class DeductionRuleController {
 
       const parsedAbsent = parseRatio(absentRuleRatio);
       const parsedLate = parseRatio(lateRuleRatio);
+      const parsedPaidLeaveDays = parseRatio(annualPaidLeaveDays) !== null ? Math.round(Number(annualPaidLeaveDays)) : 30;
+      const parsedTaxExemption = parseRatio(taxExemptionAnnual);
+      const parsedTaxRate = parseRatio(taxRatePercent);
+      const parsedFiscalYear = taxFiscalYear?.trim() || null;
 
       const rule = await (prisma as any).salaryDeductionRule.upsert({
         where: { branchId: String(branchId) },
         update: {
           absentRuleRatio: parsedAbsent,
           lateRuleRatio: parsedLate,
+          annualPaidLeaveDays: parsedPaidLeaveDays,
+          taxExemptionAnnual: parsedTaxExemption,
+          taxRatePercent: parsedTaxRate,
+          taxFiscalYear: parsedFiscalYear,
         },
         create: {
           tenantId,
           branchId: String(branchId),
           absentRuleRatio: parsedAbsent,
           lateRuleRatio: parsedLate,
+          annualPaidLeaveDays: parsedPaidLeaveDays,
+          taxExemptionAnnual: parsedTaxExemption,
+          taxRatePercent: parsedTaxRate,
+          taxFiscalYear: parsedFiscalYear,
           createdById: user.id,
         },
       });
@@ -68,7 +95,14 @@ export class DeductionRuleController {
         branchId: String(branchId),
         userId: user.id,
         action: "SALARY_DEDUCTION_RULE_UPDATED",
-        details: { absentRuleRatio: parsedAbsent, lateRuleRatio: parsedLate },
+        details: {
+          absentRuleRatio: parsedAbsent,
+          lateRuleRatio: parsedLate,
+          annualPaidLeaveDays: parsedPaidLeaveDays,
+          taxExemptionAnnual: parsedTaxExemption,
+          taxRatePercent: parsedTaxRate,
+          taxFiscalYear: parsedFiscalYear,
+        },
       });
 
       res.status(200).json({

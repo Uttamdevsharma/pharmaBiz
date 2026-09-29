@@ -574,6 +574,14 @@ class UserService {
                 pharmacyRoleName: matchedRole?.name || data.role,
                 permissions: assignedPermissions,
                 branchId: data.branchId || null,
+                nidNumber: data.nidNumber || null,
+                nidFrontUrl: data.nidFrontUrl || null,
+                nidFrontPublicId: data.nidFrontPublicId || null,
+                nidBackUrl: data.nidBackUrl || null,
+                nidBackPublicId: data.nidBackPublicId || null,
+                documentsSubmitted: !!data.documentsSubmitted,
+                grossSalary: data.grossSalary !== undefined && data.grossSalary !== null && !isNaN(Number(data.grossSalary)) ? Number(data.grossSalary) : null,
+                isPermanent: !!data.isPermanent,
                 isActive: true,
             },
             include: {
@@ -581,6 +589,34 @@ class UserService {
                 branch: { select: { id: true, name: true } },
             },
         });
+        // Auto-create/sync EmployeeSalaryConfig if grossSalary provided
+        if (data.grossSalary !== undefined && data.grossSalary !== null && !isNaN(Number(data.grossSalary)) && Number(data.grossSalary) >= 0) {
+            const baseSalary = Number(data.grossSalary);
+            let targetBranch = data.branchId || user.branchId;
+            if (!targetBranch) {
+                const firstBranch = await prisma_1.prisma.branch.findFirst({ where: { tenantId } });
+                targetBranch = firstBranch?.id;
+            }
+            if (targetBranch) {
+                await prisma_1.prisma.employeeSalaryConfig.upsert({
+                    where: { userId: user.id },
+                    update: {
+                        branchId: targetBranch,
+                        baseSalary,
+                        netSalary: baseSalary,
+                    },
+                    create: {
+                        tenantId,
+                        branchId: targetBranch,
+                        userId: user.id,
+                        baseSalary,
+                        netSalary: baseSalary,
+                        allowances: 0,
+                        deductions: 0,
+                    },
+                });
+            }
+        }
         await audit_1.AuditService.log({
             tenantId,
             branchId: data.branchId || null,
@@ -600,6 +636,14 @@ class UserService {
             name: user.name,
             email: user.email,
             phone: user.phone,
+            nidNumber: user.nidNumber,
+            nidFrontUrl: user.nidFrontUrl,
+            nidFrontPublicId: user.nidFrontPublicId,
+            nidBackUrl: user.nidBackUrl,
+            nidBackPublicId: user.nidBackPublicId,
+            documentsSubmitted: user.documentsSubmitted,
+            grossSalary: user.grossSalary ? Number(user.grossSalary) : null,
+            isPermanent: user.isPermanent ?? false,
             isActive: user.isActive,
             branch: user.branch,
             createdAt: user.createdAt,
@@ -609,7 +653,10 @@ class UserService {
         const page = query.page || 1;
         const limit = query.limit || 50;
         const skip = (page - 1) * limit;
-        const where = { tenantId };
+        const where = {
+            tenantId,
+            NOT: [{ username: { startsWith: "deleted_" } }],
+        };
         // Branch managers only see staff in their assigned branch
         if (userRole === "BRANCH_MANAGER" && userBranchId) {
             where.branchId = userBranchId;
@@ -644,6 +691,7 @@ class UserService {
                 include: {
                     pharmacyRole: true,
                     branch: { select: { id: true, name: true } },
+                    salaryConfig: { select: { baseSalary: true } },
                 },
             }),
         ]);
@@ -660,6 +708,14 @@ class UserService {
                 name: u.name,
                 email: u.email,
                 phone: u.phone,
+                nidNumber: u.nidNumber,
+                nidFrontUrl: u.nidFrontUrl,
+                nidFrontPublicId: u.nidFrontPublicId,
+                nidBackUrl: u.nidBackUrl,
+                nidBackPublicId: u.nidBackPublicId,
+                documentsSubmitted: u.documentsSubmitted ?? false,
+                grossSalary: u.grossSalary ? Number(u.grossSalary) : (u.salaryConfig?.baseSalary ? Number(u.salaryConfig.baseSalary) : null),
+                isPermanent: u.isPermanent ?? false,
                 isActive: u.isActive,
                 createdAt: u.createdAt,
                 branch: u.branch,
@@ -678,6 +734,7 @@ class UserService {
             include: {
                 pharmacyRole: true,
                 branch: { select: { id: true, name: true, location: true } },
+                salaryConfig: true,
             },
         });
         if (!user) {
@@ -695,6 +752,15 @@ class UserService {
             name: user.name,
             email: user.email,
             phone: user.phone,
+            nidNumber: user.nidNumber,
+            nidFrontUrl: user.nidFrontUrl,
+            nidFrontPublicId: user.nidFrontPublicId,
+            nidBackUrl: user.nidBackUrl,
+            nidBackPublicId: user.nidBackPublicId,
+            documentsSubmitted: user.documentsSubmitted ?? false,
+            grossSalary: user.grossSalary ? Number(user.grossSalary) : (user.salaryConfig?.baseSalary ? Number(user.salaryConfig.baseSalary) : null),
+            isPermanent: user.isPermanent ?? false,
+            salaryConfig: user.salaryConfig,
             isActive: user.isActive,
             createdAt: user.createdAt,
             updatedAt: user.updatedAt,
@@ -741,6 +807,16 @@ class UserService {
             ...(data.phone !== undefined && { phone: data.phone }),
             ...(data.branchId !== undefined && { branchId: data.branchId }),
             ...(data.isActive !== undefined && { isActive: data.isActive }),
+            ...(data.nidNumber !== undefined && { nidNumber: data.nidNumber }),
+            ...(data.nidFrontUrl !== undefined && { nidFrontUrl: data.nidFrontUrl }),
+            ...(data.nidFrontPublicId !== undefined && { nidFrontPublicId: data.nidFrontPublicId }),
+            ...(data.nidBackUrl !== undefined && { nidBackUrl: data.nidBackUrl }),
+            ...(data.nidBackPublicId !== undefined && { nidBackPublicId: data.nidBackPublicId }),
+            ...(data.documentsSubmitted !== undefined && { documentsSubmitted: data.documentsSubmitted }),
+            ...(data.grossSalary !== undefined && {
+                grossSalary: data.grossSalary !== null && !isNaN(Number(data.grossSalary)) ? Number(data.grossSalary) : null,
+            }),
+            ...(data.isPermanent !== undefined && { isPermanent: data.isPermanent }),
             pharmacyRoleId,
             pharmacyRoleName,
             permissions,
@@ -763,6 +839,34 @@ class UserService {
             action: "USER_UPDATE",
             details: { updatedUserId: userId, changes: Object.keys(data) },
         });
+        // Auto-sync EmployeeSalaryConfig if grossSalary updated
+        if (data.grossSalary !== undefined && data.grossSalary !== null && !isNaN(Number(data.grossSalary)) && Number(data.grossSalary) >= 0) {
+            const baseSalary = Number(data.grossSalary);
+            let targetBranch = data.branchId || updated.branchId;
+            if (!targetBranch) {
+                const firstBranch = await prisma_1.prisma.branch.findFirst({ where: { tenantId } });
+                targetBranch = firstBranch?.id;
+            }
+            if (targetBranch) {
+                await prisma_1.prisma.employeeSalaryConfig.upsert({
+                    where: { userId },
+                    update: {
+                        branchId: targetBranch,
+                        baseSalary,
+                        netSalary: baseSalary,
+                    },
+                    create: {
+                        tenantId,
+                        branchId: targetBranch,
+                        userId,
+                        baseSalary,
+                        netSalary: baseSalary,
+                        allowances: 0,
+                        deductions: 0,
+                    },
+                });
+            }
+        }
         return {
             id: updated.id,
             tenantId: updated.tenantId,
@@ -775,6 +879,13 @@ class UserService {
             name: updated.name,
             email: updated.email,
             phone: updated.phone,
+            nidNumber: updated.nidNumber,
+            nidFrontUrl: updated.nidFrontUrl,
+            nidFrontPublicId: updated.nidFrontPublicId,
+            nidBackUrl: updated.nidBackUrl,
+            nidBackPublicId: updated.nidBackPublicId,
+            documentsSubmitted: updated.documentsSubmitted ?? false,
+            grossSalary: updated.grossSalary ? Number(updated.grossSalary) : null,
             isActive: updated.isActive,
             updatedAt: updated.updatedAt,
             branch: updated.branch,
@@ -825,9 +936,49 @@ class UserService {
         if (user.id === deleterId) {
             throw new Error("You cannot delete your own account.");
         }
-        await prisma_1.prisma.user.delete({
-            where: { id: userId },
+        // 1. Reassign user's sales and financial records to deleter (owner/admin)
+        // so business financial integrity is maintained and no FK constraint is violated
+        await prisma_1.prisma.sale.updateMany({
+            where: { userId },
+            data: { userId: deleterId },
         });
+        await prisma_1.prisma.financialTransaction.updateMany({
+            where: { userId },
+            data: { userId: deleterId },
+        });
+        // 2. Clear user reference from audit logs
+        await prisma_1.prisma.auditLog.updateMany({
+            where: { userId },
+            data: { userId: null },
+        });
+        // 3. Clear user notifications
+        await prisma_1.prisma.notification.deleteMany({
+            where: { userId },
+        });
+        // 4. Delete the user record
+        try {
+            await prisma_1.prisma.user.delete({
+                where: { id: userId },
+            });
+        }
+        catch (dbErr) {
+            // Fallback: Soft-delete and revoke access if any other unhandled constraint exists
+            await prisma_1.prisma.user.update({
+                where: { id: userId },
+                data: {
+                    isActive: false,
+                    deactivatedAt: new Date(),
+                    deactivatedById: deleterId,
+                    resignationDate: new Date(),
+                    resignationReason: "Deleted by administrator",
+                    permissions: [],
+                    branchId: null,
+                    pharmacyRoleId: null,
+                    username: `deleted_${Date.now()}_${user.username}`,
+                    email: user.email ? `deleted_${Date.now()}_${user.email}` : null,
+                },
+            });
+        }
         await audit_1.AuditService.log({
             tenantId,
             branchId: user.branchId,

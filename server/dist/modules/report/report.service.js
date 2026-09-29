@@ -113,6 +113,12 @@ class ReportService {
         const hourlyMap = {};
         for (let i = 0; i < 24; i++)
             hourlyMap[i] = { count: 0, revenue: 0 };
+        // Day of week distribution (0 = Sunday, 1 = Monday, ..., 6 = Saturday)
+        const dayOfWeekNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+        const dayOfWeekMap = {};
+        for (let i = 0; i < 7; i++) {
+            dayOfWeekMap[i] = { day: dayOfWeekNames[i], count: 0, revenue: 0 };
+        }
         sales.forEach((s) => {
             const saleSubTotal = Number(s.subTotal || 0);
             const saleDiscount = Number(s.discount || 0);
@@ -153,10 +159,16 @@ class ReportService {
             else {
                 paymentBreakdown.other += saleTotal;
             }
-            // Hourly metric
-            const hour = new Date(s.createdAt).getHours();
+            // Hourly & Day-of-week metric
+            const saleDate = new Date(s.createdAt);
+            const hour = saleDate.getHours();
             hourlyMap[hour].count += 1;
             hourlyMap[hour].revenue += saleTotal;
+            const dayIndex = saleDate.getDay();
+            if (dayOfWeekMap[dayIndex]) {
+                dayOfWeekMap[dayIndex].count += 1;
+                dayOfWeekMap[dayIndex].revenue += saleTotal;
+            }
             // Aggregate Product Sales
             (s.items || []).forEach((item) => {
                 const prod = item.product;
@@ -278,6 +290,7 @@ class ReportService {
             productSales: productSalesList,
             transactions: transactionList,
             hourlyBreakdown: hourlyMap,
+            dayOfWeekBreakdown: dayOfWeekMap,
         };
     }
     /**

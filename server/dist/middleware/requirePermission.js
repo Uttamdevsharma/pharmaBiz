@@ -103,8 +103,6 @@ exports.DEFAULT_ROLE_PERMISSIONS = {
         "sales.pos",
         "sales.create",
         "sales.view_own",
-        "stock.stock_list",
-        "inventory.product_list",
         "product.view",
         "inventory.view",
     ],
@@ -210,7 +208,7 @@ exports.PERMISSION_ALIASES = {
     ],
     // Location Management
     "location.create_rack": ["location.manage", "stock.manage", "inventory.manage"],
-    "location.rack_list": ["location.view", "location.manage", "stock.manage", "inventory.manage", "stock.stock_list"],
+    "location.rack_list": ["location.view", "location.manage", "stock.manage", "inventory.manage"],
     "location.manage": ["location.create_rack", "location.rack_list", "stock.manage"],
     "location.view": ["location.rack_list", "location.manage", "stock.manage"],
     // Supplier Management

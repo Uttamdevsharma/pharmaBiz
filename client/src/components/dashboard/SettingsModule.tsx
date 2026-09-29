@@ -21,7 +21,9 @@ import {
   Pencil,
   Sparkles,
   ExternalLink,
+  Sliders,
 } from "lucide-react";
+import { SalaryDeductionRules } from "./SalaryDeductionRules";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface TenantProfile {
@@ -64,9 +66,9 @@ function TabButton({
   return (
     <button
       onClick={onClick}
-      className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition whitespace-nowrap ${
+      className={`flex items-center gap-2 px-4 py-2.5 rounded-none text-xs font-bold transition whitespace-nowrap cursor-pointer ${
         active
-          ? "bg-brand-primary text-white shadow-md"
+          ? "bg-brand-primary text-white shadow-xs"
           : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
       }`}
     >
@@ -1037,16 +1039,17 @@ function PrescriptionSettingsTab() {
 
 // ─── Main Settings Module ─────────────────────────────────────────────────────
 export function SettingsModule() {
-  const [activeTab, setActiveTab] = useState<"profile" | "receipt" | "prescription">("profile");
+  const [activeTab, setActiveTab] = useState<"profile" | "receipt" | "prescription" | "payroll_policy">("profile");
 
   const tabs = [
     { id: "profile" as const, label: "Company Profile", icon: Building2 },
     { id: "receipt" as const, label: "Receipt & Invoice", icon: Receipt },
     { id: "prescription" as const, label: "Prescription Settings", icon: ShieldCheck },
+    { id: "payroll_policy" as const, label: "Leave & Salary Policies", icon: Sliders },
   ];
 
   return (
-    <div className="space-y-6 max-w-3xl">
+    <div className="space-y-6 max-w-4xl">
       {/* Page Header */}
       <div className="pb-4 border-b border-slate-200 dark:border-slate-800">
         <div className="flex items-center gap-2 text-xs text-slate-400 mb-1">
@@ -1059,7 +1062,7 @@ export function SettingsModule() {
           Pharmacy Settings
         </h1>
         <p className="text-xs text-slate-500 mt-1">
-          Manage your pharmacy profile, invoice format, and dispensing preferences.
+          Manage your pharmacy profile, invoice format, dispensing rules, and annual leave & salary deduction policies.
         </p>
       </div>
 
@@ -1080,6 +1083,7 @@ export function SettingsModule() {
       {activeTab === "profile" && <CompanyProfileTab />}
       {activeTab === "receipt" && <ReceiptInvoiceTab />}
       {activeTab === "prescription" && <PrescriptionSettingsTab />}
+      {activeTab === "payroll_policy" && <SalaryDeductionRules />}
     </div>
   );
 }

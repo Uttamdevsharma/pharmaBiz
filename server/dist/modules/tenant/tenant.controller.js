@@ -53,5 +53,19 @@ class TenantController {
             res.status(500).json({ success: false, message: error.message });
         }
     }
+    static async getBillingLedger(req, res) {
+        try {
+            const tenantId = req.user.tenantId;
+            if (!tenantId) {
+                res.status(400).json({ success: false, message: "No tenant context found" });
+                return;
+            }
+            const data = await tenant_service_1.TenantService.getBillingLedger(tenantId);
+            res.status(200).json({ success: true, data });
+        }
+        catch (error) {
+            res.status(500).json({ success: false, message: error.message });
+        }
+    }
 }
 exports.TenantController = TenantController;

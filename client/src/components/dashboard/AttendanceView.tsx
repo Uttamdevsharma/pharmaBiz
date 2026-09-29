@@ -26,6 +26,7 @@ import {
   Briefcase,
   DollarSign,
   Eye,
+  Lock,
 } from "lucide-react";
 
 interface AttendanceViewProps {
@@ -42,7 +43,10 @@ interface RosterItem {
   role: string;
   avatarUrl?: string;
   phone?: string;
-  status: "PRESENT" | "ABSENT" | "LATE";
+  isPermanent?: boolean;
+  paidLeavesUsed?: number;
+  annualPaidLeaveAllowance?: number;
+  status: "PRESENT" | "ABSENT" | "LATE" | "PAID_LEAVE" | "UNPAID_LEAVE" | "OFF_DAY";
   hasSavedRecord: boolean;
   notes?: string;
   markedBy?: { name?: string; username: string } | null;
@@ -256,10 +260,19 @@ export function AttendanceView({
   // Handle individual status change
   const handleStatusChange = (
     empId: string,
-    status: "PRESENT" | "ABSENT" | "LATE"
+    status: "PRESENT" | "ABSENT" | "LATE" | "PAID_LEAVE"
   ) => {
     setRoster((prev) =>
-      prev.map((emp) => (emp.id === empId ? { ...emp, status } : emp))
+      prev.map((emp) => {
+        if (emp.id === empId) {
+          if (status === "PAID_LEAVE" && !emp.isPermanent) {
+            setError(`Cannot grant Paid Leave: "${emp.name || emp.username}" is not a permanent employee. Only permanent employees are eligible for paid leave.`);
+            return emp;
+          }
+          return { ...emp, status };
+        }
+        return emp;
+      })
     );
   };
 
@@ -450,8 +463,8 @@ export function AttendanceView({
       )}
 
       {successMsg && (
-        <div className="flex items-center gap-3 p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl text-emerald-600 dark:text-emerald-400 text-xs font-bold">
-          <CheckCircle2 className="w-5 h-5 shrink-0" />
+        <div className="flex items-center gap-3 p-3.5 bg-emerald-500/10 border border-emerald-500/20 rounded-none text-emerald-600 dark:text-emerald-400 text-xs font-bold">
+          <CheckCircle2 className="w-4 h-4 shrink-0" />
           <span>{successMsg}</span>
         </div>
       )}
@@ -460,10 +473,10 @@ export function AttendanceView({
       {activeTab === "daily" && isManager && (
         <div className="space-y-4">
           {/* Controls Card */}
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-none p-4 shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
             <div className="flex flex-wrap items-center gap-3">
               {/* Date Selector */}
-              <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800 px-3 py-2 rounded-2xl border border-slate-200 dark:border-slate-700">
+              <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800 px-3 py-2 rounded-none border border-slate-200 dark:border-slate-700">
                 <Calendar className="w-4 h-4 text-emerald-600" />
                 <input
                   type="date"
@@ -475,12 +488,12 @@ export function AttendanceView({
 
               {/* Off-Day Status Indicator */}
               {isDateOffDay ? (
-                <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-300 text-xs font-bold">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-none bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-300 text-xs font-bold">
                   <Coffee className="w-3.5 h-3.5" />
                   <span>Scheduled Off-Day ({dateDayOfWeek}) — Non-Working Day</span>
                 </div>
               ) : (
-                <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-300 text-xs font-bold">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-none bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-300 text-xs font-bold">
                   <Briefcase className="w-3.5 h-3.5" />
                   <span>Official Working Day ({dateDayOfWeek})</span>
                 </div>
@@ -491,7 +504,7 @@ export function AttendanceView({
               <button
                 type="button"
                 onClick={handleMarkAllPresent}
-                className="px-3.5 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-xl transition"
+                className="px-3.5 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-none transition border border-slate-300 dark:border-slate-700 cursor-pointer"
               >
                 Mark All Present
               </button>
@@ -500,7 +513,7 @@ export function AttendanceView({
                 type="button"
                 onClick={handleSaveDailyAttendance}
                 disabled={saving || roster.length === 0}
-                className="flex items-center gap-2 px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition shadow-md shadow-emerald-600/20 disabled:opacity-50"
+                className="flex items-center gap-2 px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-none transition shadow-sm disabled:opacity-50 cursor-pointer"
               >
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                 <span>Save Attendance</span>
@@ -509,7 +522,7 @@ export function AttendanceView({
           </div>
 
           {isDateOffDay ? (
-            <div className="bg-amber-500/10 border border-amber-500/20 rounded-3xl p-12 text-center space-y-3">
+            <div className="bg-amber-500/10 border border-amber-500/20 rounded-none p-12 text-center space-y-3">
               <Coffee className="w-12 h-12 mx-auto text-amber-600 dark:text-amber-400" />
               <h3 className="text-xl font-extrabold text-amber-900 dark:text-amber-200">Today is Off-Day</h3>
               <p className="text-xs font-semibold text-amber-700 dark:text-amber-300 max-w-md mx-auto">
@@ -526,12 +539,12 @@ export function AttendanceView({
                   placeholder="Search employee by name, username..."
                   value={searchDaily}
                   onChange={(e) => setSearchDaily(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                  className="w-full pl-10 pr-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-none text-xs font-bold text-slate-900 dark:text-white focus:outline-none"
                 />
               </div>
 
               {/* Roster Table */}
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-xs overflow-hidden">
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-none shadow-xs overflow-hidden">
                 {loading ? (
                   <div className="p-16 text-center text-slate-400 flex flex-col items-center gap-2">
                     <Loader2 className="w-7 h-7 animate-spin text-emerald-600" />
@@ -561,31 +574,42 @@ export function AttendanceView({
                         {filteredRoster.map((emp) => (
                           <tr key={emp.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition">
                             {/* Employee Name */}
-                            <td className="py-4 px-4">
-                              <div className="font-extrabold text-slate-900 dark:text-white">
+                            <td className="py-3.5 px-4">
+                              <div className="font-bold text-slate-900 dark:text-white">
                                 {emp.name || emp.username}
                               </div>
-                              <div className="text-[10px] text-slate-400 font-mono">@{emp.username}</div>
+                              <div className="flex items-center gap-2 mt-0.5">
+                                <span className="text-[10px] text-slate-400 font-mono">@{emp.username}</span>
+                                {emp.isPermanent ? (
+                                  <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-none bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                                    Permanent
+                                  </span>
+                                ) : (
+                                  <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-none bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                                    Contractual
+                                  </span>
+                                )}
+                              </div>
                             </td>
 
                             {/* Role */}
-                            <td className="py-4 px-4">
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                            <td className="py-3.5 px-4">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-none text-[10px] font-bold uppercase bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
                                 {emp.role}
                               </span>
                             </td>
 
-                            {/* Status Select Buttons (Present / Absent Only) */}
-                            <td className="py-4 px-4">
-                              <div className="flex flex-wrap items-center gap-2">
+                            {/* Status Select Buttons */}
+                            <td className="py-3.5 px-4">
+                              <div className="flex flex-wrap items-center gap-1.5">
                                 {/* PRESENT */}
                                 <button
                                   type="button"
                                   onClick={() => handleStatusChange(emp.id, "PRESENT")}
-                                  className={`px-4 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+                                  className={`px-3 py-1.5 rounded-none text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
                                     emp.status === "PRESENT"
                                       ? "bg-emerald-600 text-white shadow-xs"
-                                      : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200"
+                                      : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700"
                                   }`}
                                 >
                                   <CheckCircle2 className="w-3.5 h-3.5" />
@@ -596,10 +620,10 @@ export function AttendanceView({
                                 <button
                                   type="button"
                                   onClick={() => handleStatusChange(emp.id, "ABSENT")}
-                                  className={`px-4 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+                                  className={`px-3 py-1.5 rounded-none text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
                                     emp.status === "ABSENT"
                                       ? "bg-rose-600 text-white shadow-xs"
-                                      : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200"
+                                      : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700"
                                   }`}
                                 >
                                   <XCircle className="w-3.5 h-3.5" />
@@ -610,44 +634,72 @@ export function AttendanceView({
                                 <button
                                   type="button"
                                   onClick={() => handleStatusChange(emp.id, "LATE")}
-                                  className={`px-4 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+                                  className={`px-3 py-1.5 rounded-none text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
                                     emp.status === "LATE"
                                       ? "bg-amber-500 text-white shadow-xs"
-                                      : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200"
+                                      : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700"
                                   }`}
                                 >
                                   <Clock className="w-3.5 h-3.5" />
                                   <span>Late</span>
                                 </button>
+
+                                {/* PAID LEAVE (Permanent Employees Only) */}
+                                {emp.isPermanent ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleStatusChange(emp.id, "PAID_LEAVE")}
+                                    className={`px-3 py-1.5 rounded-none text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                                      emp.status === "PAID_LEAVE"
+                                        ? "bg-blue-600 text-white shadow-xs"
+                                        : "bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/50"
+                                    }`}
+                                    title={`Paid Leave: ${emp.paidLeavesUsed || 0}/${emp.annualPaidLeaveAllowance || 30} days used this year`}
+                                  >
+                                    <Sparkles className="w-3.5 h-3.5 text-blue-400" />
+                                    <span>Paid Leave</span>
+                                    <span className="text-[10px] font-mono opacity-85">
+                                      ({emp.paidLeavesUsed || 0}/{emp.annualPaidLeaveAllowance || 30}d)
+                                    </span>
+                                  </button>
+                                ) : (
+                                  <div
+                                    className="px-2.5 py-1.5 rounded-none text-[11px] font-bold bg-slate-100 dark:bg-slate-800/80 text-slate-400 dark:text-slate-500 border border-dashed border-slate-300 dark:border-slate-700 flex items-center gap-1 cursor-not-allowed select-none"
+                                    title="Not a permanent employee. Update staff in Staff List to make them permanent."
+                                  >
+                                    <Lock className="w-3 h-3 text-slate-400" />
+                                    <span>Paid Leave: Not Permanent Yet</span>
+                                  </div>
+                                )}
                               </div>
                             </td>
 
-                        {/* Notes */}
-                        <td className="py-4 px-4">
-                          <input
-                            type="text"
-                            placeholder="Optional remark..."
-                            value={emp.notes || ""}
-                            onChange={(e) => handleNotesChange(emp.id, e.target.value)}
-                            className="w-full max-w-xs px-2.5 py-1.5 rounded-xl text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:outline-none"
-                          />
-                        </td>
+                            {/* Notes */}
+                            <td className="py-3.5 px-4">
+                              <input
+                                type="text"
+                                placeholder="Optional remark..."
+                                value={emp.notes || ""}
+                                onChange={(e) => handleNotesChange(emp.id, e.target.value)}
+                                className="w-full max-w-xs px-2.5 py-1.5 rounded-none text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:outline-none"
+                              />
+                            </td>
 
-                        {/* Saved State */}
-                        <td className="py-4 px-4 text-right">
-                          {emp.hasSavedRecord ? (
-                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
-                              <Check className="w-3 h-3" /> Saved
-                            </span>
-                          ) : (
-                            <span className="text-[10px] font-semibold text-slate-400">Unsaved</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                            {/* Saved State */}
+                            <td className="py-3.5 px-4 text-right">
+                              {emp.hasSavedRecord ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                                  <Check className="w-3 h-3" /> Saved
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-semibold text-slate-400">Unsaved</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
             )}
           </div>
         </>

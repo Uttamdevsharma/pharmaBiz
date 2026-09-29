@@ -219,7 +219,7 @@ class AccountingService {
             const transaction = await tx.financialTransaction.create({
                 data: {
                     tenantId,
-                    branchId: data.branchId,
+                    branchId: data.branchId || sourceAcc.branchId,
                     sourceAccountId: sourceAcc.id,
                     destinationAccountId: destAcc.id,
                     amount: data.amount,
@@ -332,7 +332,12 @@ class AccountingService {
             ];
         }
         if (query.type) {
-            where.type = query.type;
+            if (query.type.includes(",")) {
+                where.type = { in: query.type.split(",").map((t) => t.trim()) };
+            }
+            else {
+                where.type = query.type;
+            }
         }
         if (query.startDate || query.endDate) {
             where.createdAt = {};
@@ -446,6 +451,21 @@ class AccountingService {
                 periodEnd = d;
             }
         }
+        else if (options?.period === "today") {
+            periodStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+            periodEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+        }
+        else if (options?.period === "thisWeek") {
+            const firstDay = new Date(now);
+            firstDay.setDate(now.getDate() - now.getDay());
+            firstDay.setHours(0, 0, 0, 0);
+            periodStart = firstDay;
+            periodEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+        }
+        else if (options?.period === "thisMonth") {
+            periodStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+            periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+        }
         else if (options?.period === "lastMonth") {
             periodStart = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
             periodEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
@@ -458,7 +478,13 @@ class AccountingService {
             periodStart = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
             periodEnd = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
         }
-        // Dynamically calculate total supplier dues from actual purchase/due records for active branch and selected period
+        // 1. Authoritative calculation of total supplier dues from supplier ledger
+        const suppliers = await prisma_1.prisma.supplier.findMany({
+            where: { tenantId, isActive: true },
+            select: { id: true, totalDue: true },
+        });
+        const supplierLifetimeDue = suppliers.reduce((sum, s) => sum + Number(s.totalDue || 0), 0);
+        // 2. Also check purchases with dueAmount > 0
         const purchaseWhere = {
             tenantId,
             dueAmount: { gt: 0 },
@@ -466,22 +492,36 @@ class AccountingService {
         if (branchId) {
             purchaseWhere.branchId = branchId;
         }
-        if (options?.startDate || options?.endDate || options?.period) {
-            purchaseWhere.purchaseDate = { gte: periodStart, lte: periodEnd };
-        }
         const unpaidPurchases = await prisma_1.prisma.purchase.findMany({
             where: purchaseWhere,
             select: { dueAmount: true },
         });
-        let totalSupplierDues = unpaidPurchases.reduce((sum, p) => sum + Number(p.dueAmount || 0), 0);
-        // Fallback if no purchase records found and no specific branch/period filter was applied
-        if (totalSupplierDues === 0 && !branchId && !options?.startDate && !options?.endDate && !options?.period) {
-            const suppliers = await prisma_1.prisma.supplier.findMany({
-                where: { tenantId, isActive: true },
-                select: { totalDue: true, dueBalance: true },
-            });
-            totalSupplierDues = suppliers.reduce((sum, s) => sum + Number(s.totalDue ?? s.dueBalance ?? 0), 0);
+        const totalPurchaseDues = unpaidPurchases.reduce((sum, p) => sum + Number(p.dueAmount || 0), 0);
+        // If branch filter specified and has branch purchases, show that branch's due,
+        // otherwise show full supplier ledger due
+        let totalSupplierDues = supplierLifetimeDue;
+        if (branchId && totalPurchaseDues > 0) {
+            totalSupplierDues = totalPurchaseDues;
         }
+        else {
+            totalSupplierDues = Math.max(supplierLifetimeDue, totalPurchaseDues);
+        }
+        // Customer Dues calculation (Sales with pending due amount)
+        const customerDuesWhere = {
+            tenantId,
+            status: "COMPLETED",
+            dueAmount: { gt: 0 },
+        };
+        if (branchId)
+            customerDuesWhere.branchId = branchId;
+        if (options?.startDate || options?.endDate || options?.period) {
+            customerDuesWhere.createdAt = { gte: periodStart, lte: periodEnd };
+        }
+        const unpaidSales = await prisma_1.prisma.sale.findMany({
+            where: customerDuesWhere,
+            select: { dueAmount: true },
+        });
+        const totalCustomerDues = unpaidSales.reduce((sum, s) => sum + Number(s.dueAmount || 0), 0);
         // Query sales for selected period
         const periodSalesWhere = {
             tenantId,
@@ -530,6 +570,39 @@ class AccountingService {
                 periodOtherSales += amt;
             }
         }
+        // Query direct cash deposits / manual income transactions during the period
+        const directIncomeWhere = {
+            tenantId,
+            type: "INCOME",
+            createdAt: { gte: periodStart, lte: periodEnd },
+        };
+        if (branchId)
+            directIncomeWhere.branchId = branchId;
+        const directIncomes = await prisma_1.prisma.financialTransaction.findMany({
+            where: directIncomeWhere,
+            select: { amount: true },
+        });
+        const periodDirectIncome = directIncomes.reduce((sum, d) => sum + Number(d.amount || 0), 0);
+        const periodTotalInflow = periodTotalSales + periodDirectIncome;
+        // Query period expenses (Branch Expenses + Salaries)
+        const periodExpenseWhere = {
+            tenantId,
+            paymentDate: { gte: periodStart, lte: periodEnd },
+        };
+        if (branchId)
+            periodExpenseWhere.branchId = branchId;
+        const [periodBranchExpenses, periodSalaries] = await Promise.all([
+            prisma_1.prisma.branchExpense.findMany({
+                where: periodExpenseWhere,
+                select: { amount: true },
+            }),
+            prisma_1.prisma.salaryDisbursement.findMany({
+                where: periodExpenseWhere,
+                select: { paidAmount: true },
+            }),
+        ]);
+        const periodTotalExpenses = periodBranchExpenses.reduce((sum, e) => sum + Number(e.amount || 0), 0) +
+            periodSalaries.reduce((sum, s) => sum + Number(s.paidAmount || 0), 0);
         // Today's Sales Telemetry & Hourly Breakdown
         const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
         const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
@@ -560,6 +633,39 @@ class AccountingService {
             else if (m === "BANK" || m === "CARD")
                 todayBank += amt;
         }
+        // Today's Direct Incomes (Deposits / Manual Cash-in)
+        const todayDirectIncomeWhere = {
+            tenantId,
+            type: "INCOME",
+            createdAt: { gte: todayStart, lte: todayEnd },
+        };
+        if (branchId)
+            todayDirectIncomeWhere.branchId = branchId;
+        const todayDirectIncomes = await prisma_1.prisma.financialTransaction.findMany({
+            where: todayDirectIncomeWhere,
+            select: { amount: true },
+        });
+        const todayDirectIncomeTotal = todayDirectIncomes.reduce((sum, d) => sum + Number(d.amount || 0), 0);
+        todayRevenue += todayDirectIncomeTotal;
+        // Today's Expenses
+        const todayExpWhere = {
+            tenantId,
+            paymentDate: { gte: todayStart, lte: todayEnd },
+        };
+        if (branchId)
+            todayExpWhere.branchId = branchId;
+        const [todayBranchExp, todaySalaryExp] = await Promise.all([
+            prisma_1.prisma.branchExpense.findMany({
+                where: todayExpWhere,
+                select: { amount: true },
+            }),
+            prisma_1.prisma.salaryDisbursement.findMany({
+                where: todayExpWhere,
+                select: { paidAmount: true },
+            }),
+        ]);
+        const todayExpenses = todayBranchExp.reduce((sum, e) => sum + Number(e.amount || 0), 0) +
+            todaySalaryExp.reduce((sum, s) => sum + Number(s.paidAmount || 0), 0);
         const hourlySlots = [
             { label: "8-10 AM", startHour: 8, endHour: 10 },
             { label: "10-12 PM", startHour: 10, endHour: 12 },
@@ -582,23 +688,54 @@ class AccountingService {
                 salesCount: slotSales.length,
             };
         });
-        // 7-Day Trend
+        // 7-Day Trend (Sales & Expenses)
         const last7Days = [];
         for (let i = 6; i >= 0; i--) {
             const d = new Date(now);
             d.setDate(d.getDate() - i);
             const dayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
             const dayEnd = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
-            const dSales = await prisma_1.prisma.sale.findMany({
-                where: {
-                    tenantId,
-                    status: "COMPLETED",
-                    ...(branchId ? { branchId } : {}),
-                    createdAt: { gte: dayStart, lte: dayEnd },
-                },
-                select: { totalAmount: true, paidAmount: true, paymentMethod: true },
-            });
-            const dayRevenue = dSales.reduce((acc, s) => acc + Number(s.paidAmount || s.totalAmount || 0), 0);
+            const [dSales, dIncomes, dExpenses, dSalaries] = await Promise.all([
+                prisma_1.prisma.sale.findMany({
+                    where: {
+                        tenantId,
+                        status: "COMPLETED",
+                        ...(branchId ? { branchId } : {}),
+                        createdAt: { gte: dayStart, lte: dayEnd },
+                    },
+                    select: { totalAmount: true, paidAmount: true, paymentMethod: true },
+                }),
+                prisma_1.prisma.financialTransaction.findMany({
+                    where: {
+                        tenantId,
+                        type: "INCOME",
+                        createdAt: { gte: dayStart, lte: dayEnd },
+                        ...(branchId ? { branchId } : {}),
+                    },
+                    select: { amount: true },
+                }),
+                prisma_1.prisma.branchExpense.findMany({
+                    where: {
+                        tenantId,
+                        ...(branchId ? { branchId } : {}),
+                        paymentDate: { gte: dayStart, lte: dayEnd },
+                    },
+                    select: { amount: true },
+                }),
+                prisma_1.prisma.salaryDisbursement.findMany({
+                    where: {
+                        tenantId,
+                        ...(branchId ? { branchId } : {}),
+                        paymentDate: { gte: dayStart, lte: dayEnd },
+                    },
+                    select: { paidAmount: true },
+                }),
+            ]);
+            const daySalesRevenue = dSales.reduce((acc, s) => acc + Number(s.paidAmount || s.totalAmount || 0), 0);
+            const dayDirectIncome = dIncomes.reduce((acc, d) => acc + Number(d.amount || 0), 0);
+            const dayRevenue = daySalesRevenue + dayDirectIncome;
+            const dayExpense = dExpenses.reduce((acc, e) => acc + Number(e.amount || 0), 0) +
+                dSalaries.reduce((acc, s) => acc + Number(s.paidAmount || 0), 0);
             let dayCash = 0;
             let dayDigital = 0;
             for (const s of dSales) {
@@ -613,55 +750,106 @@ class AccountingService {
                 dayName: dayStart.toLocaleDateString("en-US", { weekday: "short" }),
                 dateKey: `${dayStart.getFullYear()}-${String(dayStart.getMonth() + 1).padStart(2, "0")}-${String(dayStart.getDate()).padStart(2, "0")}`,
                 revenue: dayRevenue,
+                expense: dayExpense,
                 orderCount: dSales.length,
                 cashAmount: dayCash,
                 digitalAmount: dayDigital,
             });
         }
-        // Build 30-Day Daily Sales Trend
+        // Build 30-Day Daily Sales & Expense Trend
         const last30Days = [];
         for (let i = 29; i >= 0; i--) {
             const d = new Date(now);
             d.setDate(d.getDate() - i);
             const dayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
             const dayEnd = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
-            const dSales = await prisma_1.prisma.sale.findMany({
-                where: {
-                    tenantId,
-                    status: "COMPLETED",
-                    ...(branchId ? { branchId } : {}),
-                    createdAt: { gte: dayStart, lte: dayEnd },
-                },
-                select: { totalAmount: true, paidAmount: true, paymentMethod: true },
-            });
-            const dayRevenue = dSales.reduce((acc, s) => acc + Number(s.paidAmount || s.totalAmount || 0), 0);
+            const [dSales, dIncomes, dExpenses, dSalaries] = await Promise.all([
+                prisma_1.prisma.sale.findMany({
+                    where: {
+                        tenantId,
+                        status: "COMPLETED",
+                        ...(branchId ? { branchId } : {}),
+                        createdAt: { gte: dayStart, lte: dayEnd },
+                    },
+                    select: { totalAmount: true, paidAmount: true, paymentMethod: true },
+                }),
+                prisma_1.prisma.financialTransaction.findMany({
+                    where: {
+                        tenantId,
+                        type: "INCOME",
+                        createdAt: { gte: dayStart, lte: dayEnd },
+                        ...(branchId ? { branchId } : {}),
+                    },
+                    select: { amount: true },
+                }),
+                prisma_1.prisma.branchExpense.findMany({
+                    where: {
+                        tenantId,
+                        ...(branchId ? { branchId } : {}),
+                        paymentDate: { gte: dayStart, lte: dayEnd },
+                    },
+                    select: { amount: true },
+                }),
+                prisma_1.prisma.salaryDisbursement.findMany({
+                    where: {
+                        tenantId,
+                        ...(branchId ? { branchId } : {}),
+                        paymentDate: { gte: dayStart, lte: dayEnd },
+                    },
+                    select: { paidAmount: true },
+                }),
+            ]);
+            const daySalesRevenue = dSales.reduce((acc, s) => acc + Number(s.paidAmount || s.totalAmount || 0), 0);
+            const dayDirectIncome = dIncomes.reduce((acc, d) => acc + Number(d.amount || 0), 0);
+            const dayRevenue = daySalesRevenue + dayDirectIncome;
+            const dayExpense = dExpenses.reduce((acc, e) => acc + Number(e.amount || 0), 0) +
+                dSalaries.reduce((acc, s) => acc + Number(s.paidAmount || 0), 0);
             last30Days.push({
                 date: dayStart.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
                 dayName: dayStart.toLocaleDateString("en-US", { weekday: "narrow" }),
                 dateKey: `${dayStart.getFullYear()}-${String(dayStart.getMonth() + 1).padStart(2, "0")}-${String(dayStart.getDate()).padStart(2, "0")}`,
                 revenue: dayRevenue,
+                expense: dayExpense,
                 orderCount: dSales.length,
             });
         }
-        // Build 6-Month Sales Trend
+        // Build 6-Month Sales & Expense Trend
         const monthlyTrend = [];
         for (let i = 5; i >= 0; i--) {
             const mDate = new Date(now.getFullYear(), now.getMonth() - i, 1);
             const mStart = new Date(mDate.getFullYear(), mDate.getMonth(), 1, 0, 0, 0, 0);
             const mEnd = new Date(mDate.getFullYear(), mDate.getMonth() + 1, 0, 23, 59, 59, 999);
-            const mSales = await prisma_1.prisma.sale.findMany({
-                where: {
-                    tenantId,
-                    status: "COMPLETED",
-                    ...(branchId ? { branchId } : {}),
-                    createdAt: { gte: mStart, lte: mEnd },
-                },
-                select: {
-                    totalAmount: true,
-                    paidAmount: true,
-                    paymentMethod: true,
-                },
-            });
+            const [mSales, mExpenses, mSalaries] = await Promise.all([
+                prisma_1.prisma.sale.findMany({
+                    where: {
+                        tenantId,
+                        status: "COMPLETED",
+                        ...(branchId ? { branchId } : {}),
+                        createdAt: { gte: mStart, lte: mEnd },
+                    },
+                    select: {
+                        totalAmount: true,
+                        paidAmount: true,
+                        paymentMethod: true,
+                    },
+                }),
+                prisma_1.prisma.branchExpense.findMany({
+                    where: {
+                        tenantId,
+                        ...(branchId ? { branchId } : {}),
+                        paymentDate: { gte: mStart, lte: mEnd },
+                    },
+                    select: { amount: true },
+                }),
+                prisma_1.prisma.salaryDisbursement.findMany({
+                    where: {
+                        tenantId,
+                        ...(branchId ? { branchId } : {}),
+                        paymentDate: { gte: mStart, lte: mEnd },
+                    },
+                    select: { paidAmount: true },
+                }),
+            ]);
             let mRevenue = 0;
             let mCash = 0;
             let mDigital = 0;
@@ -673,11 +861,14 @@ class AccountingService {
                 else
                     mDigital += amt;
             }
+            const mExpense = mExpenses.reduce((acc, e) => acc + Number(e.amount || 0), 0) +
+                mSalaries.reduce((acc, s) => acc + Number(s.paidAmount || 0), 0);
             monthlyTrend.push({
                 month: mStart.toLocaleDateString("en-US", { month: "short", year: "numeric" }),
                 monthShort: mStart.toLocaleDateString("en-US", { month: "short" }),
                 monthKey: `${mStart.getFullYear()}-${String(mStart.getMonth() + 1).padStart(2, "0")}`,
                 revenue: mRevenue,
+                expense: mExpense,
                 salesCount: mSales.length,
                 cashAmount: mCash,
                 digitalAmount: mDigital,
@@ -696,7 +887,9 @@ class AccountingService {
         });
         return {
             summary: {
-                totalSales: periodTotalSales,
+                totalSales: periodTotalInflow,
+                totalExpenses: periodTotalExpenses,
+                netInflow: periodTotalInflow - periodTotalExpenses,
                 cashSales: periodCashSales,
                 bkashSales: periodBkashSales,
                 nagadSales: periodNagadSales,
@@ -704,12 +897,15 @@ class AccountingService {
                 otherSales: periodOtherSales,
                 totalTransactions: periodSales.length,
                 totalSupplierDues,
+                totalCustomerDues,
                 currentCashBalance: totalCash,
                 currentBkashBalance: totalBkash,
                 currentNagadBalance: totalNagad,
                 currentBankBalance: totalBank,
                 totalLiquidity,
                 todayRevenue,
+                todayExpenses,
+                todayNet: todayRevenue - todayExpenses,
                 todaySalesCount: todaySales.length,
                 todayCash,
                 todayBkash,
@@ -945,6 +1141,129 @@ class AccountingService {
             return expense;
         });
     }
+    static async updateExpense(tenantId, id, userId, data) {
+        const existing = await prisma_1.prisma.branchExpense.findFirst({
+            where: { id, tenantId },
+            include: { financialAccount: true },
+        });
+        if (!existing) {
+            throw new Error("Expense record not found");
+        }
+        return prisma_1.prisma.$transaction(async (tx) => {
+            let finalAccountId = existing.financialAccountId;
+            const oldAmount = Number(existing.amount);
+            const newAmount = data.amount !== undefined ? data.amount : oldAmount;
+            // Handle financial account change or amount adjustment
+            if (data.financialAccountId && data.financialAccountId !== existing.financialAccountId) {
+                // Refund old account
+                await tx.financialAccount.update({
+                    where: { id: existing.financialAccountId },
+                    data: { balance: { increment: oldAmount } },
+                });
+                // Check new account balance
+                const newAcc = await tx.financialAccount.findFirst({
+                    where: { id: data.financialAccountId, tenantId, isActive: true },
+                });
+                if (!newAcc)
+                    throw new Error("Target financial account not found or inactive");
+                if (Number(newAcc.balance) < newAmount) {
+                    throw new Error(`Insufficient balance in ${newAcc.name}`);
+                }
+                // Deduct new account
+                await tx.financialAccount.update({
+                    where: { id: data.financialAccountId },
+                    data: { balance: { decrement: newAmount } },
+                });
+                finalAccountId = data.financialAccountId;
+            }
+            else if (data.amount !== undefined && data.amount !== oldAmount) {
+                const diff = data.amount - oldAmount;
+                if (diff > 0) {
+                    const acc = await tx.financialAccount.findFirst({ where: { id: existing.financialAccountId } });
+                    if (Number(acc.balance) < diff) {
+                        throw new Error(`Insufficient balance to cover expense increment of ৳${diff}`);
+                    }
+                    await tx.financialAccount.update({
+                        where: { id: existing.financialAccountId },
+                        data: { balance: { decrement: diff } },
+                    });
+                }
+                else {
+                    await tx.financialAccount.update({
+                        where: { id: existing.financialAccountId },
+                        data: { balance: { increment: Math.abs(diff) } },
+                    });
+                }
+            }
+            const updated = await tx.branchExpense.update({
+                where: { id },
+                data: {
+                    ...(data.title && { title: data.title.trim() }),
+                    ...(data.expenseMonth && { expenseMonth: data.expenseMonth }),
+                    ...(data.amount !== undefined && { amount: data.amount }),
+                    financialAccountId: finalAccountId,
+                    ...(data.voucherNo !== undefined && { voucherNo: data.voucherNo?.trim() || null }),
+                    ...(data.reference !== undefined && { reference: data.reference?.trim() || null }),
+                    ...(data.notes !== undefined && { notes: data.notes?.trim() || null }),
+                    ...(data.paymentDate && { paymentDate: new Date(data.paymentDate) }),
+                },
+                include: {
+                    financialAccount: true,
+                    branch: true,
+                },
+            });
+            await audit_1.AuditService.log({
+                tenantId,
+                branchId: existing.branchId,
+                userId,
+                action: "EXPENSE_UPDATED",
+                details: { expenseId: id, updatedData: data },
+            });
+            return updated;
+        });
+    }
+    static async deleteExpense(tenantId, id, userId) {
+        const existing = await prisma_1.prisma.branchExpense.findFirst({
+            where: { id, tenantId },
+            include: { financialAccount: true },
+        });
+        if (!existing) {
+            throw new Error("Expense record not found");
+        }
+        return prisma_1.prisma.$transaction(async (tx) => {
+            // 1. Revert financial account balance
+            await tx.financialAccount.update({
+                where: { id: existing.financialAccountId },
+                data: { balance: { increment: existing.amount } },
+            });
+            // 2. Remove financial transaction if linked
+            await tx.financialTransaction.deleteMany({
+                where: {
+                    tenantId,
+                    sourceAccountId: existing.financialAccountId,
+                    reference: existing.voucherNo || existing.reference || existing.id,
+                    type: "EXPENSE",
+                },
+            });
+            // 3. Delete expense record
+            await tx.branchExpense.delete({
+                where: { id },
+            });
+            await audit_1.AuditService.log({
+                tenantId,
+                branchId: existing.branchId,
+                userId,
+                action: "EXPENSE_DELETED",
+                details: {
+                    expenseId: id,
+                    title: existing.title,
+                    amount: Number(existing.amount),
+                    refundedToAccount: existing.financialAccount?.name,
+                },
+            });
+            return { success: true, message: "Expense record deleted and account balance restored." };
+        });
+    }
     static async getExpenseSummary(tenantId, branchId, month) {
         const where = { tenantId };
         if (branchId)
@@ -1030,6 +1349,11 @@ class AccountingService {
                 branchId: true,
                 branch: { select: { id: true, name: true } },
                 salaryConfig: true,
+                nidNumber: true,
+                nidFrontUrl: true,
+                nidBackUrl: true,
+                documentsSubmitted: true,
+                isPermanent: true,
                 isActive: true,
                 resignationDate: true,
                 resignationReason: true,
@@ -1084,6 +1408,11 @@ class AccountingService {
                 branchId: u.branchId,
                 branchName: u.branch?.name,
                 createdAt: u.createdAt,
+                nidNumber: u.nidNumber,
+                nidFrontUrl: u.nidFrontUrl,
+                nidBackUrl: u.nidBackUrl,
+                documentsSubmitted: u.documentsSubmitted ?? false,
+                isPermanent: Boolean(u.isPermanent),
                 isActive: u.isActive,
                 resignationDate: u.resignationDate,
                 resignationReason: u.resignationReason,
@@ -1167,6 +1496,9 @@ class AccountingService {
         });
         if (!employee)
             throw new Error("Employee not found in this branch.");
+        if (!employee.documentsSubmitted) {
+            throw new Error("Salary disbursement blocked: Employee has not submitted required certificates/documents.");
+        }
         // 2. Verify financial account belongs to branch & has funds
         const account = await prisma_1.prisma.financialAccount.findFirst({
             where: { id: data.financialAccountId, branchId: data.branchId, tenantId, isActive: true },
@@ -1303,6 +1635,13 @@ class AccountingService {
                 branchId: true,
                 branch: { select: { id: true, name: true } },
                 salaryConfig: true,
+                nidNumber: true,
+                nidFrontUrl: true,
+                nidFrontPublicId: true,
+                nidBackUrl: true,
+                nidBackPublicId: true,
+                documentsSubmitted: true,
+                isPermanent: true,
             },
         });
         if (!employee)

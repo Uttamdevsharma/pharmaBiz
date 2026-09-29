@@ -486,9 +486,9 @@ class ProductService {
                 barcode: data.barcode || null,
                 basePrice: data.basePrice ?? 0,
                 category: mainCategoryName,
-                categoryId: mainCategoryId,
+                categoryId: mainCategoryId || null,
                 subcategory: subcategoryName,
-                subcategoryId: subcategoryId,
+                subcategoryId: subcategoryId || null,
                 brandId: data.brandId || null,
                 unitId: data.unitId || null,
                 productType: calculatedType,
@@ -503,6 +503,8 @@ class ProductService {
                 stripsPerBox: data.stripsPerBox ? Number(data.stripsPerBox) : 10,
                 tabletsPerStrip: data.tabletsPerStrip ? Number(data.tabletsPerStrip) : 10,
                 minStockAlert: data.minStockAlert !== undefined ? data.minStockAlert : 10,
+                shopMinStockAlert: data.shopMinStockAlert !== undefined ? data.shopMinStockAlert : (data.minStockAlert !== undefined ? data.minStockAlert : 10),
+                godownMinStockAlert: data.godownMinStockAlert !== undefined ? data.godownMinStockAlert : 50,
                 description: data.description || null,
                 isControlled: data.isControlled || false,
                 requiresPrescription: data.requiresPrescription || false,
@@ -796,12 +798,12 @@ class ProductService {
                 ...(data.barcode !== undefined && { barcode: data.barcode }),
                 ...(data.basePrice !== undefined && { basePrice: data.basePrice }),
                 category: categoryName,
-                categoryId: categoryId,
+                ...(categoryId !== undefined && { categoryId: categoryId || null }),
                 subcategory: subcategoryName,
-                subcategoryId: subcategoryId,
+                ...(subcategoryId !== undefined && { subcategoryId: subcategoryId || null }),
                 productType: calculatedType,
-                ...(data.brandId !== undefined && { brandId: data.brandId }),
-                ...(data.unitId !== undefined && { unitId: data.unitId }),
+                ...(data.brandId !== undefined && { brandId: data.brandId || null }),
+                ...(data.unitId !== undefined && { unitId: data.unitId || null }),
                 ...(data.brandName !== undefined && { brandName: data.brandName }),
                 ...(data.manufacturer !== undefined && { manufacturer: data.manufacturer }),
                 ...(data.unit !== undefined && { unit: data.unit }),
@@ -813,6 +815,8 @@ class ProductService {
                 stripsPerBox: data.stripsPerBox !== undefined ? (data.stripsPerBox ? Number(data.stripsPerBox) : null) : product.stripsPerBox,
                 tabletsPerStrip: data.tabletsPerStrip !== undefined ? (data.tabletsPerStrip ? Number(data.tabletsPerStrip) : null) : product.tabletsPerStrip,
                 ...(data.minStockAlert !== undefined && { minStockAlert: data.minStockAlert }),
+                ...(data.shopMinStockAlert !== undefined && { shopMinStockAlert: data.shopMinStockAlert }),
+                ...(data.godownMinStockAlert !== undefined && { godownMinStockAlert: data.godownMinStockAlert }),
                 ...(data.description !== undefined && { description: data.description }),
                 ...(data.isControlled !== undefined && { isControlled: data.isControlled }),
                 ...(data.requiresPrescription !== undefined && { requiresPrescription: data.requiresPrescription }),
@@ -871,14 +875,33 @@ class ProductService {
     static async bulkImport(tenantId, userId, data) {
         const results = [];
         for (const item of data.products) {
-            const existing = await prisma_1.prisma.product.findUnique({
-                where: {
-                    tenantId_sku: {
-                        tenantId,
-                        sku: item.sku,
+            let existing = null;
+            if (item.sku && item.sku.trim() !== "") {
+                existing = await prisma_1.prisma.product.findUnique({
+                    where: {
+                        tenantId_sku: {
+                            tenantId,
+                            sku: item.sku.trim(),
+                        },
                     },
-                },
-            });
+                });
+            }
+            else if (item.barcode && item.barcode.trim() !== "") {
+                existing = await prisma_1.prisma.product.findFirst({
+                    where: {
+                        tenantId,
+                        barcode: item.barcode.trim(),
+                    },
+                });
+            }
+            else if (item.name && item.name.trim() !== "") {
+                existing = await prisma_1.prisma.product.findFirst({
+                    where: {
+                        tenantId,
+                        name: { equals: item.name.trim(), mode: "insensitive" },
+                    },
+                });
+            }
             const calculatedType = mapCategoryNameToProductType(item.category);
             const isMed = calculatedType === "MEDICINE";
             if (existing) {
@@ -886,8 +909,9 @@ class ProductService {
                     where: { id: existing.id },
                     data: {
                         name: item.name,
+                        genericName: item.genericName || existing.genericName,
                         barcode: item.barcode || existing.barcode,
-                        basePrice: item.basePrice,
+                        basePrice: item.basePrice !== undefined ? item.basePrice : existing.basePrice,
                         category: item.category || existing.category,
                         categoryId: item.categoryId || existing.categoryId,
                         subcategory: item.subcategory || existing.subcategory,
@@ -897,9 +921,12 @@ class ProductService {
                         manufacturer: item.manufacturer || existing.manufacturer,
                         unit: item.unit || existing.unit,
                         size: item.size || existing.size,
+                        defaultPackType: item.defaultPackType || existing.defaultPackType,
                         stripsPerBox: isMed ? (item.stripsPerBox || existing.stripsPerBox) : null,
                         tabletsPerStrip: isMed ? (item.tabletsPerStrip || existing.tabletsPerStrip) : null,
                         minStockAlert: item.minStockAlert !== undefined ? item.minStockAlert : existing.minStockAlert,
+                        shopMinStockAlert: item.shopMinStockAlert !== undefined ? item.shopMinStockAlert : (existing.shopMinStockAlert ?? existing.minStockAlert),
+                        godownMinStockAlert: item.godownMinStockAlert !== undefined ? item.godownMinStockAlert : (existing.godownMinStockAlert ?? 50),
                         description: item.description || existing.description,
                         isControlled: item.isControlled !== undefined ? item.isControlled : existing.isControlled,
                         requiresPrescription: item.requiresPrescription !== undefined ? item.requiresPrescription : existing.requiresPrescription,
@@ -909,25 +936,34 @@ class ProductService {
                 results.push({ action: "UPDATED", product: updated });
             }
             else {
+                const generatedSku = item.sku && item.sku.trim() !== ""
+                    ? item.sku.trim()
+                    : `SKU-${Date.now().toString().slice(-6)}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
                 const created = await prisma_1.prisma.product.create({
                     data: {
                         tenantId,
-                        name: item.name,
-                        sku: item.sku,
+                        name: item.name.trim(),
+                        genericName: item.genericName?.trim() || null,
+                        sku: generatedSku,
                         barcode: item.barcode || null,
-                        basePrice: item.basePrice,
+                        basePrice: item.basePrice || 0,
                         category: item.category || "Medicine",
                         categoryId: item.categoryId || null,
                         subcategory: item.subcategory || null,
                         subcategoryId: item.subcategoryId || null,
+                        brandId: item.brandId || null,
+                        unitId: item.unitId || null,
                         productType: calculatedType,
                         brandName: item.brandName || null,
                         manufacturer: item.manufacturer || null,
                         unit: item.unit || (isMed ? "tablet" : "piece"),
                         size: item.size || null,
+                        defaultPackType: item.defaultPackType || (isMed ? "BOX" : "PIECE"),
                         stripsPerBox: isMed ? (item.stripsPerBox || 10) : null,
                         tabletsPerStrip: isMed ? (item.tabletsPerStrip || 10) : null,
                         minStockAlert: item.minStockAlert || 10,
+                        shopMinStockAlert: item.shopMinStockAlert || item.minStockAlert || 10,
+                        godownMinStockAlert: item.godownMinStockAlert || 50,
                         description: item.description || null,
                         isControlled: item.isControlled || false,
                         requiresPrescription: item.requiresPrescription || false,

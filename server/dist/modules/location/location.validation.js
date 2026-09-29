@@ -6,11 +6,13 @@ exports.CreateRackSchema = zod_1.z.object({
     name: zod_1.z.string().min(1, "Rack name is required"),
     branchId: zod_1.z.string().optional(),
     type: zod_1.z.string().optional().default("RACK"),
+    location: zod_1.z.string().optional(),
     isActive: zod_1.z.boolean().optional(),
 });
 exports.UpdateRackSchema = zod_1.z.object({
     name: zod_1.z.string().min(1, "Name cannot be empty").optional(),
     type: zod_1.z.string().optional(),
+    location: zod_1.z.string().optional().nullable(),
     isActive: zod_1.z.boolean().optional(),
 });
 exports.CreateShelfSchema = zod_1.z.object({
@@ -35,9 +37,11 @@ exports.QuickCreateRackSchema = zod_1.z.object({
     name: zod_1.z.string().min(1, "Storage unit name/code is required").max(60, "Name is too long"),
     branchId: zod_1.z.string().optional(),
     type: zod_1.z.string().optional().default("RACK"),
+    location: zod_1.z.string().optional(),
     shelfPrefix: zod_1.z.string().max(30).optional().default("Shelf"),
     numberOfShelves: zod_1.z.coerce.number().int().min(0, "Shelves cannot be negative").max(50, "Maximum 50 shelves allowed").default(0),
     binPrefix: zod_1.z.string().max(30).optional().default("Bin"),
     binsPerShelf: zod_1.z.coerce.number().int().min(0, "Bins cannot be negative").max(50, "Maximum 50 bins per shelf allowed").default(0),
+    customShelves: zod_1.z.array(zod_1.z.string()).optional(),
     isActive: zod_1.z.boolean().optional(),
 });

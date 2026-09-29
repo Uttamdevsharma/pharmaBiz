@@ -38,6 +38,8 @@ router.delete("/recurring-expenses/:id", (0, requirePermission_1.requirePermissi
 // ==========================================
 router.get("/expenses", (0, requirePermission_1.requirePermission)("expenses.history"), (0, validate_1.validateRequest)({ query: accounting_validation_1.listExpensesQuerySchema }), accounting_controller_1.AccountingController.listExpenses);
 router.post("/expenses", (0, requirePermission_1.requirePermission)("expenses.pay"), (0, validate_1.validateRequest)({ body: accounting_validation_1.recordExpensePaymentSchema }), accounting_controller_1.AccountingController.recordExpense);
+router.put("/expenses/:id", (0, requirePermission_1.requirePermission)("expenses.pay"), (0, validate_1.validateRequest)({ body: accounting_validation_1.updateExpensePaymentSchema }), accounting_controller_1.AccountingController.updateExpense);
+router.delete("/expenses/:id", (0, requirePermission_1.requirePermission)("expenses.pay"), accounting_controller_1.AccountingController.deleteExpense);
 router.get("/expenses/summary", (0, requirePermission_1.requirePermission)("expenses.history"), accounting_controller_1.AccountingController.getExpenseSummary);
 // ==========================================
 // 👥 Staff Salaries & Payroll

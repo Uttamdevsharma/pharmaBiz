@@ -17,13 +17,17 @@ export const MODULE_TO_PATH: Record<OwnerModule, string> = {
   // Accounts & Finance
   accounts: "/dashboard/accounts",
   acc_overview: "/dashboard/accounts",
+  acc_create_account: "/dashboard/accounts/create",
+  acc_account_list: "/dashboard/accounts/list",
   acc_financial_accounts: "/dashboard/accounts/financial",
   acc_fund_transfer: "/dashboard/accounts/transfer",
+  acc_transfer_history: "/dashboard/accounts/transfer-history",
   acc_transaction_history: "/dashboard/accounts/transactions",
   acc_expenses: "/dashboard/expenses",
   acc_salaries: "/dashboard/salary",
 
   // Expenses & Bills
+  exp_create: "/dashboard/expenses/create",
   exp_list: "/dashboard/expenses/list",
   exp_pay: "/dashboard/expenses/pay",
   exp_history: "/dashboard/expenses/history",

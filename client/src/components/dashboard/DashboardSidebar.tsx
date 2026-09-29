@@ -68,14 +68,18 @@ export type OwnerModule =
   | "pos_vat"
   | "accounts"
   | "acc_overview"
+  | "acc_create_account"
+  | "acc_account_list"
   | "acc_financial_accounts"
   | "acc_fund_transfer"
+  | "acc_transfer_history"
   | "acc_expenses"
   | "acc_salaries"
   | "employee_details"
   | "staff_salary_history"
   | "change_password"
   | "acc_transaction_history"
+  | "exp_create"
   | "exp_list"
   | "exp_pay"
   | "exp_history"
@@ -200,12 +204,16 @@ export function DashboardSidebar({
   const isAccountsActive =
     activeModule === "acc_overview" ||
     activeModule === "accounts" ||
+    activeModule === "acc_create_account" ||
+    activeModule === "acc_account_list" ||
     activeModule === "acc_financial_accounts" ||
     activeModule === "acc_fund_transfer" ||
+    activeModule === "acc_transfer_history" ||
     activeModule === "acc_transaction_history" ||
     activeModule === "sup_payments_due";
 
   const isExpensesActive =
+    activeModule === "exp_create" ||
     activeModule === "exp_list" ||
     activeModule === "exp_pay" ||
     activeModule === "exp_history" ||
@@ -569,8 +577,14 @@ export function DashboardSidebar({
       visible: isOwner || hasPermission("accounts.overview"),
     },
     {
+      id: "acc_create_account" as OwnerModule,
+      label: "Create Account",
+      icon: PlusCircle,
+      visible: isOwner || hasPermission("accounts.financial_accounts"),
+    },
+    {
       id: "acc_financial_accounts" as OwnerModule,
-      label: "Financial Accounts",
+      label: "Account List",
       icon: Wallet,
       visible: isOwner || hasPermission("accounts.financial_accounts"),
     },
@@ -581,21 +595,27 @@ export function DashboardSidebar({
       visible: isOwner || hasPermission("accounts.fund_transfer"),
     },
     {
+      id: "acc_transfer_history" as OwnerModule,
+      label: "Transfer History",
+      icon: History,
+      visible: isOwner || hasPermission("accounts.fund_transfer"),
+    },
+    {
       id: "sup_payments_due" as OwnerModule,
       label: "Supplier Payments / Due",
       icon: Receipt,
       visible: isOwner || hasPermission("accounts.supplier_due"),
     },
-    {
-      id: "acc_transaction_history" as OwnerModule,
-      label: "Transaction History",
-      icon: History,
-      visible: isOwner || hasPermission("accounts.transaction_history"),
-    },
   ].filter((item) => item.visible);
 
   // 10. Expenses & Bills Section
   const expensesChildren: SubMenuItem[] = [
+    {
+      id: "exp_create" as OwnerModule,
+      label: "Create Bill",
+      icon: PlusCircle,
+      visible: isOwner || hasPermission("expenses.list"),
+    },
     {
       id: "exp_list" as OwnerModule,
       label: "Bill List",

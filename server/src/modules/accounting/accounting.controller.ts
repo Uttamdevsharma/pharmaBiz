@@ -29,6 +29,15 @@ export class AccountingController {
     try {
       const tenantId = req.user!.tenantId;
       const userId = req.user!.id;
+      if (!req.body.branchId) {
+        const firstBranch = await (prisma as any).branch.findFirst({
+          where: { tenantId },
+          select: { id: true },
+        });
+        if (firstBranch) {
+          req.body.branchId = firstBranch.id;
+        }
+      }
       const account = await AccountingService.createAccount(tenantId, userId, req.body);
       res.status(201).json({ success: true, data: account });
     } catch (err: any) {
@@ -164,7 +173,12 @@ export class AccountingController {
     try {
       const user = req.user!;
       const tenantId = user.tenantId;
-      const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN" || user.role === "REGIONAL_ADMIN";
+      const isOwner =
+        user.role === "COMPANY_OWNER" ||
+        user.role === "SUPER_ADMIN" ||
+        user.role === "REGIONAL_ADMIN" ||
+        user.role === "ACCOUNTS" ||
+        user.role === "CTO";
       const branchId = isOwner
         ? ((req.query.branchId as string) || (req.headers["x-branch-id"] as string) || undefined)
         : (user.branchId || undefined);
@@ -232,6 +246,28 @@ export class AccountingController {
     }
   }
 
+  static async updateExpense(req: Request, res: Response): Promise<void> {
+    try {
+      const tenantId = req.user!.tenantId;
+      const userId = req.user!.id;
+      const updated = await AccountingService.updateExpense(tenantId, req.params.id, userId, req.body);
+      res.json({ success: true, data: updated, message: "Expense record updated successfully" });
+    } catch (err: any) {
+      res.status(400).json({ success: false, message: err.message });
+    }
+  }
+
+  static async deleteExpense(req: Request, res: Response): Promise<void> {
+    try {
+      const tenantId = req.user!.tenantId;
+      const userId = req.user!.id;
+      const result = await AccountingService.deleteExpense(tenantId, req.params.id, userId);
+      res.json(result);
+    } catch (err: any) {
+      res.status(400).json({ success: false, message: err.message });
+    }
+  }
+
   static async getExpenseSummary(req: Request, res: Response): Promise<void> {
     try {
       const tenantId = req.user!.tenantId;
@@ -251,7 +287,12 @@ export class AccountingController {
     try {
       const tenantId = req.user!.tenantId;
       const user = req.user!;
-      const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN" || user.role === "REGIONAL_ADMIN";
+      const isOwner =
+        user.role === "COMPANY_OWNER" ||
+        user.role === "SUPER_ADMIN" ||
+        user.role === "REGIONAL_ADMIN" ||
+        user.role === "ACCOUNTS" ||
+        user.role === "CTO";
       const branchId = isOwner
         ? ((req.query.branchId as string) || (req.headers["x-branch-id"] as string) || undefined)
         : (user.branchId || undefined);
@@ -270,7 +311,7 @@ export class AccountingController {
     try {
       const user = req.user!;
       const tenantId = user.tenantId;
-      const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN";
+      const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN" || user.role === "ACCOUNTS";
       const isBranchManager =
         user.role === "BRANCH_MANAGER" ||
         user.pharmacyRoleName?.toLowerCase().includes("branch manager") ||
@@ -317,7 +358,7 @@ export class AccountingController {
       const user = req.user!;
       const tenantId = user.tenantId;
       const disbursedById = user.id;
-      const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN";
+      const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN" || user.role === "ACCOUNTS";
       const branchId = isOwner ? ((req.body.branchId as string) || user.branchId || "") : (user.branchId || (req.body.branchId as string) || "");
 
       if (!branchId) {
@@ -341,7 +382,12 @@ export class AccountingController {
     try {
       const tenantId = req.user!.tenantId;
       const user = req.user!;
-      const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN" || user.role === "REGIONAL_ADMIN";
+      const isOwner =
+        user.role === "COMPANY_OWNER" ||
+        user.role === "SUPER_ADMIN" ||
+        user.role === "REGIONAL_ADMIN" ||
+        user.role === "ACCOUNTS" ||
+        user.role === "CTO";
       const branchId = isOwner
         ? ((req.query.branchId as string) || (req.headers["x-branch-id"] as string) || undefined)
         : (user.branchId || undefined);

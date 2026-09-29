@@ -80,6 +80,9 @@ interface EmployeeData {
   avatarUrl?: string;
   createdAt: string;
   isActive: boolean;
+  isPermanent?: boolean;
+  paidLeavesUsedThisYear?: number;
+  annualPaidLeaveAllowance?: number;
   nidNumber?: string | null;
   nidFrontUrl?: string | null;
   nidFrontPublicId?: string | null;
@@ -559,6 +562,33 @@ export function EmployeeDetailsView({ employeeId, selectedBranchId, onBack }: Em
             )
           )}
 
+          {isManager && (
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  const newStatus = !employee.isPermanent;
+                  const res = await fetchApi<any>(`/users/${employee.id}`, {
+                    method: "PATCH",
+                    body: JSON.stringify({ isPermanent: newStatus }),
+                  });
+                  if (res.success) {
+                    setEmployee((prev) => (prev ? { ...prev, isPermanent: newStatus } : null));
+                    setSuccessMsg(`Employee status updated to ${newStatus ? "Permanent" : "Contractual"}!`);
+                    setTimeout(() => setSuccessMsg(null), 3000);
+                  }
+                } catch (e: any) {
+                  setError(e.message || "Failed to update permanent status");
+                }
+              }}
+              className="px-3 py-2 rounded-xl text-xs font-bold border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-1.5 transition cursor-pointer"
+              title="Toggle Permanent Employee status"
+            >
+              <Sparkles className="h-3.5 w-3.5 text-brand-primary" />
+              <span>{employee.isPermanent ? "Set Contractual" : "Set Permanent"}</span>
+            </button>
+          )}
+
           <button
             onClick={() => {
               loadDetails();
@@ -607,6 +637,16 @@ export function EmployeeDetailsView({ employeeId, selectedBranchId, onBack }: Em
                 <Shield className="h-3 w-3" />
                 {roleName}
               </span>
+
+              {employee.isPermanent ? (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-blue-500/10 text-blue-600 border border-blue-500/20">
+                  <Sparkles className="h-3 w-3" /> Permanent Staff (30d Paid Leave)
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-slate-500/10 text-slate-600 dark:text-slate-400 border border-slate-500/20">
+                  Probation / Contractual
+                </span>
+              )}
 
               {employee.isActive ? (
                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
@@ -935,6 +975,28 @@ export function EmployeeDetailsView({ employeeId, selectedBranchId, onBack }: Em
                   </span>
                   <span className="text-[9px] text-rose-500">Locked / Read-Only</span>
                 </div>
+
+                {/* Paid Leaves */}
+                <div className="p-3.5 bg-blue-500/5 dark:bg-blue-500/10 rounded-2xl border border-blue-500/20">
+                  <span className="text-[10px] text-blue-600 dark:text-blue-400 font-black uppercase tracking-wider block">Paid Leaves</span>
+                  <span className="text-base font-black font-mono text-blue-600 dark:text-blue-300 mt-0.5 block">
+                    {m.paidLeaveDays || 0} Days
+                  </span>
+                  <span className="text-[9px] text-blue-500">0 Tk Deduction</span>
+                </div>
+
+                {/* Tax / TDS deduction if applicable */}
+                {Number(m.monthlyTaxDeduction || 0) > 0 && (
+                  <div className="p-3.5 bg-amber-500/5 dark:bg-amber-500/10 rounded-2xl border border-amber-500/20">
+                    <span className="text-[10px] text-amber-600 font-black uppercase tracking-wider block">TDS / Tax</span>
+                    <span className="text-base font-black font-mono text-amber-600 mt-0.5 block">
+                      -৳{Number(m.monthlyTaxDeduction).toLocaleString()}
+                    </span>
+                    <span className="text-[9px] text-amber-500">
+                      {m.taxFiscalYear || "FY"} ({m.taxRatePercent}%)
+                    </span>
+                  </div>
+                )}
 
                 <div className="p-3.5 bg-emerald-500/5 dark:bg-emerald-500/10 rounded-2xl border border-emerald-500/20">
                   <span className="text-[10px] text-emerald-600 font-black uppercase tracking-wider block">Allowances</span>

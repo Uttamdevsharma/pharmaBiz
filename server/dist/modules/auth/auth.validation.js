@@ -16,7 +16,12 @@ exports.registerOwnerSchema = zod_1.z.object({
     companyName: zod_1.z.string().min(2, "Company name must be at least 2 characters"),
     ownerName: zod_1.z.string().min(2, "Owner name must be at least 2 characters"),
     email: zod_1.z.string().email("Invalid email address"),
-    phone: zod_1.z.string().min(5, "Phone number must be at least 5 digits"),
+    phone: zod_1.z
+        .string()
+        .trim()
+        .regex(/^\d+$/, "Phone number must contain digits only")
+        .min(11, "Phone number must be at least 11 digits")
+        .max(12, "Phone number cannot exceed 12 digits"),
     password: zod_1.z.string().min(6, "Password must be at least 6 characters"),
     address: zod_1.z.string().optional(),
     // Regulatory document & license numbers

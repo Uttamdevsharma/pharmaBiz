@@ -77,7 +77,7 @@ class SubscriptionService {
             : {};
         const branchCount = tenant.branches ? tenant.branches.length : 0;
         const maxBranches = currentSub?.plan?.maxBranches ?? planConfig.maxBranches;
-        const nonOwnerStaff = (tenant.users || []).filter((u) => u.role !== "COMPANY_OWNER");
+        const nonOwnerStaff = (tenant.users || []).filter((u) => u.role !== "COMPANY_OWNER" && u.role !== "SUPER_ADMIN" && !u.username?.startsWith("deleted_"));
         const staffCount = nonOwnerStaff.length;
         const maxStaffPerBranch = Number(planFeatures.maxStaffPerBranch ?? currentSub?.plan?.maxStaffPerBranch ?? planConfig.maxStaffPerBranch ?? 1);
         const maxStaff = Number(planFeatures.maxTotalStaff ?? currentSub?.plan?.maxTotalStaff ?? planConfig.maxTotalStaff ?? 999);

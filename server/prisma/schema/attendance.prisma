@@ -79,9 +79,13 @@ model SalaryDeductionRule {
   id              String   @id @default(uuid())
   tenantId        String
   branchId        String
-  absentRuleRatio Decimal? @db.Decimal(5, 2)
-  lateRuleRatio   Decimal? @db.Decimal(5, 2)
-  createdById     String?
+  absentRuleRatio     Decimal? @db.Decimal(5, 2)
+  lateRuleRatio       Decimal? @db.Decimal(5, 2)
+  annualPaidLeaveDays Int?     @default(30)
+  taxExemptionAnnual  Decimal? @db.Decimal(15, 2)
+  taxRatePercent      Decimal? @db.Decimal(5, 2)
+  taxFiscalYear       String?
+  createdById         String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

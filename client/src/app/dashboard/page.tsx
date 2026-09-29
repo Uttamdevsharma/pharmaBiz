@@ -58,13 +58,17 @@ import { SupplierDetailsView } from "@/components/dashboard/SupplierDetailsView"
 import { PurchaseHistoryView } from "@/components/dashboard/PurchaseHistoryView";
 import { PaymentsDueView } from "@/components/dashboard/PaymentsDueView";
 import { AccountsOverviewView } from "@/components/dashboard/AccountsOverviewView";
+import { CreateFinancialAccountView } from "@/components/dashboard/CreateFinancialAccountView";
+import { FinancialAccountsListView } from "@/components/dashboard/FinancialAccountsListView";
 import { FinancialAccountsView } from "@/components/dashboard/FinancialAccountsView";
 import { FundTransferView } from "@/components/dashboard/FundTransferView";
+import { FundTransferHistoryView } from "@/components/dashboard/FundTransferHistoryView";
 import { TransactionHistoryView } from "@/components/dashboard/TransactionHistoryView";
 import { SalesHistoryView } from "@/components/dashboard/SalesHistoryView";
 import { VatSettingsView } from "@/components/dashboard/VatSettingsView";
 import { MedicineLocatorView } from "@/components/dashboard/MedicineLocatorView";
 import { ExpensesManagementView } from "@/components/dashboard/ExpensesManagementView";
+import { CreateBillView } from "@/components/dashboard/CreateBillView";
 import { BillListView } from "@/components/dashboard/BillListView";
 import { PayBillView } from "@/components/dashboard/PayBillView";
 import { BillHistoryView } from "@/components/dashboard/BillHistoryView";
@@ -918,11 +922,18 @@ export default function RoleBasedDashboard() {
         }
         return <AccountsOverviewView onNavigate={handleNavigate} />;
 
+      case "acc_create_account":
+        if (!isOwner && !hasPermission("accounts.financial_accounts")) {
+          return <TenantAccessRestricted moduleName="Create Account" requiredPerm="accounts.financial_accounts" />;
+        }
+        return <CreateFinancialAccountView onNavigate={handleNavigate} />;
+
+      case "acc_account_list":
       case "acc_financial_accounts":
         if (!isOwner && !hasPermission("accounts.financial_accounts")) {
           return <TenantAccessRestricted moduleName="Financial Accounts" requiredPerm="accounts.financial_accounts" />;
         }
-        return <FinancialAccountsView onNavigate={handleNavigate} />;
+        return <FinancialAccountsListView onNavigate={handleNavigate} />;
 
       case "acc_fund_transfer":
         if (!isOwner && !hasPermission("accounts.fund_transfer")) {
@@ -930,13 +941,30 @@ export default function RoleBasedDashboard() {
         }
         return <FundTransferView onNavigate={handleNavigate} />;
 
+      case "acc_transfer_history":
+        if (!isOwner && !hasPermission("accounts.fund_transfer")) {
+          return <TenantAccessRestricted moduleName="Transfer History" requiredPerm="accounts.fund_transfer" />;
+        }
+        return <FundTransferHistoryView onNavigate={handleNavigate} />;
+
       case "acc_transaction_history":
         if (!isOwner && !hasPermission("accounts.transaction_history")) {
           return <TenantAccessRestricted moduleName="Transaction History" requiredPerm="accounts.transaction_history" />;
         }
         return <TransactionHistoryView onNavigate={handleNavigate} />;
 
-      // 💸 Expenses & Bills (Redesigned 3-Submenu Structure)
+      // 💸 Expenses & Bills Submenus
+      case "exp_create":
+        if (!isOwner && !hasPermission("expenses.list")) {
+          return <TenantAccessRestricted moduleName="Create Bill" requiredPerm="expenses.list" />;
+        }
+        return (
+          <CreateBillView
+            selectedBranchId={selectedBranchId}
+            onNavigate={handleNavigate}
+          />
+        );
+
       case "exp_list":
       case "exp_recurring":
       case "exp_settings":

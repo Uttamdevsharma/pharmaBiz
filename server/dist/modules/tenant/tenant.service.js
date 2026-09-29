@@ -90,7 +90,7 @@ class TenantService {
         const planConfig = (0, planLimits_1.getPlanConfig)(tier);
         const maxBranches = activeSub?.plan?.maxBranches || planConfig.maxBranches;
         const branchCount = tenant.branches ? tenant.branches.length : 0;
-        const nonOwnerStaff = (tenant.users || []).filter((u) => u.role !== "COMPANY_OWNER");
+        const nonOwnerStaff = (tenant.users || []).filter((u) => u.role !== "COMPANY_OWNER" && u.role !== "SUPER_ADMIN" && !u.username?.startsWith("deleted_"));
         const staffCount = nonOwnerStaff.length;
         const maxStaff = tier === "TRIAL" ? 1 : planConfig.maxTotalStaff || 999;
         return {
@@ -113,6 +113,61 @@ class TenantService {
                 customAudit: tier === "ENTERPRISE",
                 apiAccess: tier === "ENTERPRISE",
             },
+        };
+    }
+    static async getBillingLedger(tenantId) {
+        const tenant = await prisma_1.prisma.tenant.findUnique({
+            where: { id: tenantId },
+            include: {
+                branches: {
+                    select: {
+                        id: true,
+                        name: true,
+                        location: true,
+                        phone: true,
+                        email: true,
+                        isActive: true,
+                        createdAt: true,
+                    },
+                },
+                users: {
+                    select: {
+                        id: true,
+                        name: true,
+                        username: true,
+                        email: true,
+                        phone: true,
+                        role: true,
+                        isActive: true,
+                        createdAt: true,
+                    },
+                },
+                subscriptions: {
+                    orderBy: { createdAt: "desc" },
+                    include: {
+                        plan: true,
+                        payments: {
+                            orderBy: { createdAt: "desc" },
+                        },
+                    },
+                },
+                payments: {
+                    orderBy: { createdAt: "desc" },
+                    include: {
+                        subscription: {
+                            include: { plan: true },
+                        },
+                    },
+                },
+            },
+        });
+        if (!tenant) {
+            throw new Error("Tenant not found");
+        }
+        const ownerUser = (tenant.users || []).find((u) => u.role === "COMPANY_OWNER") || tenant.users?.[0] || null;
+        return {
+            tenant,
+            ownerUser,
         };
     }
 }

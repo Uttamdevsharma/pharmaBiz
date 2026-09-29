@@ -10,6 +10,7 @@ import {
   CreateRecurringExpenseInput,
   UpdateRecurringExpenseInput,
   RecordExpensePaymentInput,
+  UpdateExpensePaymentInput,
   ListExpensesQuery,
   SetSalaryConfigInput,
   DisburseSalaryInput,
@@ -260,7 +261,7 @@ export class AccountingService {
       const transaction = await tx.financialTransaction.create({
         data: {
           tenantId,
-          branchId: data.branchId,
+          branchId: data.branchId || sourceAcc.branchId,
           sourceAccountId: sourceAcc.id,
           destinationAccountId: destAcc.id,
           amount: data.amount,
@@ -389,7 +390,11 @@ export class AccountingService {
     }
 
     if (query.type) {
-      where.type = query.type;
+      if (query.type.includes(",")) {
+        where.type = { in: query.type.split(",").map((t: string) => t.trim()) };
+      } else {
+        where.type = query.type;
+      }
     }
 
     if (query.startDate || query.endDate) {
@@ -1261,6 +1266,145 @@ export class AccountingService {
     });
   }
 
+  static async updateExpense(
+    tenantId: string,
+    id: string,
+    userId: string,
+    data: UpdateExpensePaymentInput
+  ) {
+    const existing = await (prisma as any).branchExpense.findFirst({
+      where: { id, tenantId },
+      include: { financialAccount: true },
+    });
+    if (!existing) {
+      throw new Error("Expense record not found");
+    }
+
+    return (prisma as any).$transaction(async (tx: any) => {
+      let finalAccountId = existing.financialAccountId;
+      const oldAmount = Number(existing.amount);
+      const newAmount = data.amount !== undefined ? data.amount : oldAmount;
+
+      // Handle financial account change or amount adjustment
+      if (data.financialAccountId && data.financialAccountId !== existing.financialAccountId) {
+        // Refund old account
+        await tx.financialAccount.update({
+          where: { id: existing.financialAccountId },
+          data: { balance: { increment: oldAmount } },
+        });
+
+        // Check new account balance
+        const newAcc = await tx.financialAccount.findFirst({
+          where: { id: data.financialAccountId, tenantId, isActive: true },
+        });
+        if (!newAcc) throw new Error("Target financial account not found or inactive");
+        if (Number(newAcc.balance) < newAmount) {
+          throw new Error(`Insufficient balance in ${newAcc.name}`);
+        }
+
+        // Deduct new account
+        await tx.financialAccount.update({
+          where: { id: data.financialAccountId },
+          data: { balance: { decrement: newAmount } },
+        });
+        finalAccountId = data.financialAccountId;
+      } else if (data.amount !== undefined && data.amount !== oldAmount) {
+        const diff = data.amount - oldAmount;
+        if (diff > 0) {
+          const acc = await tx.financialAccount.findFirst({ where: { id: existing.financialAccountId } });
+          if (Number(acc.balance) < diff) {
+            throw new Error(`Insufficient balance to cover expense increment of ৳${diff}`);
+          }
+          await tx.financialAccount.update({
+            where: { id: existing.financialAccountId },
+            data: { balance: { decrement: diff } },
+          });
+        } else {
+          await tx.financialAccount.update({
+            where: { id: existing.financialAccountId },
+            data: { balance: { increment: Math.abs(diff) } },
+          });
+        }
+      }
+
+      const updated = await tx.branchExpense.update({
+        where: { id },
+        data: {
+          ...(data.title && { title: data.title.trim() }),
+          ...(data.expenseMonth && { expenseMonth: data.expenseMonth }),
+          ...(data.amount !== undefined && { amount: data.amount }),
+          financialAccountId: finalAccountId,
+          ...(data.voucherNo !== undefined && { voucherNo: data.voucherNo?.trim() || null }),
+          ...(data.reference !== undefined && { reference: data.reference?.trim() || null }),
+          ...(data.notes !== undefined && { notes: data.notes?.trim() || null }),
+          ...(data.paymentDate && { paymentDate: new Date(data.paymentDate) }),
+        },
+        include: {
+          financialAccount: true,
+          branch: true,
+        },
+      });
+
+      await AuditService.log({
+        tenantId,
+        branchId: existing.branchId,
+        userId,
+        action: "EXPENSE_UPDATED",
+        details: { expenseId: id, updatedData: data },
+      });
+
+      return updated;
+    });
+  }
+
+  static async deleteExpense(tenantId: string, id: string, userId: string) {
+    const existing = await (prisma as any).branchExpense.findFirst({
+      where: { id, tenantId },
+      include: { financialAccount: true },
+    });
+    if (!existing) {
+      throw new Error("Expense record not found");
+    }
+
+    return (prisma as any).$transaction(async (tx: any) => {
+      // 1. Revert financial account balance
+      await tx.financialAccount.update({
+        where: { id: existing.financialAccountId },
+        data: { balance: { increment: existing.amount } },
+      });
+
+      // 2. Remove financial transaction if linked
+      await tx.financialTransaction.deleteMany({
+        where: {
+          tenantId,
+          sourceAccountId: existing.financialAccountId,
+          reference: existing.voucherNo || existing.reference || existing.id,
+          type: "EXPENSE",
+        },
+      });
+
+      // 3. Delete expense record
+      await tx.branchExpense.delete({
+        where: { id },
+      });
+
+      await AuditService.log({
+        tenantId,
+        branchId: existing.branchId,
+        userId,
+        action: "EXPENSE_DELETED",
+        details: {
+          expenseId: id,
+          title: existing.title,
+          amount: Number(existing.amount),
+          refundedToAccount: existing.financialAccount?.name,
+        },
+      });
+
+      return { success: true, message: "Expense record deleted and account balance restored." };
+    });
+  }
+
   static async getExpenseSummary(tenantId: string, branchId?: string, month?: string) {
     const where: any = { tenantId };
     if (branchId) where.branchId = branchId;
@@ -1353,6 +1497,7 @@ export class AccountingService {
         nidFrontUrl: true,
         nidBackUrl: true,
         documentsSubmitted: true,
+        isPermanent: true,
         isActive: true,
         resignationDate: true,
         resignationReason: true,
@@ -1414,6 +1559,7 @@ export class AccountingService {
           nidFrontUrl: u.nidFrontUrl,
           nidBackUrl: u.nidBackUrl,
           documentsSubmitted: u.documentsSubmitted ?? false,
+          isPermanent: Boolean(u.isPermanent),
           isActive: u.isActive,
           resignationDate: u.resignationDate,
           resignationReason: u.resignationReason,
@@ -1660,6 +1806,7 @@ export class AccountingService {
         nidBackUrl: true,
         nidBackPublicId: true,
         documentsSubmitted: true,
+        isPermanent: true,
       },
     });
     if (!employee) throw new Error("Employee not found.");

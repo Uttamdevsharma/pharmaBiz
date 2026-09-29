@@ -70,6 +70,7 @@ export function CreateStaffTab({ onNavigate }: CreateStaffTabProps) {
     nidBackPublicId: "",
     documentsSubmitted: false,
     grossSalary: "",
+    isPermanent: false,
   });
 
   const loadData = async () => {
@@ -178,6 +179,7 @@ export function CreateStaffTab({ onNavigate }: CreateStaffTabProps) {
           nidBackPublicId: formData.nidBackPublicId || null,
           documentsSubmitted: formData.documentsSubmitted,
           grossSalary: formData.grossSalary ? Number(formData.grossSalary) : null,
+          isPermanent: formData.isPermanent,
         }),
       });
 
@@ -206,6 +208,7 @@ export function CreateStaffTab({ onNavigate }: CreateStaffTabProps) {
           nidBackPublicId: "",
           documentsSubmitted: false,
           grossSalary: "",
+          isPermanent: false,
         });
         // Automatically navigate to Staff List
         if (onNavigate) {
@@ -474,7 +477,16 @@ export function CreateStaffTab({ onNavigate }: CreateStaffTabProps) {
                 <select
                   required
                   value={formData.role}
-                  onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                  onChange={(e) => {
+                    const nextRole = e.target.value;
+                    const rObj = roles.find((r) => r.id === nextRole || r.name === nextRole);
+                    const isAcc = (rObj?.name || nextRole).toLowerCase().includes("account") || nextRole === "ACCOUNTS";
+                    setFormData((prev) => ({
+                      ...prev,
+                      role: nextRole,
+                      branchId: isAcc ? "" : (prev.branchId || branches[0]?.id || ""),
+                    }));
+                  }}
                   className="w-full h-11 pl-10 pr-3.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary cursor-pointer"
                 >
                   {roles.map((r) => (
@@ -488,9 +500,16 @@ export function CreateStaffTab({ onNavigate }: CreateStaffTabProps) {
 
             {/* Branch Assignment */}
             <div>
-              <label className="block text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
-                Assign to Branch
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200">
+                  Assign to Branch
+                </label>
+                {(selectedRoleObj?.name?.toLowerCase().includes("account") || formData.role === "ACCOUNTS") && (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                    Company-wide Role
+                  </span>
+                )}
+              </div>
               <div className="relative flex items-center">
                 <Building className="h-4 w-4 text-slate-400 absolute left-3.5 pointer-events-none" />
                 {isManager ? (
@@ -502,10 +521,13 @@ export function CreateStaffTab({ onNavigate }: CreateStaffTabProps) {
                   />
                 ) : (
                   <select
-                    value={formData.branchId || branches[0]?.id || ""}
+                    value={formData.branchId}
                     onChange={(e) => setFormData({ ...formData, branchId: e.target.value })}
                     className="w-full h-11 pl-10 pr-3.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary cursor-pointer"
                   >
+                    {(selectedRoleObj?.name?.toLowerCase().includes("account") || formData.role === "ACCOUNTS") && (
+                      <option value="">🏢 All Branches (Central Accounts Lead)</option>
+                    )}
                     {branches.length === 0 && <option value="">No branch available</option>}
                     {branches.map((b) => (
                       <option key={b.id} value={b.id}>
@@ -515,6 +537,11 @@ export function CreateStaffTab({ onNavigate }: CreateStaffTabProps) {
                   </select>
                 )}
               </div>
+              {(selectedRoleObj?.name?.toLowerCase().includes("account") || formData.role === "ACCOUNTS") && (
+                <p className="mt-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+                  ℹ️ Ekjon accounts officer-i sobgula branch er accounts & finances monitor korben.
+                </p>
+              )}
             </div>
 
             {/* Gross Salary */}
@@ -531,9 +558,38 @@ export function CreateStaffTab({ onNavigate }: CreateStaffTabProps) {
                   value={formData.grossSalary}
                   onChange={(e) => setFormData({ ...formData, grossSalary: e.target.value })}
                   placeholder="e.g. 25000"
-                  className="w-full h-11 pl-9 pr-3.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary font-mono"
+                  className="w-full h-11 pl-9 pr-3.5 rounded-none border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary font-mono"
                 />
               </div>
+            </div>
+
+            {/* Permanent Employee Option */}
+            <div className="md:col-span-2 p-3.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-none">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={formData.isPermanent}
+                  onChange={(e) => setFormData({ ...formData, isPermanent: e.target.checked })}
+                  className="mt-0.5 h-4 w-4 rounded-none border-slate-300 text-brand-primary focus:ring-brand-primary cursor-pointer shrink-0"
+                />
+                <div>
+                  <div className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <span>Permanent Employee</span>
+                    {formData.isPermanent ? (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-none bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                        Paid Leave Eligible (30 Days/Year)
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-none bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
+                        Probation / Contractual
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    Permanent employees receive statutory annual paid leave (30 days/year) and leave benefits. Marking attendance as Paid Leave will not deduct from their monthly salary.
+                  </p>
+                </div>
+              </label>
             </div>
           </div>
 
@@ -612,11 +668,10 @@ export function CreateStaffTab({ onNavigate }: CreateStaffTabProps) {
             </div>
 
             {/* Document Submission Checkbox / Terms */}
-            <div className={`p-4 rounded-xl border transition-all ${
-              formData.documentsSubmitted
+            <div className={`p-4 rounded-xl border transition-all ${formData.documentsSubmitted
                 ? "bg-emerald-50/60 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800"
                 : "bg-amber-50/60 dark:bg-amber-950/30 border-amber-300 dark:border-amber-800"
-            }`}>
+              }`}>
               <label className="flex items-start gap-3 cursor-pointer">
                 <input
                   type="checkbox"

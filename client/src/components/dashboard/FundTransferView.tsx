@@ -14,12 +14,8 @@ import {
   Loader2,
   RefreshCw,
   History,
-  Calendar,
-  User,
-  FileText,
-  TrendingDown,
-  TrendingUp,
 } from "lucide-react";
+import Swal from "sweetalert2";
 
 interface FinancialAccount {
   id: string;
@@ -29,17 +25,53 @@ interface FinancialAccount {
   bankName?: string | null;
   accountNumber?: string | null;
   branchName?: string | null;
-  branchId: string;
+  branchId?: string;
 }
 
 interface FundTransferViewProps {
   onNavigate?: (module: OwnerModule) => void;
 }
 
+function FundTransferSkeleton() {
+  return (
+    <div className="space-y-4 w-full animate-pulse">
+      {/* Header Skeleton */}
+      <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+        <div className="h-7 w-48 bg-slate-200 dark:bg-slate-800 rounded-none" />
+        <div className="flex gap-2">
+          <div className="h-8 w-28 bg-slate-200 dark:bg-slate-800 rounded-none" />
+          <div className="h-8 w-24 bg-slate-200 dark:bg-slate-800 rounded-none" />
+        </div>
+      </div>
+
+      {/* Main Grid Skeleton */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        <div className="lg:col-span-7 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 sm:p-6 space-y-4 rounded-none">
+          <div className="grid grid-cols-1 sm:grid-cols-9 gap-3 items-center">
+            <div className="sm:col-span-4 h-12 bg-slate-100 dark:bg-slate-800 rounded-none" />
+            <div className="sm:col-span-1 h-8 bg-slate-100 dark:bg-slate-800 rounded-none" />
+            <div className="sm:col-span-4 h-12 bg-slate-100 dark:bg-slate-800 rounded-none" />
+          </div>
+          <div className="h-14 bg-slate-100 dark:bg-slate-800 rounded-none" />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="h-10 bg-slate-100 dark:bg-slate-800 rounded-none" />
+            <div className="h-10 bg-slate-100 dark:bg-slate-800 rounded-none" />
+          </div>
+          <div className="h-10 bg-slate-200 dark:bg-slate-800 rounded-none" />
+        </div>
+
+        <div className="lg:col-span-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 sm:p-6 space-y-4 rounded-none">
+          <div className="h-5 w-36 bg-slate-200 dark:bg-slate-800 rounded-none" />
+          <div className="h-20 bg-slate-100 dark:bg-slate-800 rounded-none" />
+          <div className="h-20 bg-slate-100 dark:bg-slate-800 rounded-none" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function FundTransferView({ onNavigate }: FundTransferViewProps) {
   const [accounts, setAccounts] = useState<FinancialAccount[]>([]);
-  const [branches, setBranches] = useState<any[]>([]);
-  const [selectedBranchId, setSelectedBranchId] = useState<string>("");
   const [loading, setLoading] = useState(true);
 
   // Transfer Form State
@@ -52,18 +84,11 @@ export function FundTransferView({ onNavigate }: FundTransferViewProps) {
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Transfer History State
-  const [recentTransfers, setRecentTransfers] = useState<any[]>([]);
-  const [loadingHistory, setLoadingHistory] = useState(false);
-
   const loadData = async () => {
     try {
       setLoading(true);
       setError(null);
-      const url = selectedBranchId
-        ? `/accounting/accounts?branchId=${selectedBranchId}`
-        : "/accounting/accounts";
-      const res = await fetchApi<FinancialAccount[]>(url);
+      const res = await fetchApi<FinancialAccount[]>("/accounting/accounts?branchId=all", { skipCache: true });
       if (res.success && res.data) {
         setAccounts(res.data);
         if (res.data.length >= 2) {
@@ -80,46 +105,9 @@ export function FundTransferView({ onNavigate }: FundTransferViewProps) {
     }
   };
 
-  const loadTransferHistory = async () => {
-    try {
-      setLoadingHistory(true);
-      const params = new URLSearchParams();
-      params.append("type", "TRANSFER");
-      if (selectedBranchId) params.append("branchId", selectedBranchId);
-      params.append("limit", "15");
-
-      const res = await fetchApi<any>(`/accounting/transactions?${params.toString()}`);
-      if (res.success && res.data) {
-        setRecentTransfers(res.data);
-      }
-    } catch (err) {
-      console.error("Failed to load transfer history", err);
-    } finally {
-      setLoadingHistory(false);
-    }
-  };
-
   useEffect(() => {
-    async function init() {
-      try {
-        const bRes = await fetchApi<any[]>("/branches");
-        if (bRes.success && bRes.data && bRes.data.length > 0) {
-          setBranches(bRes.data);
-          if (!selectedBranchId) setSelectedBranchId(bRes.data[0].id);
-        }
-      } catch (err) {
-        console.error("Failed to load branches", err);
-      }
-    }
-    init();
+    loadData();
   }, []);
-
-  useEffect(() => {
-    if (selectedBranchId) {
-      loadData();
-      loadTransferHistory();
-    }
-  }, [selectedBranchId]);
 
   const sourceAccount = accounts.find((a) => a.id === sourceAccountId);
   const destinationAccount = accounts.find((a) => a.id === destinationAccountId);
@@ -129,7 +117,9 @@ export function FundTransferView({ onNavigate }: FundTransferViewProps) {
   const destBalance = Number(destinationAccount?.balance || 0);
 
   const isInsufficient = transferNum > sourceBalance;
-  const isSameAccount = sourceAccountId === destinationAccountId;
+  const isSameAccount = Boolean(
+    sourceAccountId && destinationAccountId && sourceAccountId === destinationAccountId
+  );
 
   const handleSwap = () => {
     const temp = sourceAccountId;
@@ -152,7 +142,9 @@ export function FundTransferView({ onNavigate }: FundTransferViewProps) {
       return;
     }
     if (isInsufficient) {
-      setError(`Insufficient funds in ${sourceAccount?.name}. Maximum available: ৳${sourceBalance.toFixed(2)}`);
+      setError(
+        `Insufficient balance in ${sourceAccount?.name}. Maximum available: ৳${sourceBalance.toLocaleString("en-BD", { minimumFractionDigits: 2 })}`
+      );
       return;
     }
 
@@ -164,7 +156,6 @@ export function FundTransferView({ onNavigate }: FundTransferViewProps) {
       const res = await fetchApi<any>("/accounting/transfer", {
         method: "POST",
         body: JSON.stringify({
-          branchId: selectedBranchId,
           sourceAccountId,
           destinationAccountId,
           amount: transferNum,
@@ -175,393 +166,310 @@ export function FundTransferView({ onNavigate }: FundTransferViewProps) {
 
       if (!res.success) throw new Error(res.message || "Fund transfer failed");
 
+      Swal.fire({
+        icon: "success",
+        title: "Transfer Completed",
+        text: `৳${transferNum.toLocaleString("en-BD", { minimumFractionDigits: 2 })} transferred from "${sourceAccount?.name}" to "${destinationAccount?.name}".`,
+        confirmButtonColor: "#10b981",
+        customClass: {
+          popup: "rounded-none",
+          confirmButton: "rounded-none",
+        },
+      });
+
       setSuccessMsg(
-        `Successfully transferred ৳${transferNum.toFixed(2)} from "${sourceAccount?.name}" to "${destinationAccount?.name}".`
+        `Successfully transferred ৳${transferNum.toLocaleString("en-BD", { minimumFractionDigits: 2 })} from "${sourceAccount?.name}" to "${destinationAccount?.name}".`
       );
       setAmount("");
       setReference("");
       setNote("");
 
-      // Refresh accounts balances and ledger
+      // Refresh accounts balances
       loadData();
-      loadTransferHistory();
     } catch (err: any) {
       setError(err.message || "Failed to execute fund transfer");
+      Swal.fire({
+        icon: "error",
+        title: "Transfer Failed",
+        text: err.message || "Failed to execute fund transfer",
+        confirmButtonColor: "#ef4444",
+        customClass: {
+          popup: "rounded-none",
+          confirmButton: "rounded-none",
+        },
+      });
     } finally {
       setTransferring(false);
     }
   };
 
-  const getAccountIcon = (type: string) => {
+  const getAccountBadge = (type: string) => {
     const t = String(type).toUpperCase();
-    if (t === "CASH") return Banknote;
-    if (t === "BKASH" || t === "NAGAD" || t === "MOBILE") return Smartphone;
-    return Building2;
+    if (t === "CASH") return "Cash";
+    if (t === "BKASH") return "bKash";
+    if (t === "NAGAD") return "Nagad";
+    if (t === "ROCKET") return "Rocket";
+    if (t === "MFS") return "MFS";
+    return "Bank";
   };
 
-  return (
-    <div className="space-y-6 2xl:space-y-8 w-full max-w-[1920px] 2xl:max-w-[2560px] mx-auto">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-6 2xl:p-8 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl xl:text-2xl 2xl:text-3xl font-black text-slate-900 dark:text-white flex items-center gap-2">
-              <ArrowLeftRight className="h-6 w-6 xl:h-7 xl:w-7 text-brand-primary" />
-              Fund Transfer & Rebalancing
-            </h1>
-            <span className="bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 text-xs xl:text-sm px-2.5 py-0.5 rounded-full font-bold">
-              Atomic Double-Entry
-            </span>
-          </div>
-          <p className="text-xs xl:text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Instantly transfer funds between Cash Drawers, bKash, Nagad, and named Bank Accounts (Cash ↔ Bank, Wallet ↔ Bank).
-          </p>
-        </div>
+  if (loading && accounts.length === 0) {
+    return <FundTransferSkeleton />;
+  }
 
-        <div className="flex items-center gap-2.5 flex-wrap">
-          {branches.length > 1 && (
-            <select
-              value={selectedBranchId}
-              onChange={(e) => setSelectedBranchId(e.target.value)}
-              className="px-3 py-2 xl:px-3.5 xl:py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs xl:text-sm font-bold text-slate-700 dark:text-slate-200 outline-none"
+  return (
+    <div className="space-y-4 w-full mx-auto">
+      {/* Page Header - Prominent Bold Heading, Balanced Actions */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
+        <h1 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+          <ArrowLeftRight className="h-5 w-5 text-brand-primary" />
+          Fund Transfer
+        </h1>
+
+        <div className="flex items-center gap-2">
+          {onNavigate && (
+            <button
+              onClick={() => onNavigate("acc_transfer_history")}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs sm:text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-700 transition rounded-none"
             >
-              {branches.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
-                </option>
-              ))}
-            </select>
+              <History className="h-3.5 w-3.5 text-brand-primary" />
+              Transfer History
+            </button>
           )}
 
           {onNavigate && (
             <button
               onClick={() => onNavigate("acc_financial_accounts")}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 xl:px-4 xl:py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs xl:text-sm font-bold shadow-xs hover:bg-slate-50 dark:hover:bg-slate-700/60 transition"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs sm:text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-700 transition rounded-none"
             >
-              <Wallet className="h-4 w-4 text-brand-primary" />
-              View Accounts
+              <Wallet className="h-3.5 w-3.5 text-brand-primary" />
+              Account List
             </button>
           )}
+
+          <button
+            onClick={loadData}
+            disabled={loading}
+            className="p-1.5 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition rounded-none disabled:opacity-50"
+            title="Refresh Account Balances"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+          </button>
         </div>
       </div>
 
       {/* Main Transfer Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 2xl:grid-cols-12 gap-6 2xl:gap-8">
-        {/* Left Form: Transfer Controls */}
-        <div className="lg:col-span-7 xl:col-span-7 2xl:col-span-7 space-y-4">
-          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 sm:p-8 shadow-sm space-y-6">
-            <h2 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
-              <ArrowLeftRight className="h-5 w-5 text-brand-primary" />
-              Transfer Funds Between Accounts
-            </h2>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+        {/* Left Form: Pure Transfer Controls */}
+        <div className="lg:col-span-7 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 sm:p-6 rounded-none space-y-4">
+          {error && (
+            <div className="p-3 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-900 text-xs sm:text-sm font-semibold flex items-center gap-2 rounded-none">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
 
-            {error && (
-              <div className="p-4 bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-900 rounded-2xl text-xs font-bold flex items-center gap-2">
-                <AlertCircle className="h-4 w-4 shrink-0" />
-                <span>{error}</span>
-              </div>
-            )}
+          {successMsg && (
+            <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900 text-xs sm:text-sm font-semibold flex items-center gap-2 rounded-none">
+              <CheckCircle2 className="h-4 w-4 shrink-0" />
+              <span>{successMsg}</span>
+            </div>
+          )}
 
-            {successMsg && (
-              <div className="p-4 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900 rounded-2xl text-xs font-bold flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 shrink-0" />
-                <span>{successMsg}</span>
-              </div>
-            )}
-
-            <form onSubmit={handleTransfer} className="space-y-5">
-              {/* From & To Selectors */}
-              <div className="grid grid-cols-1 sm:grid-cols-9 gap-3 items-center">
-                {/* Source Account */}
-                <div className="sm:col-span-4 space-y-1.5">
-                  <label className="block text-xs font-bold text-slate-600 dark:text-slate-400">
-                    From Account (Source) *
-                  </label>
-                  <select
-                    value={sourceAccountId}
-                    onChange={(e) => setSourceAccountId(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-xs font-bold text-slate-900 dark:text-white outline-none"
-                    required
-                  >
-                    {accounts.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.name} (৳{Number(a.balance).toFixed(2)})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Swap Button */}
-                <div className="sm:col-span-1 flex justify-center pt-5">
-                  <button
-                    type="button"
-                    onClick={handleSwap}
-                    className="p-2.5 rounded-full border border-slate-200 dark:border-slate-700 text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-brand-primary transition"
-                    title="Swap Source and Destination"
-                  >
-                    <ArrowLeftRight className="h-4 w-4" />
-                  </button>
-                </div>
-
-                {/* Destination Account */}
-                <div className="sm:col-span-4 space-y-1.5">
-                  <label className="block text-xs font-bold text-slate-600 dark:text-slate-400">
-                    To Account (Destination) *
-                  </label>
-                  <select
-                    value={destinationAccountId}
-                    onChange={(e) => setDestinationAccountId(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-xs font-bold text-slate-900 dark:text-white outline-none"
-                    required
-                  >
-                    {accounts.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.name} (৳{Number(a.balance).toFixed(2)})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* Amount */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                  Transfer Amount (৳) *
+          <form onSubmit={handleTransfer} className="space-y-4">
+            {/* From & To Selectors */}
+            <div className="grid grid-cols-1 sm:grid-cols-9 gap-3 items-center">
+              {/* Source Account */}
+              <div className="sm:col-span-4 space-y-1.5">
+                <label className="block text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300">
+                  From Account (Source) <span className="text-rose-500">*</span>
                 </label>
-                <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-slate-400 text-base">
-                    ৳
-                  </span>
-                  <input
-                    type="number"
-                    min="1"
-                    step="0.01"
-                    placeholder="0.00"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    className={`w-full pl-9 pr-4 py-3 bg-slate-50 dark:bg-slate-800 border rounded-2xl text-lg font-black font-mono outline-none dark:text-white ${
-                      isInsufficient
-                        ? "border-rose-300 text-rose-600 focus:border-rose-500"
-                        : "border-slate-200 dark:border-slate-700 focus:border-brand-primary"
-                    }`}
-                    required
-                  />
-                </div>
-                {isInsufficient && (
-                  <p className="text-[11px] text-rose-500 font-bold mt-1">
-                    Amount exceeds available source balance (৳{sourceBalance.toFixed(2)})
-                  </p>
-                )}
+                <select
+                  value={sourceAccountId}
+                  onChange={(e) => setSourceAccountId(e.target.value)}
+                  className="w-full h-9 sm:h-10 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-none text-xs sm:text-sm font-medium text-slate-900 dark:text-white outline-none focus:border-brand-primary"
+                  required
+                >
+                  {accounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name} ({getAccountBadge(a.type)}) — ৳{Number(a.balance).toLocaleString("en-BD", { minimumFractionDigits: 2 })}
+                    </option>
+                  ))}
+                </select>
               </div>
 
-              {/* Reference & Note */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Reference / Slip No (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. DEPOSIT-1029 / BKASH-TRX"
-                    value={reference}
-                    onChange={(e) => setReference(e.target.value)}
-                    className="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none dark:text-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Transfer Purpose / Note (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Daily Cash deposit to DBBL"
-                    value={note}
-                    onChange={(e) => setNote(e.target.value)}
-                    className="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none dark:text-white"
-                  />
-                </div>
+              {/* Swap Button */}
+              <div className="sm:col-span-1 flex justify-center pt-4 sm:pt-6">
+                <button
+                  type="button"
+                  onClick={handleSwap}
+                  className="p-2 border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition rounded-none"
+                  title="Swap Source and Destination"
+                >
+                  <ArrowLeftRight className="h-4 w-4" />
+                </button>
               </div>
 
-              {/* Submit CTA */}
+              {/* Destination Account */}
+              <div className="sm:col-span-4 space-y-1.5">
+                <label className="block text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300">
+                  To Account (Destination) <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  value={destinationAccountId}
+                  onChange={(e) => setDestinationAccountId(e.target.value)}
+                  className="w-full h-9 sm:h-10 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-none text-xs sm:text-sm font-medium text-slate-900 dark:text-white outline-none focus:border-brand-primary"
+                  required
+                >
+                  {accounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name} ({getAccountBadge(a.type)}) — ৳{Number(a.balance).toLocaleString("en-BD", { minimumFractionDigits: 2 })}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Transfer Amount Input */}
+            <div>
+              <label className="block text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                Transfer Amount (৳) <span className="text-rose-500">*</span>
+              </label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-slate-400 text-sm">
+                  ৳
+                </span>
+                <input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  className={`w-full h-10 sm:h-11 pl-8 pr-3 bg-slate-50 dark:bg-slate-800 border rounded-none text-sm sm:text-base font-bold font-mono outline-none dark:text-white ${
+                    isInsufficient
+                      ? "border-rose-400 text-rose-600 focus:border-rose-500"
+                      : "border-slate-300 dark:border-slate-700 focus:border-brand-primary"
+                  }`}
+                  required
+                />
+              </div>
+              {isInsufficient && (
+                <p className="text-xs text-rose-500 font-medium mt-1">
+                  Amount exceeds source account balance (৳{sourceBalance.toLocaleString("en-BD", { minimumFractionDigits: 2 })})
+                </p>
+              )}
+            </div>
+
+            {/* Reference & Note */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                  Reference / Slip No <span className="text-xs font-normal text-slate-400">(Optional)</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. TRF-1029 / DBBL-DEP"
+                  value={reference}
+                  onChange={(e) => setReference(e.target.value)}
+                  className="w-full h-9 sm:h-10 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-none text-xs sm:text-sm outline-none focus:border-brand-primary dark:text-white"
+                />
+              </div>
+              <div>
+                <label className="block text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                  Note / Purpose <span className="text-xs font-normal text-slate-400">(Optional)</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Daily Cash Deposit to DBBL"
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  className="w-full h-9 sm:h-10 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-none text-xs sm:text-sm outline-none focus:border-brand-primary dark:text-white"
+                />
+              </div>
+            </div>
+
+            {/* Submit CTA */}
+            <div className="pt-2">
               <button
                 type="submit"
                 disabled={transferring || isInsufficient || isSameAccount || transferNum <= 0}
-                className="w-full py-3.5 rounded-2xl bg-brand-primary text-white text-sm font-bold shadow-md hover:opacity-90 transition active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="w-full py-2.5 sm:py-3 bg-brand-primary text-white text-xs sm:text-sm font-bold hover:opacity-95 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 rounded-none"
               >
                 {transferring ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Executing Double-Entry Transfer...
+                    Executing Transfer...
                   </>
                 ) : (
                   <>
                     <ArrowLeftRight className="h-4 w-4" />
-                    Confirm & Execute Transfer
+                    Confirm & Transfer Funds
                   </>
                 )}
               </button>
-            </form>
-          </div>
+            </div>
+          </form>
         </div>
 
         {/* Right Column: Live Balance Simulation Preview */}
-        <div className="lg:col-span-5 space-y-4">
-          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm space-y-4">
-            <h3 className="text-xs font-black uppercase tracking-wider text-slate-400">
-              Live Balance Simulation
-            </h3>
+        <div className="lg:col-span-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 sm:p-5 rounded-none space-y-4">
+          <div className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800 pb-2">
+            Real-Time Balance Preview
+          </div>
 
-            {/* Source Account Preview */}
-            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
-                  Source: {sourceAccount?.name || "Select Account"}
-                </span>
-                <span className="text-[10px] text-rose-500 font-bold bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 rounded">
-                  Debit (-)
-                </span>
-              </div>
-              <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
-                <span>Current Balance:</span>
-                <span className="font-mono font-bold text-slate-800 dark:text-slate-200">
-                  ৳{sourceBalance.toFixed(2)}
-                </span>
-              </div>
-              {transferNum > 0 && (
-                <div className="flex items-center justify-between text-xs text-rose-600 font-bold pt-1 border-t border-slate-200 dark:border-slate-700">
-                  <span>Balance After Transfer:</span>
-                  <span className="font-mono">
-                    ৳{Math.max(0, sourceBalance - transferNum).toFixed(2)}
-                  </span>
-                </div>
-              )}
+          {/* Source Account Preview */}
+          <div className="p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-none space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-100 truncate">
+                {sourceAccount ? sourceAccount.name : "Select Source Account"}
+              </span>
+              <span className="text-[10px] font-bold text-rose-600 bg-rose-50 dark:bg-rose-950/40 px-1.5 py-0.5 border border-rose-200 dark:border-rose-900 rounded-none">
+                Debit (-)
+              </span>
             </div>
+            <div className="flex items-center justify-between text-xs text-slate-500 pt-0.5">
+              <span>Current:</span>
+              <span className="font-mono font-semibold text-slate-800 dark:text-slate-200">
+                ৳{sourceBalance.toLocaleString("en-BD", { minimumFractionDigits: 2 })}
+              </span>
+            </div>
+            {transferNum > 0 && (
+              <div className="flex items-center justify-between text-xs text-rose-600 font-bold pt-1.5 border-t border-slate-200 dark:border-slate-700">
+                <span>After Transfer:</span>
+                <span className="font-mono">
+                  ৳{Math.max(0, sourceBalance - transferNum).toLocaleString("en-BD", { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+            )}
+          </div>
 
-            {/* Destination Account Preview */}
-            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
-                  Destination: {destinationAccount?.name || "Select Account"}
-                </span>
-                <span className="text-[10px] text-emerald-500 font-bold bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded">
-                  Credit (+)
-                </span>
-              </div>
-              <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
-                <span>Current Balance:</span>
-                <span className="font-mono font-bold text-slate-800 dark:text-slate-200">
-                  ৳{destBalance.toFixed(2)}
-                </span>
-              </div>
-              {transferNum > 0 && (
-                <div className="flex items-center justify-between text-xs text-emerald-600 font-bold pt-1 border-t border-slate-200 dark:border-slate-700">
-                  <span>Balance After Transfer:</span>
-                  <span className="font-mono">
-                    ৳{(destBalance + transferNum).toFixed(2)}
-                  </span>
-                </div>
-              )}
+          {/* Destination Account Preview */}
+          <div className="p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-none space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-100 truncate">
+                {destinationAccount ? destinationAccount.name : "Select Destination Account"}
+              </span>
+              <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 border border-emerald-200 dark:border-emerald-900 rounded-none">
+                Credit (+)
+              </span>
             </div>
-
-            {/* Helpful Transfer Types Hint */}
-            <div className="p-3.5 bg-blue-50/50 dark:bg-blue-950/20 rounded-2xl border border-blue-100 dark:border-blue-900 text-xs text-blue-800 dark:text-blue-300 space-y-1">
-              <div className="font-bold flex items-center gap-1.5">
-                <Building2 className="h-3.5 w-3.5 text-blue-600" />
-                Supported Direct Transfer Flows
-              </div>
-              <p className="text-[11px] text-blue-700/80 dark:text-blue-400">
-                • Cash Drawer ➔ Bank (End of day settlement)<br />
-                • bKash / Nagad ➔ Bank (Wallet payout)<br />
-                • Bank ➔ Cash Drawer (Petty cash refill)<br />
-                • Bank ➔ Bank (Interbank liquidity)
-              </p>
+            <div className="flex items-center justify-between text-xs text-slate-500 pt-0.5">
+              <span>Current:</span>
+              <span className="font-mono font-semibold text-slate-800 dark:text-slate-200">
+                ৳{destBalance.toLocaleString("en-BD", { minimumFractionDigits: 2 })}
+              </span>
             </div>
+            {transferNum > 0 && (
+              <div className="flex items-center justify-between text-xs text-emerald-600 font-bold pt-1.5 border-t border-slate-200 dark:border-slate-700">
+                <span>After Transfer:</span>
+                <span className="font-mono">
+                  ৳{(destBalance + transferNum).toLocaleString("en-BD", { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+            )}
           </div>
         </div>
-      </div>
-
-      {/* Recent Transfer Audit History */}
-      <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
-              <History className="h-5 w-5 text-brand-primary" />
-              Recent Fund Transfers Audit Ledger
-            </h3>
-            <p className="text-xs text-slate-500">Real-time record of all transfers performed across accounts</p>
-          </div>
-
-          <button
-            onClick={loadTransferHistory}
-            className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800 transition"
-            title="Refresh History"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${loadingHistory ? "animate-spin" : ""}`} />
-          </button>
-        </div>
-
-        {loadingHistory ? (
-          <div className="p-8 text-center text-slate-400 text-xs font-bold">
-            <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2 text-brand-primary" />
-            Loading transfer transactions...
-          </div>
-        ) : recentTransfers.length === 0 ? (
-          <div className="p-8 text-center text-slate-400 text-xs">
-            No fund transfers recorded yet for this branch.
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 dark:bg-slate-800 text-slate-500 font-bold border-b border-slate-200 dark:border-slate-700">
-                <tr>
-                  <th className="py-3 px-4">Date & Time</th>
-                  <th className="py-3 px-4">Reference</th>
-                  <th className="py-3 px-4">Source (From)</th>
-                  <th className="py-3 px-4">Destination (To)</th>
-                  <th className="py-3 px-4 text-right">Amount</th>
-                  <th className="py-3 px-4">Notes</th>
-                  <th className="py-3 px-4">Performed By</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {recentTransfers.map((trx) => (
-                  <tr key={trx.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                    <td className="py-3 px-4 text-slate-500 font-mono text-[11px]">
-                      {new Date(trx.createdAt).toLocaleString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </td>
-                    <td className="py-3 px-4 font-bold font-mono text-slate-800 dark:text-slate-200">
-                      {trx.reference || "TRF-DIRECT"}
-                    </td>
-                    <td className="py-3 px-4">
-                      <span className="font-semibold text-rose-600 dark:text-rose-400">
-                        {trx.sourceAccount?.name || "External / Source"}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4">
-                      <span className="font-semibold text-emerald-600 dark:text-emerald-400">
-                        {trx.destinationAccount?.name || "Destination"}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-right font-black font-mono text-slate-900 dark:text-white">
-                      ৳{Number(trx.amount).toFixed(2)}
-                    </td>
-                    <td className="py-3 px-4 text-slate-500 text-[11px] truncate max-w-[200px]">
-                      {trx.note || "—"}
-                    </td>
-                    <td className="py-3 px-4 text-slate-600 dark:text-slate-400 text-[11px]">
-                      {trx.user?.name || trx.user?.username || "System"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
       </div>
     </div>
   );

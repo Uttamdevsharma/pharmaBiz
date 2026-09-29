@@ -9,11 +9,15 @@ class AccountingController {
         try {
             const tenantId = req.user.tenantId;
             const user = req.user;
-            const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN" || user.role === "REGIONAL_ADMIN";
-            const branchId = isOwner
-                ? (req.query.branchId || req.headers["x-branch-id"] || undefined)
-                : (user.branchId || undefined);
-            const cleanBranchId = !branchId || branchId === "all" || branchId === "all-branches" ? undefined : branchId;
+            const isOwner = user.role === "COMPANY_OWNER" ||
+                user.role === "SUPER_ADMIN" ||
+                user.role === "REGIONAL_ADMIN" ||
+                user.role === "ACCOUNTS" ||
+                user.role === "CTO";
+            const queryBranch = req.query.branchId;
+            const headerBranch = req.headers["x-branch-id"];
+            const rawBranchId = queryBranch !== undefined ? queryBranch : (isOwner ? headerBranch : user.branchId);
+            const cleanBranchId = !rawBranchId || rawBranchId === "all" || rawBranchId === "all-branches" ? undefined : rawBranchId;
             const accounts = await accounting_service_1.AccountingService.listAccounts(tenantId, cleanBranchId);
             res.json({ success: true, data: accounts });
         }
@@ -25,6 +29,15 @@ class AccountingController {
         try {
             const tenantId = req.user.tenantId;
             const userId = req.user.id;
+            if (!req.body.branchId) {
+                const firstBranch = await prisma_1.prisma.branch.findFirst({
+                    where: { tenantId },
+                    select: { id: true },
+                });
+                if (firstBranch) {
+                    req.body.branchId = firstBranch.id;
+                }
+            }
             const account = await accounting_service_1.AccountingService.createAccount(tenantId, userId, req.body);
             res.status(201).json({ success: true, data: account });
         }
@@ -115,11 +128,15 @@ class AccountingController {
         try {
             const user = req.user;
             const tenantId = user.tenantId;
-            const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN" || user.role === "REGIONAL_ADMIN";
-            const branchId = isOwner
-                ? (req.query.branchId || req.headers["x-branch-id"] || undefined)
-                : (user.branchId || undefined);
-            const cleanBranchId = !branchId || branchId === "all" || branchId === "all-branches" ? undefined : branchId;
+            const isOwner = user.role === "COMPANY_OWNER" ||
+                user.role === "SUPER_ADMIN" ||
+                user.role === "REGIONAL_ADMIN" ||
+                user.role === "ACCOUNTS" ||
+                user.role === "CTO";
+            const queryBranch = req.query.branchId;
+            const headerBranch = req.headers["x-branch-id"];
+            const rawBranchId = queryBranch !== undefined ? queryBranch : (isOwner ? headerBranch : user.branchId);
+            const cleanBranchId = !rawBranchId || rawBranchId === "all" || rawBranchId === "all-branches" ? undefined : rawBranchId;
             const options = {
                 startDate: req.query.startDate,
                 endDate: req.query.endDate,
@@ -152,7 +169,11 @@ class AccountingController {
         try {
             const user = req.user;
             const tenantId = user.tenantId;
-            const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN" || user.role === "REGIONAL_ADMIN";
+            const isOwner = user.role === "COMPANY_OWNER" ||
+                user.role === "SUPER_ADMIN" ||
+                user.role === "REGIONAL_ADMIN" ||
+                user.role === "ACCOUNTS" ||
+                user.role === "CTO";
             const branchId = isOwner
                 ? (req.query.branchId || req.headers["x-branch-id"] || undefined)
                 : (user.branchId || undefined);
@@ -219,6 +240,28 @@ class AccountingController {
             res.status(400).json({ success: false, message: err.message });
         }
     }
+    static async updateExpense(req, res) {
+        try {
+            const tenantId = req.user.tenantId;
+            const userId = req.user.id;
+            const updated = await accounting_service_1.AccountingService.updateExpense(tenantId, req.params.id, userId, req.body);
+            res.json({ success: true, data: updated, message: "Expense record updated successfully" });
+        }
+        catch (err) {
+            res.status(400).json({ success: false, message: err.message });
+        }
+    }
+    static async deleteExpense(req, res) {
+        try {
+            const tenantId = req.user.tenantId;
+            const userId = req.user.id;
+            const result = await accounting_service_1.AccountingService.deleteExpense(tenantId, req.params.id, userId);
+            res.json(result);
+        }
+        catch (err) {
+            res.status(400).json({ success: false, message: err.message });
+        }
+    }
     static async getExpenseSummary(req, res) {
         try {
             const tenantId = req.user.tenantId;
@@ -238,7 +281,11 @@ class AccountingController {
         try {
             const tenantId = req.user.tenantId;
             const user = req.user;
-            const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN" || user.role === "REGIONAL_ADMIN";
+            const isOwner = user.role === "COMPANY_OWNER" ||
+                user.role === "SUPER_ADMIN" ||
+                user.role === "REGIONAL_ADMIN" ||
+                user.role === "ACCOUNTS" ||
+                user.role === "CTO";
             const branchId = isOwner
                 ? (req.query.branchId || req.headers["x-branch-id"] || undefined)
                 : (user.branchId || undefined);
@@ -256,7 +303,7 @@ class AccountingController {
         try {
             const user = req.user;
             const tenantId = user.tenantId;
-            const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN";
+            const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN" || user.role === "ACCOUNTS";
             const isBranchManager = user.role === "BRANCH_MANAGER" ||
                 user.pharmacyRoleName?.toLowerCase().includes("branch manager") ||
                 user.customRoleName?.toLowerCase().includes("branch manager") ||
@@ -298,7 +345,7 @@ class AccountingController {
             const user = req.user;
             const tenantId = user.tenantId;
             const disbursedById = user.id;
-            const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN";
+            const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN" || user.role === "ACCOUNTS";
             const branchId = isOwner ? (req.body.branchId || user.branchId || "") : (user.branchId || req.body.branchId || "");
             if (!branchId) {
                 res.status(400).json({ success: false, message: "Branch ID is required" });
@@ -319,7 +366,11 @@ class AccountingController {
         try {
             const tenantId = req.user.tenantId;
             const user = req.user;
-            const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN" || user.role === "REGIONAL_ADMIN";
+            const isOwner = user.role === "COMPANY_OWNER" ||
+                user.role === "SUPER_ADMIN" ||
+                user.role === "REGIONAL_ADMIN" ||
+                user.role === "ACCOUNTS" ||
+                user.role === "CTO";
             const branchId = isOwner
                 ? (req.query.branchId || req.headers["x-branch-id"] || undefined)
                 : (user.branchId || undefined);

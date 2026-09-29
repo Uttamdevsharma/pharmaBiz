@@ -7,6 +7,7 @@ exports.MULTI_BRANCH_ROLES = [
     "COMPANY_OWNER",
     "SUPER_ADMIN",
     "REGIONAL_ADMIN",
+    "ACCOUNTS",
     "CTO",
     "PROJECT_MANAGER",
 ];

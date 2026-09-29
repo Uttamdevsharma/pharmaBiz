@@ -29,6 +29,7 @@ export const createUserSchema = z.object({
   nidBackPublicId: z.string().nullable().optional(),
   documentsSubmitted: z.boolean().optional(),
   grossSalary: z.coerce.number().min(0, "Gross salary must be a positive number").nullable().optional(),
+  isPermanent: z.boolean().optional(),
 });
 
 export const updateUserSchema = z.object({
@@ -46,6 +47,7 @@ export const updateUserSchema = z.object({
   nidBackPublicId: z.string().nullable().optional(),
   documentsSubmitted: z.boolean().optional(),
   grossSalary: z.coerce.number().min(0, "Gross salary must be a positive number").nullable().optional(),
+  isPermanent: z.boolean().optional(),
 });
 
 export const createPharmacyRoleSchema = z.object({

@@ -138,6 +138,7 @@ class AttendanceService {
                 pharmacyRoleName: true,
                 avatarUrl: true,
                 phone: true,
+                isPermanent: true,
                 salaryConfig: {
                     select: {
                         baseSalary: true,
@@ -146,6 +147,29 @@ class AttendanceService {
                 },
             },
             orderBy: [{ name: "asc" }, { username: "asc" }],
+        });
+        // Fetch deduction rule for annual paid leave policy
+        const deductionRule = await prisma_1.prisma.salaryDeductionRule.findUnique({
+            where: { branchId },
+        });
+        const annualPaidLeaveAllowance = deductionRule?.annualPaidLeaveDays ?? 30;
+        // Fetch yearly paid leave count for each employee in current calendar year
+        const year = date.slice(0, 4);
+        const yearlyPaidLeaves = await prisma_1.prisma.employeeAttendance.groupBy({
+            by: ["userId"],
+            where: {
+                tenantId,
+                branchId,
+                date: { startsWith: year },
+                status: "PAID_LEAVE",
+            },
+            _count: {
+                date: true,
+            },
+        });
+        const paidLeaveCountMap = new Map();
+        yearlyPaidLeaves.forEach((item) => {
+            paidLeaveCountMap.set(item.userId, item._count?.date || 0);
         });
         // Fetch existing attendance records for this date
         const existing = await prisma_1.prisma.employeeAttendance.findMany({
@@ -163,6 +187,7 @@ class AttendanceService {
         const recordMap = new Map(existing.map((r) => [r.userId, r]));
         const roster = employees.map((emp) => {
             const record = recordMap.get(emp.id);
+            const paidLeavesUsed = paidLeaveCountMap.get(emp.id) || 0;
             return {
                 id: emp.id,
                 name: emp.name,
@@ -170,6 +195,9 @@ class AttendanceService {
                 role: emp.customRoleName || emp.pharmacyRoleName || emp.role.replace(/_/g, " "),
                 avatarUrl: emp.avatarUrl,
                 phone: emp.phone,
+                isPermanent: Boolean(emp.isPermanent),
+                paidLeavesUsed,
+                annualPaidLeaveAllowance,
                 status: record ? record.status : isOffDay ? "OFF_DAY" : "PRESENT",
                 hasSavedRecord: Boolean(record),
                 notes: record?.notes || "",
@@ -182,6 +210,7 @@ class AttendanceService {
             month,
             isOffDay,
             dayOfWeek: dayMeta?.dayOfWeek || "",
+            annualPaidLeaveAllowance,
             roster,
         };
     }
@@ -189,6 +218,22 @@ class AttendanceService {
      * 4. Manager saves/finalizes daily attendance in bulk
      */
     static async markBulkDailyAttendance(tenantId, branchId, date, data, actorId) {
+        // Validate: non-permanent staff cannot be marked as PAID_LEAVE
+        const paidLeaveUserIds = data.attendances
+            .filter((item) => item.status === "PAID_LEAVE")
+            .map((item) => item.userId);
+        if (paidLeaveUserIds.length > 0) {
+            const nonPermanentUsers = await prisma_1.prisma.user.findMany({
+                where: {
+                    id: { in: paidLeaveUserIds },
+                    isPermanent: false,
+                },
+                select: { id: true, name: true },
+            });
+            if (nonPermanentUsers.length > 0) {
+                throw new Error(`Staff member "${nonPermanentUsers[0].name}" is not a permanent employee and is not entitled to statutory paid leave.`);
+            }
+        }
         const results = await prisma_1.prisma.$transaction(data.attendances.map((item) => prisma_1.prisma.employeeAttendance.upsert({
             where: {
                 userId_date: {
@@ -314,6 +359,19 @@ class AttendanceService {
                 markedBy: record?.markedBy || null,
             };
         });
+        const year = month.slice(0, 4);
+        const yearlyPaidLeavesCount = await prisma_1.prisma.employeeAttendance.count({
+            where: {
+                tenantId,
+                userId,
+                date: { startsWith: year },
+                status: "PAID_LEAVE",
+            },
+        });
+        const deductionRule = await prisma_1.prisma.salaryDeductionRule.findUnique({
+            where: { branchId },
+        });
+        const annualPaidLeaveAllowance = deductionRule?.annualPaidLeaveDays ?? 30;
         return {
             employee: {
                 id: employee.id,
@@ -322,6 +380,9 @@ class AttendanceService {
                 role: employee.customRoleName || employee.pharmacyRoleName || employee.role.replace(/_/g, " "),
                 branch: employee.branch,
                 isActive: employee.isActive,
+                isPermanent: Boolean(employee.isPermanent),
+                paidLeavesUsedThisYear: yearlyPaidLeavesCount,
+                annualPaidLeaveAllowance,
                 resignationDate: employee.resignationDate,
                 resignationReason: employee.resignationReason,
                 deactivatedAt: employee.deactivatedAt,
@@ -387,10 +448,21 @@ class AttendanceService {
             orderBy: { createdAt: "asc" },
         });
         const dynamicAllowancesTotal = monthlyAllowances.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+        // Income Tax / TDS Rule calculation
+        const taxExemptionAnnual = deductionRule?.taxExemptionAnnual ? Number(deductionRule.taxExemptionAnnual) : 0;
+        const taxRatePercent = deductionRule?.taxRatePercent ? Number(deductionRule.taxRatePercent) : 0;
+        const taxFiscalYear = deductionRule?.taxFiscalYear || null;
+        let monthlyTaxDeduction = 0;
+        const annualProjectedGross = (baseSalary + packageAllowances) * 12;
+        if (taxExemptionAnnual > 0 && taxRatePercent > 0 && annualProjectedGross > taxExemptionAnnual) {
+            const taxableAmount = annualProjectedGross - taxExemptionAnnual;
+            const annualTax = taxableAmount * (taxRatePercent / 100);
+            monthlyTaxDeduction = Number((annualTax / 12).toFixed(2));
+        }
         const totalAllowances = Number((packageAllowances + dynamicAllowancesTotal).toFixed(2));
-        const totalDeductions = Number((packageDeductions + attendanceDeduction).toFixed(2));
+        const totalDeductions = Number((packageDeductions + attendanceDeduction + monthlyTaxDeduction).toFixed(2));
         // Final payable salary
-        const finalPayable = Math.max(0, Number((baseSalary - attendanceDeduction + totalAllowances - packageDeductions).toFixed(2)));
+        const finalPayable = Math.max(0, Number((baseSalary - attendanceDeduction + totalAllowances - packageDeductions - monthlyTaxDeduction).toFixed(2)));
         // Check disbursement status for this month
         const disbursements = await prisma_1.prisma.salaryDisbursement.findMany({
             where: { tenantId, userId, month },
@@ -411,6 +483,7 @@ class AttendanceService {
                 role: employee.customRoleName || employee.pharmacyRoleName || employee.role.replace(/_/g, " "),
                 branch: employee.branch,
                 isActive: employee.isActive,
+                isPermanent: Boolean(employee.isPermanent),
                 resignationDate: employee.resignationDate,
             },
             month,
@@ -425,6 +498,11 @@ class AttendanceService {
                 unpaidLeaveDays,
                 dailyRate,
                 attendanceDeduction, // Locked/read-only
+                monthlyTaxDeduction,
+                taxFiscalYear,
+                taxExemptionAnnual,
+                taxRatePercent,
+                annualProjectedGross,
                 packageAllowances,
                 dynamicAllowancesTotal,
                 totalAllowances,

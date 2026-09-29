@@ -167,6 +167,7 @@ export class AttendanceService {
         pharmacyRoleName: true,
         avatarUrl: true,
         phone: true,
+        isPermanent: true,
         salaryConfig: {
           select: {
             baseSalary: true,
@@ -175,6 +176,31 @@ export class AttendanceService {
         },
       },
       orderBy: [{ name: "asc" }, { username: "asc" }],
+    });
+
+    // Fetch deduction rule for annual paid leave policy
+    const deductionRule = await (prisma as any).salaryDeductionRule.findUnique({
+      where: { branchId },
+    });
+    const annualPaidLeaveAllowance = deductionRule?.annualPaidLeaveDays ?? 30;
+
+    // Fetch yearly paid leave count for each employee in current calendar year
+    const year = date.slice(0, 4);
+    const yearlyPaidLeaves = await (prisma as any).employeeAttendance.groupBy({
+      by: ["userId"],
+      where: {
+        tenantId,
+        branchId,
+        date: { startsWith: year },
+        status: "PAID_LEAVE",
+      },
+      _count: {
+        date: true,
+      },
+    });
+    const paidLeaveCountMap = new Map<string, number>();
+    yearlyPaidLeaves.forEach((item: any) => {
+      paidLeaveCountMap.set(item.userId, item._count?.date || 0);
     });
 
     // Fetch existing attendance records for this date
@@ -195,6 +221,7 @@ export class AttendanceService {
 
     const roster = employees.map((emp: any) => {
       const record: any = recordMap.get(emp.id);
+      const paidLeavesUsed = paidLeaveCountMap.get(emp.id) || 0;
       return {
         id: emp.id,
         name: emp.name,
@@ -202,6 +229,9 @@ export class AttendanceService {
         role: emp.customRoleName || emp.pharmacyRoleName || emp.role.replace(/_/g, " "),
         avatarUrl: emp.avatarUrl,
         phone: emp.phone,
+        isPermanent: Boolean(emp.isPermanent),
+        paidLeavesUsed,
+        annualPaidLeaveAllowance,
         status: record ? record.status : isOffDay ? "OFF_DAY" : "PRESENT",
         hasSavedRecord: Boolean(record),
         notes: record?.notes || "",
@@ -215,6 +245,7 @@ export class AttendanceService {
       month,
       isOffDay,
       dayOfWeek: dayMeta?.dayOfWeek || "",
+      annualPaidLeaveAllowance,
       roster,
     };
   }
@@ -229,6 +260,27 @@ export class AttendanceService {
     data: MarkBulkDailyAttendanceInput,
     actorId: string
   ) {
+    // Validate: non-permanent staff cannot be marked as PAID_LEAVE
+    const paidLeaveUserIds = data.attendances
+      .filter((item) => item.status === "PAID_LEAVE")
+      .map((item) => item.userId);
+
+    if (paidLeaveUserIds.length > 0) {
+      const nonPermanentUsers = await (prisma as any).user.findMany({
+        where: {
+          id: { in: paidLeaveUserIds },
+          isPermanent: false,
+        },
+        select: { id: true, name: true },
+      });
+
+      if (nonPermanentUsers.length > 0) {
+        throw new Error(
+          `Staff member "${nonPermanentUsers[0].name}" is not a permanent employee and is not entitled to statutory paid leave.`
+        );
+      }
+    }
+
     const results = await (prisma as any).$transaction(
       data.attendances.map((item) =>
         (prisma as any).employeeAttendance.upsert({
@@ -367,6 +419,21 @@ export class AttendanceService {
       };
     });
 
+    const year = month.slice(0, 4);
+    const yearlyPaidLeavesCount = await (prisma as any).employeeAttendance.count({
+      where: {
+        tenantId,
+        userId,
+        date: { startsWith: year },
+        status: "PAID_LEAVE",
+      },
+    });
+
+    const deductionRule = await (prisma as any).salaryDeductionRule.findUnique({
+      where: { branchId },
+    });
+    const annualPaidLeaveAllowance = deductionRule?.annualPaidLeaveDays ?? 30;
+
     return {
       employee: {
         id: employee.id,
@@ -375,6 +442,9 @@ export class AttendanceService {
         role: employee.customRoleName || employee.pharmacyRoleName || employee.role.replace(/_/g, " "),
         branch: employee.branch,
         isActive: employee.isActive,
+        isPermanent: Boolean(employee.isPermanent),
+        paidLeavesUsedThisYear: yearlyPaidLeavesCount,
+        annualPaidLeaveAllowance,
         resignationDate: employee.resignationDate,
         resignationReason: employee.resignationReason,
         deactivatedAt: employee.deactivatedAt,
@@ -456,11 +526,24 @@ export class AttendanceService {
       0
     );
 
+    // Income Tax / TDS Rule calculation
+    const taxExemptionAnnual = deductionRule?.taxExemptionAnnual ? Number(deductionRule.taxExemptionAnnual) : 0;
+    const taxRatePercent = deductionRule?.taxRatePercent ? Number(deductionRule.taxRatePercent) : 0;
+    const taxFiscalYear = deductionRule?.taxFiscalYear || null;
+
+    let monthlyTaxDeduction = 0;
+    const annualProjectedGross = (baseSalary + packageAllowances) * 12;
+    if (taxExemptionAnnual > 0 && taxRatePercent > 0 && annualProjectedGross > taxExemptionAnnual) {
+      const taxableAmount = annualProjectedGross - taxExemptionAnnual;
+      const annualTax = taxableAmount * (taxRatePercent / 100);
+      monthlyTaxDeduction = Number((annualTax / 12).toFixed(2));
+    }
+
     const totalAllowances = Number((packageAllowances + dynamicAllowancesTotal).toFixed(2));
-    const totalDeductions = Number((packageDeductions + attendanceDeduction).toFixed(2));
+    const totalDeductions = Number((packageDeductions + attendanceDeduction + monthlyTaxDeduction).toFixed(2));
 
     // Final payable salary
-    const finalPayable = Math.max(0, Number((baseSalary - attendanceDeduction + totalAllowances - packageDeductions).toFixed(2)));
+    const finalPayable = Math.max(0, Number((baseSalary - attendanceDeduction + totalAllowances - packageDeductions - monthlyTaxDeduction).toFixed(2)));
 
     // Check disbursement status for this month
     const disbursements = await (prisma as any).salaryDisbursement.findMany({
@@ -484,6 +567,7 @@ export class AttendanceService {
         role: employee.customRoleName || employee.pharmacyRoleName || employee.role.replace(/_/g, " "),
         branch: employee.branch,
         isActive: employee.isActive,
+        isPermanent: Boolean(employee.isPermanent),
         resignationDate: employee.resignationDate,
       },
       month,
@@ -498,6 +582,11 @@ export class AttendanceService {
         unpaidLeaveDays,
         dailyRate,
         attendanceDeduction, // Locked/read-only
+        monthlyTaxDeduction,
+        taxFiscalYear,
+        taxExemptionAnnual,
+        taxRatePercent,
+        annualProjectedGross,
         packageAllowances,
         dynamicAllowancesTotal,
         totalAllowances,

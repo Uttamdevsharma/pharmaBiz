@@ -14,3 +14,4 @@ router.get("/profile", tenant_controller_1.TenantController.getProfile);
 router.patch("/profile", (0, authorize_1.authorize)(["COMPANY_OWNER", "SUPER_ADMIN"]), (0, validate_1.validateRequest)({ body: tenant_validation_1.updateTenantProfileSchema }), tenant_controller_1.TenantController.updateProfile);
 router.get("/subscription", tenant_controller_1.TenantController.getSubscription);
 router.get("/usage", tenant_controller_1.TenantController.getUsage);
+router.get("/billing-ledger", tenant_controller_1.TenantController.getBillingLedger);

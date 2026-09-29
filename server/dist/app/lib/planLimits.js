@@ -170,8 +170,10 @@ async function checkCanAddStaff(tenantId, branchId) {
     // Dynamic limits from database plan features or defaults
     const maxStaffPerBranch = Number(planFeatures.maxStaffPerBranch ?? activeSub?.plan?.maxStaffPerBranch ?? planConfig.maxStaffPerBranch ?? 1);
     const maxTotalStaff = Number(planFeatures.maxTotalStaff ?? activeSub?.plan?.maxTotalStaff ?? planConfig.maxTotalStaff ?? (tier === "TRIAL" ? 1 : 999));
-    // Exclude owner from staff count limit check
-    const nonOwnerUsers = (tenant.users || []).filter((u) => u.role !== "COMPANY_OWNER");
+    // Exclude owner, super admin, and deleted users from staff count limit check
+    const nonOwnerUsers = (tenant.users || []).filter((u) => u.role !== "COMPANY_OWNER" &&
+        u.role !== "SUPER_ADMIN" &&
+        !u.username?.startsWith("deleted_"));
     const totalStaffCount = nonOwnerUsers.length;
     // 1. Overall tenant staff limit check
     if (maxTotalStaff < 999 && totalStaffCount >= maxTotalStaff) {
@@ -179,7 +181,7 @@ async function checkCanAddStaff(tenantId, branchId) {
             allowed: false,
             currentStaff: totalStaffCount,
             maxStaff: maxTotalStaff,
-            message: `Staff limit reached (${totalStaffCount}/${maxTotalStaff} on ${planName}). Please upgrade your plan or adjust limits to add more staff members.`,
+            message: `Staff limit reached: Maximum ${maxTotalStaff} staff members allowed on the ${planName} plan. Upgrade plan to add more.`,
         };
     }
     // 2. Per-branch staff limit check (if branchId is provided)
@@ -190,7 +192,7 @@ async function checkCanAddStaff(tenantId, branchId) {
                 allowed: false,
                 currentStaff: branchStaff.length,
                 maxStaff: maxStaffPerBranch,
-                message: `Branch staff limit reached (${branchStaff.length}/${maxStaffPerBranch} staff for this branch on ${planName}). Please upgrade your plan or adjust branch staff limits.`,
+                message: `Branch staff limit reached: Maximum ${maxStaffPerBranch} staff members allowed for this branch on the ${planName} plan.`,
             };
         }
     }

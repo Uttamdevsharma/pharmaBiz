@@ -45,6 +45,7 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
       role === "COMPANY_OWNER" ||
       role === "SUPER_ADMIN" ||
       role === "REGIONAL_ADMIN" ||
+      role === "ACCOUNTS" ||
       role === "CTO" ||
       role === "PROJECT_MANAGER"
     );

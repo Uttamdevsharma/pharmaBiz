@@ -127,7 +127,8 @@ class LocationService {
         if (numberOfShelves > 0) {
             shelvesData = Array.from({ length: numberOfShelves }, (_, s) => {
                 const sIdx = s + 1;
-                const shelfName = formatName(shelfPrefix, sIdx);
+                const customName = data.customShelves && data.customShelves[s] ? data.customShelves[s].trim() : "";
+                const shelfName = customName || formatName(shelfPrefix, sIdx);
                 const shelfObj = {
                     name: shelfName,
                     isActive,
@@ -152,6 +153,7 @@ class LocationService {
             branchId,
             name: rackName,
             type: data.type?.trim() || "RACK",
+            location: data.location !== undefined ? data.location : null,
             isActive,
         };
         if (shelvesData && shelvesData.length > 0) {
@@ -198,6 +200,7 @@ class LocationService {
                 branchId,
                 name: rackName,
                 type: data.type?.trim() || "RACK",
+                location: data.location !== undefined ? data.location : null,
                 isActive: data.isActive ?? true,
             },
             include: {
@@ -213,6 +216,10 @@ class LocationService {
             updateData.name = data.name.trim();
         if (data.type !== undefined)
             updateData.type = data.type;
+        if (data.location !== undefined) {
+            const locVal = data.location;
+            updateData.location = locVal && typeof locVal === "string" ? locVal.trim() : null;
+        }
         if (data.isActive !== undefined)
             updateData.isActive = data.isActive;
         return prisma_1.prisma.rack.update({

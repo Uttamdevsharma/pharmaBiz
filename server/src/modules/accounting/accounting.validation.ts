@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const createAccountSchema = z.object({
-  branchId: z.string().uuid("Invalid branch ID"),
+  branchId: z.string().uuid("Invalid branch ID").optional().nullable().or(z.literal("")),
   name: z.string().min(2, "Account name must be at least 2 characters"),
   type: z.enum(["CASH", "BANK", "BKASH", "NAGAD", "MOBILE", "CARD_SETTLEMENT", "OTHER"]),
   accountNumber: z.string().optional().nullable(),
@@ -33,7 +33,7 @@ export const depositFundsSchema = z.object({
 export type DepositFundsInput = z.infer<typeof depositFundsSchema>;
 
 export const transferFundsSchema = z.object({
-  branchId: z.string().uuid("Invalid branch ID"),
+  branchId: z.string().uuid("Invalid branch ID").optional().nullable(),
   sourceAccountId: z.string().uuid("Invalid source account ID"),
   destinationAccountId: z.string().uuid("Invalid destination account ID"),
   amount: z.number().positive("Transfer amount must be greater than 0"),
@@ -53,7 +53,7 @@ export const recordTransactionSchema = z.object({
 export const listTransactionsQuerySchema = z.object({
   branchId: z.string().uuid().optional(),
   accountId: z.string().uuid().optional(),
-  type: z.enum(["INCOME", "EXPENSE", "TRANSFER", "SALE_PAYMENT", "PURCHASE_PAYMENT", "REFUND"]).optional(),
+  type: z.string().optional(),
   startDate: z.string().datetime().optional().or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()),
   endDate: z.string().datetime().optional().or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()),
   page: z.coerce.number().int().positive().optional().default(1),
@@ -106,6 +106,17 @@ export const listExpensesQuerySchema = z.object({
   limit: z.coerce.number().int().positive().max(500).optional().default(100),
 });
 
+export const updateExpensePaymentSchema = z.object({
+  title: z.string().min(1, "Expense title is required").optional(),
+  expenseMonth: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Format must be YYYY-MM").optional(),
+  amount: z.number().positive("Amount must be greater than 0").optional(),
+  financialAccountId: z.string().uuid("Invalid financial account ID").optional(),
+  voucherNo: z.string().optional().nullable(),
+  reference: z.string().optional().nullable(),
+  notes: z.string().optional().nullable(),
+  paymentDate: z.string().optional(),
+});
+
 // Employee Salary Structure Config Schema
 export const setSalaryConfigSchema = z.object({
   branchId: z.string().uuid("Invalid branch ID"),
@@ -138,6 +149,7 @@ export type ListTransactionsQuery = z.infer<typeof listTransactionsQuerySchema>;
 export type CreateRecurringExpenseInput = z.infer<typeof createRecurringExpenseSchema>;
 export type UpdateRecurringExpenseInput = z.infer<typeof updateRecurringExpenseSchema>;
 export type RecordExpensePaymentInput = z.infer<typeof recordExpensePaymentSchema>;
+export type UpdateExpensePaymentInput = z.infer<typeof updateExpensePaymentSchema>;
 export type ListExpensesQuery = z.infer<typeof listExpensesQuerySchema>;
 export type SetSalaryConfigInput = z.infer<typeof setSalaryConfigSchema>;
 export type DisburseSalaryInput = z.infer<typeof disburseSalarySchema>;

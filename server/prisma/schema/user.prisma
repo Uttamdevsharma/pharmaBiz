@@ -35,6 +35,7 @@ model User {
   nidBackPublicId  String?
   documentsSubmitted Boolean   @default(false)
   grossSalary      Decimal?      @db.Decimal(15, 2)
+  isPermanent      Boolean       @default(false)
   isActive         Boolean       @default(true)
   resignationDate  DateTime?
   resignationReason String?
