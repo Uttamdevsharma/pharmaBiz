@@ -2,34 +2,26 @@
 
 import React, { useEffect, useState } from "react";
 import { fetchApi } from "@/lib/api";
-import { showAlert } from "@/lib/swal";
+import { showAlert, showToast } from "@/lib/swal";
 import { useAuth } from "@/context/AuthContext";
 import { useBranchContext } from "@/context/BranchContext";
 import { OwnerModule } from "./DashboardSidebar";
 import {
   Users,
-  DollarSign,
-  Wallet,
   CheckCircle2,
   AlertCircle,
   Clock,
   Search,
   RefreshCw,
-  Plus,
-  ArrowRight,
   Shield,
-  Briefcase,
-  Layers,
-  ChevronRight,
   Loader2,
   Calendar,
-  CreditCard,
-  Building,
-  Check,
   CalendarCheck,
-  Lock,
-  Sparkles,
   Store,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
 } from "lucide-react";
 
 interface SalaryManagementViewProps {
@@ -64,6 +56,7 @@ interface MonthStatus {
   attendanceDeduction?: number;
   totalAllowances?: number;
   allowancesList?: any[];
+  monthlyAllowances?: any[];
   netSalary: number;
   paidAmount: number;
   dueAmount: number;
@@ -109,6 +102,7 @@ interface FinancialAccount {
 let cachedSalaryEmployees: EmployeeItem[] = [];
 let cachedSalaryAccounts: FinancialAccount[] = [];
 
+
 export function SalaryManagementView({
   selectedBranchId: propBranchId,
   onSelectEmployee,
@@ -124,22 +118,18 @@ export function SalaryManagementView({
 
   const effectiveBranchId = propBranchId !== undefined ? propBranchId : contextBranchId;
 
-  const isOwner = user?.role === "COMPANY_OWNER" || user?.role === "SUPER_ADMIN";
-  const isBranchManager =
-    user?.role === "BRANCH_MANAGER" ||
-    user?.pharmacyRoleName?.toLowerCase().includes("branch manager") ||
-    user?.customRoleName?.toLowerCase().includes("branch manager");
-  const canSetBaseSalary = isOwner || isBranchManager || (hasPermission ? hasPermission("salaries.base_salary.edit") : false);
-
   const [currentMonth, setCurrentMonth] = useState<string>(() => new Date().toISOString().slice(0, 7));
   const [employees, setEmployees] = useState<EmployeeItem[]>(() => cachedSalaryEmployees);
   const [financialAccounts, setFinancialAccounts] = useState<FinancialAccount[]>(() => cachedSalaryAccounts);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(() => cachedSalaryEmployees.length === 0);
   const [submitting, setSubmitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [error, setError] = useState<string | null>(null);
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  // Pagination states
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
 
   // Quick Pay Modal State
   const [isPayModalOpen, setIsPayModalOpen] = useState(false);
@@ -157,7 +147,6 @@ export function SalaryManagementView({
   const [existingAllowances, setExistingAllowances] = useState<any[]>([]);
   const [loadingAllowances, setLoadingAllowances] = useState(false);
 
-
   // Load Financial Accounts
   const loadAccounts = async () => {
     try {
@@ -167,6 +156,7 @@ export function SalaryManagementView({
       const res = await fetchApi<FinancialAccount[]>(url);
       if (res.success && res.data) {
         setFinancialAccounts(res.data.filter((a) => a.isActive));
+        cachedSalaryAccounts = res.data.filter((a) => a.isActive);
         if (res.data.length > 0 && !payAccountId) {
           setPayAccountId(res.data[0].id);
         }
@@ -191,6 +181,7 @@ export function SalaryManagementView({
       );
       if (res.success && res.data) {
         setEmployees(res.data);
+        cachedSalaryEmployees = res.data;
       }
     } catch (err: any) {
       setError(err.message || "Failed to load employees");
@@ -204,6 +195,11 @@ export function SalaryManagementView({
     loadEmployees();
   }, [effectiveBranchId, currentMonth]);
 
+  // Reset page when filters change
+  useEffect(() => {
+    setPage(1);
+  }, [searchQuery, statusFilter, currentMonth, effectiveBranchId]);
+
   // Open Quick Pay Modal
   const openPayModal = (emp: EmployeeItem) => {
     if (!emp.documentsSubmitted) {
@@ -214,11 +210,33 @@ export function SalaryManagementView({
       return;
     }
     setPayEmployee(emp);
+    if (emp.monthStatus?.monthlyAllowances && Array.isArray(emp.monthStatus.monthlyAllowances)) {
+      setExistingAllowances(emp.monthStatus.monthlyAllowances);
+    } else {
+      setExistingAllowances([]);
+    }
     const due = emp.monthStatus?.dueAmount ?? 0;
     setPayAmount(due > 0 ? due : (emp.monthStatus?.netSalary || ""));
     setPayRef("");
     setPayNotes("");
     setIsPayModalOpen(true);
+    fetchAllowances(emp.id);
+  };
+
+  // Open Adjust / Edit Modal (allows additional salary payment if mistakenly underpaid)
+  const openAdjustModal = (emp: EmployeeItem) => {
+    setPayEmployee(emp);
+    if (emp.monthStatus?.monthlyAllowances && Array.isArray(emp.monthStatus.monthlyAllowances)) {
+      setExistingAllowances(emp.monthStatus.monthlyAllowances);
+    } else {
+      setExistingAllowances([]);
+    }
+    const due = emp.monthStatus?.dueAmount ?? 0;
+    setPayAmount(due > 0 ? due : "");
+    setPayRef("");
+    setPayNotes("Salary adjustment / additional payment");
+    setIsPayModalOpen(true);
+    fetchAllowances(emp.id);
   };
 
   // Open Allowance Modal
@@ -273,16 +291,19 @@ export function SalaryManagementView({
       });
 
       if (res.success) {
-        setSuccessMsg(`Allowance added for ${allowanceEmployee.name || allowanceEmployee.username}!`);
+        showToast(`Allowance added for ${allowanceEmployee.name || allowanceEmployee.username}!`, "success");
         setAllowanceTitle("");
         setAllowanceAmount("");
         await Promise.all([loadEmployees(), fetchAllowances(allowanceEmployee.id)]);
-        setTimeout(() => setSuccessMsg(null), 3000);
       } else {
-        setError(res.message || "Failed to add allowance");
+        const msg = res.message || "Failed to add allowance";
+        setError(msg);
+        showToast(msg, "error");
       }
     } catch (err: any) {
-      setError(err.message || "Failed to add allowance");
+      const msg = err.message || "Failed to add allowance";
+      setError(msg);
+      showToast(msg, "error");
     } finally {
       setSubmitting(false);
     }
@@ -298,14 +319,17 @@ export function SalaryManagementView({
       });
 
       if (res.success) {
-        setSuccessMsg("Allowance removed.");
+        showToast("Allowance removed.", "success");
         await Promise.all([loadEmployees(), fetchAllowances(allowanceEmployee.id)]);
-        setTimeout(() => setSuccessMsg(null), 3000);
       } else {
-        setError(res.message || "Failed to remove allowance");
+        const msg = res.message || "Failed to remove allowance";
+        setError(msg);
+        showToast(msg, "error");
       }
     } catch (err: any) {
-      setError(err.message || "Failed to remove allowance");
+      const msg = err.message || "Failed to remove allowance";
+      setError(msg);
+      showToast(msg, "error");
     } finally {
       setSubmitting(false);
     }
@@ -351,15 +375,18 @@ export function SalaryManagementView({
       });
 
       if (res.success) {
-        setSuccessMsg(`Salary paid to ${payEmployee.name || payEmployee.username}! Financial account debited.`);
+        showToast(`Salary paid to ${payEmployee.name || payEmployee.username}! Financial account debited.`, "success");
         setIsPayModalOpen(false);
         await Promise.all([loadEmployees(), loadAccounts()]);
-        setTimeout(() => setSuccessMsg(null), 3500);
       } else {
-        setError(res.message || "Failed to process salary payment");
+        const msg = res.message || "Failed to process salary payment";
+        setError(msg);
+        showToast(msg, "error");
       }
     } catch (err: any) {
-      setError(err.message || "Failed to disburse salary");
+      const msg = err.message || "Failed to disburse salary";
+      setError(msg);
+      showToast(msg, "error");
     } finally {
       setSubmitting(false);
     }
@@ -382,34 +409,30 @@ export function SalaryManagementView({
     return matchesSearch && matchesStatus;
   });
 
+  // Calculate status counts for inline summary
+  const paidCount = filteredEmployees.filter((e) => e.monthStatus?.status === "PAID").length;
+  const unpaidCount = filteredEmployees.filter((e) => e.monthStatus?.status !== "PAID").length;
+
+  // Pagination calculation
+  const totalEmployees = filteredEmployees.length;
+  const totalPages = Math.max(1, Math.ceil(totalEmployees / limit));
+  const paginatedEmployees = filteredEmployees.slice((page - 1) * limit, page * limit);
+
   const selectedAccount = financialAccounts.find((a) => a.id === payAccountId);
 
-  // Avatar Initials
-  const getInitials = (emp: EmployeeItem) => {
-    if (emp.name) {
-      const parts = emp.name.trim().split(/\s+/);
-      if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
-      return emp.name.slice(0, 2).toUpperCase();
-    }
-    return emp.username.slice(0, 2).toUpperCase();
-  };
-
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-2.5">
-            <Users className="h-6 w-6 text-brand-primary" />
+          <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
+            <Users className="h-5 w-5 text-brand-primary" />
             Branch Staff Salary Management
           </h1>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Configure salary packages, monitor monthly disbursement status, and pay salaries directly from branch financial accounts.
-          </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-medium text-slate-600 dark:text-slate-300">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-none border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-medium text-slate-600 dark:text-slate-300">
             <Store className="h-3.5 w-3.5 text-brand-primary" />
             <span>Scope:</span>
             <span className="font-bold text-slate-900 dark:text-white">
@@ -419,7 +442,7 @@ export function SalaryManagementView({
 
           <button
             onClick={() => onNavigate?.("sal_attendance")}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-200 transition shadow-xs"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-none border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-200 transition"
           >
             <CalendarCheck className="h-3.5 w-3.5 text-blue-500" />
             Attendance & Off-Days
@@ -427,7 +450,7 @@ export function SalaryManagementView({
 
           <button
             onClick={() => onNavigate?.("sal_employees")}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-200 transition shadow-xs"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-none border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-200 transition"
           >
             <Users className="h-3.5 w-3.5 text-emerald-500" />
             Employee List
@@ -435,14 +458,14 @@ export function SalaryManagementView({
 
           <button
             onClick={() => onNavigate?.("sal_history")}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-200 transition shadow-xs"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-none border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-200 transition"
           >
             <Clock className="h-3.5 w-3.5 text-purple-500" />
             Salary History
           </button>
 
           {/* Month Selector */}
-          <div className="relative flex items-center gap-2 bg-white dark:bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs">
+          <div className="relative flex items-center gap-2 bg-white dark:bg-slate-900 px-3 py-1.5 rounded-none border border-slate-200 dark:border-slate-800">
             <Calendar className="h-4 w-4 text-slate-400" />
             <input
               type="month"
@@ -454,7 +477,7 @@ export function SalaryManagementView({
 
           <button
             onClick={loadEmployees}
-            className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-500 transition shadow-xs"
+            className="p-2 rounded-none border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-500 transition"
             title="Refresh"
           >
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
@@ -462,10 +485,35 @@ export function SalaryManagementView({
         </div>
       </div>
 
+      {/* Monthly Status Summary (Compact Text, Not State Card) */}
+      <div className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2.5 bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-800 text-xs sm:text-sm">
+        <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
+          <span className="font-semibold text-slate-700 dark:text-slate-200">
+            Month {currentMonth} Status:
+          </span>
+          <span className="inline-flex items-center gap-1.5 font-bold text-emerald-600 dark:text-emerald-400">
+            <span className="h-2 w-2 bg-emerald-500 inline-block"></span>
+            {paidCount} Paid
+          </span>
+          <span className="text-slate-300 dark:text-slate-600">•</span>
+          <span className="inline-flex items-center gap-1.5 font-bold text-rose-600 dark:text-rose-400">
+            <span className="h-2 w-2 bg-rose-500 inline-block"></span>
+            {unpaidCount} Due / Unpaid
+          </span>
+          <span className="text-slate-400">
+            (Total Staff: {totalEmployees})
+          </span>
+        </div>
+
+        <div className="text-xs text-slate-500 dark:text-slate-400 font-mono">
+          Showing {paginatedEmployees.length} of {totalEmployees} employees
+        </div>
+      </div>
+
       {/* Alerts */}
       {error && (
-        <div className="p-3.5 rounded-2xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 flex items-center justify-between gap-3 text-xs text-red-600 dark:text-red-400">
-          <div className="flex items-center gap-2.5">
+        <div className="p-3.5 rounded-none bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 flex items-center justify-between gap-3 text-xs sm:text-sm text-red-600 dark:text-red-400">
+          <div className="flex items-center gap-2">
             <AlertCircle className="h-4 w-4 shrink-0" />
             <span>{error}</span>
           </div>
@@ -473,28 +521,22 @@ export function SalaryManagementView({
         </div>
       )}
 
-      {successMsg && (
-        <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/50 flex items-center gap-2.5 text-xs text-emerald-600 dark:text-emerald-400">
-          <CheckCircle2 className="h-4 w-4 shrink-0" />
-          <span>{successMsg}</span>
-        </div>
-      )}
 
       {/* Filters & Search */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
         <div className="relative flex-1 max-w-md">
-          <Search className="h-4 w-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+          <Search className="h-4 w-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search employee by name, username, or phone..."
-            className="w-full pl-9 pr-4 py-2 rounded-xl text-xs sm:text-sm border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-primary/20"
+            className="w-full pl-9 pr-4 py-2 rounded-none text-xs sm:text-sm border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary"
           />
         </div>
 
         {/* Status Filter Tabs */}
-        <div className="flex items-center gap-1.5 overflow-x-auto p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl">
+        <div className="flex items-center gap-1 overflow-x-auto p-1 bg-slate-100 dark:bg-slate-800/80 rounded-none">
           {[
             { id: "ALL", label: "All Staff" },
             { id: "DUE", label: "Due" },
@@ -504,9 +546,9 @@ export function SalaryManagementView({
             <button
               key={tab.id}
               onClick={() => setStatusFilter(tab.id)}
-              className={`px-3 py-1 rounded-lg text-xs font-bold transition whitespace-nowrap ${
+              className={`px-3 py-1.5 text-xs sm:text-sm font-semibold transition whitespace-nowrap rounded-none ${
                 statusFilter === tab.id
-                  ? "bg-white dark:bg-slate-900 text-brand-primary shadow-xs"
+                  ? "bg-white dark:bg-slate-900 text-brand-primary shadow-xs font-bold"
                   : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
               }`}
             >
@@ -517,41 +559,67 @@ export function SalaryManagementView({
       </div>
 
       {/* Staff Salary Table */}
-      <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-xs">
-        {filteredEmployees.length === 0 ? (
-          <div className="p-12 text-center text-slate-400 space-y-3">
-            <div className="h-12 w-12 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-400 flex items-center justify-center mx-auto">
-              <Users className="h-6 w-6" />
-            </div>
-            <div className="text-sm font-semibold text-slate-600 dark:text-slate-300">
-              {loading ? "Loading branch staff and salary records..." : "No staff members found"}
-            </div>
-            <p className="text-xs text-slate-400 max-w-sm mx-auto">
-              {!loading && "Add staff members to this branch in Staff Management to configure their payroll."}
-            </p>
-          </div>
-        ) : (
-          <div className="table-responsive-container">
-            <table className="w-full min-w-[850px] text-left border-collapse">
-              <thead>
-                <tr className="border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                  <th className="py-3 px-4">Employee</th>
-                  <th className="py-3 px-4">Role</th>
-                  <th className="py-3 px-4">Base Package</th>
-                  <th className="py-3 px-4">Attendance ({currentMonth})</th>
-                  <th className="py-3 px-4">Net Payable</th>
-                  <th className="py-3 px-4">Status</th>
-                  <th className="py-3 px-4">Paid / Due</th>
-                  <th className="py-3 px-4 text-right">Actions</th>
+      <div className="rounded-none border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
+        <div className="table-responsive-container">
+          <table className="w-full min-w-[850px] text-left text-sm border-collapse">
+            <thead>
+              <tr className="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/75 text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">
+                <th className="py-3 px-4">Employee</th>
+                <th className="py-3 px-4">Role</th>
+                <th className="py-3 px-4">Gross Salary</th>
+                <th className="py-3 px-4">Net Payable</th>
+                <th className="py-3 px-4">Status</th>
+                <th className="py-3 px-4 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-sm font-medium text-slate-700 dark:text-slate-300">
+              {loading ? (
+                [...Array(6)].map((_, idx) => (
+                  <tr key={idx} className="animate-pulse">
+                    <td className="py-3.5 px-4">
+                      <div className="h-4 w-32 bg-slate-200 dark:bg-slate-800 rounded-none" />
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <div className="h-5 w-24 bg-slate-200 dark:bg-slate-800 rounded-none" />
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <div className="h-4 w-20 bg-slate-200 dark:bg-slate-800 rounded-none" />
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <div className="h-4 w-20 bg-slate-200 dark:bg-slate-800 rounded-none" />
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <div className="h-5 w-16 bg-slate-200 dark:bg-slate-800 rounded-none" />
+                    </td>
+                    <td className="py-3.5 px-4 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <div className="h-7 w-20 bg-slate-200 dark:bg-slate-800 rounded-none" />
+                        <div className="h-7 w-16 bg-slate-200 dark:bg-slate-800 rounded-none" />
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              ) : filteredEmployees.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="p-12 text-center text-slate-400">
+                    <div className="h-10 w-10 bg-slate-100 dark:bg-slate-800 text-slate-400 flex items-center justify-center mx-auto mb-2">
+                      <Users className="h-5 w-5" />
+                    </div>
+                    <div className="text-sm font-semibold text-slate-600 dark:text-slate-300">
+                      No staff members found
+                    </div>
+                    <p className="text-xs sm:text-sm text-slate-400 max-w-sm mx-auto mt-1">
+                      Add staff members to this branch in Staff Management to configure their payroll.
+                    </p>
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs text-slate-700 dark:text-slate-300">
-                {filteredEmployees.map((emp) => {
+              ) : (
+                paginatedEmployees.map((emp) => {
                   const roleName = emp.pharmacyRoleName || emp.customRoleName || emp.role?.replace(/_/g, " ");
                   const status = emp.monthStatus?.status || "UNCONFIGURED";
                   const config = emp.salaryConfig;
                   const mStatus = emp.monthStatus;
-                  const absentOrUnpaid = (mStatus?.absentDays || 0) + (mStatus?.unpaidLeaveDays || 0);
+                  const isPaid = status === "PAID" || (mStatus && mStatus.dueAmount <= 0 && mStatus.paidAmount > 0);
 
                   return (
                     <tr
@@ -559,194 +627,201 @@ export function SalaryManagementView({
                       className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition cursor-pointer group"
                       onClick={() => onSelectEmployee(emp.id)}
                     >
-                      {/* Employee Info */}
+                      {/* Employee Name Only */}
                       <td className="py-3.5 px-4">
-                        <div className="flex items-center gap-3">
-                          {emp.avatarUrl ? (
-                            <img
-                              src={emp.avatarUrl}
-                              alt={emp.name || "Avatar"}
-                              className="h-10 w-10 rounded-xl object-cover border border-slate-200 dark:border-slate-700 shrink-0"
-                            />
-                          ) : (
-                            <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-brand-primary to-teal-600 text-white font-black text-xs flex items-center justify-center shadow-xs shrink-0">
-                              {getInitials(emp)}
-                            </div>
-                          )}
-                          <div>
-                            <div className="font-bold text-slate-900 dark:text-white group-hover:text-brand-primary transition">
-                              {emp.name || emp.username}
-                            </div>
-                            <div className="text-[11px] text-slate-400 font-mono">
-                              {emp.phone || `@${emp.username}`}
-                            </div>
-                            <div className="mt-1">
-                              {emp.documentsSubmitted ? (
-                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
-                                  <CheckCircle2 className="w-2.5 h-2.5" />
-                                  <span>Docs Submitted</span>
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-800" title="Documents pending — salary disbursement blocked">
-                                  <AlertCircle className="w-2.5 h-2.5" />
-                                  <span>Docs Pending (Salary Blocked)</span>
-                                </span>
-                              )}
-                            </div>
-                          </div>
+                        <div className="font-bold text-slate-900 dark:text-white group-hover:text-brand-primary transition text-sm">
+                          {emp.name || emp.username}
                         </div>
                       </td>
 
                       {/* Role */}
                       <td className="py-3.5 px-4">
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 uppercase">
-                          <Shield className="h-2.5 w-2.5 text-brand-primary" />
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-none text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 uppercase">
+                          <Shield className="h-3 w-3 text-brand-primary" />
                           {roleName}
                         </span>
                       </td>
 
-                      {/* Base Package */}
+                      {/* Gross Salary */}
                       <td className="py-3.5 px-4">
                         {config ? (
-                          <div>
-                            <div className="font-bold text-slate-900 dark:text-white text-sm">
-                              ৳{config.baseSalary.toLocaleString()}
-                            </div>
-                            <div className="text-[10px] text-slate-400">
-                              Daily Rate: ৳{(mStatus?.dailyRate || 0).toLocaleString()}
-                            </div>
+                          <div className="font-bold text-slate-900 dark:text-white text-sm font-mono">
+                            ৳{config.baseSalary.toLocaleString()}
                           </div>
                         ) : (
-                          <span className="text-[11px] text-amber-600 font-medium">Not Configured</span>
+                          <span className="text-xs text-amber-600 font-medium">Not Configured</span>
                         )}
                       </td>
 
-                      {/* Attendance Breakdown */}
+                      {/* Net Payable */}
                       <td className="py-3.5 px-4">
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2 text-[11px]">
-                            <span className="font-semibold text-slate-700 dark:text-slate-300">
-                              {mStatus?.workingDays ?? 0} Working Days
-                            </span>
-                            <span className="text-slate-400">({mStatus?.offDays ?? 0} off)</span>
-                          </div>
-                          <div className="flex items-center gap-2 text-[10px]">
-                            <span className="text-emerald-600 font-bold">
-                              ✓ {mStatus?.presentDays ?? 0} Present
-                            </span>
-                            {absentOrUnpaid > 0 && (
-                              <span className="text-rose-600 font-bold">
-                                ✗ {absentOrUnpaid} Absent
-                              </span>
-                            )}
-                          </div>
+                        <div className="font-bold text-slate-900 dark:text-white text-sm font-mono">
+                          ৳{(mStatus?.netSalary || 0).toLocaleString()}
                         </div>
                       </td>
 
-                      {/* Net Payable & Adjustments */}
-                      <td className="py-3.5 px-4">
-                        <div>
-                          <div className="font-black text-slate-900 dark:text-white text-sm">
-                            ৳{(mStatus?.netSalary || 0).toLocaleString()}
-                          </div>
-                          <div className="flex items-center gap-1.5 text-[10px]">
-                            {(mStatus?.attendanceDeduction || 0) > 0 && (
-                              <span className="inline-flex items-center gap-0.5 text-rose-600 font-semibold" title="System attendance deduction (locked)">
-                                <Lock className="h-2.5 w-2.5" />
-                                -৳{mStatus?.attendanceDeduction?.toLocaleString()}
-                              </span>
-                            )}
-                            {(mStatus?.totalAllowances || 0) > 0 && (
-                              <span className="inline-flex items-center gap-0.5 text-emerald-600 font-semibold" title="Dynamic allowances">
-                                <Sparkles className="h-2.5 w-2.5" />
-                                +৳{mStatus?.totalAllowances?.toLocaleString()}
-                              </span>
-                            )}
-                            {(!mStatus?.attendanceDeduction && !mStatus?.totalAllowances) && (
-                              <span className="text-slate-400">No deductions</span>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* Status Badge */}
+                      {/* Status Badge (Paid / Partial / Due) */}
                       <td className="py-3.5 px-4">
                         {status === "PAID" && (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                            <CheckCircle2 className="h-3 w-3" />
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-none text-xs font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                            <CheckCircle2 className="h-3.5 w-3.5" />
                             Paid
                           </span>
                         )}
                         {status === "PARTIAL" && (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-                            <Clock className="h-3 w-3" />
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-none text-xs font-bold uppercase tracking-wider bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                            <Clock className="h-3.5 w-3.5" />
                             Partial
                           </span>
                         )}
                         {status === "DUE" && (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
-                            <AlertCircle className="h-3 w-3" />
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-none text-xs font-bold uppercase tracking-wider bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
+                            <AlertCircle className="h-3.5 w-3.5" />
                             Due
                           </span>
                         )}
-                      </td>
-
-                      {/* Paid vs Due */}
-                      <td className="py-3.5 px-4">
-                        <div>
-                          <div className="font-semibold text-emerald-600 dark:text-emerald-400">
-                            Paid: ৳{(mStatus?.paidAmount || 0).toLocaleString()}
-                          </div>
-                          {(mStatus?.dueAmount || 0) > 0 && (
-                            <div className="font-bold text-rose-600 dark:text-rose-400 text-[11px]">
-                              Due: ৳{(mStatus?.dueAmount || 0).toLocaleString()}
-                            </div>
-                          )}
-                        </div>
+                        {status === "UNCONFIGURED" && (
+                          <span className="text-xs text-slate-400 font-medium">Unconfigured</span>
+                        )}
                       </td>
 
                       {/* Actions */}
                       <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center justify-end gap-2">
+                        <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                          {/* Pay Salary / Already Paid Button */}
+                          {isPaid ? (
+                            <button
+                              disabled
+                              className="px-2.5 py-1.5 rounded-none text-xs sm:text-sm font-bold bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700 cursor-not-allowed"
+                              title="Salary already paid for this month"
+                            >
+                              Already Paid
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => openPayModal(emp)}
+                              className={`px-3 py-1.5 rounded-none text-xs sm:text-sm font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                                emp.documentsSubmitted
+                                  ? "bg-brand-primary hover:bg-brand-primary/90 text-white"
+                                  : "bg-amber-100 hover:bg-amber-200 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300 border border-amber-300 dark:border-amber-700"
+                              }`}
+                              title={
+                                emp.documentsSubmitted
+                                  ? status === "PARTIAL"
+                                    ? `Pay Remaining Due: ৳${(mStatus?.dueAmount || 0).toLocaleString()}`
+                                    : "Pay Salary"
+                                  : "Documents pending — salary disbursement blocked"
+                              }
+                            >
+                              {!emp.documentsSubmitted && <AlertCircle className="w-3.5 h-3.5 text-amber-600" />}
+                              <span>
+                                {emp.documentsSubmitted
+                                  ? status === "PARTIAL"
+                                    ? `Pay Due (৳${(mStatus?.dueAmount || 0).toLocaleString()})`
+                                    : "Pay Salary"
+                                  : "Docs Pending"}
+                              </span>
+                            </button>
+                          )}
+
+                          {/* Edit / Adjust Option (allows additional payment or correction if paid less by mistake) */}
                           <button
-                            onClick={() => openPayModal(emp)}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition shadow-xs flex items-center gap-1.5 ${
-                              emp.documentsSubmitted
-                                ? "bg-brand-primary hover:bg-brand-primary/90 text-white"
-                                : "bg-amber-100 hover:bg-amber-200 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300 border border-amber-300 dark:border-amber-700"
-                            }`}
-                            title={emp.documentsSubmitted ? "Pay Salary" : "Documents pending — salary disbursement blocked"}
+                            onClick={() => openAdjustModal(emp)}
+                            className="px-2.5 py-1.5 rounded-none text-xs sm:text-sm font-semibold border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition cursor-pointer"
+                            title="Adjust disbursed salary or add additional payment if mistakenly underpaid"
                           >
-                            {!emp.documentsSubmitted && <AlertCircle className="w-3 h-3 text-amber-600" />}
-                            <span>{emp.documentsSubmitted ? "Pay Salary" : "Docs Pending"}</span>
+                            Edit / Adjust
                           </button>
-                          <button
-                            onClick={() => openAllowanceModal(emp)}
-                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border border-emerald-200 dark:border-emerald-800/50 bg-emerald-50 dark:bg-emerald-950/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 transition"
-                            title="Add monthly allowance (e.g. bonus, overtime)"
-                          >
-                            <Sparkles className="w-3.5 h-3.5" />
-                            Add Allowance (Optional)
-                          </button>
+
+                          {/* Details Button */}
                           <button
                             onClick={() => onSelectEmployee(emp.id)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-brand-primary transition"
-                            title="View Employee Full Details"
+                            className="px-2.5 py-1.5 rounded-none text-xs sm:text-sm font-semibold border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition cursor-pointer"
+                            title="View Employee Attendance & Details"
                           >
-                            <ChevronRight className="h-4 w-4" />
+                            Details
                           </button>
                         </div>
                       </td>
                     </tr>
                   );
-                })}
-              </tbody>
-            </table>
+                }))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Table Pagination Footer - Always Visible */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 bg-slate-50/75 dark:bg-slate-800/60 border-t border-slate-200 dark:border-slate-800 text-xs sm:text-sm">
+          <div className="text-slate-500">
+            Showing <span className="font-semibold text-slate-800 dark:text-slate-200">{filteredEmployees.length === 0 ? 0 : (page - 1) * limit + 1}</span> to{" "}
+            <span className="font-semibold text-slate-800 dark:text-slate-200">{Math.min(page * limit, filteredEmployees.length)}</span> of{" "}
+            <span className="font-semibold text-slate-800 dark:text-slate-200">{filteredEmployees.length}</span> staff
           </div>
-        )}
+
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-slate-500">Rows per page:</span>
+              <select
+                value={limit}
+                onChange={(e) => {
+                  setLimit(Number(e.target.value));
+                  setPage(1);
+                }}
+                className="px-2 py-1 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs rounded-none outline-none text-slate-700 dark:text-slate-200"
+              >
+                <option value={10}>10</option>
+                <option value={20}>20</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+            </div>
+
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setPage(1)}
+                disabled={page <= 1}
+                className="p-1 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-30 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-none"
+                title="First Page"
+              >
+                <ChevronsLeft className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page <= 1}
+                className="p-1 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-30 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-none"
+                title="Previous Page"
+              >
+                <ChevronLeft className="h-3.5 w-3.5" />
+              </button>
+              <span className="px-2 text-xs text-slate-600 dark:text-slate-300">
+                Page {page} of {totalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page >= totalPages}
+                className="p-1 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-30 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-none"
+                title="Next Page"
+              >
+                <ChevronRight className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setPage(totalPages)}
+                disabled={page >= totalPages}
+                className="p-1 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-30 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-none"
+                title="Last Page"
+              >
+                <ChevronsRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* MODAL: Pay Salary */}
+      {/* MODAL: Pay Salary (Clean, sharp form, detailed allowances, no decorative icons) */}
       {isPayModalOpen && payEmployee && (() => {
         const mStatus = payEmployee.monthStatus;
         const attMetrics = (payEmployee as any).attendanceMetrics;
@@ -768,92 +843,112 @@ export function SalaryManagementView({
             ? attMetrics.attendanceDeduction
             : Math.max(0, Number((baseSalary + allowance - netSalary).toFixed(2)));
 
+        const activeAllowances = existingAllowances.length > 0
+          ? existingAllowances
+          : (mStatus?.monthlyAllowances || []);
+
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-            <div className="relative w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl p-6 sm:p-7 max-h-[92vh] overflow-y-auto">
-              <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 mb-4">
-                <div className="flex items-center gap-2.5">
-                  <div className="h-10 w-10 rounded-xl bg-brand-primary/10 text-brand-primary flex items-center justify-center border border-brand-primary/20">
-                    <DollarSign className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h2 className="text-base font-bold text-slate-900 dark:text-white leading-tight">
-                      Disburse Salary: {payEmployee.name || payEmployee.username}
-                    </h2>
-                    <p className="text-xs text-slate-500">Month: {currentMonth}</p>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+            <div className="relative w-full max-w-lg rounded-none bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 shadow-xl p-5 sm:p-6 max-h-[92vh] overflow-y-auto">
+              {/* Clean Modal Header */}
+              <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800 mb-4">
+                <div>
+                  <h2 className="text-base font-bold text-slate-900 dark:text-white leading-tight">
+                    Disburse Salary: {payEmployee.name || payEmployee.username}
+                  </h2>
+                  <div className="text-xs text-slate-500 font-mono mt-0.5">
+                    Target Month: {currentMonth}
                   </div>
                 </div>
-                <button onClick={() => setIsPayModalOpen(false)} className="text-slate-400 font-bold p-1">×</button>
+                <button
+                  type="button"
+                  onClick={() => setIsPayModalOpen(false)}
+                  className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 text-lg font-bold p-1"
+                >
+                  ✕
+                </button>
               </div>
 
               <form onSubmit={handlePaySubmit} className="space-y-4">
-                {/* Payment Summary Box */}
-                <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 space-y-2 text-xs">
-                  {/* 1. Base Salary */}
+                {/* Clear Salary & Allowance Breakdown */}
+                <div className="p-3.5 rounded-none bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2 text-xs">
                   <div className="flex justify-between items-center">
-                    <span className="text-slate-500 dark:text-slate-400 font-medium">Base Salary:</span>
+                    <span className="text-slate-600 dark:text-slate-400 font-medium">Base Salary:</span>
                     <span className="font-bold text-slate-900 dark:text-white font-mono">
                       ৳{baseSalary.toLocaleString()}
                     </span>
                   </div>
 
-                  {/* 2. Attendance / Working Days */}
                   <div className="flex justify-between items-center text-[11px] text-slate-500 dark:text-slate-400">
-                    <span className="font-medium">Attendance / Working Days:</span>
-                    <span className="font-semibold text-slate-700 dark:text-slate-300 font-mono">
+                    <span>Attendance:</span>
+                    <span className="font-mono text-slate-700 dark:text-slate-300">
                       {presentDays} Present / {workingDays} Working Days ({offDays} off)
                     </span>
                   </div>
 
-                  {/* 3. Absent Days */}
-                  <div className="flex justify-between items-center text-[11px] text-slate-500 dark:text-slate-400">
-                    <span className="font-medium">Absent Days:</span>
-                    <span className={`font-semibold font-mono ${absentDays > 0 ? "text-rose-600 dark:text-rose-400" : "text-slate-700 dark:text-slate-300"}`}>
-                      {absentDays} Days
-                    </span>
+                  {absentDays > 0 && (
+                    <div className="flex justify-between items-center text-[11px]">
+                      <span className="text-rose-600 font-medium">Absent Days:</span>
+                      <span className="font-mono font-semibold text-rose-600">
+                        {absentDays} Days
+                      </span>
+                    </div>
+                  )}
+
+                  {autoDeduction > 0 && (
+                    <div className="flex justify-between items-center text-[11px] bg-rose-50 dark:bg-rose-950/40 p-1.5 border border-rose-200/50 text-rose-700 dark:text-rose-300 font-semibold rounded-none">
+                      <span>Attendance Deduction:</span>
+                      <span className="font-bold font-mono">-৳{autoDeduction.toLocaleString()}</span>
+                    </div>
+                  )}
+
+                  {/* Itemized Allowance Section */}
+                  <div className="border-t border-slate-200 dark:border-slate-700 pt-2 space-y-1">
+                    <div className="flex justify-between items-center font-semibold text-slate-700 dark:text-slate-300">
+                      <span>Allowances Included:</span>
+                      <span className="font-bold font-mono text-emerald-600 dark:text-emerald-400">
+                        +৳{allowance.toLocaleString()}
+                      </span>
+                    </div>
+
+                    {/* Breakdown of what allowances are given */}
+                    {Number(config?.allowances || 0) > 0 && (
+                      <div className="flex justify-between text-[11px] text-slate-600 dark:text-slate-400 pl-2">
+                        <span>• Fixed Package Allowance:</span>
+                        <span className="font-mono text-emerald-600 font-medium">+৳{Number(config?.allowances).toLocaleString()}</span>
+                      </div>
+                    )}
+
+                    {activeAllowances.length > 0 ? (
+                      activeAllowances.map((item: any, idx: number) => (
+                        <div key={item.id || idx} className="flex justify-between text-[11px] text-slate-600 dark:text-slate-400 pl-2">
+                          <span>• {item.title}:</span>
+                          <span className="font-mono text-emerald-600 font-medium">+৳{Number(item.amount).toLocaleString()}</span>
+                        </div>
+                      ))
+                    ) : Number(config?.allowances || 0) === 0 ? (
+                      <div className="text-[11px] text-slate-400 italic pl-2">
+                        No allowances for this month
+                      </div>
+                    ) : null}
                   </div>
 
-                  {/* 4. Auto Deduction (read-only) */}
-                  <div className="flex justify-between items-center bg-rose-50 dark:bg-rose-950/40 p-2 rounded-xl text-rose-700 dark:text-rose-300 font-semibold border border-rose-200/50">
-                    <span className="flex items-center gap-1.5">
-                      <Lock className="h-3 w-3 shrink-0 text-rose-600 dark:text-rose-400" />
-                      Auto Deduction (read-only):
-                    </span>
-                    <span className="font-bold font-mono">
-                      -৳{autoDeduction.toLocaleString()}
-                    </span>
-                  </div>
-
-                  {/* 5. Allowance */}
-                  <div className="flex justify-between items-center bg-emerald-50 dark:bg-emerald-950/40 p-2 rounded-xl text-emerald-700 dark:text-emerald-300 font-semibold border border-emerald-200/50">
-                    <span className="flex items-center gap-1.5">
-                      <Sparkles className="h-3 w-3 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                      Allowance:
-                    </span>
-                    <span className="font-bold font-mono">
-                      +৳{allowance.toLocaleString()}
-                    </span>
-                  </div>
-
-                  {/* 6. Final Payable */}
                   <div className="flex justify-between border-t border-slate-200 dark:border-slate-700 pt-2 font-bold">
-                    <span className="text-slate-800 dark:text-slate-200">Final Payable:</span>
+                    <span className="text-slate-800 dark:text-slate-200">Final Net Payable:</span>
                     <span className="font-black text-slate-900 dark:text-white text-sm font-mono">
                       ৳{netSalary.toLocaleString()}
                     </span>
                   </div>
 
-                  {/* 7. Already Paid */}
-                  <div className="flex justify-between text-slate-500 dark:text-slate-400">
+                  <div className="flex justify-between text-slate-500 dark:text-slate-400 text-[11px]">
                     <span>Already Paid:</span>
                     <span className="font-semibold text-emerald-600 dark:text-emerald-400 font-mono">
                       ৳{paidAmount.toLocaleString()}
                     </span>
                   </div>
 
-                  {/* 8. Remaining Due */}
-                  <div className="flex justify-between border-t border-slate-200 dark:border-slate-700 pt-1.5">
-                    <span className="text-slate-700 dark:text-slate-300 font-bold">Remaining Due:</span>
+                  <div className="flex justify-between border-t border-slate-200 dark:border-slate-700 pt-1.5 font-bold">
+                    <span className="text-slate-700 dark:text-slate-300">Remaining Due:</span>
                     <span className="font-black text-rose-600 dark:text-rose-400 text-sm font-mono">
                       ৳{dueAmount.toLocaleString()}
                     </span>
@@ -863,7 +958,7 @@ export function SalaryManagementView({
                 {/* Amount to Pay */}
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Disbursement Amount (৳)
+                    Disbursement Amount (৳) *
                   </label>
                   <input
                     type="number"
@@ -872,23 +967,23 @@ export function SalaryManagementView({
                     step="any"
                     value={payAmount}
                     onChange={(e) => setPayAmount(e.target.value === "" ? "" : Number(e.target.value))}
-                    className="w-full px-3.5 py-2.5 rounded-xl text-base font-bold border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-brand-primary focus:outline-none"
+                    className="w-full px-3 py-2 rounded-none text-base font-bold border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-brand-primary focus:outline-none"
                   />
                 </div>
 
                 {/* Branch Financial Account */}
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
-                    <span>Pay From Branch Financial Account</span>
+                    <span>Pay From Branch Account *</span>
                     {selectedAccount && (
-                      <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
-                        Balance: ৳{Number(selectedAccount.balance).toLocaleString()}
+                      <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 font-mono">
+                        Avail: ৳{Number(selectedAccount.balance).toLocaleString()}
                       </span>
                     )}
                   </label>
 
                   {financialAccounts.length === 0 ? (
-                    <div className="p-3 rounded-xl bg-red-50 text-xs text-red-600 border border-red-200">
+                    <div className="p-2.5 rounded-none bg-red-50 text-xs text-red-600 border border-red-200">
                       No active financial account exists for this branch.
                     </div>
                   ) : (
@@ -896,7 +991,7 @@ export function SalaryManagementView({
                       value={payAccountId}
                       onChange={(e) => setPayAccountId(e.target.value)}
                       required
-                      className="w-full px-3.5 py-2.5 rounded-xl text-xs font-semibold border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none"
+                      className="w-full px-3 py-2 rounded-none text-xs font-semibold border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none"
                     >
                       {financialAccounts.map((acc) => (
                         <option key={acc.id} value={acc.id}>
@@ -908,45 +1003,47 @@ export function SalaryManagementView({
                 </div>
 
                 {/* Ref & Notes */}
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Payment Reference / Voucher No. (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. SAL-VCH-9012"
-                    value={payRef}
-                    onChange={(e) => setPayRef(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl text-xs border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none"
-                  />
-                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Payment Ref / Voucher No.
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. SAL-VCH-9012"
+                      value={payRef}
+                      onChange={(e) => setPayRef(e.target.value)}
+                      className="w-full px-3 py-1.5 rounded-none text-xs border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none"
+                    />
+                  </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Notes (Optional)
-                  </label>
-                  <textarea
-                    rows={2}
-                    value={payNotes}
-                    onChange={(e) => setPayNotes(e.target.value)}
-                    placeholder="Remarks..."
-                    className="w-full px-3 py-2 rounded-xl text-xs border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none resize-none"
-                  />
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Notes / Remarks
+                    </label>
+                    <input
+                      type="text"
+                      value={payNotes}
+                      onChange={(e) => setPayNotes(e.target.value)}
+                      placeholder="Optional remarks"
+                      className="w-full px-3 py-1.5 rounded-none text-xs border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none"
+                    />
+                  </div>
                 </div>
 
                 {/* Submit Buttons */}
-                <div className="pt-2 flex items-center justify-end gap-3 border-t border-slate-100 dark:border-slate-800">
+                <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-200 dark:border-slate-800">
                   <button
                     type="button"
                     onClick={() => setIsPayModalOpen(false)}
-                    className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 transition"
+                    className="px-4 py-2 rounded-none text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={submitting || financialAccounts.length === 0}
-                    className="px-5 py-2 rounded-xl text-xs font-bold bg-brand-primary hover:bg-brand-primary/90 text-white shadow-sm flex items-center gap-2 transition disabled:opacity-50"
+                    className="px-5 py-2 rounded-none text-xs font-bold bg-brand-primary hover:bg-brand-primary/90 text-white shadow-xs flex items-center gap-2 transition disabled:opacity-50"
                   >
                     {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                     Confirm Salary Payment
@@ -958,27 +1055,30 @@ export function SalaryManagementView({
         );
       })()}
 
-      {/* MODAL: Add Allowance (Optional) */}
+      {/* MODAL: Add Allowance (Simple clean form, no decorative icons, rounded-none) */}
       {isAllowanceModalOpen && allowanceEmployee && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="relative w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl p-6 sm:p-7 space-y-5 max-h-[92vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <div className="flex items-center gap-2.5">
-                <div className="h-10 w-10 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center border border-emerald-500/20">
-                  <Sparkles className="h-5 w-5" />
-                </div>
-                <div>
-                  <h2 className="text-base font-bold text-slate-900 dark:text-white leading-tight">
-                    Add Allowance (Optional)
-                  </h2>
-                  <p className="text-xs text-slate-500">{allowanceEmployee.name || allowanceEmployee.username} • {currentMonth}</p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="relative w-full max-w-md rounded-none bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 shadow-xl p-5 sm:p-6 space-y-4 max-h-[92vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+              <div>
+                <h2 className="text-base font-bold text-slate-900 dark:text-white leading-tight">
+                  Add Allowance
+                </h2>
+                <div className="text-xs text-slate-500 mt-0.5">
+                  {allowanceEmployee.name || allowanceEmployee.username} • {currentMonth}
                 </div>
               </div>
-              <button onClick={() => setIsAllowanceModalOpen(false)} className="text-slate-400 font-bold p-1">✕</button>
+              <button
+                type="button"
+                onClick={() => setIsAllowanceModalOpen(false)}
+                className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 text-lg font-bold p-1"
+              >
+                ✕
+              </button>
             </div>
 
             {/* Form to add allowance */}
-            <form onSubmit={handleAddAllowance} className="space-y-4">
+            <form onSubmit={handleAddAllowance} className="space-y-3">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   Allowance Title *
@@ -986,10 +1086,10 @@ export function SalaryManagementView({
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Performance Bonus, Overtime"
+                  placeholder="e.g. Overtime, Bonus, Performance"
                   value={allowanceTitle}
                   onChange={(e) => setAllowanceTitle(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl text-xs font-semibold border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none"
+                  className="w-full px-3 py-2 rounded-none text-xs font-medium border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none"
                 />
               </div>
 
@@ -1002,26 +1102,26 @@ export function SalaryManagementView({
                   required
                   min="1"
                   step="any"
-                  placeholder="e.g. 1000"
+                  placeholder="e.g. 1500"
                   value={allowanceAmount}
                   onChange={(e) => setAllowanceAmount(e.target.value === "" ? "" : Number(e.target.value))}
-                  className="w-full px-3.5 py-2.5 rounded-xl text-sm font-bold border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-emerald-600 focus:outline-none"
+                  className="w-full px-3 py-2 rounded-none text-sm font-bold border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-emerald-600 focus:outline-none font-mono"
                 />
               </div>
 
               {/* Submit Buttons */}
-              <div className="pt-2 flex items-center justify-end gap-3 border-t border-slate-100 dark:border-slate-800">
+              <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-200 dark:border-slate-800">
                 <button
                   type="button"
                   onClick={() => setIsAllowanceModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 transition"
+                  className="px-4 py-2 rounded-none text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="px-5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm flex items-center gap-2 transition disabled:opacity-50"
+                  className="px-5 py-2 rounded-none text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs flex items-center gap-1.5 transition disabled:opacity-50"
                 >
                   {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                   Save Allowance
@@ -1031,7 +1131,7 @@ export function SalaryManagementView({
 
             {/* List of active allowances for this month */}
             {existingAllowances.length > 0 && (
-              <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2">
+              <div className="pt-3 border-t border-slate-200 dark:border-slate-800 space-y-2">
                 <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300">
                   Allowances Added for {currentMonth}
                 </h4>
@@ -1039,11 +1139,11 @@ export function SalaryManagementView({
                   {existingAllowances.map((item) => (
                     <div
                       key={item.id}
-                      className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/50 dark:border-slate-700/50 text-xs"
+                      className="flex items-center justify-between p-2 rounded-none bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs"
                     >
                       <div>
                         <div className="font-semibold text-slate-800 dark:text-slate-200">{item.title}</div>
-                        <div className="text-[10px] text-emerald-600 font-bold">+৳{Number(item.amount).toLocaleString()}</div>
+                        <div className="text-[10px] text-emerald-600 font-bold font-mono">+৳{Number(item.amount).toLocaleString()}</div>
                       </div>
                       <button
                         type="button"

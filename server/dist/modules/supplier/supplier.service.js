@@ -590,6 +590,7 @@ class SupplierService {
                             quantity: { increment: item.quantity },
                             purchasePrice: item.unitPurchasePrice,
                             sellingPrice: item.unitSellingPrice,
+                            ...(item.barcode && { barcode: item.barcode }),
                             supplierId: data.supplierId || existingInventory.supplierId,
                             shelfLocation: item.shelfLocation || existingInventory.shelfLocation,
                             receivedDate: data.purchaseDate ? new Date(data.purchaseDate) : existingInventory.receivedDate || new Date(),
@@ -620,6 +621,13 @@ class SupplierService {
                         },
                     });
                     inventoryId = newInv.id;
+                }
+                // Sync barcode to product master if provided
+                if (item.barcode && item.barcode.trim() !== "") {
+                    await tx.product.update({
+                        where: { id: item.productId },
+                        data: { barcode: item.barcode.trim() },
+                    });
                 }
                 // Record Stock Movement
                 await tx.stockMovement.create({

@@ -341,6 +341,21 @@
     max-height: none !important;
   }
 
+  .print-portal .print-voucher-card {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    max-width: 650px !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+    border: none !important;
+    overflow: visible !important;
+    max-height: none !important;
+  }
+
   .print-portal * {
     visibility: visible !important;
   }

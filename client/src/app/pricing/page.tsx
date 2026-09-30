@@ -7,11 +7,8 @@ import { Footer } from "@/components/landing/Footer";
 import { useSettings } from "@/context/SettingsContext";
 import {
   Check,
-  X,
   Sparkles,
   ArrowRight,
-  HelpCircle,
-  PhoneCall,
 } from "lucide-react";
 
 export default function PricingPage() {
@@ -94,39 +91,6 @@ export default function PricingPage() {
     }
     return num;
   };
-
-  const comparisonRows = [
-    { feature: "Active Branches", starter: "Up to 2", growth: "Up to 3", enterprise: "Unlimited" },
-    { feature: "Staff per Branch", starter: "1 Staff", growth: "3 Staff", enterprise: "Unlimited" },
-    { feature: "100% Offline POS", starter: true, growth: true, enterprise: true },
-    { feature: "Automatic Cloud Sync", starter: true, growth: true, enterprise: true },
-    { feature: "Barcode & Expiry Alerts", starter: true, growth: true, enterprise: true },
-    { feature: "Inter-Branch Stock Transfers", starter: false, growth: true, enterprise: true },
-    { feature: "Regional Manager Access", starter: false, growth: true, enterprise: true },
-    { feature: "Branch Price Overrides", starter: false, growth: true, enterprise: true },
-    { feature: "VAT & Tax Compliance Export", starter: false, growth: "Standard", enterprise: "Advanced / MIS" },
-    { feature: "Developer API & Webhooks", starter: false, growth: false, enterprise: true },
-    { feature: "Support SLA", starter: "Email Support", growth: "Priority Email & Phone", enterprise: "24/7 Dedicated Manager" },
-  ];
-
-  const faqs = [
-    {
-      q: "Can I upgrade or downgrade my plan at any time?",
-      a: "Yes. You can upgrade immediately from your billing portal. When upgrading, prorated charges apply automatically.",
-    },
-    {
-      q: "What payment methods do you support in Bangladesh?",
-      a: "We support instant online checkout via SSLCOMMERZ with bKash, Nagad, Rocket, Visa, Mastercard, and corporate bank transfer.",
-    },
-    {
-      q: "Are there any setup fees or hidden costs?",
-      a: "No, there are zero setup fees or hidden charges. You only pay the subscription fee for your selected plan.",
-    },
-    {
-      q: "Does counter POS billing stop if our internet goes down?",
-      a: "Never. PharmaBiz is engineered with an offline-first architecture. Sales continue without interruption and sync up the moment connection restores.",
-    },
-  ];
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 selection:bg-emerald-500 selection:text-white">
@@ -259,7 +223,7 @@ export default function PricingPage() {
                       <li className="flex items-center gap-2.5">
                         <Check className="h-4 w-4 text-emerald-500 shrink-0" />
                         <span>
-                          <strong>{plan.maxBranches >= 999 ? "Unlimited" : plan.maxBranches}</strong> Branches
+                          <strong>{plan.maxBranches >= 999 ? "Unlimited" : plan.maxBranches}</strong> Branches Included
                         </span>
                       </li>
                       <li className="flex items-center gap-2.5">
@@ -273,33 +237,53 @@ export default function PricingPage() {
                         <span>100% Offline POS & Auto Cloud Sync</span>
                       </li>
                       <li className="flex items-center gap-2.5">
-                        {plan.features?.inventoryTransfers ? (
-                          <Check className="h-4 w-4 text-emerald-500 shrink-0" />
-                        ) : (
-                          <X className="h-4 w-4 text-slate-400 shrink-0" />
-                        )}
-                        <span className={plan.features?.inventoryTransfers ? "" : "text-slate-400 line-through"}>
-                          Inter-Branch Stock Movement
+                        <Check className="h-4 w-4 text-emerald-500 shrink-0" />
+                        <span>
+                          {plan.tier === "STARTER"
+                            ? "Real-time Inventory & Stock Tracking"
+                            : plan.tier === "GROWTH"
+                            ? "Multi-Branch Stock & Batch Tracking"
+                            : "Centralized Multi-Store Inventory Control"}
                         </span>
                       </li>
                       <li className="flex items-center gap-2.5">
-                        {plan.features?.regionalAdmin ? (
-                          <Check className="h-4 w-4 text-emerald-500 shrink-0" />
-                        ) : (
-                          <X className="h-4 w-4 text-slate-400 shrink-0" />
-                        )}
-                        <span className={plan.features?.regionalAdmin ? "" : "text-slate-400 line-through"}>
-                          Regional Manager Role
+                        <Check className="h-4 w-4 text-emerald-500 shrink-0" />
+                        <span>
+                          {plan.tier === "STARTER"
+                            ? "Medicine Expiry & Low-Stock Alerts"
+                            : plan.tier === "GROWTH"
+                            ? "Medicine Expiry, Near-Expiry & Damage Tracking"
+                            : "Full Expiry, Damage & Batch Audit Trails"}
                         </span>
                       </li>
                       <li className="flex items-center gap-2.5">
-                        {plan.features?.apiAccess ? (
-                          <Check className="h-4 w-4 text-emerald-500 shrink-0" />
-                        ) : (
-                          <X className="h-4 w-4 text-slate-400 shrink-0" />
-                        )}
-                        <span className={plan.features?.apiAccess ? "" : "text-slate-400 line-through"}>
-                          External API & ERP Integrations
+                        <Check className="h-4 w-4 text-emerald-500 shrink-0" />
+                        <span>
+                          {plan.tier === "STARTER"
+                            ? "Thermal Receipt & Barcode Support"
+                            : plan.tier === "GROWTH"
+                            ? "Customer Ledger & Credit/Due Tracking"
+                            : "Customer Credit Ledger & Accounts Reports"}
+                        </span>
+                      </li>
+                      <li className="flex items-center gap-2.5">
+                        <Check className="h-4 w-4 text-emerald-500 shrink-0" />
+                        <span>
+                          {plan.tier === "STARTER"
+                            ? "Daily Sales & Revenue Reports"
+                            : plan.tier === "GROWTH"
+                            ? "Custom Staff Roles & Permission Assignment"
+                            : "Unlimited Custom Roles & Granular RBAC"}
+                        </span>
+                      </li>
+                      <li className="flex items-center gap-2.5">
+                        <Check className="h-4 w-4 text-emerald-500 shrink-0" />
+                        <span>
+                          {plan.tier === "STARTER"
+                            ? "Standard Helpdesk & Email Support"
+                            : plan.tier === "GROWTH"
+                            ? "Comprehensive Profit/Loss & Tax Reports"
+                            : "Advanced Business Analytics & VAT/Tax Export"}
                         </span>
                       </li>
                     </ul>
@@ -307,117 +291,6 @@ export default function PricingPage() {
                 </div>
               );
             })}
-          </div>
-
-          {/* Feature Comparison Matrix */}
-          <div className="mt-20 max-w-5xl 2xl:max-w-6xl mx-auto">
-            <div className="text-center space-y-3 mb-10">
-              <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white">
-                Detailed Plan Feature Matrix
-              </h2>
-              <p className="text-sm sm:text-base text-slate-600 dark:text-slate-400">
-                Compare limits and features side-by-side to select the right tier.
-              </p>
-            </div>
-
-            <div className="table-responsive-container rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
-              <table className="w-full min-w-[650px] text-left border-collapse text-sm">
-                <thead>
-                  <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/75 dark:bg-slate-800/50">
-                    <th className="py-4 px-6 font-bold text-slate-900 dark:text-white">Platform Feature</th>
-                    <th className="py-4 px-6 font-bold text-slate-900 dark:text-white text-center">Starter</th>
-                    <th className="py-4 px-6 font-bold text-brand-primary text-center">Growth</th>
-                    <th className="py-4 px-6 font-bold text-slate-900 dark:text-white text-center">Enterprise</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs sm:text-sm">
-                  {comparisonRows.map((row, idx) => (
-                    <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition">
-                      <td className="py-3.5 px-6 font-medium text-slate-700 dark:text-slate-200">
-                        {row.feature}
-                      </td>
-                      <td className="py-3.5 px-6 text-center text-slate-600 dark:text-slate-300">
-                        {typeof row.starter === "boolean" ? (
-                          row.starter ? (
-                            <Check className="h-4 w-4 text-emerald-500 mx-auto" />
-                          ) : (
-                            <X className="h-4 w-4 text-slate-400 mx-auto" />
-                          )
-                        ) : (
-                          row.starter
-                        )}
-                      </td>
-                      <td className="py-3.5 px-6 text-center font-semibold text-slate-800 dark:text-slate-100 bg-emerald-50/30 dark:bg-emerald-950/10">
-                        {typeof row.growth === "boolean" ? (
-                          row.growth ? (
-                            <Check className="h-4 w-4 text-emerald-500 mx-auto" />
-                          ) : (
-                            <X className="h-4 w-4 text-slate-400 mx-auto" />
-                          )
-                        ) : (
-                          row.growth
-                        )}
-                      </td>
-                      <td className="py-3.5 px-6 text-center text-slate-600 dark:text-slate-300">
-                        {typeof row.enterprise === "boolean" ? (
-                          row.enterprise ? (
-                            <Check className="h-4 w-4 text-emerald-500 mx-auto" />
-                          ) : (
-                            <X className="h-4 w-4 text-slate-400 mx-auto" />
-                          )
-                        ) : (
-                          row.enterprise
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Pricing FAQ */}
-          <div className="mt-20 max-w-4xl 2xl:max-w-5xl mx-auto">
-            <div className="text-center space-y-3 mb-10">
-              <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-brand-primary">
-                <HelpCircle className="h-4 w-4" />
-                Frequently Asked Questions
-              </div>
-              <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white">
-                Everything You Need To Know About Pricing
-              </h2>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {faqs.map((faq, idx) => (
-                <div
-                  key={idx}
-                  className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-2"
-                >
-                  <h4 className="text-base font-bold text-slate-900 dark:text-white">{faq.q}</h4>
-                  <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
-                    {faq.a}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Bottom Consultation Banner */}
-          <div className="mt-16 max-w-4xl 2xl:max-w-5xl mx-auto rounded-3xl bg-slate-900 text-white p-8 sm:p-10 shadow-xl flex flex-col sm:flex-row items-center justify-between gap-6">
-            <div className="space-y-2 text-center sm:text-left">
-              <h3 className="text-xl sm:text-2xl font-bold">Have complex multi-chain requirements?</h3>
-              <p className="text-sm text-slate-400 max-w-md">
-                Our healthcare deployment specialists will consult with you to design a custom hardware and cloud sync architecture.
-              </p>
-            </div>
-            <Link
-              href="/contact"
-              className="px-6 py-3.5 rounded-xl bg-brand-primary text-white text-sm font-bold shadow hover:opacity-90 transition shrink-0 flex items-center gap-2"
-            >
-              <PhoneCall className="h-4 w-4" />
-              Contact Our Team
-            </Link>
           </div>
         </div>
       </main>

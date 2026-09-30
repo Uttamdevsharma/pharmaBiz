@@ -59,7 +59,7 @@ export function AddProductView({
     name: editingProduct?.name || "",
     genericName: editingProduct?.genericName || "",
     sku: editingProduct?.sku || "",
-    barcode: editingProduct?.barcode || `${Math.floor(100000000000 + Math.random() * 900000000000)}`,
+    barcode: editingProduct?.barcode || "",
     basePrice: editingProduct?.basePrice ? Number(editingProduct.basePrice) : 0,
     categoryId: editingProduct?.categoryId || "",
     subcategoryId: editingProduct?.subcategoryId || "",
@@ -135,7 +135,7 @@ export function AddProductView({
         name: editingProduct.name || "",
         genericName: editingProduct.genericName || "",
         sku: editingProduct.sku || "",
-        barcode: editingProduct.barcode || `${Math.floor(100000000000 + Math.random() * 900000000000)}`,
+        barcode: editingProduct.barcode || "",
         basePrice: editingProduct.basePrice ? Number(editingProduct.basePrice) : 0,
         categoryId: editingProduct.categoryId || "",
         subcategoryId: editingProduct.subcategoryId || "",
@@ -344,7 +344,7 @@ export function AddProductView({
         name: formData.name.trim(),
         genericName: formData.genericName?.trim() || null,
         sku: formData.sku?.trim() || undefined,
-        barcode: formData.barcode || null,
+        barcode: formData.barcode?.trim() || null,
         basePrice: Number(formData.basePrice) || 0,
         categoryId: formData.categoryId || null,
         subcategoryId: formData.subcategoryId || null,
@@ -407,7 +407,7 @@ export function AddProductView({
       name: "",
       genericName: "",
       sku: "",
-      barcode: `${Math.floor(100000000000 + Math.random() * 900000000000)}`,
+      barcode: "",
       basePrice: 0,
       categoryId: defaultCat?.id || "",
       subcategoryId: "",
@@ -533,6 +533,20 @@ export function AddProductView({
                 value={formData.genericName}
                 onChange={(e) => setFormData({ ...formData, genericName: e.target.value })}
                 className="w-full h-12 sm:h-12 xl:h-13 px-4 bg-slate-50/70 hover:bg-slate-50 dark:bg-slate-800/60 dark:hover:bg-slate-800/80 focus:bg-white dark:focus:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-sm sm:text-base xl:text-lg font-semibold text-slate-900 dark:text-white placeholder:text-xs sm:placeholder:text-sm xl:placeholder:text-base placeholder:font-normal placeholder:text-slate-400 dark:placeholder:text-slate-500 outline-none focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20 transition-all"
+              />
+            </div>
+
+            {/* Barcode (Optional) */}
+            <div>
+              <label className="block text-sm sm:text-base xl:text-lg font-bold text-slate-800 dark:text-slate-200 mb-2">
+                Barcode <span className="text-xs font-normal text-slate-400">(Optional — Scan box or type)</span>
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. Scan packaging or type barcode"
+                value={formData.barcode}
+                onChange={(e) => setFormData({ ...formData, barcode: e.target.value })}
+                className="w-full h-12 sm:h-12 xl:h-13 px-4 bg-slate-50/70 hover:bg-slate-50 dark:bg-slate-800/60 dark:hover:bg-slate-800/80 focus:bg-white dark:focus:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-sm sm:text-base xl:text-lg font-semibold font-mono text-slate-900 dark:text-white placeholder:text-xs sm:placeholder:text-sm xl:placeholder:text-base placeholder:font-normal placeholder:text-slate-400 dark:placeholder:text-slate-500 outline-none focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20 transition-all"
               />
             </div>
 

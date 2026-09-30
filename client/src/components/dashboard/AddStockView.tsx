@@ -151,6 +151,7 @@ export interface StockLineItem {
 
   // Metadata
   lotNumber: string;
+  barcode?: string;
   mfgDate: string;
   expiryDate: string;
   shelfLocation: string;
@@ -472,6 +473,7 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
       discountPercent: 0,
       unitSellingPrice: initialSelling,
       lotNumber: `BAT-${Math.floor(10000 + Math.random() * 90000)}`,
+      barcode: prod.barcode || "",
       mfgDate: new Date().toISOString().slice(0, 10),
       expiryDate: twoYearsLater,
       shelfLocation: prod.shelfLocation || "Main Shelf",
@@ -607,7 +609,7 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
         return {
           productId: item.productId,
           batchNumber: item.lotNumber || `BAT-${Date.now().toString().slice(-6)}`,
-          barcode: item.product.barcode || null,
+          barcode: (item.barcode !== undefined ? item.barcode.trim() : item.product.barcode) || null,
           mfgDate: item.mfgDate || null,
           expiryDate: item.expiryDate || null,
           packageType: item.product.productType || "Medicine",
@@ -688,7 +690,7 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
           <button
             type="button"
             onClick={() => onNavigate("stock_stock_list")}
-            className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-bold rounded-xl bg-white dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-700 transition shadow-sm"
+            className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-bold rounded-none bg-white dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-700 transition shadow-sm"
           >
             <ArrowLeft className="w-4 h-4" />
             Back to Stock List
@@ -698,7 +700,7 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
 
       {/* Notifications */}
       {error && (
-        <div className="p-4 bg-rose-50 dark:bg-rose-950/50 border-2 border-rose-300 dark:border-rose-900 rounded-xl flex items-start gap-3 text-rose-900 dark:text-rose-200 shadow-md">
+        <div className="p-4 bg-rose-50 dark:bg-rose-950/50 border-2 border-rose-300 dark:border-rose-900 rounded-none flex items-start gap-3 text-rose-900 dark:text-rose-200 shadow-md">
           <AlertCircle className="w-6 h-6 mt-0.5 flex-shrink-0 text-rose-600" />
           <div className="flex-1 text-base font-bold">{error}</div>
           <button onClick={() => setError(null)} className="text-rose-400 hover:text-rose-600">
@@ -708,7 +710,7 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
       )}
 
       {success && (
-        <div className="p-4 bg-emerald-50 dark:bg-emerald-950/50 border-2 border-emerald-300 dark:border-emerald-800 rounded-xl flex items-center gap-3 text-emerald-900 dark:text-emerald-200 shadow-md">
+        <div className="p-4 bg-emerald-50 dark:bg-emerald-950/50 border-2 border-emerald-300 dark:border-emerald-800 rounded-none flex items-center gap-3 text-emerald-900 dark:text-emerald-200 shadow-md">
           <CheckCircle2 className="w-7 h-7 text-emerald-600 flex-shrink-0" />
           <div>
             <h4 className="font-black text-base sm:text-lg">Stock Added Successfully!</h4>
@@ -720,7 +722,7 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
       )}
 
       {/* Section 1: Supplier & Invoice Metadata Header */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border-2 border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-sm space-y-4">
+      <div className="bg-white dark:bg-slate-900 rounded-none border-2 border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-sm space-y-4">
         <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white flex items-center gap-2 pb-2 border-b border-slate-100 dark:border-slate-800">
           <Building className="w-5 h-5 text-emerald-600" />
           Supplier Information
@@ -737,7 +739,7 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
               disabled={isBranchLocked}
               value={selectedBranchId}
               onChange={(e) => setSelectedBranchId(e.target.value)}
-              className="w-full text-sm font-bold bg-slate-50 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 disabled:opacity-70 h-11"
+              className="w-full text-sm font-bold bg-slate-50 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-none px-3.5 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 disabled:opacity-70 h-11"
             >
               {branches.map((b) => (
                 <option key={b.id} value={b.id}>
@@ -761,7 +763,7 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
             <select
               value={selectedSupplierId}
               onChange={(e) => setSelectedSupplierId(e.target.value)}
-              className="w-full text-sm font-bold bg-slate-50 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 h-11"
+              className="w-full text-sm font-bold bg-slate-50 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-none px-3.5 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 h-11"
             >
               <option value="">-- Local Market / Cash Purchase --</option>
               {suppliers.map((s) => (
@@ -782,7 +784,7 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
               disabled={!selectedSupplierId}
               value={selectedContactId}
               onChange={(e) => setSelectedContactId(e.target.value)}
-              className="w-full text-sm font-bold bg-slate-50 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-slate-100 dark:disabled:bg-slate-900 h-11"
+              className="w-full text-sm font-bold bg-slate-50 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-none px-3.5 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-slate-100 dark:disabled:bg-slate-900 h-11"
             >
               {!selectedSupplierId ? (
                 <option value="">N/A (Local / Cash Purchase)</option>
@@ -809,14 +811,14 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
               type="date"
               value={purchaseDate}
               onChange={(e) => setPurchaseDate(e.target.value)}
-              className="w-full text-sm font-bold bg-slate-50 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 h-11 font-mono"
+              className="w-full text-sm font-bold bg-slate-50 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-none px-3.5 py-2 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 h-11 font-mono"
             />
           </div>
         </div>
       </div>
 
       {/* Section 2: Product Search & Dynamic Stock Items Grid */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border-2 border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+      <div className="bg-white dark:bg-slate-900 rounded-none border-2 border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
         {/* Search Header Bar */}
         <div className="p-4 sm:p-5 bg-slate-50/80 dark:bg-slate-800/60 border-b-2 border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
           <div className="relative w-full max-w-xl lg:max-w-2xl" ref={searchContainerRef}>
@@ -842,7 +844,7 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
                   setIsSearchOpen(true);
                 }}
                 placeholder="Search medicine or scan barcode..."
-                className="w-full pl-12 sm:pl-13 pr-10 py-3 sm:py-3.5 bg-white dark:bg-slate-900 border-2 border-emerald-500/60 dark:border-emerald-500/40 focus:border-emerald-600 dark:focus:border-emerald-500 rounded-xl text-sm sm:text-base text-slate-900 dark:text-white placeholder-slate-400 font-bold outline-none focus:ring-4 focus:ring-emerald-500/15 transition shadow-sm h-12 sm:h-13"
+                className="w-full pl-12 sm:pl-13 pr-10 py-3 sm:py-3.5 bg-white dark:bg-slate-900 border-2 border-emerald-500/60 dark:border-emerald-500/40 focus:border-emerald-600 dark:focus:border-emerald-500 rounded-none text-sm sm:text-base text-slate-900 dark:text-white placeholder-slate-400 font-bold outline-none focus:ring-4 focus:ring-emerald-500/15 transition shadow-sm h-12 sm:h-13"
               />
 
               {searchTerm && (
@@ -862,7 +864,7 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
 
             {/* Autocomplete Dropdown List - Fixed Max Height with Smooth Scroll */}
             {isSearchOpen && (
-              <div className="absolute left-0 right-0 top-full mt-2 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl z-50 max-h-[360px] overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 overscroll-contain">
+              <div className="absolute left-0 right-0 top-full mt-2 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-none shadow-2xl z-50 max-h-[360px] overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 overscroll-contain">
                 {searchResults.length > 0 ? (
                   searchResults.map((prod) => {
                     const stock = getProductStockCount(prod);
@@ -877,7 +879,7 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
                         className="px-4 py-3.5 hover:bg-emerald-50 dark:hover:bg-emerald-950/50 cursor-pointer flex items-center justify-between transition"
                       >
                         <div className="flex items-center gap-3">
-                          <div className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200">
+                          <div className="p-2.5 rounded-none bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200">
                             {model === "TABLET" && <Pill className="w-5 h-5 text-emerald-600" />}
                             {model === "BOTTLE" && <Droplets className="w-5 h-5 text-blue-600" />}
                             {model === "PIECE" && <Package className="w-5 h-5 text-amber-600" />}
@@ -887,7 +889,7 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
                             <div className="text-sm sm:text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
                               <span>{prod.name}</span>
                               <span
-                                className={`text-xs px-2 py-0.5 rounded-md font-bold uppercase tracking-wider ${
+                                className={`text-xs px-2 py-0.5 rounded-none font-bold uppercase tracking-wider ${
                                   model === "TABLET"
                                     ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/70 dark:text-emerald-300"
                                     : model === "BOTTLE"
@@ -915,7 +917,7 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
                         <div className="text-right flex items-center gap-3">
                           <div>
                             <span
-                              className={`text-xs font-black px-2.5 py-1 rounded-full ${
+                              className={`text-xs font-black px-2.5 py-1 rounded-none ${
                                 stock > 0
                                   ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-300"
                                   : "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300"
@@ -927,7 +929,7 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
                               MRP: ৳{Number(prod.effectivePrice || prod.basePrice || 0).toFixed(2)}
                             </div>
                           </div>
-                          <div className="p-2 rounded-lg bg-emerald-600 text-white shadow-sm">
+                          <div className="p-2 rounded-none bg-emerald-600 text-white shadow-sm">
                             <Plus className="w-4 h-4" />
                           </div>
                         </div>
@@ -948,7 +950,7 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
                         e.preventDefault();
                         onNavigate("inv_add_product");
                       }}
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs sm:text-sm font-black shadow-sm transition"
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-none text-xs sm:text-sm font-black shadow-sm transition"
                     >
                       <Plus className="w-4 h-4" />
                       Add Product in Catalog
@@ -961,7 +963,7 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
 
           {/* Right side items counter badge */}
           <div className="flex items-center gap-2 text-xs sm:text-sm font-bold text-slate-600 dark:text-slate-300 self-end sm:self-center">
-            <span className="px-3.5 py-2 rounded-xl bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 shadow-xs flex items-center gap-2">
+            <span className="px-3.5 py-2 rounded-none bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 shadow-xs flex items-center gap-2">
               <span className={`w-2.5 h-2.5 rounded-full ${lineItems.length > 0 ? "bg-emerald-500 animate-pulse" : "bg-slate-300 dark:bg-slate-600"}`} />
               <span>{lineItems.length} {lineItems.length === 1 ? "Product" : "Products"} in Table</span>
             </span>
@@ -979,7 +981,7 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
                 <th className="py-3.5 px-3.5 min-w-[130px]">Unit Cost (৳)</th>
                 <th className="py-3.5 px-4 min-w-[120px] text-right">Total (৳)</th>
                 <th className="py-3.5 px-3.5 min-w-[130px]">MRP (৳)</th>
-                <th className="py-3.5 px-3.5 min-w-[160px]">Batch &amp; EXP Date</th>
+                <th className="py-3.5 px-3.5 min-w-[180px]">Barcode, Batch &amp; EXP</th>
                 <th className="py-3.5 px-2 text-center w-12">
                   <Trash2 className="w-4 h-4 mx-auto text-white/80" />
                 </th>
@@ -1047,14 +1049,14 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
                       {/* Stock In Unit & Intake Qty Input */}
                       <td className="py-4 px-3.5 space-y-2">
                         {isTablet ? (
-                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 font-bold text-xs border border-blue-200 dark:border-blue-800">
+                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-none bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 font-bold text-xs border border-blue-200 dark:border-blue-800">
                             <span>Box Intake</span>
                             <span className="text-[11px] text-blue-500 dark:text-blue-400 font-mono">
                               ({item.stripsPerBox * item.tabletsPerStrip} tabs/box)
                             </span>
                           </div>
                         ) : (
-                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs border border-slate-200 dark:border-slate-700 capitalize">
+                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-none bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs border border-slate-200 dark:border-slate-700 capitalize">
                             <span>Unit:</span>
                             <span className="font-mono text-brand-primary">
                               {item.product.unit || "Piece"}
@@ -1074,7 +1076,7 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
                                 enteredQuantity: Math.max(1, Number(e.target.value) || 1),
                               })
                             }
-                            className="w-24 sm:w-28 h-10 text-sm sm:text-base font-black text-slate-900 dark:text-white bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-3 text-right focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20 font-mono shadow-xs outline-none"
+                            className="w-24 sm:w-28 h-10 text-sm sm:text-base font-black text-slate-900 dark:text-white bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-none px-3 text-right focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20 font-mono shadow-xs outline-none"
                           />
                           <span className="text-sm font-black text-slate-800 dark:text-slate-200 capitalize">
                             {isTablet
@@ -1117,7 +1119,7 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
                                 unitCostBeforeDiscount: Math.max(0, Number(e.target.value) || 0),
                               })
                             }
-                            className="w-full h-10 text-sm sm:text-base font-black text-slate-900 dark:text-white bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-3 text-right focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20 font-mono outline-none shadow-xs"
+                            className="w-full h-10 text-sm sm:text-base font-black text-slate-900 dark:text-white bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-none px-3 text-right focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20 font-mono outline-none shadow-xs"
                           />
                           {isTablet && (
                             <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mt-1 text-right font-mono">
@@ -1129,7 +1131,7 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
 
                       {/* Total (৳) */}
                       <td className="py-4 px-4 text-right align-middle">
-                        <div className="inline-flex items-center justify-end px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 shadow-2xs">
+                        <div className="inline-flex items-center justify-end px-3.5 py-2 rounded-none bg-slate-100 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 shadow-2xs">
                           <span className="text-base sm:text-lg font-black text-brand-primary font-mono">
                             ৳{Math.round(item.lineTotal).toLocaleString("en-BD")}
                           </span>
@@ -1154,7 +1156,7 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
                                 unitSellingPrice: Math.max(0, Number(e.target.value) || 0),
                               })
                             }
-                            className="w-full h-10 text-sm sm:text-base font-black text-slate-900 dark:text-white bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-3 text-right focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20 font-mono outline-none shadow-xs"
+                            className="w-full h-10 text-sm sm:text-base font-black text-slate-900 dark:text-white bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-none px-3 text-right focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20 font-mono outline-none shadow-xs"
                           />
                           {isTablet && (
                             <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mt-1 text-right font-mono">
@@ -1164,21 +1166,44 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
                         </div>
                       </td>
 
-                      {/* Lot / Batch & Expiry Date */}
+                      {/* Barcode, Lot / Batch & Expiry Date */}
                       <td className="py-4 px-3.5 space-y-2">
-                        <input
-                          type="text"
-                          value={item.lotNumber}
-                          onChange={(e) =>
-                            updateLineItem(item.id, {
-                              lotNumber: e.target.value,
-                            })
-                          }
-                          placeholder="Batch / Lot #"
-                          className="w-full h-9 text-xs sm:text-sm font-bold font-mono bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-3 focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20 outline-none"
-                        />
+                        <div>
+                          <div className="text-[10px] font-black uppercase text-slate-400 mb-1">
+                            Barcode:
+                          </div>
+                          <input
+                            type="text"
+                            value={item.barcode ?? (item.product?.barcode || "")}
+                            onChange={(e) =>
+                              updateLineItem(item.id, {
+                                barcode: e.target.value,
+                              })
+                            }
+                            placeholder="Scan / Barcode #"
+                            className="w-full h-8 text-xs font-bold font-mono bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-none px-2.5 focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20 outline-none"
+                          />
+                        </div>
+
+                        <div>
+                          <div className="text-[10px] font-black uppercase text-slate-400 mb-1">
+                            Batch / Lot #:
+                          </div>
+                          <input
+                            type="text"
+                            value={item.lotNumber}
+                            onChange={(e) =>
+                              updateLineItem(item.id, {
+                                lotNumber: e.target.value,
+                              })
+                            }
+                            placeholder="Batch #"
+                            className="w-full h-8 text-xs font-bold font-mono bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-none px-2.5 focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20 outline-none"
+                          />
+                        </div>
+
                         <div className="flex items-center gap-1.5 text-xs font-black text-slate-500">
-                          <span className="text-[11px] font-black uppercase text-slate-400">EXP:</span>
+                          <span className="text-[10px] font-black uppercase text-slate-400 shrink-0">EXP:</span>
                           <input
                             type="date"
                             value={item.expiryDate}
@@ -1187,7 +1212,7 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
                                 expiryDate: e.target.value,
                               })
                             }
-                            className="h-9 text-xs font-bold bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-2 text-slate-900 dark:text-white font-mono w-full focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20 outline-none"
+                            className="h-8 text-xs font-bold bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-none px-2 text-slate-900 dark:text-white font-mono w-full focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20 outline-none"
                           />
                         </div>
                       </td>
@@ -1197,7 +1222,7 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
                         <button
                           type="button"
                           onClick={() => removeLineItem(item.id)}
-                          className="p-2 rounded-xl text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition cursor-pointer"
+                          className="p-2 rounded-none text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition cursor-pointer"
                           title="Remove item"
                         >
                           <X className="w-5 h-5 mx-auto" />
@@ -1230,7 +1255,7 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
       </div>
 
       {/* Section 3: Discount Section */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border-2 border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-sm">
+      <div className="bg-white dark:bg-slate-900 rounded-none border-2 border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-sm">
         <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white mb-4 pb-2 border-b border-slate-100 dark:border-slate-800">
           Discount
         </h2>
@@ -1245,7 +1270,7 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
               <select
                 value={discountType}
                 onChange={(e) => setDiscountType(e.target.value as any)}
-                className="w-full text-sm font-bold bg-slate-50 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 h-11"
+                className="w-full text-sm font-bold bg-slate-50 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-none px-3.5 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 h-11"
               >
                 <option value="NONE">None</option>
                 <option value="FIXED">Fixed Amount (৳)</option>
@@ -1265,13 +1290,13 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
                 value={discountAmount}
                 onChange={(e) => setDiscountAmount(Math.max(0, Number(e.target.value) || 0))}
                 placeholder="0.00"
-                className="w-full text-sm font-bold bg-slate-50 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 disabled:opacity-50 h-11 font-mono"
+                className="w-full text-sm font-bold bg-slate-50 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-none px-3.5 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 disabled:opacity-50 h-11 font-mono"
               />
             </div>
           </div>
 
           {/* Right Column: Financial Breakdown Summary */}
-          <div className="bg-slate-50 dark:bg-slate-800/50 rounded-2xl p-6 border-2 border-slate-200 dark:border-slate-800 flex flex-col justify-between space-y-4">
+          <div className="bg-slate-50 dark:bg-slate-800/50 rounded-none p-6 border-2 border-slate-200 dark:border-slate-800 flex flex-col justify-between space-y-4">
             <div className="space-y-4 divide-y-2 divide-slate-200 dark:divide-slate-700/60">
               <div className="flex justify-between items-center py-1">
                 <span className="text-sm sm:text-base font-bold text-slate-600 dark:text-slate-400">Subtotal:</span>
@@ -1299,7 +1324,7 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
       </div>
 
       {/* Section 4: Add Payment Section */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border-2 border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-sm space-y-5">
+      <div className="bg-white dark:bg-slate-900 rounded-none border-2 border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-sm space-y-5">
         <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white flex items-center gap-2 pb-2 border-b border-slate-100 dark:border-slate-800">
           <CreditCard className="w-6 h-6 text-emerald-600" />
           Payment
@@ -1333,7 +1358,7 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
                 placeholder={`৳${netTotalAmount}`}
                 value={paidAmount}
                 onChange={(e) => setPaidAmount(Math.max(0, Math.round(Number(e.target.value) || 0)))}
-                className="w-full pl-8 pr-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-xl text-sm sm:text-base font-black text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 font-mono h-11"
+                className="w-full pl-8 pr-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-none text-sm sm:text-base font-black text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 font-mono h-11"
               />
             </div>
           </div>
@@ -1347,7 +1372,7 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
               type="datetime-local"
               value={paidOnDate}
               onChange={(e) => setPaidOnDate(e.target.value)}
-              className="w-full text-sm font-bold bg-slate-50 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 h-11"
+              className="w-full text-sm font-bold bg-slate-50 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-none px-3.5 py-2 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 h-11"
             />
           </div>
 
@@ -1382,7 +1407,7 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
                   setPaymentMethod(acc.type || acc.name);
                 }
               }}
-              className="w-full text-sm font-bold bg-slate-50 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 h-11"
+              className="w-full text-sm font-bold bg-slate-50 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-none px-3.5 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 h-11"
             >
               {financialAccounts.length > 0 ? (
                 financialAccounts.map((acc) => (
@@ -1403,7 +1428,7 @@ export function AddStockView({ onNavigate }: AddStockViewProps) {
             type="button"
             disabled={submitting || lineItems.length === 0}
             onClick={handleSubmitStock}
-            className="w-full sm:w-auto px-10 py-3.5 bg-brand-primary hover:bg-brand-primary-hover text-white rounded-xl text-base sm:text-lg font-black shadow-lg hover:shadow-xl transition flex items-center justify-center gap-2.5 disabled:opacity-50 disabled:cursor-not-allowed h-13 cursor-pointer"
+            className="w-full sm:w-auto px-10 py-3.5 bg-brand-primary hover:bg-brand-primary-hover text-white rounded-none text-base sm:text-lg font-black shadow-lg hover:shadow-xl transition flex items-center justify-center gap-2.5 disabled:opacity-50 disabled:cursor-not-allowed h-13 cursor-pointer"
           >
             {submitting ? (
               <>

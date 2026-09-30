@@ -144,15 +144,18 @@ export function CreateStaffTab({
           </div>
           <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white flex items-center gap-2.5">
             <Users className="h-7 w-7 text-brand-primary" />
-            Create Staff Member
+            <span>Create Staff Member</span>
           </h1>
+          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+            Create a new platform administrator or executive staff member with custom roles.
+          </p>
         </div>
 
         {onNavigateToList && (
           <button
             type="button"
             onClick={onNavigateToList}
-            className="h-11 px-5 rounded-xl text-sm font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 transition flex items-center gap-2 cursor-pointer"
+            className="h-10 px-4 rounded-none text-xs sm:text-sm font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition flex items-center gap-2 cursor-pointer"
           >
             <span>View Staff List</span>
             <ArrowRight className="h-4 w-4" />
@@ -162,205 +165,236 @@ export function CreateStaffTab({
 
       {/* Alerts */}
       {errorMsg && (
-        <div className="flex items-center gap-2.5 p-4 rounded-xl text-sm font-medium bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800">
+        <div className="flex items-center gap-2.5 p-4 rounded-none text-xs sm:text-sm font-medium bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800">
           <AlertCircle className="h-5 w-5 text-red-500 shrink-0" />
           <span>{errorMsg}</span>
         </div>
       )}
 
       {successMsg && (
-        <div className="flex items-center gap-2.5 p-4 rounded-xl text-sm font-medium bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+        <div className="flex items-center gap-2.5 p-4 rounded-none text-xs sm:text-sm font-medium bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
           <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" />
           <span>{successMsg}</span>
         </div>
       )}
 
-      {/* Staff Information Form Card */}
-      <form
-        onSubmit={handleSubmit}
-        className="bg-white dark:bg-slate-900 p-6 sm:p-8 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-6"
-      >
-        {/* Row 1: Full Name, Email Address, Phone Number */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-          {/* Full Name */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-              Full Name <span className="text-red-500">*</span>
-            </label>
-            <div className="relative">
-              <User className="h-4 w-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                required
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Shakil Ahmed"
-                className="w-full pl-10 pr-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary"
-              />
+      {/* Loading Skeleton */}
+      {loadingRoles ? (
+        <div className="bg-white dark:bg-slate-900 p-6 sm:p-8 rounded-none border border-slate-200 dark:border-slate-800 shadow-xs space-y-6 animate-pulse">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            <div className="space-y-2">
+              <div className="h-4 w-24 bg-slate-200 dark:bg-slate-700 rounded-none" />
+              <div className="h-11 w-full bg-slate-100 dark:bg-slate-800 rounded-none" />
+            </div>
+            <div className="space-y-2">
+              <div className="h-4 w-28 bg-slate-200 dark:bg-slate-700 rounded-none" />
+              <div className="h-11 w-full bg-slate-100 dark:bg-slate-800 rounded-none" />
+            </div>
+            <div className="space-y-2">
+              <div className="h-4 w-24 bg-slate-200 dark:bg-slate-700 rounded-none" />
+              <div className="h-11 w-full bg-slate-100 dark:bg-slate-800 rounded-none" />
             </div>
           </div>
-
-          {/* Email Address */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-              Email Address <span className="text-red-500">*</span>
-            </label>
-            <div className="relative">
-              <Mail className="h-4 w-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="name@pharmacy.com"
-                className="w-full pl-10 pr-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary"
-              />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            <div className="space-y-2">
+              <div className="h-4 w-20 bg-slate-200 dark:bg-slate-700 rounded-none" />
+              <div className="h-11 w-full bg-slate-100 dark:bg-slate-800 rounded-none" />
+            </div>
+            <div className="space-y-2">
+              <div className="h-4 w-24 bg-slate-200 dark:bg-slate-700 rounded-none" />
+              <div className="h-11 w-full bg-slate-100 dark:bg-slate-800 rounded-none" />
+            </div>
+            <div className="space-y-2">
+              <div className="h-4 w-32 bg-slate-200 dark:bg-slate-700 rounded-none" />
+              <div className="h-11 w-full bg-slate-100 dark:bg-slate-800 rounded-none" />
             </div>
           </div>
-
-          {/* Phone Number */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-              Phone Number
-            </label>
-            <div className="relative">
-              <Phone className="h-4 w-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="01700000000"
-                className="w-full pl-10 pr-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary"
-              />
-            </div>
-          </div>
+          <div className="h-14 w-full bg-slate-100 dark:bg-slate-800 rounded-none" />
+          <div className="h-11 w-44 ml-auto bg-slate-200 dark:bg-slate-700 rounded-none" />
         </div>
+      ) : (
+        /* Staff Information Form Card */
+        <form
+          onSubmit={handleSubmit}
+          className="bg-white dark:bg-slate-900 p-6 sm:p-8 rounded-none border border-slate-200 dark:border-slate-800 shadow-xs space-y-6"
+        >
+          {/* Row 1: Full Name, Email Address, Phone Number (clean serial flow) */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            {/* Full Name */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                Full Name <span className="text-red-500">*</span>
+              </label>
+              <div className="relative">
+                <User className="h-4 w-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  required
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="e.g. Shakil Ahmed"
+                  className="w-full pl-10 pr-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-none text-sm focus:outline-none focus:border-brand-primary"
+                />
+              </div>
+            </div>
 
-        {/* Row 2: Password, Select Role, Assign to Department */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-          {/* Password */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-              Password <span className="text-red-500">*</span>
-            </label>
-            <div className="relative">
-              <Lock className="h-4 w-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-              <input
-                type={showPassword ? "text" : "password"}
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Minimum 6 characters"
-                className="w-full pl-10 pr-10 py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary font-mono"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
-              >
-                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
+            {/* Email Address */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                Email Address <span className="text-red-500">*</span>
+              </label>
+              <div className="relative">
+                <Mail className="h-4 w-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="name@pharmacy.com"
+                  className="w-full pl-10 pr-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-none text-sm focus:outline-none focus:border-brand-primary"
+                />
+              </div>
+            </div>
+
+            {/* Phone Number */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                Phone Number
+              </label>
+              <div className="relative">
+                <Phone className="h-4 w-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="01700000000"
+                  className="w-full pl-10 pr-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-none text-sm focus:outline-none focus:border-brand-primary"
+                />
+              </div>
             </div>
           </div>
 
-          {/* Select Role */}
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                Select Role <span className="text-red-500">*</span>
+          {/* Row 2: Password, Select Role, Assign to Department */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            {/* Password */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                Password <span className="text-red-500">*</span>
               </label>
-              {onNavigateToRoles && (
+              <div className="relative">
+                <Lock className="h-4 w-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type={showPassword ? "text" : "password"}
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Minimum 6 characters"
+                  className="w-full pl-10 pr-10 py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-none text-sm focus:outline-none focus:border-brand-primary font-mono"
+                />
                 <button
                   type="button"
-                  onClick={onNavigateToRoles}
-                  className="text-[11px] font-bold text-brand-primary hover:underline cursor-pointer"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
                 >
-                  Manage Roles
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
-              )}
+              </div>
             </div>
-            <div className="relative">
-              <KeyRound className="h-4 w-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-              <select
-                required
-                value={selectedRole}
-                onChange={(e) => setSelectedRole(e.target.value)}
-                disabled={loadingRoles}
-                className="w-full pl-10 pr-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-brand-primary cursor-pointer appearance-none"
-              >
-                {loadingRoles ? (
-                  <option>Loading roles...</option>
-                ) : (
-                  roles.map((r) => (
+
+            {/* Select Role */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                  Select Role <span className="text-red-500">*</span>
+                </label>
+                {onNavigateToRoles && (
+                  <button
+                    type="button"
+                    onClick={onNavigateToRoles}
+                    className="text-[11px] font-bold text-brand-primary hover:underline cursor-pointer"
+                  >
+                    Manage Roles
+                  </button>
+                )}
+              </div>
+              <div className="relative">
+                <KeyRound className="h-4 w-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <select
+                  required
+                  value={selectedRole}
+                  onChange={(e) => setSelectedRole(e.target.value)}
+                  className="w-full pl-10 pr-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-none text-sm font-semibold focus:outline-none focus:border-brand-primary cursor-pointer appearance-none"
+                >
+                  {roles.map((r) => (
                     <option key={r.id} value={r.id}>
                       {r.name}
                     </option>
-                  ))
-                )}
-              </select>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Assign Department / Scope */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                Assign to Branch / Department
+              </label>
+              <div className="relative">
+                <Building className="h-4 w-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <select
+                  value={assignedDepartment}
+                  onChange={(e) => setAssignedDepartment(e.target.value)}
+                  className="w-full pl-10 pr-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-none text-sm font-semibold focus:outline-none focus:border-brand-primary cursor-pointer appearance-none"
+                >
+                  <option value="Platform Headquarters (HQ)">Platform Headquarters (HQ)</option>
+                  <option value="Main Branch (Dhanmondi, Dhaka)">Main Branch (Dhanmondi, Dhaka)</option>
+                  <option value="System Administration">System Administration</option>
+                  <option value="Customer Operations">Customer Operations</option>
+                </select>
+              </div>
             </div>
           </div>
 
-          {/* Assign Department / Scope */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-              Assign to Branch / Department
-            </label>
-            <div className="relative">
-              <Building className="h-4 w-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-              <select
-                value={assignedDepartment}
-                onChange={(e) => setAssignedDepartment(e.target.value)}
-                className="w-full pl-10 pr-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-brand-primary cursor-pointer appearance-none"
-              >
-                <option value="Main Branch (Dhanmondi, Dhaka)">Main Branch (Dhanmondi, Dhaka)</option>
-                <option value="Platform Headquarters (HQ)">Platform Headquarters (HQ)</option>
-                <option value="System Administration">System Administration</option>
-                <option value="Customer Operations">Customer Operations</option>
-              </select>
+          {/* Row 3: Role Info Card */}
+          <div className="p-4 rounded-none border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 flex items-center justify-between text-xs font-bold shadow-2xs">
+            <div className="flex items-center gap-2 text-slate-900 dark:text-white">
+              <ShieldCheck className="h-4 w-4 text-brand-primary" />
+              <span>
+                Assigned Role: {selectedRoleObj?.name || "Super Admin"}
+              </span>
             </div>
-          </div>
-        </div>
-
-        {/* Row 3: Role Info Card */}
-        <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 flex items-center justify-between text-xs font-bold shadow-2xs">
-          <div className="flex items-center gap-2 text-slate-900 dark:text-white">
-            <ShieldCheck className="h-4 w-4 text-brand-primary" />
-            <span>
-              Assigned Role: {selectedRoleObj?.name || "Super Admin"}
+            <span className="text-brand-primary font-mono text-xs">
+              {selectedRoleObj?.permissions?.length || 10} Modules Permitted
             </span>
           </div>
-          <span className="text-brand-primary font-mono text-xs">
-            {selectedRoleObj?.permissions?.length || 10} Modules Permitted
-          </span>
-        </div>
 
-        {/* Footer Actions */}
-        <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
-          {onNavigateToList && (
-            <button
-              type="button"
-              onClick={onNavigateToList}
-              className="h-11 px-6 rounded-xl text-sm font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 transition cursor-pointer"
-            >
-              Cancel
-            </button>
-          )}
-
-          <button
-            type="submit"
-            disabled={submitting}
-            className="h-11 px-6 rounded-xl text-sm font-bold bg-brand-primary hover:bg-brand-primary-hover text-white shadow-xs transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
-          >
-            {submitting ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <PlusCircle className="h-4 w-4" />
+          {/* Footer Actions */}
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+            {onNavigateToList && (
+              <button
+                type="button"
+                onClick={onNavigateToList}
+                className="h-10 px-5 rounded-none text-xs sm:text-sm font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 transition cursor-pointer"
+              >
+                Cancel
+              </button>
             )}
-            <span>Create Staff Member</span>
-          </button>
-        </div>
-      </form>
+
+            <button
+              type="submit"
+              disabled={submitting}
+              className="h-10 px-6 rounded-none text-xs sm:text-sm font-bold bg-brand-primary hover:bg-brand-primary-hover text-white shadow-xs transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
+            >
+              {submitting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <PlusCircle className="h-4 w-4" />
+              )}
+              <span>Create Staff Member</span>
+            </button>
+          </div>
+        </form>
+      )}
     </div>
   );
 }

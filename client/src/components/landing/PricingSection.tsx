@@ -171,28 +171,56 @@ export function PricingSection() {
                   <ul className="space-y-3 text-sm text-slate-600 dark:text-slate-300">
                     <li className="flex items-center gap-3">
                       <Check className="h-4 w-4 text-emerald-500 shrink-0" />
-                      <span>Offline POS with 72h Queueing</span>
+                      <span>100% Offline POS & Auto Cloud Sync</span>
                     </li>
                     <li className="flex items-center gap-3">
                       <Check className="h-4 w-4 text-emerald-500 shrink-0" />
-                      <span>Centralized Product & Price Catalog</span>
-                    </li>
-                    <li className="flex items-center gap-3">
-                      <Check className={`h-4 w-4 shrink-0 ${plan.tier !== "STARTER" ? "text-emerald-500" : "text-slate-300 dark:text-slate-700"}`} />
-                      <span className={plan.tier === "STARTER" ? "text-slate-400 line-through" : ""}>
-                        Inter-Branch Stock Transfers
+                      <span>
+                        {plan.tier === "STARTER"
+                          ? "Real-time Inventory & Stock Tracking"
+                          : plan.tier === "GROWTH"
+                          ? "Multi-Branch Stock & Batch Tracking"
+                          : "Centralized Multi-Store Inventory Control"}
                       </span>
                     </li>
                     <li className="flex items-center gap-3">
-                      <Check className={`h-4 w-4 shrink-0 ${plan.tier !== "STARTER" ? "text-emerald-500" : "text-slate-300 dark:text-slate-700"}`} />
-                      <span className={plan.tier === "STARTER" ? "text-slate-400 line-through" : ""}>
-                        Regional Admin Role Hierarchy
+                      <Check className="h-4 w-4 text-emerald-500 shrink-0" />
+                      <span>
+                        {plan.tier === "STARTER"
+                          ? "Medicine Expiry & Low-Stock Alerts"
+                          : plan.tier === "GROWTH"
+                          ? "Medicine Expiry, Damage & Near-Expiry Alerts"
+                          : "Full Expiry, Damage & Batch Audit Trails"}
                       </span>
                     </li>
                     <li className="flex items-center gap-3">
-                      <Check className={`h-4 w-4 shrink-0 ${plan.tier === "ENTERPRISE" ? "text-emerald-500" : "text-slate-300 dark:text-slate-700"}`} />
-                      <span className={plan.tier !== "ENTERPRISE" ? "text-slate-400 line-through" : ""}>
-                        Full VAT/MIS Compliance Export
+                      <Check className="h-4 w-4 text-emerald-500 shrink-0" />
+                      <span>
+                        {plan.tier === "STARTER"
+                          ? "Thermal Receipt & Barcode Support"
+                          : plan.tier === "GROWTH"
+                          ? "Customer Ledger & Due Tracking"
+                          : "Customer Credit Ledger & Accounts Reports"}
+                      </span>
+                    </li>
+                    <li className="flex items-center gap-3">
+                      <Check className="h-4 w-4 text-emerald-500 shrink-0" />
+                      <span>
+                        {plan.tier === "STARTER"
+                          ? "Daily Sales & Revenue Reports"
+                          : plan.tier === "GROWTH"
+                          ? "Custom Roles & Permission Control"
+                          : "Unlimited Custom Roles & Granular RBAC"}
+                      </span>
+                    </li>
+                    <li className="flex items-center gap-3">
+                      <Check className="h-4 w-4 text-emerald-500 shrink-0" />
+                      <span>
+                        {plan.tier === "STARTER"
+                          ? "Standard Customer Support"
+                          : plan.tier === "GROWTH"
+                          ? "Priority Phone & WhatsApp Support"
+                          : "24/7 Dedicated Account Manager"}
                       </span>
                     </li>
                   </ul>

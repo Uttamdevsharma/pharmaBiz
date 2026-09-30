@@ -19,6 +19,7 @@ import {
   X,
   PanelLeftClose,
   PanelLeftOpen,
+  Settings,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { ThemeToggle } from "@/components/common/ThemeToggle";
@@ -279,17 +280,17 @@ export function AdminSidebar({
                 <button
                   type="button"
                   onClick={() => handleTabClick("settings")}
-                  className={`h-11 w-11 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
+                  className={`h-11 w-11 rounded-none flex items-center justify-center transition-all cursor-pointer ${
                     activeTab === "settings"
                       ? "bg-brand-primary text-white shadow-md shadow-brand-primary/20"
                       : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
                   }`}
-                  aria-label="Branding & Theme"
+                  aria-label="Settings"
                 >
-                  <Palette className="h-5 w-5 shrink-0" />
+                  <Settings className="h-5 w-5 shrink-0" />
                 </button>
-                <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 px-3 py-1.5 rounded-xl bg-slate-900 dark:bg-slate-800 text-white text-xs font-bold shadow-xl opacity-0 pointer-events-none group-hover:opacity-100 transition whitespace-nowrap z-50 border border-slate-700">
-                  Branding & Theme
+                <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 px-3 py-1.5 rounded-none bg-slate-900 dark:bg-slate-800 text-white text-xs font-bold shadow-xl opacity-0 pointer-events-none group-hover:opacity-100 transition whitespace-nowrap z-50 border border-slate-700">
+                  Settings
                 </div>
               </div>
             )}
@@ -371,36 +372,9 @@ export function AdminSidebar({
 
                 {staffMenuOpen && (
                   <div className="pl-4 pr-1 py-1 space-y-1.5 border-l-2 border-slate-100 dark:border-slate-800 ml-6 mt-1.5">
-                    {canViewStaffList && (
-                      <button
-                        onClick={() => handleTabClick("staff-list")}
-                        className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
-                          activeTab === "staff-list" || activeTab === "staff"
-                            ? "bg-brand-primary text-white shadow-xs"
-                            : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
-                        }`}
-                      >
-                        <Users className="h-4 w-4 shrink-0" />
-                        <span>Staff Directory</span>
-                      </button>
-                    )}
-
-                    {canCreateStaff && (
-                      <button
-                        onClick={() => handleTabClick("staff-create")}
-                        className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
-                          activeTab === "staff-create"
-                            ? "bg-brand-primary text-white shadow-xs"
-                            : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
-                        }`}
-                      >
-                        <UserPlus className="h-4 w-4 shrink-0" />
-                        <span>Create Staff</span>
-                      </button>
-                    )}
-
+                    {/* 1. Role Management */}
                     {canManageRoles && (
-                      <div className="pt-1">
+                      <div className="pt-0.5">
                         <button
                           type="button"
                           onClick={() => setRoleMenuOpen(!roleMenuOpen)}
@@ -414,7 +388,7 @@ export function AdminSidebar({
                         >
                           <div className="flex items-center gap-2.5">
                             <KeyRound className="h-4 w-4 shrink-0" />
-                            <span>Roles & RBAC</span>
+                            <span>Role Management</span>
                           </div>
                           {roleMenuOpen ? (
                             <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
@@ -445,11 +419,41 @@ export function AdminSidebar({
                               }`}
                             >
                               <CheckSquare className="h-3.5 w-3.5 shrink-0" />
-                              <span>Assign Permissions</span>
+                              <span>Permission Assignment</span>
                             </button>
                           </div>
                         )}
                       </div>
+                    )}
+
+                    {/* 2. Create Staff */}
+                    {canCreateStaff && (
+                      <button
+                        onClick={() => handleTabClick("staff-create")}
+                        className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+                          activeTab === "staff-create"
+                            ? "bg-brand-primary text-white shadow-xs"
+                            : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
+                        }`}
+                      >
+                        <UserPlus className="h-4 w-4 shrink-0" />
+                        <span>Create Staff</span>
+                      </button>
+                    )}
+
+                    {/* 3. Staff List */}
+                    {canViewStaffList && (
+                      <button
+                        onClick={() => handleTabClick("staff-list")}
+                        className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+                          activeTab === "staff-list" || activeTab === "staff"
+                            ? "bg-brand-primary text-white shadow-xs"
+                            : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
+                        }`}
+                      >
+                        <Users className="h-4 w-4 shrink-0" />
+                        <span>Staff List</span>
+                      </button>
                     )}
                   </div>
                 )}
@@ -494,14 +498,14 @@ export function AdminSidebar({
             {canViewSettings && (
               <button
                 onClick={() => handleTabClick("settings")}
-                className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-sm sm:text-base font-bold transition-all cursor-pointer ${
+                className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-none text-sm sm:text-base font-bold transition-all cursor-pointer ${
                   activeTab === "settings"
                     ? "bg-brand-primary text-white shadow-sm"
                     : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white"
                 }`}
               >
-                <Palette className="h-5 w-5 shrink-0" />
-                <span>Branding & Theme</span>
+                <Settings className="h-5 w-5 shrink-0" />
+                <span>Settings</span>
               </button>
             )}
           </div>

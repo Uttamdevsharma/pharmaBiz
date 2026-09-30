@@ -17,7 +17,7 @@ import {
   Loader2, AlertCircle, Store, Printer, Barcode, CheckCircle2, X,
   MapPin, Package, ShieldAlert, ArrowRight,
   Repeat, ChevronDown, Check, User, Phone, Maximize2,
-  Wifi, WifiOff, CloudOff, RefreshCw
+  Wifi, WifiOff, CloudOff, RefreshCw, Percent
 } from "lucide-react";
 
 interface CartItem {
@@ -228,6 +228,17 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
   const [checkingOut, setCheckingOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successToast, setSuccessToast] = useState<string | null>(null);
+
+  // Discount state
+  const [discountModalOpen, setDiscountModalOpen] = useState(false);
+  const [discountType, setDiscountType] = useState<"PERCENT" | "FIXED">("PERCENT");
+  const [discountRate, setDiscountRate] = useState<number>(0);
+  const [discountFlat, setDiscountFlat] = useState<number>(0);
+
+  // Modal working state (for editing inside modal before confirming)
+  const [tempDiscountRate, setTempDiscountRate] = useState<string>("");
+  const [tempDiscountFlat, setTempDiscountFlat] = useState<string>("");
+  const [tempDiscountType, setTempDiscountType] = useState<"PERCENT" | "FIXED">("PERCENT");
 
   // Location / Batch selection modal
   const [locationModalOpen, setLocationModalOpen] = useState(false);
@@ -448,7 +459,8 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
       if (batches.length > 0) {
         for (const b of batches) {
           const bNum = (b.batchNumber || "").toLowerCase();
-          if (matchesSearch || bNum.includes(q)) {
+          const bBarcode = (b.barcode || "").toLowerCase();
+          if (matchesSearch || bNum.includes(q) || (bBarcode && bBarcode.includes(q))) {
             const now = new Date();
             const exp = b.expiryDate ? new Date(b.expiryDate) : null;
             const isExpired = exp ? exp < now : false;
@@ -1202,12 +1214,92 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
     return acc + (item.unitPrice * item.quantity);
   }, 0);
   const subTotal = Math.round(rawSubTotal);
-  const rawTax = taxPercent > 0 ? (rawSubTotal * (taxPercent / 100)) : 0;
+
+  // Compute discount amount
+  let computedDiscount = 0;
+  if (discountType === "PERCENT") {
+    computedDiscount = discountRate > 0 ? Math.min(subTotal, Math.round(subTotal * (discountRate / 100))) : 0;
+  } else {
+    computedDiscount = discountFlat > 0 ? Math.min(subTotal, Math.round(discountFlat)) : 0;
+  }
+
+  const rawTax = taxPercent > 0 ? (Math.max(0, subTotal - computedDiscount) * (taxPercent / 100)) : 0;
   const taxAmount = Math.round(rawTax);
-  const grandTotal = Math.round(Math.max(0, rawSubTotal + rawTax));
+  const grandTotal = Math.round(Math.max(0, subTotal - computedDiscount + rawTax));
   const numericPaid = paidInput !== "" ? Math.round(parseFloat(paidInput) || 0) : grandTotal;
   const dueAmount = Math.max(0, grandTotal - numericPaid);
   const changeAmount = Math.max(0, numericPaid - grandTotal);
+
+  // Discount Modal Helpers
+  const handleOpenDiscountModal = () => {
+    setTempDiscountRate(discountRate > 0 ? discountRate.toString() : "");
+    setTempDiscountFlat(discountFlat > 0 ? discountFlat.toString() : "");
+    setTempDiscountType(discountType);
+    setDiscountModalOpen(true);
+  };
+
+  const handleSelectQuickPercent = (pct: number) => {
+    setTempDiscountRate(pct.toString());
+    setTempDiscountType("PERCENT");
+    const calculatedFlat = subTotal > 0 ? Math.round(subTotal * (pct / 100)) : 0;
+    setTempDiscountFlat(calculatedFlat > 0 ? calculatedFlat.toString() : "");
+  };
+
+  const handleRateChange = (valStr: string) => {
+    setTempDiscountRate(valStr);
+    setTempDiscountType("PERCENT");
+    const rateNum = parseFloat(valStr) || 0;
+    if (rateNum >= 0 && subTotal > 0) {
+      const flat = Math.round(subTotal * (rateNum / 100));
+      setTempDiscountFlat(flat > 0 ? flat.toString() : "");
+    } else {
+      setTempDiscountFlat("");
+    }
+  };
+
+  const handleFlatChange = (valStr: string) => {
+    setTempDiscountFlat(valStr);
+    setTempDiscountType("FIXED");
+    const flatNum = parseFloat(valStr) || 0;
+    if (flatNum >= 0 && subTotal > 0) {
+      const rate = Number(((flatNum / subTotal) * 100).toFixed(1));
+      setTempDiscountRate(rate > 0 ? rate.toString() : "");
+    } else {
+      setTempDiscountRate("");
+    }
+  };
+
+  const handleApplyDiscount = () => {
+    const rateNum = Math.max(0, Math.min(100, parseFloat(tempDiscountRate) || 0));
+    const flatNum = Math.max(0, Math.min(subTotal, parseFloat(tempDiscountFlat) || 0));
+
+    if (tempDiscountType === "PERCENT") {
+      setDiscountType("PERCENT");
+      setDiscountRate(rateNum);
+      setDiscountFlat(subTotal > 0 ? Math.round(subTotal * (rateNum / 100)) : 0);
+    } else {
+      setDiscountType("FIXED");
+      setDiscountFlat(flatNum);
+      setDiscountRate(subTotal > 0 ? Number(((flatNum / subTotal) * 100).toFixed(1)) : 0);
+    }
+    setDiscountModalOpen(false);
+  };
+
+  const handleClearDiscount = () => {
+    setDiscountType("PERCENT");
+    setDiscountRate(0);
+    setDiscountFlat(0);
+    setTempDiscountRate("");
+    setTempDiscountFlat("");
+    setDiscountModalOpen(false);
+  };
+
+  const tempRateNum = parseFloat(tempDiscountRate) || 0;
+  const tempFlatNum = parseFloat(tempDiscountFlat) || 0;
+  const previewFlatDiscount = tempDiscountType === "PERCENT"
+    ? (subTotal > 0 ? Math.min(subTotal, Math.round(subTotal * (tempRateNum / 100))) : 0)
+    : Math.min(subTotal, Math.round(tempFlatNum));
+  const previewGrandTotal = Math.round(Math.max(0, subTotal - previewFlatDiscount + taxAmount));
 
   const hasRxItems = cart.some((i) => i.requiresPrescription);
   const hasControlledDrugs = cart.some((i) => i.isControlled);
@@ -1268,8 +1360,8 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
         financialAccountId: chosenAccount.id,
         bankName: chosenAccount.bankName || chosenAccount.name,
         notes: finalNotes,
-        discount: 0,
-        discountType: "FIXED" as const,
+        discount: discountType === "PERCENT" ? discountRate : discountFlat,
+        discountType: discountType,
         tax: taxAmount,
         paidAmount: numericPaid,
         prescriptionRef: prescriptionRef.trim() || null,
@@ -1343,7 +1435,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
           financialAccountId: chosenAccount.id,
           bankName: chosenAccount.bankName || chosenAccount.name,
           subTotal,
-          discount: 0,
+          discount: computedDiscount,
           tax: taxAmount,
           totalAmount: grandTotal,
           paidAmount: numericPaid,
@@ -1475,7 +1567,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
           }),
           totalQuantity: totalCartUnits,
           subTotal,
-          discount: 0,
+          discount: computedDiscount,
           deliveryCharge: 0,
           totalAmount: grandTotal,
           paidAmount: numericPaid,
@@ -1517,6 +1609,9 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
       setCustomerAddress("");
       setPrescriptionRef("");
       setManagerPin("");
+      setDiscountRate(0);
+      setDiscountFlat(0);
+      setDiscountType("PERCENT");
 
       loadPosProducts();
       loadFinancialAccounts(selectedBranchId);
@@ -1539,6 +1634,9 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
         e.preventDefault();
         setCart([]);
         setSearch("");
+        setDiscountRate(0);
+        setDiscountFlat(0);
+        setDiscountType("PERCENT");
       }
       if (e.key === "F9" || (e.ctrlKey && e.key === "Enter")) {
         if (cart.length > 0 && !checkingOut) {
@@ -1547,13 +1645,14 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
         }
       }
       if (e.key === "Escape") {
-        if (locationModalOpen) setLocationModalOpen(false);
+        if (discountModalOpen) setDiscountModalOpen(false);
+        else if (locationModalOpen) setLocationModalOpen(false);
         else setSearchFocused(false);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [cart, checkingOut, locationModalOpen]);
+  }, [cart, checkingOut, locationModalOpen, discountModalOpen]);
 
   // Clean Native Print (triggers browser print without blank page)
   const handlePrintReceipt = () => {
@@ -1564,18 +1663,18 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
     <div className="w-full h-full flex flex-col min-h-0 space-y-2 select-none text-slate-800 dark:text-slate-200">
       {/* Success Notification Banner */}
       {successToast && (
-        <div className="fixed top-5 right-5 z-50 bg-emerald-600 text-white px-5 py-3 rounded-xl shadow-2xl flex items-center gap-2 font-bold text-sm animate-bounce">
+        <div className="fixed top-5 right-5 z-50 bg-emerald-600 text-white px-5 py-3 rounded-none shadow-2xl flex items-center gap-2 font-bold text-sm animate-bounce">
           <CheckCircle2 className="h-5 w-5" />
           <span>{successToast}</span>
         </div>
       )}
 
       {/* Network Connectivity & Offline Cloud Sync Status Bar */}
-      <div className="shrink-0 px-3.5 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-xs flex items-center justify-between text-xs transition-colors">
+      <div className="shrink-0 px-3.5 py-1.5 rounded-none bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-xs flex items-center justify-between text-xs transition-colors">
         <div className="flex items-center gap-2.5 flex-wrap">
           {/* Online/Offline Badge */}
           {syncState.isOnline ? (
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/80 text-emerald-700 dark:text-emerald-300 font-semibold">
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-none bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/80 text-emerald-700 dark:text-emerald-300 font-semibold">
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
@@ -1584,7 +1683,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
               <span>Online Mode</span>
             </div>
           ) : (
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/70 border border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-300 font-bold shadow-xs">
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-none bg-amber-50 dark:bg-amber-950/70 border border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-300 font-bold shadow-xs">
               <WifiOff className="h-3 w-3 text-amber-600 dark:text-amber-400 animate-pulse" />
               <span>Offline POS (Electricity/Internet Cut)</span>
             </div>
@@ -1592,7 +1691,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
 
           {/* Pending Sales Queued in IndexedDB */}
           {syncState.pendingCount > 0 && (
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/60 border border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-200 font-extrabold animate-pulse">
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-none bg-amber-100 dark:bg-amber-900/60 border border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-200 font-extrabold animate-pulse">
               <CloudOff className="h-3 w-3 text-amber-700 dark:text-amber-400" />
               <span>{syncState.pendingCount} offline bill{syncState.pendingCount > 1 ? "s" : ""} waiting to sync</span>
             </div>
@@ -1611,7 +1710,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
             <button
               onClick={handleManualSync}
               disabled={syncState.isSyncing}
-              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold transition shadow-xs disabled:opacity-50 cursor-pointer text-xs"
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-none bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold transition shadow-xs disabled:opacity-50 cursor-pointer text-xs"
             >
               <RefreshCw className={`h-3 w-3 ${syncState.isSyncing ? "animate-spin" : ""}`} />
               <span>{syncState.isSyncing ? "Syncing to Cloud..." : "Sync Now"}</span>
@@ -1624,7 +1723,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
               <select
                 value={selectedBranchId}
                 onChange={(e) => setLocalBranchId(e.target.value)}
-                className="px-2 py-0.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded text-xs font-bold outline-none cursor-pointer"
+                className="px-2 py-0.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-none text-xs font-bold outline-none cursor-pointer"
               >
                 {branches.map((b) => (
                   <option key={b.id} value={b.id}>{b.name}</option>
@@ -1650,8 +1749,8 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
           <div className="flex items-center gap-2 shrink-0">
             {/* Search Input with instant dropdown */}
             <div ref={searchContainerRef} className="relative flex-1">
-              <div className="flex items-center h-12 bg-white dark:bg-slate-900 border-2 border-emerald-500/50 hover:border-emerald-500 focus-within:border-emerald-600 focus-within:ring-4 focus-within:ring-emerald-500/15 rounded-2xl shadow-xs px-3.5 transition">
-                <div className="h-8 w-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/70 border border-emerald-200/80 dark:border-emerald-800/60 flex items-center justify-center mr-3 shrink-0 text-emerald-600 dark:text-emerald-400">
+              <div className="flex items-center h-12 bg-white dark:bg-slate-900 border-2 border-emerald-500/50 hover:border-emerald-500 focus-within:border-emerald-600 focus-within:ring-4 focus-within:ring-emerald-500/15 rounded-none shadow-xs px-3.5 transition">
+                <div className="h-8 w-8 rounded-none bg-emerald-50 dark:bg-emerald-950/70 border border-emerald-200/80 dark:border-emerald-800/60 flex items-center justify-center mr-3 shrink-0 text-emerald-600 dark:text-emerald-400">
                   <Search className="h-4.5 w-4.5" />
                 </div>
                 <input
@@ -1693,16 +1792,16 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                         setSearch("");
                         setSearchFocused(false);
                       }}
-                      className="p-1 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer"
+                      className="p-1 rounded-none hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer"
                     >
                       <X className="h-4 w-4" />
                     </button>
                   ) : null}
-                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 text-xs font-mono font-bold text-slate-500 dark:text-slate-400">
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-none bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 text-xs font-mono font-bold text-slate-500 dark:text-slate-400">
                     <Barcode className="h-4.5 w-4.5 text-emerald-600 shrink-0" />
                     <span>Scan</span>
                   </div>
-                  <kbd className="hidden sm:inline-flex items-center px-2 py-0.5 text-xs font-mono font-black text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md">
+                  <kbd className="hidden sm:inline-flex items-center px-2 py-0.5 text-xs font-mono font-black text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-none">
                     /
                   </kbd>
                 </div>
@@ -1712,11 +1811,11 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
               {searchFocused && searchResults.length > 0 && (
                 <div
                   onMouseDown={(e) => e.preventDefault()}
-                  className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-white dark:bg-slate-900 border-2 border-emerald-500/50 rounded-xl shadow-2xl max-h-[400px] overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 content-scrollbar"
+                  className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-white dark:bg-slate-900 border-2 border-emerald-500/50 rounded-none shadow-2xl max-h-[400px] overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 content-scrollbar"
                 >
                   {searchResults.map(({ product, batch, isExpired, daysLeft, stock }, idx) => {
                     const isKeySelected = idx === selectedSearchIndex;
-                    const barcodeVal = batch?.barcode || product.barcode || product.sku || "—";
+                    const barcodeVal = batch?.barcode || product.barcode || "";
                     const variantStr = product.size || (product.unit ? `Unit: ${product.unit}` : "- - -");
 
                     const locs = (batch?.locations || (product as any)?.locations || []) as any[];
@@ -1742,24 +1841,33 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                         onMouseEnter={() => setSelectedSearchIndex(idx)}
                         className={`p-3.5 cursor-pointer transition flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 ${
                           isKeySelected
-                            ? "bg-emerald-100/80 dark:bg-emerald-950/60 ring-2 ring-emerald-500 rounded-lg"
+                            ? "bg-emerald-100/80 dark:bg-emerald-950/60 ring-2 ring-emerald-500 rounded-none"
                             : "hover:bg-emerald-50/80 dark:hover:bg-emerald-950/30"
                         } ${isExpired ? "opacity-75 bg-rose-50/30 dark:bg-rose-950/20" : ""}`}
                       >
                         <div className="space-y-1 min-w-0">
                           <div className="text-[15px] font-black text-slate-900 dark:text-white flex items-center gap-2 flex-wrap">
-                            <span className="text-slate-500 dark:text-slate-400 font-mono text-xs font-bold">Barcode: {barcodeVal}</span>
+                            {barcodeVal ? (
+                              <span className="text-slate-500 dark:text-slate-400 font-mono text-xs font-bold bg-slate-100 dark:bg-slate-800 px-2 py-0.5 border border-slate-200 dark:border-slate-700">
+                                Barcode: {barcodeVal}
+                              </span>
+                            ) : null}
                             <span className="text-slate-900 dark:text-white font-extrabold">{product.name}</span>
                             {product.requiresPrescription && (
-                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 font-bold border border-rose-300">
+                              <span className="text-[10px] px-1.5 py-0.5 rounded-none bg-rose-100 text-rose-700 font-bold border border-rose-300">
                                 Rx
                               </span>
                             )}
                           </div>
-                          <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                            Product ID: <span className="text-slate-700 dark:text-slate-300 font-bold">{product.id.slice(0, 8)}</span>, SKU: <span className="text-slate-700 dark:text-slate-300 font-bold">{product.sku || "—"}</span>, Variant: <span className="text-slate-700 dark:text-slate-300 font-bold">{variantStr}</span>
+                          <div className="text-xs text-slate-500 dark:text-slate-400 font-medium flex items-center gap-2 flex-wrap">
+                            <span>Variant: <strong className="text-slate-700 dark:text-slate-300">{variantStr}</strong></span>
                             {product.genericName && (
-                              <span className="text-emerald-700 dark:text-emerald-400 ml-1.5 font-bold">({product.genericName})</span>
+                              <span className="text-emerald-700 dark:text-emerald-400 font-bold">({product.genericName})</span>
+                            )}
+                            {batch?.batchNumber && (
+                              <span className="text-slate-500 font-mono text-[11px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 border border-slate-200 dark:border-slate-700">
+                                Batch: {batch.batchNumber}
+                              </span>
                             )}
                           </div>
                         </div>
@@ -1767,33 +1875,33 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                         <div className="flex items-center gap-2 shrink-0 flex-wrap">
                           {/* Shelf Location Tag */}
                           {locLabel ? (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-black bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-none text-xs font-black bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900">
                               <MapPin className="h-3 w-3 text-blue-500 shrink-0" />
                               <span>{locLabel}</span>
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold text-slate-400 bg-slate-100 dark:bg-slate-800">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-none text-[11px] font-bold text-slate-400 bg-slate-100 dark:bg-slate-800">
                               <span>Godown / Unassigned</span>
                             </span>
                           )}
 
-                          <span className="px-2.5 py-1 rounded-full text-xs font-black bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 font-mono">
+                          <span className="px-2.5 py-1 rounded-none text-xs font-black bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 font-mono">
                             Stock: {stock.toLocaleString()}
                           </span>
 
                           {isExpired ? (
-                            <span className="px-2.5 py-1 rounded-full text-xs font-black bg-rose-100 text-rose-700 border border-rose-300">
+                            <span className="px-2.5 py-1 rounded-none text-xs font-black bg-rose-100 text-rose-700 border border-rose-300">
                               Expire: Expired ({Math.abs(daysLeft || 0)} days ago)
                             </span>
                           ) : daysLeft !== null ? (
-                            <span className={`px-2.5 py-1 rounded-full text-xs font-black border ${daysLeft <= 90
+                            <span className={`px-2.5 py-1 rounded-none text-xs font-black border ${daysLeft <= 90
                               ? "bg-amber-100 text-amber-800 border-amber-300"
                               : "bg-emerald-100 text-emerald-800 border-emerald-300"
                             }`}>
                               Expire: {daysLeft} days left
                             </span>
                           ) : (
-                            <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-500">
+                            <span className="px-2.5 py-1 rounded-none text-xs font-bold bg-slate-100 text-slate-500">
                               No Expiry
                             </span>
                           )}
@@ -1806,7 +1914,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
 
               {/* Empty state notice */}
               {searchFocused && search.trim().length > 0 && searchResults.length === 0 && (
-                <div className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 text-center text-xs text-slate-500 shadow-lg">
+                <div className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-none p-4 text-center text-xs text-slate-500 shadow-lg">
                   No matching medicine or batches found for &ldquo;{search}&rdquo;
                 </div>
               )}
@@ -1821,7 +1929,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
               }}
               style={{ backgroundColor: "var(--primary-color, #059669)" }}
               title="Reset or Exchange sale (F7)"
-              className="h-12 flex items-center gap-2 px-5 sm:px-6 bg-emerald-600 hover:brightness-95 text-white rounded-2xl text-sm sm:text-base font-black transition shrink-0 cursor-pointer shadow-sm hover:shadow active:scale-97"
+              className="h-12 flex items-center gap-2 px-5 sm:px-6 bg-emerald-600 hover:brightness-95 text-white rounded-none text-sm sm:text-base font-black transition shrink-0 cursor-pointer shadow-sm hover:shadow active:scale-97"
             >
               <Repeat className="h-5 w-5" />
               <span>Exchange (F7)</span>
@@ -1829,7 +1937,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
           </div>
 
           {/* ACTIVE CART TABLE WITH PRIMARY BRAND HEADER */}
-          <div className="flex-1 min-h-0 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-xs flex flex-col justify-between">
+          <div className="flex-1 min-h-0 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-none overflow-hidden shadow-xs flex flex-col justify-between">
             <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto content-scrollbar">
               <table className="w-full text-left text-xs border-collapse">
                 {/* Sticky Primary Brand Color Table Header */}
@@ -1870,7 +1978,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                             <div className="truncate text-base font-black leading-snug">{item.name}</div>
                             <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                               {item.shelfLocation && (
-                                <span className="inline-flex items-center gap-1 text-[11px] font-black px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900">
+                                <span className="inline-flex items-center gap-1 text-[11px] font-black px-1.5 py-0.5 rounded-none bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900">
                                   <MapPin className="h-2.5 w-2.5 text-blue-500 shrink-0" />
                                   <span>{item.shelfLocation}</span>
                                 </span>
@@ -1878,9 +1986,9 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                               {item.genericName && (
                                 <span className="text-xs text-emerald-600 dark:text-emerald-400 truncate font-bold">{item.genericName}</span>
                               )}
-                              {(item.barcode || item.sku) && (
+                              {item.barcode && (
                                 <span className="text-[11px] font-mono text-slate-400 dark:text-slate-500 font-medium">
-                                  #{item.barcode || item.sku}
+                                  #{item.barcode}
                                 </span>
                               )}
                             </div>
@@ -1897,7 +2005,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                             {isMed ? (
                               <div className="flex items-center justify-center gap-2 py-0.5">
                                 {/* Box Stepper */}
-                                <div className="inline-flex items-center border border-slate-300 dark:border-slate-700 rounded-lg overflow-hidden bg-slate-50 dark:bg-slate-800 shadow-xs" title={`1 Box = ${item.tabletsPerBox} tabs`}>
+                                <div className="inline-flex items-center border border-slate-300 dark:border-slate-700 rounded-none overflow-hidden bg-slate-50 dark:bg-slate-800 shadow-xs" title={`1 Box = ${item.tabletsPerBox} tabs`}>
                                   <span className="px-2 py-1 text-[11px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-300 bg-slate-200/70 dark:bg-slate-700/80 border-r border-slate-300 dark:border-slate-700 select-none">
                                     Box
                                   </span>
@@ -1926,7 +2034,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                                 </div>
 
                                 {/* Strip Stepper */}
-                                <div className="inline-flex items-center border border-slate-300 dark:border-slate-700 rounded-lg overflow-hidden bg-slate-50 dark:bg-slate-800 shadow-xs" title={`1 Strip = ${item.tabletsPerStrip} tabs`}>
+                                <div className="inline-flex items-center border border-slate-300 dark:border-slate-700 rounded-none overflow-hidden bg-slate-50 dark:bg-slate-800 shadow-xs" title={`1 Strip = ${item.tabletsPerStrip} tabs`}>
                                   <span className="px-2 py-1 text-[11px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-300 bg-slate-200/70 dark:bg-slate-700/80 border-r border-slate-300 dark:border-slate-700 select-none">
                                     Strip
                                   </span>
@@ -1955,7 +2063,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                                 </div>
 
                                 {/* Tablet Stepper */}
-                                <div className="inline-flex items-center border border-emerald-400 dark:border-emerald-700 rounded-lg overflow-hidden bg-emerald-50/50 dark:bg-slate-800 shadow-xs" title="Single Tablet">
+                                <div className="inline-flex items-center border border-emerald-400 dark:border-emerald-700 rounded-none overflow-hidden bg-emerald-50/50 dark:bg-slate-800 shadow-xs" title="Single Tablet">
                                   <span className="px-2 py-1 text-[11px] font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950/60 border-r border-emerald-300 dark:border-emerald-700 select-none">
                                     Tab
                                   </span>
@@ -1984,7 +2092,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                                 </div>
                               </div>
                             ) : (
-                              <div className="inline-flex items-center border border-slate-300 dark:border-slate-700 rounded-lg overflow-hidden bg-white dark:bg-slate-900 shadow-xs">
+                              <div className="inline-flex items-center border border-slate-300 dark:border-slate-700 rounded-none overflow-hidden bg-white dark:bg-slate-900 shadow-xs">
                                 <button
                                   type="button"
                                   onClick={() => updateCartQuantity(idx, item.quantity - 1)}
@@ -2021,7 +2129,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                             <button
                               type="button"
                               onClick={() => updateCartQuantity(idx, 0)}
-                              className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition cursor-pointer"
+                              className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-none transition cursor-pointer"
                             >
                               <Trash2 className="h-5 w-5" />
                             </button>
@@ -2038,22 +2146,22 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
             <div className="shrink-0 px-4 py-2.5 bg-slate-50 dark:bg-slate-800/60 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs text-slate-500 font-bold">
               <span className="text-slate-400 text-xs font-semibold">Selected Products</span>
               <div>
-                Total Items: <strong className="text-slate-900 dark:text-white font-mono text-xs ml-1.5 px-2.5 py-0.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-md">{totalCartUnits}</strong>
+                Total Items: <strong className="text-slate-900 dark:text-white font-mono text-xs ml-1.5 px-2.5 py-0.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-none">{totalCartUnits}</strong>
               </div>
             </div>
           </div>
         </div>
 
         {/* RIGHT COLUMN: "BILL DETAILS" SECTION (~30% width) */}
-        <div className="w-full lg:w-[32%] xl:w-[30%] min-w-[310px] max-w-[430px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs flex flex-col h-full overflow-hidden shrink-0">
+        <div className="w-full lg:w-[32%] xl:w-[30%] min-w-[310px] max-w-[430px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-none shadow-xs flex flex-col h-full overflow-hidden shrink-0">
           {/* Header with Live Order # */}
           <div className="shrink-0 px-4 sm:px-5 py-3.5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
             <h3 className="text-lg font-black text-slate-900 dark:text-white tracking-tight">Bill Details</h3>
-            <span className="font-mono text-xs font-bold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-md">#{currentOrderId}</span>
+            <span className="font-mono text-xs font-bold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-none">#{currentOrderId}</span>
           </div>
 
           {error && (
-            <div className="shrink-0 mx-4 sm:mx-5 mt-3 p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs font-bold text-rose-700 flex items-center gap-2">
+            <div className="shrink-0 mx-4 sm:mx-5 mt-3 p-3 bg-rose-50 border border-rose-200 rounded-none text-xs font-bold text-rose-700 flex items-center gap-2">
               <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" />
               <span>{error}</span>
             </div>
@@ -2084,7 +2192,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                       setPhoneDropdownOpen(true);
                       if (customersList.length === 0) loadCustomers();
                     }}
-                    className="w-full h-11 px-3.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 focus:border-emerald-500 rounded-xl text-base font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 outline-none pr-9"
+                    className="w-full h-11 px-3.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 focus:border-emerald-500 rounded-none text-base font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 outline-none pr-9"
                   />
                   <button
                     type="button"
@@ -2099,7 +2207,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                 {phoneDropdownOpen && filteredCustomers.length > 0 && (
                   <div
                     onMouseDown={(e) => e.preventDefault()}
-                    className="absolute left-0 right-0 top-full mt-1 z-50 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl max-h-48 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800"
+                    className="absolute left-0 right-0 top-full mt-1 z-50 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-none shadow-xl max-h-48 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800"
                   >
                     {filteredCustomers.map((cust, i) => (
                       <div
@@ -2111,7 +2219,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                           <div className="font-bold text-slate-900 dark:text-white font-mono text-sm">{cust.phone}</div>
                           <div className="text-xs text-slate-500">{cust.name} {cust.address ? `• ${cust.address}` : ""}</div>
                         </div>
-                        <span className="text-xs text-emerald-700 font-bold bg-emerald-100 px-2 py-0.5 rounded">Select</span>
+                        <span className="text-xs text-emerald-700 font-bold bg-emerald-100 px-2 py-0.5 rounded-none">Select</span>
                       </div>
                     ))}
                   </div>
@@ -2134,7 +2242,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                   placeholder="Enter Customer Name"
                   value={customerName}
                   onChange={(e) => setCustomerName(e.target.value)}
-                  className="w-full h-11 px-3.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 focus:border-emerald-500 rounded-xl text-base font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 outline-none"
+                  className="w-full h-11 px-3.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 focus:border-emerald-500 rounded-none text-base font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 outline-none"
                 />
               </div>
 
@@ -2148,7 +2256,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                   placeholder="Enter Customer Address"
                   value={customerAddress}
                   onChange={(e) => setCustomerAddress(e.target.value)}
-                  className="w-full h-11 px-3.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 focus:border-emerald-500 rounded-xl text-base font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 outline-none"
+                  className="w-full h-11 px-3.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 focus:border-emerald-500 rounded-none text-base font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 outline-none"
                 />
               </div>
             </div>
@@ -2162,7 +2270,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                   placeholder="Doctor Name / Rx Reference"
                   value={prescriptionRef}
                   onChange={(e) => setPrescriptionRef(e.target.value)}
-                  className="w-full h-11 px-3.5 bg-rose-50 border border-rose-300 rounded-xl text-sm font-bold text-slate-900 outline-none"
+                  className="w-full h-11 px-3.5 bg-rose-50 border border-rose-300 rounded-none text-sm font-bold text-slate-900 outline-none"
                 />
               </div>
             )}
@@ -2175,7 +2283,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                   placeholder="Manager PIN"
                   value={managerPin}
                   onChange={(e) => setManagerPin(e.target.value)}
-                  className="w-full h-11 px-3.5 bg-amber-50 border border-amber-300 rounded-xl text-sm font-bold text-slate-900 outline-none"
+                  className="w-full h-11 px-3.5 bg-amber-50 border border-amber-300 rounded-none text-sm font-bold text-slate-900 outline-none"
                 />
               </div>
             )}
@@ -2192,7 +2300,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                   const acct = financialAccounts.find((a) => a.id === e.target.value);
                   if (acct) setPaymentMethod(acct.type || "CASH");
                 }}
-                className="w-full h-11 px-3.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-slate-800 dark:text-slate-200 outline-none cursor-pointer"
+                className="w-full h-11 px-3.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-none text-sm font-bold text-slate-800 dark:text-slate-200 outline-none cursor-pointer"
               >
                 {financialAccounts.map((acct) => (
                   <option key={acct.id} value={acct.id}>
@@ -2210,6 +2318,22 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                   <span className="text-slate-700 dark:text-slate-300">Subtotal:</span>
                   <span className="font-mono text-base font-black text-slate-900 dark:text-white">৳{subTotal.toLocaleString()}</span>
                 </div>
+                {computedDiscount > 0 && (
+                  <div className="flex justify-between font-bold text-emerald-600 dark:text-emerald-400">
+                    <span className="text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                      Discount {discountType === "PERCENT" && discountRate > 0 ? `(${discountRate}%)` : "(Flat)"}:
+                      <button
+                        type="button"
+                        onClick={handleClearDiscount}
+                        className="text-rose-500 hover:text-rose-700 text-xs font-bold cursor-pointer"
+                        title="Remove discount"
+                      >
+                        ✕
+                      </button>
+                    </span>
+                    <span className="font-mono text-base font-black">-৳{computedDiscount.toLocaleString()}</span>
+                  </div>
+                )}
                 {taxAmount > 0 && (
                   <div className="flex justify-between font-bold text-slate-600 dark:text-slate-400">
                     <span className="text-slate-700 dark:text-slate-300">VAT ({taxPercent}%):</span>
@@ -2221,7 +2345,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
               {/* GRAND TOTAL (Prominent Primary Brand Banner with Big Numbers) */}
               <div
                 style={{ backgroundColor: "var(--primary-color, #059669)" }}
-                className="p-3.5 sm:p-4 bg-emerald-600 rounded-2xl text-white shadow-xs flex items-center justify-between"
+                className="p-3.5 sm:p-4 bg-emerald-600 rounded-none text-white shadow-xs flex items-center justify-between"
               >
                 <span className="text-sm font-black uppercase tracking-wider">GRAND TOTAL:</span>
                 <span className="text-3xl sm:text-[34px] font-black font-mono tracking-tight">
@@ -2231,45 +2355,69 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
 
               {/* Paid Amount Input & Presets */}
               <div className="space-y-2.5">
-                <div className="flex items-center justify-between gap-3 bg-slate-50 dark:bg-slate-800/80 p-3 rounded-2xl border border-slate-200 dark:border-slate-700">
+                <div className="flex items-center justify-between gap-3 bg-slate-50 dark:bg-slate-800/80 p-3 rounded-none border border-slate-200 dark:border-slate-700">
                   <span className="text-sm font-black text-slate-800 dark:text-slate-200">Paid Amount (৳):</span>
                   <input
                     type="number"
                     placeholder={`৳${grandTotal.toLocaleString()}`}
                     value={paidInput}
                     onChange={(e) => setPaidInput(e.target.value)}
-                    className="w-40 h-11 px-3 bg-white dark:bg-slate-900 border-2 border-emerald-500 rounded-xl text-xl font-black text-right outline-none text-emerald-700 dark:text-emerald-400 font-mono shadow-xs"
+                    className="w-40 h-11 px-3 bg-white dark:bg-slate-900 border-2 border-emerald-500 rounded-none text-xl font-black text-right outline-none text-emerald-700 dark:text-emerald-400 font-mono shadow-xs"
                   />
                 </div>
 
-                {/* Quick Paid Presets */}
-                <div className="flex items-center gap-2 overflow-x-auto pb-0.5">
-                  <button
-                    type="button"
-                    onClick={() => setPaidInput(grandTotal.toString())}
-                    className="px-3.5 py-1.5 bg-emerald-100 text-emerald-800 rounded-xl text-sm font-black shrink-0 hover:bg-emerald-200 cursor-pointer transition active:scale-95"
-                  >
-                    Exact
-                  </button>
-                  {[100, 500, 1000, 2000].map((amt) => (
-                    <button
-                      key={amt}
-                      type="button"
-                      onClick={() => setPaidInput(amt.toString())}
-                      className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-xl text-sm font-black shrink-0 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer transition active:scale-95"
-                    >
-                      ৳{amt}
-                    </button>
-                  ))}
-                </div>
+                {/* Discount Option Button (Image 1 style: Discount button with icon) */}
+                <button
+                  type="button"
+                  onClick={handleOpenDiscountModal}
+                  className={`w-full p-2.5 border rounded-none flex items-center justify-between transition cursor-pointer ${
+                    computedDiscount > 0
+                      ? "border-emerald-500 bg-emerald-50/70 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 shadow-2xs"
+                      : "border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200"
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div className={`h-8 w-8 rounded-none flex items-center justify-center border ${
+                      computedDiscount > 0
+                        ? "border-emerald-400 bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300"
+                        : "border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300"
+                    }`}>
+                      <Percent className="h-4.5 w-4.5" />
+                    </div>
+                    <div className="text-left">
+                      <div className="text-sm font-black leading-tight">Discount</div>
+                      <div className="text-[11px] text-slate-400 font-medium">
+                        {computedDiscount > 0 ? (
+                          <span className="text-emerald-600 dark:text-emerald-400 font-bold">
+                            {discountType === "PERCENT" ? `${discountRate}% applied` : `৳${discountFlat} flat applied`}
+                          </span>
+                        ) : (
+                          "Click to apply % or flat discount"
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {computedDiscount > 0 ? (
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-base font-black text-emerald-600 dark:text-emerald-400">
+                        -৳{computedDiscount.toLocaleString()}
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="text-xs font-bold px-2.5 py-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300">
+                      Add Discount
+                    </span>
+                  )}
+                </button>
 
                 {dueAmount > 0 ? (
-                  <div className="flex justify-between items-center text-rose-700 font-black text-sm bg-rose-50 dark:bg-rose-950/40 p-3 rounded-xl border border-rose-200 dark:border-rose-800">
+                  <div className="flex justify-between items-center text-rose-700 font-black text-sm bg-rose-50 dark:bg-rose-950/40 p-3 rounded-none border border-rose-200 dark:border-rose-800">
                     <span>Due Amount:</span>
                     <span className="font-mono text-lg font-black">৳{dueAmount.toLocaleString()}</span>
                   </div>
                 ) : changeAmount > 0 ? (
-                  <div className="flex justify-between items-center text-blue-700 font-black text-sm bg-blue-50 dark:bg-blue-950/40 p-3 rounded-xl border border-blue-200 dark:border-blue-800">
+                  <div className="flex justify-between items-center text-blue-700 font-black text-sm bg-blue-50 dark:bg-blue-950/40 p-3 rounded-none border border-blue-200 dark:border-blue-800">
                     <span>Change Return:</span>
                     <span className="font-mono text-lg font-black">৳{changeAmount.toLocaleString()}</span>
                   </div>
@@ -2282,7 +2430,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                 disabled={checkingOut || cart.length === 0 || financialAccounts.length === 0}
                 onClick={handleCheckout}
                 style={{ backgroundColor: "var(--primary-color, #059669)" }}
-                className="h-13 sm:h-14 w-full bg-emerald-600 hover:brightness-95 disabled:opacity-50 text-white font-black rounded-xl text-lg shadow-md transition flex items-center justify-center gap-2.5 cursor-pointer active:scale-99"
+                className="h-13 sm:h-14 w-full bg-emerald-600 hover:brightness-95 disabled:opacity-50 text-white font-black rounded-none text-lg shadow-md transition flex items-center justify-center gap-2.5 cursor-pointer active:scale-99"
               >
                 {checkingOut ? (
                   <Loader2 className="h-6 w-6 animate-spin" />
@@ -2304,13 +2452,13 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
       {/* ========================================================================= */}
       {locationModalOpen && modalProduct && (
         <div className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 animate-in fade-in duration-150">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-[880px] shadow-2xl p-6 sm:p-8 text-slate-800 dark:text-slate-100 flex flex-col space-y-5 max-h-[94vh] overflow-hidden select-none relative">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-none w-full max-w-[880px] shadow-2xl p-6 sm:p-8 text-slate-800 dark:text-slate-100 flex flex-col space-y-5 max-h-[94vh] overflow-hidden select-none relative">
             {/* Top Close Button */}
             <button
               type="button"
               onClick={closeModal}
               title="Close (Esc)"
-              className="absolute top-6 right-6 text-slate-400 hover:text-slate-700 dark:hover:text-white p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+              className="absolute top-6 right-6 text-slate-400 hover:text-slate-700 dark:hover:text-white p-2 rounded-none hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
             >
               <X className="h-6 w-6" />
             </button>
@@ -2321,10 +2469,10 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                 {modalProduct.name}
               </h3>
               <div className="flex items-center justify-center gap-3 mt-2 flex-wrap">
-                <span className="px-3 py-1 rounded-xl bg-slate-100 dark:bg-slate-800 text-sm font-bold text-slate-700 dark:text-slate-300 font-mono">
+                <span className="px-3 py-1 rounded-none bg-slate-100 dark:bg-slate-800 text-sm font-bold text-slate-700 dark:text-slate-300 font-mono">
                   Batch: {modalBatch?.batchNumber || "BAT-Default"}
                 </span>
-                <span className="px-3 py-1 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/60 text-sm font-bold text-emerald-800 dark:text-emerald-300 font-mono">
+                <span className="px-3 py-1 rounded-none bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/60 text-sm font-bold text-emerald-800 dark:text-emerald-300 font-mono">
                   Exp: {modalBatch?.expiryDate ? new Date(modalBatch.expiryDate).toLocaleDateString("en-GB") : "—"}
                 </span>
               </div>
@@ -2348,7 +2496,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                     </button>
                   )}
                 </div>
-                <span className="px-3 py-1 rounded-full text-sm font-bold text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/70 border border-blue-200 dark:border-blue-800/60 font-mono">
+                <span className="px-3 py-1 rounded-none text-sm font-bold text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/70 border border-blue-200 dark:border-blue-800/60 font-mono">
                   {filteredModalLocations.length} locations
                 </span>
               </div>
@@ -2361,7 +2509,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                   placeholder="Search rack, shelf, bin..."
                   value={modalLocationSearch}
                   onChange={(e) => setModalLocationSearch(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-[#111622] border border-slate-200 dark:border-slate-800 focus:border-emerald-500 rounded-2xl pl-11 pr-11 py-3 text-base font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 outline-none transition"
+                  className="w-full bg-slate-50 dark:bg-[#111622] border border-slate-200 dark:border-slate-800 focus:border-emerald-500 rounded-none pl-11 pr-11 py-3 text-base font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 outline-none transition"
                 />
                 <Maximize2 className="absolute right-4 top-3.5 h-4.5 w-4.5 text-slate-400" />
               </div>
@@ -2369,7 +2517,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
               {/* Location Cards List */}
               <div className="flex-1 min-h-0 overflow-y-auto content-scrollbar space-y-3 pr-1 mt-1">
                 {filteredModalLocations.length === 0 ? (
-                  <div className="py-12 text-center text-base font-medium text-slate-400 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl">
+                  <div className="py-12 text-center text-base font-medium text-slate-400 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-none">
                     No physical stock locations available for this batch.
                   </div>
                 ) : (
@@ -2398,7 +2546,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                       return (
                         <div
                           key={loc.id || i}
-                          className={`p-4 sm:p-5 rounded-2xl transition shadow-xs relative border-2 ${
+                          className={`p-4 sm:p-5 rounded-none transition shadow-xs relative border-2 ${
                             isAllocated
                               ? "border-emerald-600 bg-emerald-50/70 dark:bg-emerald-950/25 ring-2 ring-emerald-500/20"
                               : "border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-[#111622]"
@@ -2412,7 +2560,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                               className="flex items-center gap-3 text-left cursor-pointer group"
                             >
                               <span
-                                className={`h-7 w-7 rounded-xl flex items-center justify-center shrink-0 transition-all ${
+                                className={`h-7 w-7 rounded-none flex items-center justify-center shrink-0 transition-all ${
                                   isAllocated
                                     ? "bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-500/30"
                                     : "border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 group-hover:border-emerald-500"
@@ -2426,11 +2574,11 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                                     {displayCode}
                                   </span>
                                   {isAllocated ? (
-                                    <span className="px-2 py-0.5 rounded-md text-xs font-black bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                                    <span className="px-2 py-0.5 rounded-none text-xs font-black bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
                                       Selected
                                     </span>
                                   ) : (
-                                    <span className="px-2 py-0.5 rounded-md text-xs font-bold text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-800 group-hover:border-emerald-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                                    <span className="px-2 py-0.5 rounded-none text-xs font-bold text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-800 group-hover:border-emerald-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
                                       Click to Select
                                     </span>
                                   )}
@@ -2442,14 +2590,14 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                             </button>
 
                             <div className="flex items-center gap-2 shrink-0">
-                              <span className="px-3 py-1 rounded-xl text-xs sm:text-sm font-black bg-emerald-100 dark:bg-emerald-950/80 border border-emerald-300 dark:border-emerald-700/60 text-emerald-900 dark:text-emerald-300 font-mono">
+                              <span className="px-3 py-1 rounded-none text-xs sm:text-sm font-black bg-emerald-100 dark:bg-emerald-950/80 border border-emerald-300 dark:border-emerald-700/60 text-emerald-900 dark:text-emerald-300 font-mono">
                                 Stock: {locStock} Tablets
                               </span>
 
                               <button
                                 type="button"
                                 onClick={() => setLocMaxAlloc(locKey, locStock)}
-                                className="px-3 py-1.5 text-xs sm:text-sm font-black rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition cursor-pointer"
+                                className="px-3 py-1.5 text-xs sm:text-sm font-black rounded-none bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition cursor-pointer"
                               >
                                 Max All
                               </button>
@@ -2459,7 +2607,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                                   type="button"
                                   onClick={() => clearLocAlloc(locKey)}
                                   title="Clear this location"
-                                  className="h-8 w-8 flex items-center justify-center text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/40 transition cursor-pointer"
+                                  className="h-8 w-8 flex items-center justify-center text-slate-400 hover:text-red-500 rounded-none hover:bg-red-50 dark:hover:bg-red-950/40 transition cursor-pointer"
                                 >
                                   <X className="h-5 w-5" />
                                 </button>
@@ -2470,7 +2618,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                           {/* Middle Row: Clean Stepper & Max Button for Box, Strip, and Tablet */}
                           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3.5 pt-3.5 border-t border-slate-200/80 dark:border-slate-800">
                             {/* 1. Box Counter */}
-                            <div className="bg-white dark:bg-[#0B0F17] border border-slate-200 dark:border-slate-800 rounded-2xl p-3 flex flex-col justify-between gap-2 shadow-2xs">
+                            <div className="bg-white dark:bg-[#0B0F17] border border-slate-200 dark:border-slate-800 rounded-none p-3 flex flex-col justify-between gap-2 shadow-2xs">
                               <div className="flex items-center justify-between">
                                 <span className="text-base font-black text-slate-900 dark:text-white">Box</span>
                                 <span className="text-xs text-slate-500 dark:text-slate-400 font-mono font-bold">
@@ -2483,7 +2631,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                                     type="button"
                                     onClick={() => updateMedAlloc(locKey, "box", (alloc.box || 0) - 1, locStock)}
                                     disabled={(alloc.box || 0) <= 0}
-                                    className="h-9 w-9 flex items-center justify-center rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-30 disabled:pointer-events-none hover:bg-slate-200 transition cursor-pointer"
+                                    className="h-9 w-9 flex items-center justify-center rounded-none bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-30 disabled:pointer-events-none hover:bg-slate-200 transition cursor-pointer"
                                   >
                                     <Minus className="h-4 w-4" />
                                   </button>
@@ -2500,7 +2648,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                                     type="button"
                                     onClick={() => updateMedAlloc(locKey, "box", (alloc.box || 0) + 1, locStock)}
                                     disabled={maxBoxesAvailable <= 0}
-                                    className="h-9 w-9 flex items-center justify-center rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-30 disabled:pointer-events-none hover:bg-slate-200 transition cursor-pointer"
+                                    className="h-9 w-9 flex items-center justify-center rounded-none bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-30 disabled:pointer-events-none hover:bg-slate-200 transition cursor-pointer"
                                   >
                                     <Plus className="h-4 w-4" />
                                   </button>
@@ -2509,7 +2657,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                                   type="button"
                                   onClick={() => setLocUnitMax(locKey, "box", locStock)}
                                   disabled={maxBoxesAvailable <= 0}
-                                  className="px-2.5 py-1.5 text-xs font-black rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-30 disabled:pointer-events-none transition cursor-pointer whitespace-nowrap"
+                                  className="px-2.5 py-1.5 text-xs font-black rounded-none bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-30 disabled:pointer-events-none transition cursor-pointer whitespace-nowrap"
                                 >
                                   Max ({maxBoxesAvailable})
                                 </button>
@@ -2517,7 +2665,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                             </div>
 
                             {/* 2. Strip Counter */}
-                            <div className="bg-white dark:bg-[#0B0F17] border border-slate-200 dark:border-slate-800 rounded-2xl p-3 flex flex-col justify-between gap-2 shadow-2xs">
+                            <div className="bg-white dark:bg-[#0B0F17] border border-slate-200 dark:border-slate-800 rounded-none p-3 flex flex-col justify-between gap-2 shadow-2xs">
                               <div className="flex items-center justify-between">
                                 <span className="text-base font-black text-slate-900 dark:text-white">Strip</span>
                                 <span className="text-xs text-slate-500 dark:text-slate-400 font-mono font-bold">
@@ -2530,7 +2678,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                                     type="button"
                                     onClick={() => updateMedAlloc(locKey, "strip", (alloc.strip || 0) - 1, locStock)}
                                     disabled={(alloc.strip || 0) <= 0}
-                                    className="h-9 w-9 flex items-center justify-center rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-30 disabled:pointer-events-none hover:bg-slate-200 transition cursor-pointer"
+                                    className="h-9 w-9 flex items-center justify-center rounded-none bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-30 disabled:pointer-events-none hover:bg-slate-200 transition cursor-pointer"
                                   >
                                     <Minus className="h-4 w-4" />
                                   </button>
@@ -2547,7 +2695,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                                     type="button"
                                     onClick={() => updateMedAlloc(locKey, "strip", (alloc.strip || 0) + 1, locStock)}
                                     disabled={maxStripsAvailable <= 0}
-                                    className="h-9 w-9 flex items-center justify-center rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-30 disabled:pointer-events-none hover:bg-slate-200 transition cursor-pointer"
+                                    className="h-9 w-9 flex items-center justify-center rounded-none bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-30 disabled:pointer-events-none hover:bg-slate-200 transition cursor-pointer"
                                   >
                                     <Plus className="h-4 w-4" />
                                   </button>
@@ -2556,7 +2704,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                                   type="button"
                                   onClick={() => setLocUnitMax(locKey, "strip", locStock)}
                                   disabled={maxStripsAvailable <= 0}
-                                  className="px-2.5 py-1.5 text-xs font-black rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-30 disabled:pointer-events-none transition cursor-pointer whitespace-nowrap"
+                                  className="px-2.5 py-1.5 text-xs font-black rounded-none bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-30 disabled:pointer-events-none transition cursor-pointer whitespace-nowrap"
                                 >
                                   Max ({maxStripsAvailable})
                                 </button>
@@ -2564,7 +2712,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                             </div>
 
                             {/* 3. Tablet Counter */}
-                            <div className="bg-white dark:bg-[#0B0F17] border border-slate-200 dark:border-slate-800 rounded-2xl p-3 flex flex-col justify-between gap-2 shadow-2xs">
+                            <div className="bg-white dark:bg-[#0B0F17] border border-slate-200 dark:border-slate-800 rounded-none p-3 flex flex-col justify-between gap-2 shadow-2xs">
                               <div className="flex items-center justify-between">
                                 <span className="text-base font-black text-slate-900 dark:text-white">Tablet</span>
                                 <span className="text-xs text-slate-500 dark:text-slate-400 font-mono font-bold">
@@ -2577,7 +2725,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                                     type="button"
                                     onClick={() => updateMedAlloc(locKey, "tablet", (alloc.tablet || 0) - 1, locStock)}
                                     disabled={(alloc.tablet || 0) <= 0}
-                                    className="h-9 w-9 flex items-center justify-center rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-30 disabled:pointer-events-none hover:bg-slate-200 transition cursor-pointer"
+                                    className="h-9 w-9 flex items-center justify-center rounded-none bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-30 disabled:pointer-events-none hover:bg-slate-200 transition cursor-pointer"
                                   >
                                     <Minus className="h-4 w-4" />
                                   </button>
@@ -2594,7 +2742,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                                     type="button"
                                     onClick={() => updateMedAlloc(locKey, "tablet", (alloc.tablet || 0) + 1, locStock)}
                                     disabled={maxTabletsAvailable <= 0}
-                                    className="h-9 w-9 flex items-center justify-center rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-30 disabled:pointer-events-none hover:bg-slate-200 transition cursor-pointer"
+                                    className="h-9 w-9 flex items-center justify-center rounded-none bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-30 disabled:pointer-events-none hover:bg-slate-200 transition cursor-pointer"
                                   >
                                     <Plus className="h-4 w-4" />
                                   </button>
@@ -2603,7 +2751,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                                   type="button"
                                   onClick={() => setLocUnitMax(locKey, "tablet", locStock)}
                                   disabled={maxTabletsAvailable <= 0}
-                                  className="px-2.5 py-1.5 text-xs font-black rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-30 disabled:pointer-events-none transition cursor-pointer whitespace-nowrap"
+                                  className="px-2.5 py-1.5 text-xs font-black rounded-none bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-30 disabled:pointer-events-none transition cursor-pointer whitespace-nowrap"
                                 >
                                   Max ({maxTabletsAvailable})
                                 </button>
@@ -2635,7 +2783,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                     return (
                       <div
                         key={loc.id || i}
-                        className={`p-4 sm:p-5 rounded-2xl transition shadow-xs relative border-2 ${
+                        className={`p-4 sm:p-5 rounded-none transition shadow-xs relative border-2 ${
                           isAllocated
                             ? "border-emerald-600 bg-emerald-50/70 dark:bg-emerald-950/25 ring-2 ring-emerald-500/20"
                             : "border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-[#111622]"
@@ -2649,7 +2797,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                               className="flex items-center gap-3 text-left cursor-pointer group"
                             >
                               <span
-                                className={`h-7 w-7 rounded-xl flex items-center justify-center shrink-0 transition-all ${
+                                className={`h-7 w-7 rounded-none flex items-center justify-center shrink-0 transition-all ${
                                   isAllocated
                                     ? "bg-emerald-600 text-white shadow-xs ring-2 ring-emerald-500/30"
                                     : "border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 group-hover:border-emerald-500"
@@ -2663,11 +2811,11 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                                     {displayCode}
                                   </span>
                                   {isAllocated ? (
-                                    <span className="px-2 py-0.5 rounded-md text-xs font-black bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                                    <span className="px-2 py-0.5 rounded-none text-xs font-black bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
                                       Selected
                                     </span>
                                   ) : (
-                                    <span className="px-2 py-0.5 rounded-md text-xs font-bold text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-800 group-hover:border-emerald-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                                    <span className="px-2 py-0.5 rounded-none text-xs font-bold text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-800 group-hover:border-emerald-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
                                       Click to Select
                                     </span>
                                   )}
@@ -2683,12 +2831,12 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                           </div>
 
                           <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-                            <div className="flex items-center gap-1.5 bg-white dark:bg-[#0B0F17] border border-slate-200 dark:border-slate-800 rounded-2xl p-1.5 shadow-xs">
+                            <div className="flex items-center gap-1.5 bg-white dark:bg-[#0B0F17] border border-slate-200 dark:border-slate-800 rounded-none p-1.5 shadow-xs">
                               <button
                                 type="button"
                                 onClick={() => updateNonMedAlloc(locKey, (alloc.qty || 0) - 1, locStock)}
                                 disabled={(alloc.qty || 0) <= 0}
-                                className="h-10 w-10 flex items-center justify-center rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-30 disabled:pointer-events-none transition cursor-pointer"
+                                className="h-10 w-10 flex items-center justify-center rounded-none hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-30 disabled:pointer-events-none transition cursor-pointer"
                               >
                                 <Minus className="h-4 w-4" />
                               </button>
@@ -2705,7 +2853,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                                 type="button"
                                 onClick={() => updateNonMedAlloc(locKey, (alloc.qty || 0) + 1, locStock)}
                                 disabled={remainingNonMed <= 0}
-                                className="h-10 w-10 flex items-center justify-center rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-30 disabled:pointer-events-none transition cursor-pointer"
+                                className="h-10 w-10 flex items-center justify-center rounded-none hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-30 disabled:pointer-events-none transition cursor-pointer"
                               >
                                 <Plus className="h-4 w-4" />
                               </button>
@@ -2713,7 +2861,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                                 type="button"
                                 onClick={() => setLocMaxAlloc(locKey, locStock)}
                                 disabled={remainingNonMed <= 0}
-                                className="px-3 py-2 text-xs sm:text-sm font-black rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-30 disabled:pointer-events-none transition cursor-pointer ml-1 whitespace-nowrap"
+                                className="px-3 py-2 text-xs sm:text-sm font-black rounded-none bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-30 disabled:pointer-events-none transition cursor-pointer ml-1 whitespace-nowrap"
                               >
                                 Max ({remainingNonMed})
                               </button>
@@ -2721,7 +2869,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                                 <button
                                   type="button"
                                   onClick={() => clearLocAlloc(locKey)}
-                                  className="h-10 w-10 flex items-center justify-center text-slate-400 hover:text-red-500 rounded-xl hover:bg-red-50 dark:hover:bg-red-950/40 transition cursor-pointer ml-0.5"
+                                  className="h-10 w-10 flex items-center justify-center text-slate-400 hover:text-red-500 rounded-none hover:bg-red-50 dark:hover:bg-red-950/40 transition cursor-pointer ml-0.5"
                                 >
                                   <X className="h-5 w-5" />
                                 </button>
@@ -2753,7 +2901,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                           key={u.id}
                           type="button"
                           onClick={() => setModalUnit(u.id)}
-                          className={`py-2.5 px-3.5 rounded-2xl border-2 text-center transition cursor-pointer ${
+                          className={`py-2.5 px-3.5 rounded-none border-2 text-center transition cursor-pointer ${
                             isSelected
                               ? "border-emerald-600 bg-emerald-50 text-emerald-800 dark:border-emerald-500 dark:bg-emerald-950/30 dark:text-emerald-400 shadow-sm"
                               : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 dark:border-slate-800 dark:bg-[#111622] dark:text-slate-300"
@@ -2773,11 +2921,11 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
               )}
 
               {/* Total Summary */}
-              <div className="bg-slate-50 dark:bg-[#111622] border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 space-y-2">
+              <div className="bg-slate-50 dark:bg-[#111622] border border-slate-200 dark:border-slate-800 rounded-none p-4 sm:p-5 space-y-2">
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <div className="flex items-center gap-3">
                     <span className="text-base sm:text-lg font-bold text-slate-800 dark:text-slate-100">Total Selected:</span>
-                    <span className="px-3.5 py-1 rounded-full text-sm sm:text-base font-black bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 font-mono">
+                    <span className="px-3.5 py-1 rounded-none text-sm sm:text-base font-black bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 font-mono">
                       {isMedicineModel ? (
                         <>
                           {modalSummary.totalBoxes > 0 ? `${modalSummary.totalBoxes} Box ` : ""}
@@ -2790,7 +2938,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                       )}
                     </span>
                     {modalSummary.activeLocations > 1 && (
-                      <span className="text-xs sm:text-sm text-blue-600 dark:text-blue-400 font-bold bg-blue-50 dark:bg-blue-950/60 px-2.5 py-1 rounded-full border border-blue-200 dark:border-blue-800">
+                      <span className="text-xs sm:text-sm text-blue-600 dark:text-blue-400 font-bold bg-blue-50 dark:bg-blue-950/60 px-2.5 py-1 rounded-none border border-blue-200 dark:border-blue-800">
                         Across {modalSummary.activeLocations} locations
                       </span>
                     )}
@@ -2810,7 +2958,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
                 onClick={confirmAddToCart}
                 disabled={modalSummary.totalSelectedCount <= 0}
                 style={{ backgroundColor: modalSummary.totalSelectedCount > 0 ? "var(--primary-color, #059669)" : undefined }}
-                className={`w-full h-14 sm:h-15 font-black py-3.5 rounded-2xl text-lg sm:text-xl shadow-lg transition flex items-center justify-center gap-2 cursor-pointer ${
+                className={`w-full h-14 sm:h-15 font-black py-3.5 rounded-none text-lg sm:text-xl shadow-lg transition flex items-center justify-center gap-2 cursor-pointer ${
                   modalSummary.totalSelectedCount > 0
                     ? "bg-emerald-600 hover:brightness-95 text-white active:scale-99"
                     : "bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed"
@@ -2828,7 +2976,153 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
       )}
 
       {/* ========================================================================= */}
-      {/* 2. SILENT THERMAL RECEIPT PRINT PORTAL (Direct print, zero on-screen modal) */}
+      {/* 2. DISCOUNT MODAL POPUP (Matches Reference Image 2: 5%, 10%, 15%, 20%, %, Flat) */}
+      {/* ========================================================================= */}
+      {discountModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150 select-none">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-none w-full max-w-[420px] shadow-2xl p-6 text-slate-800 dark:text-slate-100 flex flex-col space-y-5 relative">
+            {/* Top Close Button */}
+            <button
+              type="button"
+              onClick={() => setDiscountModalOpen(false)}
+              className="absolute top-5 right-5 text-slate-400 hover:text-slate-700 dark:hover:text-white p-1.5 transition cursor-pointer"
+            >
+              <X className="h-5 w-5" />
+            </button>
+
+            {/* Modal Title */}
+            <div>
+              <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">
+                Select Discount Amount:
+              </h3>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Current Subtotal: <strong className="font-mono font-bold text-slate-700 dark:text-slate-300">৳{subTotal.toLocaleString()}</strong>
+              </p>
+            </div>
+
+            {/* Quick Percentage Presets (Matches Image 2 exactly: 5%, 10%, 15% in row 1, 20% in row 2) */}
+            <div className="grid grid-cols-3 gap-3">
+              {[5, 10, 15, 20].map((pct) => {
+                const isSelected = tempDiscountType === "PERCENT" && parseFloat(tempDiscountRate) === pct;
+                return (
+                  <button
+                    key={pct}
+                    type="button"
+                    onClick={() => handleSelectQuickPercent(pct)}
+                    className={`py-3.5 px-3 border text-center font-black text-xl transition cursor-pointer rounded-none ${
+                      isSelected
+                        ? "border-emerald-600 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 ring-2 ring-emerald-500/20 shadow-xs"
+                        : "border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800 text-slate-900 dark:text-white hover:border-emerald-400 hover:bg-slate-100 dark:hover:bg-slate-700"
+                    }`}
+                  >
+                    {pct}%
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Inputs: Discount Rate (%) & Flat Discount (BDT) */}
+            <div className="space-y-3.5 pt-1">
+              <div>
+                <label className="text-sm font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+                  Enter Discount Rate (%)
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="any"
+                    placeholder="0"
+                    value={tempDiscountRate}
+                    onChange={(e) => handleRateChange(e.target.value)}
+                    onFocus={(e) => e.target.select()}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleApplyDiscount();
+                      }
+                    }}
+                    className="w-full h-11 px-3.5 border border-slate-200 dark:border-slate-700 focus:border-emerald-500 rounded-none bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-bold text-base outline-none pr-8 font-mono"
+                  />
+                  <span className="absolute right-3.5 top-2.5 text-slate-400 font-bold text-base pointer-events-none">
+                    %
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-sm font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+                  Enter Flat Discount (BDT)
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    min="0"
+                    max={subTotal}
+                    step="any"
+                    placeholder="0"
+                    value={tempDiscountFlat}
+                    onChange={(e) => handleFlatChange(e.target.value)}
+                    onFocus={(e) => e.target.select()}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleApplyDiscount();
+                      }
+                    }}
+                    className="w-full h-11 px-3.5 border border-slate-200 dark:border-slate-700 focus:border-emerald-500 rounded-none bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-bold text-base outline-none pl-8 font-mono"
+                  />
+                  <span className="absolute left-3.5 top-2.5 text-slate-400 font-bold text-base pointer-events-none">
+                    ৳
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Real-time Summary Box */}
+            <div className="p-3 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-none text-xs space-y-1">
+              <div className="flex justify-between font-bold text-slate-600 dark:text-slate-400">
+                <span>Discount to apply:</span>
+                <span className="font-mono text-emerald-600 dark:text-emerald-400 font-black text-sm">
+                  -৳{previewFlatDiscount.toLocaleString()}
+                </span>
+              </div>
+              <div className="flex justify-between font-bold text-slate-800 dark:text-slate-200 pt-1 border-t border-slate-200 dark:border-slate-700">
+                <span>Updated Grand Total:</span>
+                <span className="font-mono font-black text-slate-900 dark:text-white text-base">
+                  ৳{previewGrandTotal.toLocaleString()}
+                </span>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="space-y-2 pt-1">
+              <button
+                type="button"
+                onClick={handleApplyDiscount}
+                style={{ backgroundColor: "var(--primary-color, #059669)" }}
+                className="w-full h-12 bg-emerald-600 hover:brightness-95 text-white font-black rounded-none text-base shadow-sm transition flex items-center justify-center cursor-pointer active:scale-99"
+              >
+                Apply Discount
+              </button>
+
+              {(discountRate > 0 || discountFlat > 0) && (
+                <button
+                  type="button"
+                  onClick={handleClearDiscount}
+                  className="w-full py-2 text-rose-600 hover:text-rose-700 dark:text-rose-400 text-xs font-bold transition cursor-pointer"
+                >
+                  Remove / Clear Discount
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 3. SILENT THERMAL RECEIPT PRINT PORTAL (Direct print, zero on-screen modal) */}
       {/* ========================================================================= */}
       {invoiceData && createPortal(
         <div className="print-portal fixed -left-[9999px] -top-[9999px] w-0 h-0 opacity-0 pointer-events-none overflow-hidden print:static print:left-auto print:top-auto print:w-full print:h-auto print:opacity-100 print:pointer-events-auto print:overflow-visible print:block print:m-0 print:p-0 print:bg-white">
@@ -3007,7 +3301,7 @@ export function PosModule({ selectedBranchId: propBranchId }: PosModuleProps = {
               <div style={{ borderTop: "1px dashed #000000", margin: "8px 0" }} />
 
               {/* Policy Box (Matches Image 2) */}
-              <div style={{ border: "1px solid #000000", padding: "8px", margin: "8px 0", textAlign: "center", fontSize: "10px", lineHeight: "1.3" }} className="font-medium rounded">
+              <div style={{ border: "1px solid #000000", padding: "8px", margin: "8px 0", textAlign: "center", fontSize: "10px", lineHeight: "1.3" }} className="font-medium rounded-none">
                 Items may be exchanged subject to Biz_Pos & Diagnostic sales policies within 7 days. No cash refund is applicable.
               </div>
 

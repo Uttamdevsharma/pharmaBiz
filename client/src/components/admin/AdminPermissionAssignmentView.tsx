@@ -119,24 +119,27 @@ export function AdminPermissionAssignmentView() {
 
   // Save matrix changes
   const handleSaveMatrix = async () => {
-    if (!canManage) return;
+    if (!canManage || !isDirty) return;
+
     try {
       setSaving(true);
-      setActionMsg(null);
+      const updates = roles.map((role) => ({
+        roleId: role.id,
+        permissions: rolePermissionsMap[role.id] || [],
+      }));
 
-      // Save permissions for each role
-      const savePromises = Object.keys(rolePermissionsMap).map((roleId) =>
-        fetchApi(`/super-admin/roles/${roleId}/permissions`, {
-          method: "PUT",
-          body: JSON.stringify({ permissions: rolePermissionsMap[roleId] || [] }),
-        })
-      );
+      const res = await fetchApi("/super-admin/roles/matrix", {
+        method: "POST",
+        body: JSON.stringify({ updates }),
+      });
 
-      await Promise.all(savePromises);
+      if (!res.success) {
+        throw new Error(res.message || "Failed to save permissions");
+      }
 
       setActionMsg({
         type: "success",
-        text: "Permissions matrix saved successfully.",
+        text: "Platform role permissions successfully updated.",
       });
       setInitialRolePermissionsMap(JSON.parse(JSON.stringify(rolePermissionsMap)));
     } catch (err: any) {
@@ -175,20 +178,28 @@ export function AdminPermissionAssignmentView() {
     <div className="space-y-6 w-full">
       {/* Header Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 bg-brand-primary/10 rounded-2xl text-brand-primary">
-            <Sliders className="h-6 w-6" />
+        <div>
+          <div className="flex items-center gap-2 text-xs font-bold text-slate-400 mb-1">
+            <span>Staff Management</span>
+            <span>/</span>
+            <span>Role Management</span>
+            <span>/</span>
+            <span className="text-brand-primary">Permission Assignment</span>
           </div>
-          <h1 className="text-2xl font-black text-slate-900 dark:text-white">
-            Permission Assignment
+          <h1 className="text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2.5">
+            <Sliders className="h-7 w-7 text-brand-primary" />
+            <span>Permission Assignment</span>
           </h1>
+          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+            Assign granular capabilities and access scopes to custom platform roles.
+          </p>
         </div>
 
         <div className="flex items-center gap-3">
           <button
             onClick={loadData}
             disabled={loading || saving}
-            className="flex items-center gap-2 h-11 px-5 rounded-xl text-sm font-bold bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition shadow-xs cursor-pointer"
+            className="flex items-center gap-2 h-10 px-4 rounded-none text-xs sm:text-sm font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition shadow-xs cursor-pointer"
           >
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             <span>Refresh</span>
@@ -199,7 +210,7 @@ export function AdminPermissionAssignmentView() {
       {/* Action Notification */}
       {actionMsg && (
         <div
-          className={`flex items-center justify-between p-4 rounded-xl text-xs font-semibold transition-all ${
+          className={`flex items-center justify-between p-4 rounded-none text-xs font-semibold transition-all ${
             actionMsg.type === "success"
               ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
               : "bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800"
@@ -219,8 +230,8 @@ export function AdminPermissionAssignmentView() {
         </div>
       )}
 
-      {/* Controls Bar: Search & Category Filter (Matches Image 4) */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
+      {/* Controls Bar: Search & Category Filter */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-4 rounded-none border border-slate-200 dark:border-slate-800 shadow-xs">
         <div className="relative flex-1 max-w-md">
           <Search className="h-4 w-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
           <input
@@ -228,7 +239,7 @@ export function AdminPermissionAssignmentView() {
             placeholder="Search permissions..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full h-11 pl-11 pr-4 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-primary transition"
+            className="w-full h-10 pl-11 pr-4 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-none text-sm font-medium focus:outline-none focus:border-brand-primary transition"
           />
         </div>
 
@@ -236,7 +247,7 @@ export function AdminPermissionAssignmentView() {
           <select
             value={selectedCategory}
             onChange={(e) => setSelectedCategory(e.target.value)}
-            className="h-11 px-4 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-brand-primary cursor-pointer transition text-slate-800 dark:text-slate-200"
+            className="h-10 px-4 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-none text-sm font-semibold focus:outline-none focus:border-brand-primary cursor-pointer transition text-slate-800 dark:text-slate-200"
           >
             <option value="ALL">All Categories</option>
             {PLATFORM_CATEGORIES.map((cat) => (
@@ -248,14 +259,33 @@ export function AdminPermissionAssignmentView() {
         </div>
       </div>
 
-      {/* Clean Permission Matrix Table (Matches Image 4) */}
+      {/* Permission Matrix Table */}
       {loading ? (
-        <div className="py-20 flex flex-col items-center justify-center text-slate-400 gap-2">
-          <Loader2 className="h-6 w-6 animate-spin text-brand-primary" />
-          <span className="text-xs font-medium">Loading platform matrix...</span>
+        /* Animated Skeleton Matrix */
+        <div className="bg-white dark:bg-slate-900 rounded-none border border-slate-200 dark:border-slate-800 p-6 space-y-4">
+          <div className="animate-pulse space-y-4">
+            <div className="h-10 w-full bg-slate-100 dark:bg-slate-800 rounded-none" />
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="flex items-center justify-between py-2 border-b border-slate-100 dark:border-slate-800">
+                <div className="h-4 w-56 bg-slate-200 dark:bg-slate-700 rounded-none" />
+                <div className="flex items-center gap-12">
+                  <div className="h-5 w-5 bg-slate-200 dark:bg-slate-700 rounded-none" />
+                  <div className="h-5 w-5 bg-slate-200 dark:bg-slate-700 rounded-none" />
+                  <div className="h-5 w-5 bg-slate-200 dark:bg-slate-700 rounded-none" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : roles.length === 0 ? (
+        <div className="bg-white dark:bg-slate-900 rounded-none border border-slate-200 dark:border-slate-800 p-16 text-center text-slate-400">
+          <p className="text-base font-bold text-slate-700 dark:text-slate-300">No custom roles found</p>
+          <p className="text-xs text-slate-400 mt-1">
+            Create custom roles under Role Management &gt; Create Role to assign permissions here.
+          </p>
         </div>
       ) : (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-xs">
+        <div className="bg-white dark:bg-slate-900 rounded-none border border-slate-200 dark:border-slate-800 overflow-hidden shadow-xs">
           <div className="overflow-x-auto max-h-[72vh]">
             <table className="w-full text-left text-sm border-collapse">
               {/* Sticky Table Header */}
@@ -272,7 +302,7 @@ export function AdminPermissionAssignmentView() {
                       className="p-4 text-center min-w-[170px] border-l border-slate-200 dark:border-slate-700"
                     >
                       <div className="flex flex-col items-center space-y-1.5">
-                        <div className="text-base font-black text-slate-900 dark:text-white tracking-tight">
+                        <div className="text-sm font-black text-slate-900 dark:text-white tracking-tight">
                           {role.name}
                         </div>
 
@@ -282,15 +312,15 @@ export function AdminPermissionAssignmentView() {
                             <button
                               type="button"
                               onClick={() => handleSelectAllForRole(role.id)}
-                              className="text-xs font-bold text-brand-primary hover:underline cursor-pointer"
+                              className="text-[11px] font-bold text-brand-primary hover:underline cursor-pointer"
                             >
                               Select All
                             </button>
-                            <span className="text-slate-300 dark:text-slate-600">|</span>
+                            <span className="text-slate-300 dark:text-slate-600 text-xs">|</span>
                             <button
                               type="button"
                               onClick={() => handleClearAllForRole(role.id)}
-                              className="text-xs font-bold text-slate-400 hover:text-red-500 cursor-pointer"
+                              className="text-[11px] font-bold text-slate-400 hover:text-red-500 cursor-pointer"
                             >
                               Clear All
                             </button>
@@ -309,10 +339,10 @@ export function AdminPermissionAssignmentView() {
                   return (
                     <React.Fragment key={category}>
                       {/* Category Header Row */}
-                      <tr className="bg-slate-50/80 dark:bg-slate-800/60">
+                      <tr className="bg-slate-50 dark:bg-slate-800/60">
                         <td
                           colSpan={roles.length + 1}
-                          className="px-6 py-2.5 font-black uppercase text-xs tracking-wider text-slate-500"
+                          className="px-6 py-2.5 font-bold uppercase text-[11px] tracking-wider text-slate-500"
                         >
                           {category}
                         </td>
@@ -325,7 +355,7 @@ export function AdminPermissionAssignmentView() {
                           className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors"
                         >
                           {/* Permission Name Only */}
-                          <td className="px-6 py-3.5 font-semibold text-slate-800 dark:text-slate-200 text-sm">
+                          <td className="px-6 py-3 font-semibold text-slate-800 dark:text-slate-200 text-xs sm:text-sm">
                             {perm.name}
                           </td>
 
@@ -364,7 +394,7 @@ export function AdminPermissionAssignmentView() {
 
       {/* Sticky Bottom Save Action Bar */}
       {canManage && isDirty && (
-        <div className="sticky bottom-4 z-30 p-4 rounded-2xl bg-slate-900 text-white shadow-xl flex items-center justify-between gap-4">
+        <div className="sticky bottom-4 z-30 p-4 rounded-none bg-slate-900 text-white shadow-xl flex items-center justify-between gap-4 border border-slate-700">
           <div>
             <div className="font-bold text-sm">Unsaved changes</div>
             <div className="text-xs text-slate-400">
@@ -375,7 +405,7 @@ export function AdminPermissionAssignmentView() {
           <div className="flex items-center gap-3">
             <button
               onClick={handleReset}
-              className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 transition cursor-pointer"
+              className="px-4 py-2 rounded-none text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 transition cursor-pointer"
             >
               Reset
             </button>
@@ -383,7 +413,7 @@ export function AdminPermissionAssignmentView() {
             <button
               onClick={handleSaveMatrix}
               disabled={saving}
-              className="flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-bold bg-brand-primary hover:bg-brand-primary-hover text-white shadow-md transition cursor-pointer"
+              className="flex items-center gap-2 px-5 py-2 rounded-none text-xs font-bold bg-brand-primary hover:bg-brand-primary-hover text-white shadow-md transition cursor-pointer"
             >
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               <span>{saving ? "Saving..." : "Save Changes"}</span>

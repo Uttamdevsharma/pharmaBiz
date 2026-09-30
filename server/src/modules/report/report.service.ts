@@ -763,7 +763,7 @@ export class ReportService {
 
     const ninetyDaysFuture = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
 
-    const [sales, inventories, accounts, suppliers, allBranches, transferLossItems, directDamageMovements] = await Promise.all([
+    const [sales, inventories, accounts, suppliers, allBranches, transferLossItems, directDamageMovements, expenses] = await Promise.all([
       (prisma as any).sale.findMany({
         where: saleWhere,
         include: {
@@ -840,6 +840,28 @@ export class ReportService {
           } : {}),
         },
       }).catch(() => []),
+      (prisma as any).branchExpense.findMany({
+        where: {
+          tenantId,
+          ...(effectiveBranchId ? { branchId: effectiveBranchId } : {}),
+          ...(rangeStart || rangeEnd
+            ? {
+                paymentDate: {
+                  ...(rangeStart ? { gte: rangeStart } : {}),
+                  ...(rangeEnd ? { lte: rangeEnd } : {}),
+                },
+              }
+            : {}),
+        },
+        select: {
+          id: true,
+          branchId: true,
+          category: true,
+          amount: true,
+          paymentDate: true,
+          title: true,
+        },
+      }).catch(() => []),
     ]);
 
     const activeBranch = effectiveBranchId ? allBranches.find((b: any) => b.id === effectiveBranchId) : null;
@@ -860,28 +882,28 @@ export class ReportService {
     const productSalesMap: Record<string, { id: string; name: string; quantity: number; revenue: number }> = {};
 
     // Dynamic Trend Map according to activePeriod
-    const dynamicTrendMap: Record<string, { key: string; label: string; sales: number; revenue: number; profit: number }> = {};
+    const dynamicTrendMap: Record<string, { key: string; label: string; sales: number; revenue: number; cost: number; profit: number; expenses: number }> = {};
 
     if (activePeriod === "today" || activePeriod === "yesterday") {
       // 24 Hourly buckets
       for (let h = 0; h < 24; h++) {
         const hourStr = String(h).padStart(2, "0");
         const hourLabel = h === 0 ? "12 AM" : h < 12 ? `${h} AM` : h === 12 ? "12 PM" : `${h - 12} PM`;
-        dynamicTrendMap[hourStr] = { key: hourStr, label: hourLabel, sales: 0, revenue: 0, profit: 0 };
+        dynamicTrendMap[hourStr] = { key: hourStr, label: hourLabel, sales: 0, revenue: 0, cost: 0, profit: 0, expenses: 0 };
       }
     } else if (activePeriod === "7d") {
       for (let i = 6; i >= 0; i--) {
         const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
         const dateStr = d.toISOString().split("T")[0];
         const label = d.toLocaleDateString("en-US", { weekday: "short" });
-        dynamicTrendMap[dateStr] = { key: dateStr, label, sales: 0, revenue: 0, profit: 0 };
+        dynamicTrendMap[dateStr] = { key: dateStr, label, sales: 0, revenue: 0, cost: 0, profit: 0, expenses: 0 };
       }
     } else if (activePeriod === "30d") {
       for (let i = 29; i >= 0; i--) {
         const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
         const dateStr = d.toISOString().split("T")[0];
         const label = `${d.getDate()} ${d.toLocaleDateString("en-US", { month: "short" })}`;
-        dynamicTrendMap[dateStr] = { key: dateStr, label, sales: 0, revenue: 0, profit: 0 };
+        dynamicTrendMap[dateStr] = { key: dateStr, label, sales: 0, revenue: 0, cost: 0, profit: 0, expenses: 0 };
       }
     } else if (activePeriod === "custom" && rangeStart && rangeEnd) {
       const diffDays = Math.ceil((rangeEnd.getTime() - rangeStart.getTime()) / (1000 * 60 * 60 * 24));
@@ -889,7 +911,7 @@ export class ReportService {
         for (let h = 0; h < 24; h++) {
           const hourStr = String(h).padStart(2, "0");
           const hourLabel = h === 0 ? "12 AM" : h < 12 ? `${h} AM` : h === 12 ? "12 PM" : `${h - 12} PM`;
-          dynamicTrendMap[hourStr] = { key: hourStr, label: hourLabel, sales: 0, revenue: 0, profit: 0 };
+          dynamicTrendMap[hourStr] = { key: hourStr, label: hourLabel, sales: 0, revenue: 0, cost: 0, profit: 0, expenses: 0 };
         }
       } else {
         const stepDays = Math.min(diffDays, 60);
@@ -898,7 +920,7 @@ export class ReportService {
           if (d >= rangeStart) {
             const dateStr = d.toISOString().split("T")[0];
             const label = `${d.getDate()} ${d.toLocaleDateString("en-US", { month: "short" })}`;
-            dynamicTrendMap[dateStr] = { key: dateStr, label, sales: 0, revenue: 0, profit: 0 };
+            dynamicTrendMap[dateStr] = { key: dateStr, label, sales: 0, revenue: 0, cost: 0, profit: 0, expenses: 0 };
           }
         }
       }
@@ -908,7 +930,7 @@ export class ReportService {
         const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
         const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
         const label = d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
-        dynamicTrendMap[key] = { key, label, sales: 0, revenue: 0, profit: 0 };
+        dynamicTrendMap[key] = { key, label, sales: 0, revenue: 0, cost: 0, profit: 0, expenses: 0 };
       }
     }
 
@@ -924,6 +946,7 @@ export class ReportService {
       costOfSold: number;
       grossProfit: number;
       damagedMissingLoss: number;
+      expenses: number;
       netProfit: number;
     }> = {};
 
@@ -939,6 +962,7 @@ export class ReportService {
         costOfSold: 0,
         grossProfit: 0,
         damagedMissingLoss: 0,
+        expenses: 0,
         netProfit: 0,
       };
     });
@@ -1006,6 +1030,7 @@ export class ReportService {
         if (dynamicTrendMap[hourStr]) {
           dynamicTrendMap[hourStr].sales += 1;
           dynamicTrendMap[hourStr].revenue += saleAmount;
+          dynamicTrendMap[hourStr].cost += saleCost;
           dynamicTrendMap[hourStr].profit += profit;
         }
       } else if (activePeriod === "all") {
@@ -1013,6 +1038,7 @@ export class ReportService {
         if (dynamicTrendMap[monthKey]) {
           dynamicTrendMap[monthKey].sales += 1;
           dynamicTrendMap[monthKey].revenue += saleAmount;
+          dynamicTrendMap[monthKey].cost += saleCost;
           dynamicTrendMap[monthKey].profit += profit;
         }
       } else {
@@ -1020,7 +1046,37 @@ export class ReportService {
         if (dynamicTrendMap[dateKey]) {
           dynamicTrendMap[dateKey].sales += 1;
           dynamicTrendMap[dateKey].revenue += saleAmount;
+          dynamicTrendMap[dateKey].cost += saleCost;
           dynamicTrendMap[dateKey].profit += profit;
+        }
+      }
+    });
+
+    // Expenses aggregation
+    let totalExpenses = 0;
+    (expenses || []).forEach((e: any) => {
+      const amt = Number(e.amount || 0);
+      totalExpenses += amt;
+
+      if (e.branchId && branchStatsMap[e.branchId]) {
+        branchStatsMap[e.branchId].expenses += amt;
+      }
+
+      const expDate = new Date(e.paymentDate || e.createdAt);
+      if (activePeriod === "today" || activePeriod === "yesterday" || (activePeriod === "custom" && Object.keys(dynamicTrendMap).length === 24)) {
+        const hourStr = String(expDate.getHours()).padStart(2, "0");
+        if (dynamicTrendMap[hourStr]) {
+          dynamicTrendMap[hourStr].expenses += amt;
+        }
+      } else if (activePeriod === "all") {
+        const monthKey = `${expDate.getFullYear()}-${String(expDate.getMonth() + 1).padStart(2, "0")}`;
+        if (dynamicTrendMap[monthKey]) {
+          dynamicTrendMap[monthKey].expenses += amt;
+        }
+      } else {
+        const dateKey = expDate.toISOString().split("T")[0];
+        if (dynamicTrendMap[dateKey]) {
+          dynamicTrendMap[dateKey].expenses += amt;
         }
       }
     });
@@ -1133,16 +1189,16 @@ export class ReportService {
 
     // Compute Gross Profit & Net Profit:
     // Sales Revenue − Purchase/Cost of Sold Products = Gross Profit
-    // Gross Profit − Damaged/Missing Stock Loss = Net Profit
+    // Gross Profit − Damaged/Missing Stock Loss − Total Expenses = Net Realized Profit
     const totalGrossProfit = Math.max(0, totalSalesRevenue - totalCostOfSold);
-    const netProfitAfterLoss = Math.round((totalGrossProfit - totalDamagedMissingLoss) * 100) / 100;
+    const netProfitAfterLoss = Math.round((totalGrossProfit - totalDamagedMissingLoss - totalExpenses) * 100) / 100;
     const grossMargin = totalSalesRevenue > 0 ? Math.round((totalGrossProfit / totalSalesRevenue) * 1000) / 10 : 0;
     const netMargin = totalSalesRevenue > 0 ? Math.round((netProfitAfterLoss / totalSalesRevenue) * 1000) / 10 : 0;
 
     // Finalize branch stats matrix
     const branchWiseList = Object.values(branchStatsMap).map((b) => {
       const gross = Math.max(0, b.salesRevenue - b.costOfSold);
-      const net = Math.round(gross - b.damagedMissingLoss);
+      const net = Math.round(gross - b.damagedMissingLoss - (b.expenses || 0));
       const margin = b.salesRevenue > 0 ? Math.round((gross / b.salesRevenue) * 1000) / 10 : 0;
       return {
         ...b,
@@ -1151,10 +1207,85 @@ export class ReportService {
         costOfSold: Math.round(b.costOfSold),
         grossProfit: Math.round(gross),
         damagedMissingLoss: Math.round(b.damagedMissingLoss),
+        expenses: Math.round(b.expenses),
         netProfit: net,
         profitMargin: margin,
       };
     });
+
+    // Compute Today's Snapshot for Header Quick Button
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    let todaySummary: any = null;
+
+    if (activePeriod === "today") {
+      todaySummary = {
+        salesRevenue: Math.round(totalSalesRevenue),
+        costOfSold: Math.round(totalCostOfSold),
+        grossProfit: Math.round(totalGrossProfit),
+        damagedMissingLoss: Math.round(totalDamagedMissingLoss),
+        expenses: Math.round(totalExpenses),
+        netProfit: Math.round(netProfitAfterLoss),
+        salesCount: sales.length,
+      };
+    } else {
+      try {
+        const todaySales = await (prisma as any).sale.findMany({
+          where: {
+            tenantId,
+            status: "COMPLETED",
+            ...(effectiveBranchId ? { branchId: effectiveBranchId } : {}),
+            createdAt: { gte: todayStart, lte: todayEnd },
+          },
+          include: {
+            items: true,
+          },
+        });
+
+        const todayExpensesList = await (prisma as any).branchExpense.findMany({
+          where: {
+            tenantId,
+            ...(effectiveBranchId ? { branchId: effectiveBranchId } : {}),
+            paymentDate: { gte: todayStart, lte: todayEnd },
+          },
+          select: { amount: true },
+        });
+
+        let tRev = 0;
+        let tCost = 0;
+        (todaySales || []).forEach((s: any) => {
+          tRev += Number(s.totalAmount || 0);
+          (s.items || []).forEach((item: any) => {
+            const baseUnits = Number(item.lowestUnitQuantity || (Number(item.quantity || 0) * Number(item.unitMultiplier || 1)));
+            const purchaseP = Number(item.purchasePrice || 0);
+            tCost += purchaseP * baseUnits;
+          });
+        });
+        const tGross = Math.max(0, tRev - tCost);
+        const tExp = (todayExpensesList || []).reduce((sum: number, e: any) => sum + Number(e.amount || 0), 0);
+        const tNet = Math.round(tGross - tExp);
+
+        todaySummary = {
+          salesRevenue: Math.round(tRev),
+          costOfSold: Math.round(tCost),
+          grossProfit: Math.round(tGross),
+          damagedMissingLoss: 0,
+          expenses: Math.round(tExp),
+          netProfit: tNet,
+          salesCount: todaySales.length,
+        };
+      } catch (err) {
+        todaySummary = {
+          salesRevenue: 0,
+          costOfSold: 0,
+          grossProfit: 0,
+          damagedMissingLoss: 0,
+          expenses: 0,
+          netProfit: 0,
+          salesCount: 0,
+        };
+      }
+    }
 
     // Accounts Balances
     let cashBalance = 0;
@@ -1212,7 +1343,10 @@ export class ReportService {
         totalDamagedMissingLoss: Math.round(totalDamagedMissingLoss),
         damagedMissingUnitsCount,
 
-        // 6. Net Realized Profit After Loss
+        // 6. Total Operating Expenses in Period
+        totalExpenses: Math.round(totalExpenses),
+
+        // 7. Net Realized Profit After Loss & Expenses
         netProfitAfterLoss: Math.round(netProfitAfterLoss),
         netMargin,
 
@@ -1227,6 +1361,7 @@ export class ReportService {
         bankBalance: Math.round(bankBalance * 100) / 100,
         digitalWalletBalance: Math.round(digitalWalletBalance * 100) / 100,
       },
+      todaySummary,
       branchWisePerformance: branchWiseList,
       charts: {
         dailySalesTrend: Object.values(dynamicTrendMap),

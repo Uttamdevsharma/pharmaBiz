@@ -20,12 +20,12 @@ export function PharmacyGrowthChart({ data, loading }: PharmacyGrowthChartProps)
 
   if (loading) {
     return (
-      <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between h-[360px] animate-pulse">
+      <div className="p-5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col justify-between h-[360px] animate-pulse">
         <div className="space-y-2">
           <div className="h-5 w-44 bg-slate-200 dark:bg-slate-800 rounded-md" />
           <div className="h-3 w-64 bg-slate-100 dark:bg-slate-800/60 rounded-md" />
         </div>
-        <div className="h-44 w-full bg-slate-100 dark:bg-slate-800/40 rounded-xl" />
+        <div className="h-44 w-full bg-slate-100 dark:bg-slate-800/40 rounded-md" />
       </div>
     );
   }
@@ -89,13 +89,13 @@ export function PharmacyGrowthChart({ data, loading }: PharmacyGrowthChartProps)
   const labelInterval = points.length > 15 ? Math.ceil(points.length / 8) : 1;
 
   return (
-    <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between relative overflow-hidden">
+    <div className="p-5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col justify-between relative overflow-hidden">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
         <div>
           <div className="flex items-center gap-2">
             <h3 className="text-base font-bold text-slate-900 dark:text-white">Pharmacy Growth</h3>
-            <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+            <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
               <TrendingUp className="h-3 w-3" />
               +{totalInPeriod} in range
             </span>

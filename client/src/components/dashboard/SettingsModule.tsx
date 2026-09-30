@@ -22,8 +22,10 @@ import {
   Sparkles,
   ExternalLink,
   Sliders,
+  CalendarX2,
 } from "lucide-react";
 import { SalaryDeductionRules } from "./SalaryDeductionRules";
+import { OffDaySettingsTab } from "./OffDaySettingsTab";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface TenantProfile {
@@ -1038,14 +1040,17 @@ function PrescriptionSettingsTab() {
 }
 
 // ─── Main Settings Module ─────────────────────────────────────────────────────
-export function SettingsModule() {
-  const [activeTab, setActiveTab] = useState<"profile" | "receipt" | "prescription" | "payroll_policy">("profile");
+export function SettingsModule({ initialTab }: { initialTab?: string }) {
+  const [activeTab, setActiveTab] = useState<"profile" | "receipt" | "prescription" | "payroll_policy" | "offdays">(
+    (initialTab as any) || "profile"
+  );
 
   const tabs = [
     { id: "profile" as const, label: "Company Profile", icon: Building2 },
     { id: "receipt" as const, label: "Receipt & Invoice", icon: Receipt },
     { id: "prescription" as const, label: "Prescription Settings", icon: ShieldCheck },
     { id: "payroll_policy" as const, label: "Leave & Salary Policies", icon: Sliders },
+    { id: "offdays" as const, label: "Off-Day Settings", icon: CalendarX2 },
   ];
 
   return (
@@ -1062,7 +1067,7 @@ export function SettingsModule() {
           Pharmacy Settings
         </h1>
         <p className="text-xs text-slate-500 mt-1">
-          Manage your pharmacy profile, invoice format, dispensing rules, and annual leave & salary deduction policies.
+          Manage your pharmacy profile, invoice format, dispensing rules, off-day schedules, and annual leave & salary deduction policies.
         </p>
       </div>
 
@@ -1084,6 +1089,7 @@ export function SettingsModule() {
       {activeTab === "receipt" && <ReceiptInvoiceTab />}
       {activeTab === "prescription" && <PrescriptionSettingsTab />}
       {activeTab === "payroll_policy" && <SalaryDeductionRules />}
+      {activeTab === "offdays" && <OffDaySettingsTab />}
     </div>
   );
 }

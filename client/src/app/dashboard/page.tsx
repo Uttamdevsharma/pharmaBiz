@@ -78,6 +78,7 @@ import { BillSettingsView } from "@/components/dashboard/BillSettingsView";
 import { EmployeeListView } from "@/components/dashboard/EmployeeListView";
 import { SalaryManagementView } from "@/components/dashboard/SalaryManagementView";
 import { BranchSalaryHistoryView } from "@/components/dashboard/BranchSalaryHistoryView";
+import { SalaryReportView } from "@/components/dashboard/SalaryReportView";
 import { EmployeeDetailsView } from "@/components/dashboard/EmployeeDetailsView";
 import { AttendanceView } from "@/components/dashboard/AttendanceView";
 import { SalaryDeductionRules } from "@/components/dashboard/SalaryDeductionRules";
@@ -253,6 +254,7 @@ export default function RoleBasedDashboard() {
 
   const [selectedSupplierDetailId, setSelectedSupplierDetailId] = useState<string | null>(null);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("");
+  const [employeeOriginModule, setEmployeeOriginModule] = useState<OwnerModule>("sal_employees");
   const [selectedRecurringForPay, setSelectedRecurringForPay] = useState<any | null>(null);
   const [dataLoading, setDataLoading] = useState(() => !cachedTenantProfile);
   const [initiatingPay, setInitiatingPay] = useState(false);
@@ -1017,6 +1019,7 @@ export default function RoleBasedDashboard() {
             selectedBranchId={selectedBranchId}
             onSelectEmployee={(empId) => {
               setSelectedEmployeeId(empId);
+              setEmployeeOriginModule("sal_employees");
               handleNavigate("employee_details");
             }}
             onNavigate={handleNavigate}
@@ -1034,6 +1037,7 @@ export default function RoleBasedDashboard() {
             initialTab="daily"
             onSelectEmployee={(empId) => {
               setSelectedEmployeeId(empId);
+              setEmployeeOriginModule("sal_attendance");
               handleNavigate("employee_details");
             }}
           />
@@ -1043,17 +1047,7 @@ export default function RoleBasedDashboard() {
         if (!isOwner && !hasPermission("attendance.offdays")) {
           return <TenantAccessRestricted moduleName="Off-Day Settings" requiredPerm="attendance.offdays" />;
         }
-        return (
-          <AttendanceView
-            selectedBranchId={selectedBranchId}
-            onNavigate={handleNavigate}
-            initialTab="offdays"
-            onSelectEmployee={(empId) => {
-              setSelectedEmployeeId(empId);
-              handleNavigate("employee_details");
-            }}
-          />
-        );
+        return <SettingsModule initialTab="offdays" />;
 
       case "sal_deduction_rules":
         if (!isOwner && !hasPermission("salary.deductions")) {
@@ -1073,6 +1067,7 @@ export default function RoleBasedDashboard() {
             selectedBranchId={selectedBranchId}
             onSelectEmployee={(empId) => {
               setSelectedEmployeeId(empId);
+              setEmployeeOriginModule("sal_management");
               handleNavigate("employee_details");
             }}
             onNavigate={handleNavigate}
@@ -1089,6 +1084,23 @@ export default function RoleBasedDashboard() {
             onNavigate={handleNavigate}
             onSelectEmployee={(empId) => {
               setSelectedEmployeeId(empId);
+              setEmployeeOriginModule("sal_history");
+              handleNavigate("employee_details");
+            }}
+          />
+        );
+
+      case "sal_report":
+        if (!isOwner && !hasPermission("salary.history")) {
+          return <TenantAccessRestricted moduleName="Salary Report" requiredPerm="salary.history" />;
+        }
+        return (
+          <SalaryReportView
+            selectedBranchId={selectedBranchId}
+            onNavigate={handleNavigate}
+            onSelectEmployee={(empId) => {
+              setSelectedEmployeeId(empId);
+              setEmployeeOriginModule("sal_report");
               handleNavigate("employee_details");
             }}
           />
@@ -1102,7 +1114,7 @@ export default function RoleBasedDashboard() {
           <EmployeeDetailsView
             employeeId={selectedEmployeeId}
             selectedBranchId={selectedBranchId}
-            onBack={() => handleNavigate("sal_management")}
+            onBack={() => handleNavigate(employeeOriginModule || "sal_employees")}
           />
         );
 

@@ -1591,6 +1591,7 @@ export class AccountingService {
             dailyRate: calc?.metrics?.dailyRate ?? 0,
             attendanceDeduction: calc?.metrics?.attendanceDeduction ?? 0,
             totalAllowances: calc?.metrics?.totalAllowances ?? 0,
+            monthlyAllowances: calc?.monthlyAllowances || [],
             netSalary,
             paidAmount,
             dueAmount,

@@ -900,7 +900,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
             <button
               type="button"
               onClick={() => setMoveModalOpen(false)}
-              className="px-5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 text-sm sm:text-base font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+              className="px-5 py-2.5 rounded-none border border-slate-300 dark:border-slate-700 text-sm sm:text-base font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
             >
               Cancel
             </button>
@@ -909,7 +909,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
               onClick={handleConfirmMoveStock}
               disabled={moveSubmitting || !movingTargetGroupId || baseUnitsToMove <= 0 || isMoveOverLimit}
               style={{ backgroundColor: "var(--primary-color, #059669)" }}
-              className="px-6 py-2.5 rounded-lg text-white text-sm sm:text-base font-bold shadow-sm hover:opacity-90 disabled:opacity-50 transition cursor-pointer flex items-center gap-2 active:scale-95"
+              className="px-6 py-2.5 rounded-none text-white text-sm sm:text-base font-bold shadow-sm hover:opacity-90 disabled:opacity-50 transition cursor-pointer flex items-center gap-2 active:scale-95"
             >
               {moveSubmitting ? (
                 <>
@@ -932,7 +932,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
             {/* Left Column: Medicine Details & Quantity */}
             <div className="lg:col-span-6 space-y-6">
               {/* Medicine Card */}
-              <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 p-5 sm:p-6 space-y-4">
+              <div className="bg-white dark:bg-slate-900 rounded-none border border-slate-200 dark:border-slate-800 p-5 sm:p-6 space-y-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">
@@ -949,7 +949,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                     </p>
                   </div>
                   <div className="text-right shrink-0">
-                    <span className="px-3.5 py-1.5 rounded-md text-sm sm:text-base font-mono font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 block shadow-2xs">
+                    <span className="px-3.5 py-1.5 rounded-none text-sm sm:text-base font-mono font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 block shadow-2xs">
                       Total Godown: {totalGodownUnitsAcrossBatches.toLocaleString()} {movingProduct.unit}
                     </span>
                   </div>
@@ -961,7 +961,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                     <label className="text-sm sm:text-base font-bold text-slate-700 dark:text-slate-300 block mb-2">
                       Selected Batch:
                     </label>
-                    <div className="flex items-center justify-between p-3.5 rounded-lg bg-emerald-50/70 dark:bg-emerald-950/40 border border-brand-primary ring-1 ring-brand-primary">
+                    <div className="flex items-center justify-between p-3.5 rounded-none bg-emerald-50/70 dark:bg-emerald-950/40 border border-brand-primary ring-1 ring-brand-primary">
                       <div>
                         <div className="text-base sm:text-lg font-mono font-bold text-slate-900 dark:text-white">
                           Batch #{selectedMovingBatch.batchNumber || "Default"}
@@ -990,7 +990,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                     </div>
 
                     {/* Scrollable Batch List with visible scrollbar */}
-                    <div className="max-h-56 overflow-y-auto space-y-2 p-1.5 border border-slate-200 dark:border-slate-800 rounded-lg [scrollbar-width:thin] [scrollbar-color:#94a3b8_#f1f5f9] dark:[scrollbar-color:#64748b_#1e293b] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:bg-slate-300 dark:[&::-webkit-scrollbar-thumb]:bg-slate-600 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-track]:bg-slate-100 dark:[&::-webkit-scrollbar-track]:bg-slate-800">
+                    <div className="max-h-56 overflow-y-auto space-y-2 p-1.5 border border-slate-200 dark:border-slate-800 rounded-none [scrollbar-width:thin] [scrollbar-color:#94a3b8_#f1f5f9] dark:[scrollbar-color:#64748b_#1e293b] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:bg-slate-300 dark:[&::-webkit-scrollbar-thumb]:bg-slate-600 [&::-webkit-scrollbar-thumb]:rounded-none [&::-webkit-scrollbar-track]:bg-slate-100 dark:[&::-webkit-scrollbar-track]:bg-slate-800">
                       {sortedMovingBatches.length === 0 ? (
                         <div className="py-6 text-center text-xs text-slate-400">
                           No batch with godown stock available.
@@ -1005,7 +1005,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                               key={b.id}
                               type="button"
                               onClick={() => setMovingBatchId(b.id)}
-                              className={`w-full text-left p-3 rounded-lg border transition flex items-center justify-between gap-3 cursor-pointer ${
+                              className={`w-full text-left p-3 rounded-none border transition flex items-center justify-between gap-3 cursor-pointer ${
                                 isSelected
                                   ? "bg-emerald-50/80 dark:bg-emerald-950/40 border-brand-primary ring-1 ring-brand-primary"
                                   : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700/80 hover:bg-slate-50 dark:hover:bg-slate-800/60"
@@ -1017,7 +1017,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                                     Batch #{b.batchNumber || "Default"}
                                   </span>
                                   {isFirst && (
-                                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300">
+                                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-none bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300">
                                       Earliest Expiry
                                     </span>
                                   )}
@@ -1050,7 +1050,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
               </div>
 
               {/* Quantity to Move Card */}
-              <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 p-5 sm:p-6 space-y-4">
+              <div className="bg-white dark:bg-slate-900 rounded-none border border-slate-200 dark:border-slate-800 p-5 sm:p-6 space-y-4">
                 <div className="flex items-center justify-between">
                   <h3 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white">
                     Quantity to Move <span className="text-rose-500">*</span>
@@ -1068,19 +1068,19 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                       min={1}
                       value={movingQuantity}
                       onChange={(e) => setMovingQuantity(Math.max(1, parseInt(e.target.value) || 1))}
-                      className="w-full h-12 px-4 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-lg font-bold text-slate-900 dark:text-white outline-none focus:border-brand-primary font-mono"
+                      className="w-full h-12 px-4 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-none text-lg font-bold text-slate-900 dark:text-white outline-none focus:border-brand-primary font-mono"
                     />
                   </div>
 
                   {/* Unit Selector Toggle */}
                   {isTabletPackaging ? (
-                    <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg">
+                    <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-100 dark:bg-slate-800 rounded-none">
                       {(["BOX", "STRIP", "TABLET"] as const).map((u) => (
                         <button
                           key={u}
                           type="button"
                           onClick={() => setMovingUnitType(u)}
-                          className={`py-2 rounded-md text-sm font-bold transition cursor-pointer text-center ${
+                          className={`py-2 rounded-none text-sm font-bold transition cursor-pointer text-center ${
                             movingUnitType === u
                               ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-xs"
                               : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
@@ -1091,14 +1091,14 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                       ))}
                     </div>
                   ) : (
-                    <div className="h-12 px-4 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-sm sm:text-base font-bold text-slate-600 dark:text-slate-300">
+                    <div className="h-12 px-4 rounded-none bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-sm sm:text-base font-bold text-slate-600 dark:text-slate-300">
                       Unit: {movingProduct.unit}
                     </div>
                   )}
                 </div>
 
                 {/* Live Stock Remaining Calculation Box */}
-                <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-lg border border-slate-200 dark:border-slate-700 text-sm space-y-2">
+                <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-none border border-slate-200 dark:border-slate-700 text-sm space-y-2">
                   <div className="flex items-center justify-between text-slate-600 dark:text-slate-400">
                     <span>Available in Selected Batch:</span>
                     <span className="font-mono font-bold text-slate-900 dark:text-white">
@@ -1140,7 +1140,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
 
             {/* Right Column: Location */}
             <div className="lg:col-span-6 space-y-6">
-              <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 p-5 sm:p-6 space-y-4">
+              <div className="bg-white dark:bg-slate-900 rounded-none border border-slate-200 dark:border-slate-800 p-5 sm:p-6 space-y-4">
                 <div className="flex items-center justify-between">
                   <h3 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white">
                     Location <span className="text-rose-500">*</span>
@@ -1163,7 +1163,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                         }
                       }
                     }}
-                    className="w-full h-11 pl-10 pr-9 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-sm sm:text-base outline-none focus:border-brand-primary text-slate-800 dark:text-slate-200"
+                    className="w-full h-11 pl-10 pr-9 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-none text-sm sm:text-base outline-none focus:border-brand-primary text-slate-800 dark:text-slate-200"
                   />
                   {groupSearchQuery && (
                     <button
@@ -1177,7 +1177,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                 </div>
 
                 {/* Direct 1-Click Selectable Location List with visible scrollbar */}
-                <div className="max-h-[460px] overflow-y-auto space-y-2 p-1.5 border border-slate-200 dark:border-slate-800 rounded-lg [scrollbar-width:thin] [scrollbar-color:#94a3b8_#f1f5f9] dark:[scrollbar-color:#64748b_#1e293b] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:bg-slate-300 dark:[&::-webkit-scrollbar-thumb]:bg-slate-600 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-track]:bg-slate-100 dark:[&::-webkit-scrollbar-track]:bg-slate-800">
+                <div className="max-h-[460px] overflow-y-auto space-y-2 p-1.5 border border-slate-200 dark:border-slate-800 rounded-none [scrollbar-width:thin] [scrollbar-color:#94a3b8_#f1f5f9] dark:[scrollbar-color:#64748b_#1e293b] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:bg-slate-300 dark:[&::-webkit-scrollbar-thumb]:bg-slate-600 [&::-webkit-scrollbar-thumb]:rounded-none [&::-webkit-scrollbar-track]:bg-slate-100 dark:[&::-webkit-scrollbar-track]:bg-slate-800">
                   {filteredModalGroups.length === 0 ? (
                     <div className="py-10 text-center text-sm text-slate-400">
                       No location matching &quot;{groupSearchQuery}&quot;
@@ -1191,7 +1191,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                           key={g.id}
                           type="button"
                           onClick={() => setMovingTargetGroupId(g.id)}
-                          className={`w-full text-left p-3.5 rounded-lg border transition flex items-center justify-between gap-3 cursor-pointer ${
+                          className={`w-full text-left p-3.5 rounded-none border transition flex items-center justify-between gap-3 cursor-pointer ${
                             isSelected
                               ? "bg-emerald-50/80 dark:bg-emerald-950/40 border-brand-primary ring-1 ring-brand-primary"
                               : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700/80 hover:border-slate-300 dark:hover:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800/60"
@@ -1237,7 +1237,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
             <button
               type="button"
               onClick={() => setMoveModalOpen(false)}
-              className="px-6 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 text-sm sm:text-base font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+              className="px-6 py-2.5 rounded-none border border-slate-300 dark:border-slate-700 text-sm sm:text-base font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
             >
               Cancel
             </button>
@@ -1245,7 +1245,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
               type="submit"
               disabled={moveSubmitting || !movingTargetGroupId || baseUnitsToMove <= 0 || isMoveOverLimit}
               style={{ backgroundColor: "var(--primary-color, #059669)" }}
-              className="px-8 py-2.5 rounded-lg text-white text-sm sm:text-base font-bold shadow-sm hover:opacity-90 disabled:opacity-50 transition cursor-pointer flex items-center gap-2 active:scale-95"
+              className="px-8 py-2.5 rounded-none text-white text-sm sm:text-base font-bold shadow-sm hover:opacity-90 disabled:opacity-50 transition cursor-pointer flex items-center gap-2 active:scale-95"
             >
               {moveSubmitting ? (
                 <>
@@ -1282,7 +1282,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-300">
+          <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3.5 py-2 rounded-none text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-300">
             <Store className="h-4 w-4 text-brand-primary shrink-0" />
             <span>{currentBranch?.name || (effectiveBranchId ? "Current Branch" : "All Branches")}</span>
           </div>
@@ -1290,7 +1290,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
           <button
             type="button"
             onClick={() => onNavigate("stock_add_stock")}
-            className="h-11 px-5 bg-brand-primary hover:opacity-90 text-white rounded-xl text-xs sm:text-sm font-bold transition flex items-center gap-2 shadow-md shadow-brand-primary/20 cursor-pointer active:scale-95"
+            className="h-11 px-5 bg-brand-primary hover:opacity-90 text-white rounded-none text-xs sm:text-sm font-bold transition flex items-center gap-2 shadow-md shadow-brand-primary/20 cursor-pointer active:scale-95"
           >
             <Plus className="h-4 w-4" />
             <span>Receive Stock</span>
@@ -1309,7 +1309,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
               placeholder="Search by Product Name, Generic, Company / Brand, Supplier, Barcode..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-12 pr-12 h-14 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:border-brand-primary rounded-2xl text-sm sm:text-base font-bold text-slate-900 dark:text-white placeholder:text-slate-400 shadow-xs outline-none transition"
+              className="w-full pl-12 pr-12 h-14 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:border-brand-primary rounded-none text-sm sm:text-base font-bold text-slate-900 dark:text-white placeholder:text-slate-400 shadow-xs outline-none transition"
             />
 
             {search ? (
@@ -1319,7 +1319,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                   setSearch("");
                   searchInputRef.current?.focus();
                 }}
-                className="absolute right-4 top-1/2 -translate-y-1/2 p-1.5 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition cursor-pointer"
+                className="absolute right-4 top-1/2 -translate-y-1/2 p-1.5 rounded-none text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition cursor-pointer"
                 title="Clear Search"
               >
                 <X className="h-5 w-5" />
@@ -1358,14 +1358,14 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                 setInspectedBatchId(null);
                 setSearch("");
               }}
-              className="text-xs sm:text-sm font-bold text-brand-primary hover:text-brand-primary/80 transition flex items-center gap-1.5 cursor-pointer py-2 px-3.5 rounded-xl bg-brand-primary/10 hover:bg-brand-primary/20 active:scale-95 w-fit"
+              className="text-xs sm:text-sm font-bold text-brand-primary hover:text-brand-primary/80 transition flex items-center gap-1.5 cursor-pointer py-2 px-3.5 rounded-none bg-brand-primary/10 hover:bg-brand-primary/20 active:scale-95 w-fit"
             >
               <ArrowLeft className="h-4 w-4" />
               <span>&larr; Back to Master Stock List</span>
             </button>
 
             <div className="flex items-center gap-2.5 flex-wrap">
-              <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300">
+              <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-1.5 rounded-none text-xs font-bold text-slate-700 dark:text-slate-300">
                 <Store className="h-3.5 w-3.5 text-brand-primary shrink-0" />
                 <span>{currentBranch?.name || "Current Branch"}</span>
               </div>
@@ -1374,7 +1374,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                 <button
                   type="button"
                   onClick={() => handleAllocateProduct(selectedProduct)}
-                  className="h-9 px-3.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm shadow-amber-500/20 cursor-pointer active:scale-95"
+                  className="h-9 px-3.5 bg-amber-500 hover:bg-amber-600 text-white rounded-none text-xs font-bold transition flex items-center gap-1.5 shadow-sm shadow-amber-500/20 cursor-pointer active:scale-95"
                 >
                   <Layers className="h-3.5 w-3.5" />
                   <span>Allocate to Shelf</span>
@@ -1384,7 +1384,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
               <button
                 type="button"
                 onClick={() => onNavigate("stock_add_stock")}
-                className="h-9 px-3.5 bg-brand-primary hover:opacity-90 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm shadow-brand-primary/20 cursor-pointer active:scale-95"
+                className="h-9 px-3.5 bg-brand-primary hover:opacity-90 text-white rounded-none text-xs font-bold transition flex items-center gap-1.5 shadow-sm shadow-brand-primary/20 cursor-pointer active:scale-95"
               >
                 <Plus className="h-3.5 w-3.5" />
                 <span>Receive More Stock</span>
@@ -1393,15 +1393,15 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
           </div>
 
           {/* Product Profile & Sourcing Hero Card */}
-          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs space-y-4">
+          <div className="bg-white dark:bg-slate-900 rounded-none border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs space-y-4">
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
               <div className="space-y-1.5">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="px-3 py-1 rounded-lg text-xs sm:text-sm font-extrabold bg-brand-primary/10 text-brand-primary border border-brand-primary/20">
+                  <span className="px-3 py-1 rounded-none text-xs sm:text-sm font-extrabold bg-brand-primary/10 text-brand-primary border border-brand-primary/20">
                     {selectedProduct.brandName || "Standard Brand"}
                   </span>
                   {selectedProduct.category && (
-                    <span className="px-3 py-1 rounded-lg text-xs sm:text-sm font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                    <span className="px-3 py-1 rounded-none text-xs sm:text-sm font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
                       {selectedProduct.category}
                     </span>
                   )}
@@ -1428,29 +1428,29 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
               <div className="flex flex-col sm:items-end gap-2 shrink-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   {selectedProduct.hasExpired ? (
-                    <span className="px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-black bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300 border border-rose-200 dark:border-rose-900/60 flex items-center gap-1.5">
+                    <span className="px-3.5 py-1.5 rounded-none text-xs sm:text-sm font-black bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300 border border-rose-200 dark:border-rose-900/60 flex items-center gap-1.5">
                       <AlertTriangle className="h-4 w-4 shrink-0 text-rose-600" />
                       <span>1+ Expired Batch</span>
                     </span>
                   ) : selectedProduct.hasExpiringSoon ? (
-                    <span className="px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-bold bg-amber-50 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300 border border-amber-200 dark:border-amber-900/60 flex items-center gap-1.5">
+                    <span className="px-3.5 py-1.5 rounded-none text-xs sm:text-sm font-bold bg-amber-50 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300 border border-amber-200 dark:border-amber-900/60 flex items-center gap-1.5">
                       <Clock className="h-4 w-4 shrink-0 text-amber-600" />
                       <span>Expiring Soon (&le;90d)</span>
                     </span>
                   ) : null}
 
                   {selectedProduct.totalGodownQuantity > 0 && selectedProduct.totalRackQuantity === 0 ? (
-                    <span className="px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-black bg-purple-50 text-purple-700 dark:bg-purple-950/50 dark:text-purple-300 border border-purple-200 dark:border-purple-800 flex items-center gap-1.5">
+                    <span className="px-3.5 py-1.5 rounded-none text-xs sm:text-sm font-black bg-purple-50 text-purple-700 dark:bg-purple-950/50 dark:text-purple-300 border border-purple-200 dark:border-purple-800 flex items-center gap-1.5">
                       <Warehouse className="h-4 w-4 shrink-0 text-purple-600" />
                       <span>Needs Shelf Placement</span>
                     </span>
                   ) : selectedProduct.hasLowStock ? (
-                    <span className="px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-black bg-orange-50 text-orange-700 dark:bg-orange-950/50 dark:text-orange-300 border border-orange-200 dark:border-orange-900/60 flex items-center gap-1.5">
+                    <span className="px-3.5 py-1.5 rounded-none text-xs sm:text-sm font-black bg-orange-50 text-orange-700 dark:bg-orange-950/50 dark:text-orange-300 border border-orange-200 dark:border-orange-900/60 flex items-center gap-1.5">
                       <AlertCircle className="h-4 w-4 shrink-0 text-orange-600" />
                       <span>Low Stock Alert</span>
                     </span>
                   ) : (
-                    <span className="px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-black bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900/60 flex items-center gap-1.5">
+                    <span className="px-3.5 py-1.5 rounded-none text-xs sm:text-sm font-black bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900/60 flex items-center gap-1.5">
                       <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
                       <span>In Stock</span>
                     </span>
@@ -1458,7 +1458,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                 </div>
 
                 {/* Sourcing / Supplier Card Info */}
-                <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800/80 px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-300">
+                <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800/80 px-4 py-2 rounded-none border border-slate-200 dark:border-slate-700 text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-300">
                   <Truck className="h-4 w-4 text-brand-primary shrink-0" />
                   <span>
                     Supplier:{" "}
@@ -1479,7 +1479,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
           {/* Top 3 KPI Summary Cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* Card 1: Total Available Stock */}
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 shadow-xs flex flex-col justify-between space-y-3">
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-none p-5 shadow-xs flex flex-col justify-between space-y-3">
               <div className="space-y-1">
                 <p className="text-xs font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">
                   Total Stock Available
@@ -1499,7 +1499,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
 
               {/* Progress Bar & Distribution */}
               <div className="space-y-1.5 pt-2 border-t border-slate-100 dark:border-slate-800">
-                <div className="w-full h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden flex">
+                <div className="w-full h-2.5 bg-slate-100 dark:bg-slate-800 rounded-none overflow-hidden flex">
                   <div
                     className="bg-emerald-500 h-full transition-all duration-500"
                     style={{ width: `${selectedProductDetails.percentInRack}%` }}
@@ -1524,7 +1524,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
             </div>
 
             {/* Card 2: In Shop / Front Counter (Shop Stock) */}
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 shadow-xs flex flex-col justify-between space-y-3">
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-none p-5 shadow-xs flex flex-col justify-between space-y-3">
               <div className="space-y-1">
                 <p className="text-xs font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
                   <Store className="h-3.5 w-3.5" />
@@ -1559,7 +1559,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
             </div>
 
             {/* Card 3: In Godown / Warehouse (Bulk Stock) */}
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 shadow-xs flex flex-col justify-between space-y-3">
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-none p-5 shadow-xs flex flex-col justify-between space-y-3">
               <div className="space-y-1">
                 <p className="text-xs font-black uppercase tracking-wider text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
                   <Warehouse className="h-3.5 w-3.5" />
@@ -1584,7 +1584,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                     type="button"
                     onClick={() => handleOpenMoveModal(selectedProduct)}
                     style={{ backgroundColor: "var(--primary-color, #059669)" }}
-                    className="w-full h-9 rounded-xl hover:opacity-90 text-white font-bold text-xs transition flex items-center justify-center gap-2 cursor-pointer shadow-xs active:scale-95"
+                    className="w-full h-9 rounded-none hover:opacity-90 text-white font-bold text-xs transition flex items-center justify-center gap-2 cursor-pointer shadow-xs active:scale-95"
                   >
                     <Store className="h-3.5 w-3.5" />
                     <span>Move to Shop</span>
@@ -1600,7 +1600,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
           </div>
 
           {/* Master Batch Inventory Matrix (Table of All Batches) */}
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl overflow-hidden shadow-xs space-y-0">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-none overflow-hidden shadow-xs space-y-0">
             <div className="p-5 pb-3 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div>
                 <h3 className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
@@ -1647,7 +1647,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                                 {b.batchNumber || "Default"}
                               </span>
                               {idx === 0 && !b.isExpired && (
-                                <span className="px-2 py-0.5 rounded text-xs font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                                <span className="px-2 py-0.5 rounded-none text-xs font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
                                   FEFO #1
                                 </span>
                               )}
@@ -1674,13 +1674,13 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                           {/* Expiry Date & Status */}
                           <td className="py-3.5 px-3 whitespace-nowrap">
                             {b.isExpired ? (
-                              <span className="px-3 py-1 rounded-lg text-xs sm:text-sm font-bold bg-rose-50 text-rose-700 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 inline-flex items-center gap-1.5">
+                              <span className="px-3 py-1 rounded-none text-xs sm:text-sm font-bold bg-rose-50 text-rose-700 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 inline-flex items-center gap-1.5">
                                 <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                                 <span>Expired ({b.expiryDate ? new Date(b.expiryDate).toLocaleDateString() : "—"})</span>
                               </span>
                             ) : b.daysLeft !== null ? (
                               <span
-                                className={`px-3 py-1 rounded-lg text-xs sm:text-sm font-bold border inline-flex items-center gap-1.5 ${
+                                className={`px-3 py-1 rounded-none text-xs sm:text-sm font-bold border inline-flex items-center gap-1.5 ${
                                   b.daysLeft <= 90
                                     ? "bg-amber-50 text-amber-800 dark:bg-amber-950/40 border-amber-200 dark:border-amber-900/50"
                                     : "bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-900/50"
@@ -1699,7 +1699,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                           {/* In Shop (Rack) */}
                           <td className="py-3.5 px-3 text-right whitespace-nowrap font-mono">
                             {b.inRackQty > 0 ? (
-                              <span className="font-bold text-sm text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/50 px-2.5 py-1 rounded-md">
+                              <span className="font-bold text-sm text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/50 px-2.5 py-1 rounded-none">
                                 {b.inRackQty.toLocaleString()} {b.unit || "tab"}
                               </span>
                             ) : (
@@ -1710,7 +1710,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                           {/* In Godown */}
                           <td className="py-3.5 px-3 text-right whitespace-nowrap font-mono">
                             {b.notInRackQty > 0 ? (
-                              <span className="font-bold text-sm text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/50 px-2.5 py-1 rounded-md">
+                              <span className="font-bold text-sm text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/50 px-2.5 py-1 rounded-none">
                                 {b.notInRackQty.toLocaleString()} {b.unit || "tab"}
                               </span>
                             ) : (
@@ -1736,7 +1736,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                                   type="button"
                                   onClick={() => handleOpenMoveModal(selectedProduct, b.id)}
                                   style={{ backgroundColor: "var(--primary-color, #059669)" }}
-                                  className="px-3 py-1.5 hover:opacity-90 text-white rounded-xl text-xs sm:text-sm font-bold transition flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-2xs"
+                                  className="px-3 py-1.5 hover:opacity-90 text-white rounded-none text-xs sm:text-sm font-bold transition flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-2xs"
                                 >
                                   <Store className="h-3.5 w-3.5" />
                                   <span>Move to Shop</span>
@@ -1746,7 +1746,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                               <button
                                 type="button"
                                 onClick={() => setInspectedBatchId(isInspected ? null : b.id)}
-                                className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition flex items-center gap-1.5 cursor-pointer border ${
+                                className={`px-3 py-1.5 rounded-none text-xs sm:text-sm font-bold transition flex items-center gap-1.5 cursor-pointer border ${
                                   isInspected
                                     ? "bg-slate-900 text-white border-slate-900 dark:bg-white dark:text-slate-900"
                                     : "bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-700"
@@ -1788,7 +1788,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                                       return (
                                         <div
                                           key={loc.id || lIdx}
-                                          className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-2xs flex items-center justify-between gap-2"
+                                          className="p-3 rounded-none bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-2xs flex items-center justify-between gap-2"
                                         >
                                           <div>
                                             <div className="text-xs font-mono font-bold text-slate-800 dark:text-slate-200">
@@ -1798,7 +1798,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                                               {loc.displayText || "Shelf Placement"}
                                             </div>
                                           </div>
-                                          <span className="text-xs font-mono font-black text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-md">
+                                          <span className="text-xs font-mono font-black text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-none">
                                             {loc.quantity.toLocaleString()} {b.unit || "tab"}
                                           </span>
                                         </div>
@@ -1806,7 +1806,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                                     })}
                                   </div>
                                 ) : (
-                                  <div className="p-3 text-xs text-slate-500 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700">
+                                  <div className="p-3 text-xs text-slate-500 bg-white dark:bg-slate-900 rounded-none border border-slate-200 dark:border-slate-700">
                                     All units for this batch are currently stored in bulk warehouse / Godown.
                                   </div>
                                 )}
@@ -1833,7 +1833,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
             <button
               type="button"
               onClick={() => setActiveFilter("ALL")}
-              className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition flex items-center gap-2 shrink-0 cursor-pointer ${
+              className={`px-4 py-2 rounded-none text-xs sm:text-sm font-bold transition flex items-center gap-2 shrink-0 cursor-pointer ${
                 activeFilter === "ALL"
                   ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-sm"
                   : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-800 hover:bg-slate-50"
@@ -1841,7 +1841,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
             >
               <Boxes className="h-4 w-4" />
               <span>All Stock</span>
-              <span className={`px-2 py-0.5 rounded-full text-xs font-mono font-extrabold ${
+              <span className={`px-2 py-0.5 rounded-none text-xs font-mono font-extrabold ${
                 activeFilter === "ALL" ? "bg-white/20 text-white dark:bg-slate-900/20 dark:text-slate-900" : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
               }`}>
                 {filterCounts.all}
@@ -1852,7 +1852,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
             <button
               type="button"
               onClick={() => setActiveFilter("IN_SHOP")}
-              className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition flex items-center gap-2 shrink-0 cursor-pointer ${
+              className={`px-4 py-2 rounded-none text-xs sm:text-sm font-bold transition flex items-center gap-2 shrink-0 cursor-pointer ${
                 activeFilter === "IN_SHOP"
                   ? "bg-emerald-600 text-white shadow-sm shadow-emerald-600/30"
                   : "bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/50 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
@@ -1860,7 +1860,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
             >
               <Store className="h-4 w-4" />
               <span>In Shop</span>
-              <span className={`px-2 py-0.5 rounded-full text-xs font-mono font-extrabold ${
+              <span className={`px-2 py-0.5 rounded-none text-xs font-mono font-extrabold ${
                 activeFilter === "IN_SHOP" ? "bg-white/20 text-white" : "bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300"
               }`}>
                 {filterCounts.inShop}
@@ -1871,7 +1871,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
             <button
               type="button"
               onClick={() => setActiveFilter("IN_GODOWN")}
-              className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition flex items-center gap-2 shrink-0 cursor-pointer ${
+              className={`px-4 py-2 rounded-none text-xs sm:text-sm font-bold transition flex items-center gap-2 shrink-0 cursor-pointer ${
                 activeFilter === "IN_GODOWN"
                   ? "bg-blue-600 text-white shadow-sm shadow-blue-600/30"
                   : "bg-white dark:bg-slate-900 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-900/50 hover:bg-blue-50 dark:hover:bg-blue-950/30"
@@ -1879,7 +1879,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
             >
               <Warehouse className="h-4 w-4" />
               <span>In Godown</span>
-              <span className={`px-2 py-0.5 rounded-full text-xs font-mono font-extrabold ${
+              <span className={`px-2 py-0.5 rounded-none text-xs font-mono font-extrabold ${
                 activeFilter === "IN_GODOWN" ? "bg-white/20 text-white" : "bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300"
               }`}>
                 {filterCounts.inGodown}
@@ -1890,7 +1890,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
             <button
               type="button"
               onClick={() => setActiveFilter("SHOP_LOW")}
-              className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition flex items-center gap-2 shrink-0 cursor-pointer ${
+              className={`px-4 py-2 rounded-none text-xs sm:text-sm font-bold transition flex items-center gap-2 shrink-0 cursor-pointer ${
                 activeFilter === "SHOP_LOW"
                   ? "bg-amber-600 text-white shadow-sm shadow-amber-600/30"
                   : "bg-white dark:bg-slate-900 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-900/50 hover:bg-amber-50 dark:hover:bg-amber-950/30"
@@ -1898,7 +1898,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
             >
               <AlertTriangle className="h-4 w-4" />
               <span>Shop Low Stock</span>
-              <span className={`px-2 py-0.5 rounded-full text-xs font-mono font-extrabold ${
+              <span className={`px-2 py-0.5 rounded-none text-xs font-mono font-extrabold ${
                 activeFilter === "SHOP_LOW" ? "bg-white/20 text-white" : "bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300"
               }`}>
                 {filterCounts.shopLow}
@@ -1909,7 +1909,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
             <button
               type="button"
               onClick={() => setActiveFilter("GODOWN_LOW")}
-              className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition flex items-center gap-2 shrink-0 cursor-pointer ${
+              className={`px-4 py-2 rounded-none text-xs sm:text-sm font-bold transition flex items-center gap-2 shrink-0 cursor-pointer ${
                 activeFilter === "GODOWN_LOW"
                   ? "bg-rose-600 text-white shadow-sm shadow-rose-600/30"
                   : "bg-white dark:bg-slate-900 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50 hover:bg-rose-50 dark:hover:bg-rose-950/30"
@@ -1917,7 +1917,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
             >
               <ShieldAlert className="h-4 w-4" />
               <span>Godown Low Stock</span>
-              <span className={`px-2 py-0.5 rounded-full text-xs font-mono font-extrabold ${
+              <span className={`px-2 py-0.5 rounded-none text-xs font-mono font-extrabold ${
                 activeFilter === "GODOWN_LOW" ? "bg-white/20 text-white" : "bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-300"
               }`}>
                 {filterCounts.godownLow}
@@ -1926,10 +1926,10 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
           </div>
 
           {/* Secondary Control Bar: Company Filter, Page Size, Reset */}
-          <div className="bg-white dark:bg-slate-900 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shadow-xs">
+          <div className="bg-white dark:bg-slate-900 p-3.5 rounded-none border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shadow-xs">
             <div className="flex items-center gap-2.5 flex-wrap">
               {/* Company / Brand Filter Dropdown */}
-              <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300">
+              <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-1.5 rounded-none text-xs font-bold text-slate-700 dark:text-slate-300">
                 <Building2 className="h-4 w-4 text-brand-primary shrink-0" />
                 <span className="text-slate-400 font-medium">Company:</span>
                 <select
@@ -1954,7 +1954,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                     setSelectedCompany("ALL");
                     setSearch("");
                   }}
-                  className="px-2.5 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition flex items-center gap-1 cursor-pointer"
+                  className="px-2.5 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-none transition flex items-center gap-1 cursor-pointer"
                 >
                   <RotateCcw className="h-3.5 w-3.5" />
                   <span>Reset Filters</span>
@@ -1967,7 +1967,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                 type="button"
                 onClick={handleExportStockCsv}
                 disabled={isExportingStock}
-                className="px-3 py-1.5 rounded-xl bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 transition flex items-center gap-1.5 cursor-pointer shadow-2xs active:scale-95 disabled:opacity-50"
+                className="px-3 py-1.5 rounded-none bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 transition flex items-center gap-1.5 cursor-pointer shadow-2xs active:scale-95 disabled:opacity-50"
                 title="Download current stock report as CSV"
               >
                 {isExportingStock ? (
@@ -1985,7 +1985,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
           </div>
 
           {/* Master Stock Table */}
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-xs">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-none overflow-hidden shadow-xs">
             <div className="overflow-x-auto content-scrollbar">
               <table className="w-full text-left text-sm border-collapse">
                 <thead
@@ -2036,12 +2036,150 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-900 dark:text-slate-100">
                   {loading ? (
-                    <tr>
-                      <td colSpan={activeFilter === "ALL" ? 6 : activeFilter === "SHOP_LOW" ? 5 : 4} className="py-16 text-center text-slate-400">
-                        <Loader2 className="h-8 w-8 animate-spin mx-auto text-brand-primary mb-2" />
-                        <p className="text-base font-bold text-slate-700 dark:text-slate-300">Loading stock inventory...</p>
-                      </td>
-                    </tr>
+                    Array.from({ length: 8 }).map((_, idx) => {
+                      const nameWidth = ["w-48", "w-36", "w-56", "w-40", "w-52", "w-44", "w-32", "w-48"][idx % 8];
+                      const genericWidth = ["w-28", "w-20", "w-32", "w-24", "w-28", "w-36", "w-20", "w-24"][idx % 8];
+                      return (
+                        <tr key={`stock-skeleton-${idx}`} className="animate-pulse">
+                          {activeFilter === "IN_SHOP" ? (
+                            <>
+                              {/* Medicine Name & Generic */}
+                              <td className="py-4 px-4">
+                                <div className={`h-4 bg-slate-200 dark:bg-slate-700 rounded-none ${nameWidth} mb-2`} />
+                                <div className="flex items-center gap-2">
+                                  <div className={`h-3 bg-slate-100 dark:bg-slate-800 rounded-none ${genericWidth}`} />
+                                  <div className="h-3 bg-slate-100 dark:bg-slate-800 rounded-none w-20" />
+                                </div>
+                              </td>
+                              {/* Location */}
+                              <td className="py-4 px-3">
+                                <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded-none w-28 mb-1" />
+                                <div className="h-2.5 bg-slate-100 dark:bg-slate-800 rounded-none w-16" />
+                              </td>
+                              {/* In Shop Stock */}
+                              <td className="py-4 px-4 text-right">
+                                <div className="h-5 bg-slate-200 dark:bg-slate-700 rounded-none w-16 ml-auto" />
+                              </td>
+                              {/* Action */}
+                              <td className="py-4 px-4 text-center">
+                                <div className="h-8 bg-slate-200 dark:bg-slate-700 rounded-none w-20 mx-auto" />
+                              </td>
+                            </>
+                          ) : activeFilter === "IN_GODOWN" ? (
+                            <>
+                              {/* Medicine Name & Company */}
+                              <td className="py-4 px-4">
+                                <div className={`h-4 bg-slate-200 dark:bg-slate-700 rounded-none ${nameWidth} mb-2`} />
+                                <div className="flex items-center gap-2">
+                                  <div className={`h-3 bg-slate-100 dark:bg-slate-800 rounded-none ${genericWidth}`} />
+                                  <div className="h-3 bg-slate-100 dark:bg-slate-800 rounded-none w-20" />
+                                </div>
+                              </td>
+                              {/* Supplier / Sourcing */}
+                              <td className="py-4 px-3">
+                                <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded-none w-32" />
+                              </td>
+                              {/* In Godown Stock */}
+                              <td className="py-4 px-4 text-right">
+                                <div className="h-5 bg-slate-200 dark:bg-slate-700 rounded-none w-16 ml-auto" />
+                              </td>
+                              {/* Action */}
+                              <td className="py-4 px-4 text-center">
+                                <div className="flex items-center justify-center gap-2">
+                                  <div className="h-8 bg-slate-200 dark:bg-slate-700 rounded-none w-24" />
+                                  <div className="h-8 bg-slate-200 dark:bg-slate-700 rounded-none w-8" />
+                                </div>
+                              </td>
+                            </>
+                          ) : activeFilter === "SHOP_LOW" ? (
+                            <>
+                              {/* Medicine Name & Generic */}
+                              <td className="py-4 px-4">
+                                <div className={`h-4 bg-slate-200 dark:bg-slate-700 rounded-none ${nameWidth} mb-2`} />
+                                <div className="flex items-center gap-2">
+                                  <div className={`h-3 bg-slate-100 dark:bg-slate-800 rounded-none ${genericWidth}`} />
+                                  <div className="h-3 bg-slate-100 dark:bg-slate-800 rounded-none w-16" />
+                                </div>
+                              </td>
+                              {/* Current Shop Stock */}
+                              <td className="py-4 px-3 text-right">
+                                <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded-none w-16 ml-auto mb-1" />
+                                <div className="h-2.5 bg-slate-100 dark:bg-slate-800 rounded-none w-20 ml-auto" />
+                              </td>
+                              {/* Available in Godown */}
+                              <td className="py-4 px-3 text-center">
+                                <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded-none w-16 mx-auto mb-1" />
+                                <div className="h-2.5 bg-slate-100 dark:bg-slate-800 rounded-none w-20 mx-auto" />
+                              </td>
+                              {/* Location */}
+                              <td className="py-4 px-3">
+                                <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded-none w-28" />
+                              </td>
+                              {/* Quick Action */}
+                              <td className="py-4 px-4 text-center">
+                                <div className="h-8 bg-slate-200 dark:bg-slate-700 rounded-none w-28 mx-auto" />
+                              </td>
+                            </>
+                          ) : activeFilter === "GODOWN_LOW" ? (
+                            <>
+                              {/* Medicine Name & Company */}
+                              <td className="py-4 px-4">
+                                <div className={`h-4 bg-slate-200 dark:bg-slate-700 rounded-none ${nameWidth} mb-2`} />
+                                <div className="flex items-center gap-2">
+                                  <div className={`h-3 bg-slate-100 dark:bg-slate-800 rounded-none ${genericWidth}`} />
+                                  <div className="h-3 bg-slate-100 dark:bg-slate-800 rounded-none w-20" />
+                                </div>
+                              </td>
+                              {/* Godown Stock */}
+                              <td className="py-4 px-4 text-right">
+                                <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded-none w-20 ml-auto" />
+                              </td>
+                              {/* Running in Shop */}
+                              <td className="py-4 px-4 text-right">
+                                <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded-none w-20 ml-auto" />
+                              </td>
+                              {/* Action */}
+                              <td className="py-4 px-4 text-center">
+                                <div className="h-8 bg-slate-200 dark:bg-slate-700 rounded-none w-20 mx-auto" />
+                              </td>
+                            </>
+                          ) : (
+                            /* ALL STOCK (Default 6 cols) */
+                            <>
+                              {/* Medicine Name & Generic */}
+                              <td className="py-4 px-4">
+                                <div className={`h-4 bg-slate-200 dark:bg-slate-700 rounded-none ${nameWidth} mb-2`} />
+                                <div className="flex items-center gap-2">
+                                  <div className={`h-3 bg-slate-100 dark:bg-slate-800 rounded-none ${genericWidth}`} />
+                                  <div className="h-3 bg-slate-100 dark:bg-slate-800 rounded-none w-20" />
+                                  <div className="h-3 bg-slate-100 dark:bg-slate-800 rounded-none w-16" />
+                                </div>
+                              </td>
+                              {/* In Godown */}
+                              <td className="py-4 px-3 text-right">
+                                <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded-none w-14 ml-auto" />
+                              </td>
+                              {/* In Shop (Shelf) */}
+                              <td className="py-4 px-3 text-right">
+                                <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded-none w-14 ml-auto" />
+                              </td>
+                              {/* Total Stock */}
+                              <td className="py-4 px-4 text-right">
+                                <div className="h-5 bg-slate-200 dark:bg-slate-700 rounded-none w-16 ml-auto" />
+                              </td>
+                              {/* Status */}
+                              <td className="py-4 px-3 text-center">
+                                <div className="h-6 bg-slate-200 dark:bg-slate-700 rounded-none w-20 mx-auto" />
+                              </td>
+                              {/* Action */}
+                              <td className="py-4 px-4 text-center">
+                                <div className="h-8 bg-slate-200 dark:bg-slate-700 rounded-none w-20 mx-auto" />
+                              </td>
+                            </>
+                          )}
+                        </tr>
+                      );
+                    })
                   ) : paginatedProducts.length === 0 ? (
                     <tr>
                       <td colSpan={activeFilter === "ALL" ? 6 : activeFilter === "SHOP_LOW" ? 5 : 4} className="py-16 text-center text-slate-400">
@@ -2072,7 +2210,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                                   </span>
                                 )}
                                 {(p.brandName || p.supplierName) && (
-                                  <span className="px-2 py-0.5 rounded-md text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                                  <span className="px-2 py-0.5 rounded-none text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
                                     {p.brandName || p.supplierName}
                                   </span>
                                 )}
@@ -2106,7 +2244,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                               <button
                                 type="button"
                                 onClick={() => setSelectedProductId(p.productId)}
-                                className="px-3.5 py-1.5 bg-slate-100 hover:bg-brand-primary hover:text-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5 mx-auto"
+                                className="px-3.5 py-1.5 bg-slate-100 hover:bg-brand-primary hover:text-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-none text-xs font-bold transition flex items-center gap-1.5 mx-auto"
                               >
                                 <Eye className="h-3.5 w-3.5" />
                                 <span>Details</span>
@@ -2136,7 +2274,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                                   </span>
                                 )}
                                 {(p.brandName || p.supplierName) && (
-                                  <span className="px-2 py-0.5 rounded-md text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                                  <span className="px-2 py-0.5 rounded-none text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
                                     {p.brandName || p.supplierName}
                                   </span>
                                 )}
@@ -2164,7 +2302,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                                   type="button"
                                   onClick={() => handleAllocateProduct(p)}
                                   style={{ backgroundColor: "var(--primary-color, #059669)" }}
-                                  className="px-3.5 py-1.5 hover:opacity-90 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95"
+                                  className="px-3.5 py-1.5 hover:opacity-90 text-white rounded-none text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95"
                                   title="Move stock from Godown into Shop"
                                 >
                                   <ArrowRightLeft className="h-3.5 w-3.5" />
@@ -2173,7 +2311,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                                 <button
                                   type="button"
                                   onClick={() => setSelectedProductId(p.productId)}
-                                  className="p-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-xl transition cursor-pointer"
+                                  className="p-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-none transition cursor-pointer"
                                   title="Details"
                                 >
                                   <Eye className="h-4 w-4" />
@@ -2204,7 +2342,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                                   </span>
                                 )}
                                 {(p.brandName || p.supplierName) && (
-                                  <span className="px-2 py-0.5 rounded-md text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                                  <span className="px-2 py-0.5 rounded-none text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
                                     {p.brandName || p.supplierName}
                                   </span>
                                 )}
@@ -2249,7 +2387,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                                   type="button"
                                   onClick={() => handleAllocateProduct(p)}
                                   style={{ backgroundColor: "var(--primary-color, #059669)" }}
-                                  className="px-3.5 py-1.5 hover:opacity-90 text-white rounded-lg text-xs sm:text-sm font-bold transition flex items-center gap-1.5 mx-auto shadow-2xs cursor-pointer active:scale-95"
+                                  className="px-3.5 py-1.5 hover:opacity-90 text-white rounded-none text-xs sm:text-sm font-bold transition flex items-center gap-1.5 mx-auto shadow-2xs cursor-pointer active:scale-95"
                                   title="Bring medicine from Godown into Shop"
                                 >
                                   <ArrowRightLeft className="h-3.5 w-3.5" />
@@ -2259,7 +2397,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                                 <button
                                   type="button"
                                   onClick={() => setSelectedProductId(p.productId)}
-                                  className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-bold transition mx-auto"
+                                  className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-none text-xs font-bold transition mx-auto"
                                 >
                                   Details
                                 </button>
@@ -2290,7 +2428,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                                   </span>
                                 )}
                                 {(p.brandName || p.supplierName) && (
-                                  <span className="px-2 py-0.5 rounded-md text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                                  <span className="px-2 py-0.5 rounded-none text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
                                     {p.brandName || p.supplierName}
                                   </span>
                                 )}
@@ -2316,7 +2454,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                               <button
                                 type="button"
                                 onClick={() => setSelectedProductId(p.productId)}
-                                className="px-3.5 py-1.5 bg-slate-100 hover:bg-brand-primary hover:text-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5 mx-auto cursor-pointer"
+                                className="px-3.5 py-1.5 bg-slate-100 hover:bg-brand-primary hover:text-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-none text-xs font-bold transition flex items-center gap-1.5 mx-auto cursor-pointer"
                               >
                                 <Eye className="h-3.5 w-3.5" />
                                 <span>Details</span>
@@ -2350,7 +2488,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                                 </span>
                               )}
                               {(p.brandName || p.supplierName || p.manufacturer) && (
-                                <span className="px-2.5 py-0.5 rounded-md text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                                <span className="px-2.5 py-0.5 rounded-none text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
                                   {p.brandName || p.supplierName || p.manufacturer}
                                 </span>
                               )}
@@ -2399,16 +2537,16 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                             {p.hasLowStock ? (
                               <span
                                 title={`Shop Alert: ≤${p.shopMinStockAlert ?? p.minStockLevel ?? 10} | Godown Alert: ≤${p.godownMinStockAlert ?? 50}`}
-                                className="px-3 py-1 rounded-lg text-xs sm:text-sm font-black bg-orange-50 text-orange-700 dark:bg-orange-950/40 dark:text-orange-300 border border-orange-200 dark:border-orange-900/50"
+                                className="px-3 py-1 rounded-none text-xs sm:text-sm font-black bg-orange-50 text-orange-700 dark:bg-orange-950/40 dark:text-orange-300 border border-orange-200 dark:border-orange-900/50"
                               >
                                 Low Stock ({p.isShopLowStock && p.isGodownLowStock ? "Shop & Godown" : p.isShopLowStock ? "Shop Low" : "Godown Low"})
                               </span>
                             ) : p.totalGodownQuantity > 0 && p.totalRackQuantity === 0 ? (
-                              <span className="px-3 py-1 rounded-lg text-xs sm:text-sm font-bold bg-purple-50 text-purple-700 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800">
+                              <span className="px-3 py-1 rounded-none text-xs sm:text-sm font-bold bg-purple-50 text-purple-700 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800">
                                 Needs Shelf
                               </span>
                             ) : (
-                              <span className="px-3 py-1 rounded-lg text-xs sm:text-sm font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900/50">
+                              <span className="px-3 py-1 rounded-none text-xs sm:text-sm font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900/50">
                                 In Stock
                               </span>
                             )}
@@ -2421,7 +2559,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                                 type="button"
                                 onClick={() => setSelectedProductId(p.productId)}
                                 title="View all batches, FEFO expiry dates & warehouse allocation"
-                                className="px-4 py-2 bg-slate-100 hover:bg-brand-primary hover:text-white dark:bg-slate-800 dark:hover:bg-brand-primary text-slate-700 dark:text-slate-200 rounded-xl text-xs sm:text-sm font-bold transition flex items-center gap-1.5 cursor-pointer shadow-2xs active:scale-95 group"
+                                className="px-4 py-2 bg-slate-100 hover:bg-brand-primary hover:text-white dark:bg-slate-800 dark:hover:bg-brand-primary text-slate-700 dark:text-slate-200 rounded-none text-xs sm:text-sm font-bold transition flex items-center gap-1.5 cursor-pointer shadow-2xs active:scale-95 group"
                               >
                                 <Eye className="h-4 w-4 text-slate-400 group-hover:text-white transition" />
                                 <span>Details</span>
@@ -2450,7 +2588,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                   <span className="hidden sm:inline text-slate-300 dark:text-slate-700">•</span>
 
                   {/* Show per page dropdown */}
-                  <div className="flex items-center gap-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-1.5 rounded-xl shadow-2xs">
+                  <div className="flex items-center gap-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-1.5 rounded-none shadow-2xs">
                     <span className="font-bold text-slate-600 dark:text-slate-300">Show:</span>
                     <select
                       value={pageSize}
@@ -2477,7 +2615,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                     type="button"
                     disabled={page <= 1}
                     onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-                    className="h-8 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-slate-700 dark:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-800 transition flex items-center gap-1.5 cursor-pointer shadow-2xs active:scale-95"
+                    className="h-8 px-3 rounded-none border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-slate-700 dark:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-800 transition flex items-center gap-1.5 cursor-pointer shadow-2xs active:scale-95"
                   >
                     <ChevronLeft className="h-4 w-4 shrink-0" />
                     <span>Previous</span>
@@ -2507,7 +2645,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                           key={pageNum}
                           type="button"
                           onClick={() => setPage(pageNum)}
-                          className={`h-8 min-w-[32px] px-2 rounded-xl text-xs font-black transition cursor-pointer ${
+                          className={`h-8 min-w-[32px] px-2 rounded-none text-xs font-black transition cursor-pointer ${
                             page === pageNum
                               ? "bg-brand-primary text-white shadow-xs"
                               : "bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
@@ -2524,7 +2662,7 @@ export function StockListView({ onNavigate, selectedBranchId: propBranchId }: St
                     type="button"
                     disabled={page >= totalPages}
                     onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
-                    className="h-8 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-slate-700 dark:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-800 transition flex items-center gap-1.5 cursor-pointer shadow-2xs active:scale-95"
+                    className="h-8 px-3 rounded-none border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-slate-700 dark:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-800 transition flex items-center gap-1.5 cursor-pointer shadow-2xs active:scale-95"
                   >
                     <span>Next</span>
                     <ChevronRight className="h-4 w-4 shrink-0" />

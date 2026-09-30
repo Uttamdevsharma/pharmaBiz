@@ -31,6 +31,7 @@ class TransferService {
                         id: item.inventoryId,
                         branchId: data.fromBranchId,
                     },
+                    include: { locations: true },
                 });
             }
             if (!inv) {
@@ -40,6 +41,7 @@ class TransferService {
                         productId: item.productId,
                         ...(item.batchNumber ? { batchNumber: item.batchNumber } : {}),
                     },
+                    include: { locations: true },
                 });
             }
             const product = await prisma_1.prisma.product.findUnique({
@@ -48,9 +50,10 @@ class TransferService {
             if (!product) {
                 throw new Error(`Product ID ${item.productId} not found.`);
             }
-            const availableQty = inv?.quantity || 0;
-            if (availableQty < item.sentQuantity) {
-                throw new Error(`Insufficient stock at ${fromBranch.name} for "${product.name}"${item.batchNumber ? ` (Batch: ${item.batchNumber})` : ""}. Available: ${availableQty}, Requested: ${item.sentQuantity}`);
+            const allocatedToShop = (inv?.locations || []).reduce((sum, loc) => sum + (Number(loc.quantity) || 0), 0);
+            const godownAvailableQty = Math.max(0, (Number(inv?.quantity) || 0) - allocatedToShop);
+            if (godownAvailableQty < item.sentQuantity) {
+                throw new Error(`Insufficient Godown stock at ${fromBranch.name} for "${product.name}"${item.batchNumber ? ` (Batch: ${item.batchNumber})` : ""}. Available in Godown: ${godownAvailableQty}, Requested: ${item.sentQuantity}. Stock allocated to shop racks/counters cannot be transferred.`);
             }
             // Use specified purchase/cost price or fallback to inventory purchase price
             const effectiveCostPrice = Number(item.costPrice ?? inv?.purchasePrice ?? product.basePrice ?? 0);

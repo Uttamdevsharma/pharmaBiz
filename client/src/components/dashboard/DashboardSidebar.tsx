@@ -14,6 +14,7 @@ import {
   KeyRound,
   Package,
   ShoppingCart,
+  ShoppingBag,
   BarChart3,
   CreditCard,
   Sparkles,
@@ -91,6 +92,7 @@ export type OwnerModule =
   | "sal_deduction_rules"
   | "sal_management"
   | "sal_history"
+  | "sal_report"
   | "inv_add_product"
   | "inv_product_list"
   | "inv_variants"
@@ -219,15 +221,14 @@ export function DashboardSidebar({
     activeModule === "exp_recurring" ||
     activeModule === "exp_monthly" ||
     activeModule === "exp_settings" ||
-    activeModule === "acc_expenses";
+    activeModule === "acc_expenses" ||
+    activeModule === "sal_management" ||
+    activeModule === "sal_history" ||
+    activeModule === "sal_report";
 
   const isSalaryActive =
     activeModule === "sal_employees" ||
     activeModule === "sal_attendance" ||
-    activeModule === "sal_offdays" ||
-    activeModule === "sal_management" ||
-    activeModule === "sal_history" ||
-    activeModule === "acc_salaries" ||
     activeModule === "employee_details" ||
     activeModule === "staff_salary_history";
 
@@ -257,6 +258,8 @@ export function DashboardSidebar({
     role_management_group: false,
     rack_management_group: true,
     other_location_group: true,
+    operational_bills_group: true,
+    staff_payroll_group: true,
   });
 
   const toggleSubgroup = (subgroupId: string) => {
@@ -297,6 +300,21 @@ export function DashboardSidebar({
     }
     if (isExpensesActive) {
       setOpenParents((prev) => ({ ...prev, expenses_bills: true }));
+      if (
+        activeModule === "exp_create" ||
+        activeModule === "exp_list" ||
+        activeModule === "exp_pay" ||
+        activeModule === "exp_history"
+      ) {
+        setOpenSubgroups((prev) => ({ ...prev, operational_bills_group: true }));
+      }
+      if (
+        activeModule === "sal_management" ||
+        activeModule === "sal_history" ||
+        activeModule === "sal_report"
+      ) {
+        setOpenSubgroups((prev) => ({ ...prev, staff_payroll_group: true }));
+      }
     }
     if (isSalaryActive) {
       setOpenParents((prev) => ({ ...prev, employee_salary: true }));
@@ -526,14 +544,16 @@ export function DashboardSidebar({
     },
   ].filter((item) => item.visible);
 
-  // 8. Sales & POS Section
+  // Standalone Direct POS Action at top of Pharmacy Operations
+  const posItem = {
+    id: "pos" as OwnerModule,
+    label: "POS",
+    icon: ShoppingCart,
+    visible: isOwner || hasPermission("pos.manage") || hasPermission("pos.view"),
+  };
+
+  // 8. Sales Section (Renamed from Sales & POS)
   const salesChildren: SubMenuItem[] = [
-    {
-      id: "pos" as OwnerModule,
-      label: "Sales / POS",
-      icon: ShoppingCart,
-      visible: isOwner || hasPermission("pos.manage"),
-    },
     {
       id: "pos_history" as OwnerModule,
       label: "Sales History",
@@ -606,35 +626,69 @@ export function DashboardSidebar({
     },
   ].filter((item) => item.visible);
 
-  // 10. Expenses & Bills Section
+  // 10. Expenses & Payroll Section
   const expensesChildren: SubMenuItem[] = [
     {
-      id: "exp_create" as OwnerModule,
-      label: "Create Bill",
-      icon: PlusCircle,
-      visible: isOwner || hasPermission("expenses.list"),
+      id: "operational_bills_group",
+      label: "Operational Bills",
+      icon: Receipt,
+      visible: isOwner || hasPermission("expenses.list") || hasPermission("expenses.pay"),
+      children: [
+        {
+          id: "exp_create" as OwnerModule,
+          label: "Create Bill",
+          icon: PlusCircle,
+          visible: isOwner || hasPermission("expenses.list"),
+        },
+        {
+          id: "exp_list" as OwnerModule,
+          label: "Bill List",
+          icon: List,
+          visible: isOwner || hasPermission("expenses.list"),
+        },
+        {
+          id: "exp_pay" as OwnerModule,
+          label: "Pay Bill",
+          icon: CreditCard,
+          visible: isOwner || hasPermission("expenses.pay"),
+        },
+        {
+          id: "exp_history" as OwnerModule,
+          label: "Bill History",
+          icon: History,
+          visible: isOwner || hasPermission("expenses.history"),
+        },
+      ].filter((c) => c.visible),
     },
     {
-      id: "exp_list" as OwnerModule,
-      label: "Bill List",
-      icon: List,
-      visible: isOwner || hasPermission("expenses.list"),
-    },
-    {
-      id: "exp_pay" as OwnerModule,
-      label: "Pay Bill",
-      icon: CreditCard,
-      visible: isOwner || hasPermission("expenses.pay"),
-    },
-    {
-      id: "exp_history" as OwnerModule,
-      label: "Bill History",
-      icon: History,
-      visible: isOwner || hasPermission("expenses.history"),
+      id: "staff_payroll_group",
+      label: "Staff Payroll",
+      icon: DollarSign,
+      visible: isOwner || hasPermission("salary.manage") || hasPermission("salary.history"),
+      children: [
+        {
+          id: "sal_management" as OwnerModule,
+          label: "Pay Salary",
+          icon: Briefcase,
+          visible: isOwner || hasPermission("salary.manage"),
+        },
+        {
+          id: "sal_history" as OwnerModule,
+          label: "Salary History",
+          icon: History,
+          visible: isOwner || hasPermission("salary.history"),
+        },
+        {
+          id: "sal_report" as OwnerModule,
+          label: "Salary Report",
+          icon: FileSpreadsheet,
+          visible: isOwner || hasPermission("salary.history"),
+        },
+      ].filter((c) => c.visible),
     },
   ].filter((item) => item.visible);
 
-  // 11. Employee & Salary Section
+  // 11. Employee Management Section
   const salaryChildren: SubMenuItem[] = [
     {
       id: "sal_employees" as OwnerModule,
@@ -647,24 +701,6 @@ export function DashboardSidebar({
       label: "Attendance Management",
       icon: CalendarCheck,
       visible: isOwner || hasPermission("attendance.manage"),
-    },
-    {
-      id: "sal_offdays" as OwnerModule,
-      label: "Off-Day Settings",
-      icon: CalendarX2,
-      visible: isOwner || hasPermission("attendance.offdays"),
-    },
-    {
-      id: "sal_management" as OwnerModule,
-      label: "Salary Management",
-      icon: Briefcase,
-      visible: isOwner || hasPermission("salary.manage"),
-    },
-    {
-      id: "sal_history" as OwnerModule,
-      label: "Salary History",
-      icon: History,
-      visible: isOwner || hasPermission("salary.history"),
     },
   ].filter((item) => item.visible);
 
@@ -737,10 +773,24 @@ export function DashboardSidebar({
     },
     {
       id: "sales_pos",
-      label: "Sales & POS",
-      icon: ShoppingCart,
+      label: "Sales",
+      icon: ShoppingBag,
       visible: salesChildren.length > 0,
       children: salesChildren,
+    },
+    {
+      id: "employee_salary",
+      label: "Employee Management",
+      icon: Users,
+      visible: salaryChildren.length > 0,
+      children: salaryChildren,
+    },
+    {
+      id: "expenses_bills",
+      label: "Expenses & Payroll",
+      icon: Receipt,
+      visible: expensesChildren.length > 0,
+      children: expensesChildren,
     },
     {
       id: "accounts",
@@ -748,20 +798,6 @@ export function DashboardSidebar({
       icon: Wallet,
       visible: accountsChildren.length > 0,
       children: accountsChildren,
-    },
-    {
-      id: "expenses_bills",
-      label: "Expenses & Bills",
-      icon: Receipt,
-      visible: expensesChildren.length > 0,
-      children: expensesChildren,
-    },
-    {
-      id: "employee_salary",
-      label: "Employee & Salary",
-      icon: Briefcase,
-      visible: salaryChildren.length > 0,
-      children: salaryChildren,
     },
     {
       id: "subscription_mgmt",
@@ -863,6 +899,27 @@ export function DashboardSidebar({
             })}
 
             <div className="w-8 border-t border-slate-200 dark:border-slate-800 my-1" />
+
+            {/* Direct POS Icon in Collapsed Mode */}
+            {posItem.visible && (
+              <div className="relative group w-full flex justify-center">
+                <button
+                  type="button"
+                  onClick={() => handleModuleSelect("pos")}
+                  className={`h-11 w-11 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
+                    activeModule === "pos"
+                      ? "bg-brand-primary text-white shadow-md shadow-brand-primary/20"
+                      : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
+                  }`}
+                  aria-label="POS"
+                >
+                  <ShoppingCart className="h-5 w-5 shrink-0" />
+                </button>
+                <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 px-2.5 py-1.5 rounded-xl bg-slate-900 dark:bg-slate-800 text-white text-xs font-semibold shadow-xl opacity-0 pointer-events-none group-hover:opacity-100 transition whitespace-nowrap z-50 border border-slate-700">
+                  POS
+                </div>
+              </div>
+            )}
 
             {/* Collapsible Domain Sections */}
             {visibleCollapsible.map((section) => {
@@ -1014,11 +1071,31 @@ export function DashboardSidebar({
             )}
 
             {/* Collapsible Domain Sections */}
-            {visibleCollapsible.length > 0 && (
+            {(posItem.visible || visibleCollapsible.length > 0) && (
               <div className="space-y-2 xl:space-y-2.5">
                 <div className="px-3 xl:px-3.5 2xl:px-4 text-[10px] xl:text-[11px] 2xl:text-xs font-black uppercase tracking-wider text-slate-400">
                   Pharmacy Operations
                 </div>
+
+                {/* Direct 1-Click POS Counter (Top of Operations) */}
+                {posItem.visible && (
+                  <button
+                    type="button"
+                    onClick={() => handleModuleSelect("pos")}
+                    className={`w-full flex items-center gap-2.5 xl:gap-3 px-3 py-2 xl:px-3.5 xl:py-2.5 2xl:px-4 2xl:py-3 rounded-xl xl:rounded-2xl text-xs xl:text-sm 2xl:text-base font-bold transition-all cursor-pointer ${
+                      activeModule === "pos"
+                        ? "bg-brand-primary text-white shadow-sm font-black"
+                        : "text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white"
+                    }`}
+                  >
+                    <ShoppingCart
+                      className={`h-4 w-4 xl:h-4.5 xl:w-4.5 2xl:h-5 2xl:w-5 shrink-0 ${
+                        activeModule === "pos" ? "text-white" : "text-brand-primary"
+                      }`}
+                    />
+                    <span className="truncate">POS</span>
+                  </button>
+                )}
 
                 {visibleCollapsible.map((section) => {
                   const ParentIcon = section.icon;

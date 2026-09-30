@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useSettings } from "@/context/SettingsContext";
 import { fetchApi } from "@/lib/api";
 import { ImageUploader } from "@/components/common/ImageUploader";
@@ -14,6 +14,23 @@ import {
   Trash2,
   ImageIcon,
   Loader2,
+  Building2,
+  PhoneCall,
+  Zap,
+  Edit2,
+  X,
+  RefreshCw,
+  ExternalLink,
+  Shield,
+  Layers,
+  Sliders,
+  Mail,
+  Phone,
+  MapPin,
+  Clock,
+  Eye,
+  Check,
+  Building,
 } from "lucide-react";
 
 // Curated preset color palettes for health & enterprise SaaS
@@ -26,13 +43,30 @@ const PRESET_COLORS = [
   { name: "Amber Clinical", hex: "#d97706" },
 ];
 
-export function SettingsTab() {
-  const { settings, refreshSettings } = useSettings();
+type SettingsSubTab =
+  | "logo-name"
+  | "brand-color"
+  | "landing-hero"
+  | "platform-features"
+  | "company-contact";
 
+export function SettingsTab() {
+  const { settings, loading, refreshSettings } = useSettings();
+
+  const [activeSubTab, setActiveSubTab] = useState<SettingsSubTab>("logo-name");
   const [saving, setSaving] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  // Local state initialized with current settings
+  // Edit toggles per tab (inputs are hidden when false)
+  const [editingTab, setEditingTab] = useState<Record<SettingsSubTab, boolean>>({
+    "logo-name": false,
+    "brand-color": false,
+    "landing-hero": false,
+    "platform-features": false,
+    "company-contact": false,
+  });
+
+  // Local form state
   const [siteName, setSiteName] = useState(settings.siteName || "PharmaBiz SaaS");
   const [logoUrl, setLogoUrl] = useState(settings.logoUrl || "");
   const [logoPublicId, setLogoPublicId] = useState((settings as any).logoPublicId || "");
@@ -58,9 +92,44 @@ export function SettingsTab() {
 
   const [features, setFeatures] = useState(settings.features || []);
 
+  // Sync state when settings update from context
+  useEffect(() => {
+    if (settings) {
+      setSiteName(settings.siteName || "PharmaBiz SaaS");
+      setLogoUrl(settings.logoUrl || "");
+      setLogoPublicId((settings as any).logoPublicId || "");
+      setPrimaryColor(settings.primaryColor || "#059669");
+
+      if (settings.hero) {
+        setHeroBadge(settings.hero.badge || "");
+        setHeroTitle(settings.hero.title || "");
+        setHeroSubtitle(settings.hero.subtitle || "");
+        setCtaPrimaryText(settings.hero.ctaPrimaryText || "");
+        setCtaSecondaryText(settings.hero.ctaSecondaryText || "");
+      }
+
+      if (settings.contact) {
+        setContactEmail(settings.contact.email || "");
+        setContactPhone(settings.contact.phone || "");
+        setContactAddress(settings.contact.address || "");
+        setSupportHours(settings.contact.supportHours || "");
+      }
+
+      if (settings.features) {
+        setFeatures(settings.features);
+      }
+    }
+  }, [settings]);
+
+  const toggleEdit = (tab: SettingsSubTab, value?: boolean) => {
+    setEditingTab((prev) => ({
+      ...prev,
+      [tab]: value !== undefined ? value : !prev[tab],
+    }));
+  };
+
   const handleColorSelect = (hex: string) => {
     setPrimaryColor(hex);
-    // Instant live preview
     document.documentElement.style.setProperty("--primary-color", hex);
   };
 
@@ -69,8 +138,8 @@ export function SettingsTab() {
       ...features,
       {
         id: `feat-${Date.now()}`,
-        title: "New Pharmacy Capability",
-        description: "Describe how this feature boosts store efficiency and offline reliability.",
+        title: "New Capability",
+        description: "Describe how this feature boosts pharmacy operations.",
         icon: "Zap",
       },
     ]);
@@ -86,8 +155,7 @@ export function SettingsTab() {
     setFeatures(updated);
   };
 
-  const handleSaveSettings = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSaveSettings = async (tabToClose?: SettingsSubTab) => {
     setSaving(true);
     setSuccessMessage(null);
 
@@ -119,8 +187,19 @@ export function SettingsTab() {
       });
 
       if (res.success) {
-        setSuccessMessage("Theme, branding, and Cloudinary media saved! Changes are now live on the public landing page.");
+        setSuccessMessage("Platform settings updated successfully! Changes are live across the system.");
         await refreshSettings();
+        if (tabToClose) {
+          toggleEdit(tabToClose, false);
+        } else {
+          setEditingTab({
+            "logo-name": false,
+            "brand-color": false,
+            "landing-hero": false,
+            "platform-features": false,
+            "company-contact": false,
+          });
+        }
       } else {
         alert(res.message || "Failed to update settings");
       }
@@ -132,382 +211,953 @@ export function SettingsTab() {
   };
 
   return (
-    <form onSubmit={handleSaveSettings} className="space-y-8 max-w-5xl">
-      {/* Header & Save Action */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 sticky -top-3.5 sm:-top-6 md:-top-8 -mx-3.5 sm:-mx-6 md:-mx-8 -mt-3.5 sm:-mt-6 md:-mt-8 px-3.5 sm:px-6 md:px-8 py-4 z-30 bg-slate-50/95 dark:bg-slate-950/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800">
+    <div className="space-y-6 w-full max-w-6xl">
+      {/* Top Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
         <div>
-          <h2 className="text-2xl font-extrabold text-slate-900 dark:text-white">
-            Branding, Content & Dynamic Theme
-          </h2>
-          <p className="text-sm text-slate-500">
-            Customize platform logo, Cloudinary media assets, dynamic primary color palette, and live landing content
+          <div className="flex items-center gap-2 text-xs font-bold text-slate-400 mb-1">
+            <span>Platform Management</span>
+            <span>/</span>
+            <span className="text-brand-primary">Settings</span>
+          </div>
+          <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white flex items-center gap-2.5">
+            <Sliders className="h-7 w-7 text-brand-primary" />
+            <span>Platform Settings & Branding</span>
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+            Manage your dynamic platform logo, site name, brand color theme, landing hero section, and company details.
           </p>
         </div>
 
-        <button
-          type="submit"
-          disabled={saving}
-          className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-brand-primary text-white font-bold text-sm shadow-md hover:opacity-90 transition active:scale-95 disabled:opacity-50"
-        >
-          {saving ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Publishing...
-            </>
-          ) : (
-            <>
-              <Save className="h-4 w-4" />
-              Save & Apply Changes
-            </>
-          )}
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={refreshSettings}
+            disabled={loading || saving}
+            className="h-10 px-4 rounded-none text-xs sm:text-sm font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition flex items-center gap-2 cursor-pointer"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+            <span>Refresh</span>
+          </button>
+        </div>
       </div>
 
+      {/* Action Notification */}
       {successMessage && (
-        <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-400 text-sm font-semibold flex items-center gap-3">
-          <CheckCircle2 className="h-5 w-5 shrink-0" />
-          <span>{successMessage}</span>
+        <div className="flex items-center justify-between p-4 rounded-none text-xs sm:text-sm font-semibold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 transition-all">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" />
+            <span>{successMessage}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSuccessMessage(null)}
+            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
       )}
 
-      {/* 1. Cloudinary Logo & Media Asset Uploader */}
-      <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-6">
-        <div className="flex items-center gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
-          <div className="p-2 rounded-xl brand-subtle-bg text-brand-primary">
-            <ImageIcon className="h-5 w-5" />
-          </div>
-          <div>
-            <h3 className="text-lg font-bold text-slate-900 dark:text-white">Platform Logo & Media (Cloudinary)</h3>
-            <p className="text-xs text-slate-500">
-              Upload company brand logo and imagery directly to Cloudinary with automated optimization
-            </p>
-          </div>
-        </div>
+      {/* Top Tab Menu (5 Subtabs) */}
+      <div className="flex flex-wrap items-center gap-1 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-1.5 shadow-2xs">
+        <button
+          type="button"
+          onClick={() => setActiveSubTab("logo-name")}
+          className={`flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer rounded-none ${
+            activeSubTab === "logo-name"
+              ? "border-brand-primary text-brand-primary bg-brand-primary/5"
+              : "border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800/50"
+          }`}
+        >
+          <ImageIcon className="h-4 w-4" />
+          <span>Platform Logo & Name</span>
+        </button>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <ImageUploader
-              label="Platform / Company Logo"
-              hint="Upload brand logo for Navbar and Header. Stored in Cloudinary."
-              value={logoUrl}
-              publicId={logoPublicId}
-              folder="pharmacy_saas/logos"
-              onChange={(data) => {
-                setLogoUrl(data?.url || "");
-                setLogoPublicId(data?.publicId || "");
-              }}
-            />
-          </div>
+        <button
+          type="button"
+          onClick={() => setActiveSubTab("brand-color")}
+          className={`flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer rounded-none ${
+            activeSubTab === "brand-color"
+              ? "border-brand-primary text-brand-primary bg-brand-primary/5"
+              : "border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800/50"
+          }`}
+        >
+          <Palette className="h-4 w-4" />
+          <span>Dynamic Brand Color Theme</span>
+        </button>
 
-          <div className="flex flex-col justify-center space-y-2 p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-800 text-xs text-slate-500">
-            <div className="font-bold text-slate-700 dark:text-slate-300">Cloudinary Media Rules:</div>
-            <div>• Automated image compression and WebP format delivery.</div>
-            <div>• Replacing an existing logo automatically destroys the previous Cloudinary asset.</div>
-            <div>• Real-time synchronization to Public Navbar, Footer, and Admin Portal.</div>
-          </div>
-        </div>
+        <button
+          type="button"
+          onClick={() => setActiveSubTab("landing-hero")}
+          className={`flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer rounded-none ${
+            activeSubTab === "landing-hero"
+              ? "border-brand-primary text-brand-primary bg-brand-primary/5"
+              : "border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800/50"
+          }`}
+        >
+          <LayoutTemplate className="h-4 w-4" />
+          <span>Landing Page Hero & Branding</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveSubTab("platform-features")}
+          className={`flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer rounded-none ${
+            activeSubTab === "platform-features"
+              ? "border-brand-primary text-brand-primary bg-brand-primary/5"
+              : "border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800/50"
+          }`}
+        >
+          <Layers className="h-4 w-4" />
+          <span>Dynamic Platform Features</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveSubTab("company-contact")}
+          className={`flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer rounded-none ${
+            activeSubTab === "company-contact"
+              ? "border-brand-primary text-brand-primary bg-brand-primary/5"
+              : "border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800/50"
+          }`}
+        >
+          <Building2 className="h-4 w-4" />
+          <span>Company Contact & HQ Details</span>
+        </button>
       </div>
 
-      {/* 2. Dynamic Primary Theme Palette */}
-      <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-6">
-        <div className="flex items-center gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
-          <div className="p-2 rounded-xl brand-subtle-bg text-brand-primary">
-            <Palette className="h-5 w-5" />
-          </div>
-          <div>
-            <h3 className="text-lg font-bold text-slate-900 dark:text-white">Dynamic Brand Color Theme</h3>
-            <p className="text-xs text-slate-500">
-              Select or enter a primary brand color. It dynamically drives buttons, gradients, icons, and glows.
-            </p>
-          </div>
+      {/* Loading Skeleton */}
+      {loading ? (
+        <div className="p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-none space-y-4 animate-pulse">
+          <div className="h-6 w-48 bg-slate-200 dark:bg-slate-700 rounded-none" />
+          <div className="h-4 w-96 bg-slate-100 dark:bg-slate-800 rounded-none" />
+          <div className="h-32 w-full bg-slate-50 dark:bg-slate-800/60 rounded-none" />
         </div>
+      ) : (
+        <div>
+          {/* ======================================================== */}
+          {/* TAB 1: Platform Logo & Name */}
+          {/* ======================================================== */}
+          {activeSubTab === "logo-name" && (
+            <div className="space-y-6">
+              {/* Active Preview Card */}
+              <div className="bg-white dark:bg-slate-900 rounded-none border border-slate-200 dark:border-slate-800 p-6 shadow-xs">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 mb-4 border-b border-slate-100 dark:border-slate-800 gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <ImageIcon className="h-5 w-5 text-brand-primary" />
+                      <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
+                        Active Platform Logo & Name
+                      </h2>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      This logo and name appear on the top-left navigation bar, receipts, invoices, and public headers.
+                    </p>
+                  </div>
 
-        <div className="space-y-4">
-          <label className="block text-xs font-semibold uppercase text-slate-500 tracking-wider">
-            Choose a Preset Theme Palette
-          </label>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
-            {PRESET_COLORS.map((preset) => {
-              const isSelected = primaryColor.toLowerCase() === preset.hex.toLowerCase();
-              return (
-                <button
-                  type="button"
-                  key={preset.hex}
-                  onClick={() => handleColorSelect(preset.hex)}
-                  className={`p-3 rounded-xl border flex flex-col items-center gap-2 transition-all ${
-                    isSelected
-                      ? "border-2 border-slate-900 dark:border-white shadow-md scale-105"
-                      : "border-slate-200 dark:border-slate-800 hover:border-slate-400"
-                  }`}
-                >
-                  <span
-                    className="h-8 w-8 rounded-full shadow-inner border border-white/20"
-                    style={{ backgroundColor: preset.hex }}
-                  />
-                  <span className="text-xs font-bold text-slate-800 dark:text-slate-200 text-center">
-                    {preset.name}
-                  </span>
-                  <span className="text-[10px] text-slate-400 font-mono">{preset.hex}</span>
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="pt-2 flex items-center gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Custom HEX Color Code
-              </label>
-              <div className="flex items-center gap-2">
-                <input
-                  type="color"
-                  value={primaryColor}
-                  onChange={(e) => handleColorSelect(e.target.value)}
-                  className="h-10 w-12 rounded-lg border border-slate-300 dark:border-slate-700 cursor-pointer bg-transparent"
-                />
-                <input
-                  type="text"
-                  value={primaryColor}
-                  onChange={(e) => handleColorSelect(e.target.value)}
-                  placeholder="#059669"
-                  className="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-mono text-sm uppercase focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                />
-              </div>
-            </div>
-
-            {/* Live Preview Button */}
-            <div className="pt-5">
-              <span
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-white font-bold text-xs shadow-md"
-                style={{ backgroundColor: primaryColor }}
-              >
-                <Sparkles className="h-4 w-4" />
-                Live Theme Preview
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* 3. Platform Branding & Hero Content */}
-      <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-6">
-        <div className="flex items-center gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
-          <div className="p-2 rounded-xl brand-subtle-bg text-brand-primary">
-            <LayoutTemplate className="h-5 w-5" />
-          </div>
-          <div>
-            <h3 className="text-lg font-bold text-slate-900 dark:text-white">Landing Page Hero & Branding</h3>
-            <p className="text-xs text-slate-500">Edit company title, hero headline, badges, and action buttons</p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 text-sm">
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-              Platform / Company Name
-            </label>
-            <input
-              type="text"
-              value={siteName}
-              onChange={(e) => setSiteName(e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-primary font-bold"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-              Hero Top Badge Pill
-            </label>
-            <input
-              type="text"
-              value={heroBadge}
-              onChange={(e) => setHeroBadge(e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-            />
-          </div>
-
-          <div className="md:col-span-2">
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-              Main Hero Headline Title
-            </label>
-            <input
-              type="text"
-              value={heroTitle}
-              onChange={(e) => setHeroTitle(e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-primary font-semibold"
-            />
-          </div>
-
-          <div className="md:col-span-2">
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-              Hero Subtitle / Description
-            </label>
-            <textarea
-              rows={3}
-              value={heroSubtitle}
-              onChange={(e) => setHeroSubtitle(e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-              Primary CTA Button Text
-            </label>
-            <input
-              type="text"
-              value={ctaPrimaryText}
-              onChange={(e) => setCtaPrimaryText(e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-              Secondary CTA Button Text
-            </label>
-            <input
-              type="text"
-              value={ctaSecondaryText}
-              onChange={(e) => setCtaSecondaryText(e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* 4. Dynamic Features Editor */}
-      <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-6">
-        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
-          <div>
-            <h3 className="text-lg font-bold text-slate-900 dark:text-white">Dynamic Platform Features</h3>
-            <p className="text-xs text-slate-500">Edit, add, or remove feature cards shown on the landing page</p>
-          </div>
-
-          <button
-            type="button"
-            onClick={handleAddFeature}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200"
-          >
-            <Plus className="h-4 w-4" />
-            Add Feature
-          </button>
-        </div>
-
-        <div className="space-y-4">
-          {features.map((feat, idx) => (
-            <div
-              key={feat.id || idx}
-              className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 space-y-3"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-500 uppercase">Feature #{idx + 1}</span>
-                <button
-                  type="button"
-                  onClick={() => handleRemoveFeature(idx)}
-                  className="p-1 rounded text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40"
-                  title="Remove Feature"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                <div>
-                  <input
-                    type="text"
-                    value={feat.title}
-                    onChange={(e) => handleFeatureChange(idx, "title", e.target.value)}
-                    placeholder="Feature Title"
-                    className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-bold focus:outline-none focus:ring-1 focus:ring-brand-primary"
-                  />
-                </div>
-                <div>
-                  <select
-                    value={feat.icon || "Zap"}
-                    onChange={(e) => handleFeatureChange(idx, "icon", e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 focus:outline-none"
+                  <button
+                    type="button"
+                    onClick={() => toggleEdit("logo-name")}
+                    className="inline-flex items-center gap-2 h-9 px-4 rounded-none bg-brand-primary text-white text-xs font-bold shadow-xs hover:bg-brand-primary-hover transition cursor-pointer self-start sm:self-auto"
                   >
-                    <option value="Zap">Zap (Offline / Fast)</option>
-                    <option value="Building2">Building2 (Multi-Branch)</option>
-                    <option value="ShieldAlert">ShieldAlert (Inventory/Expiry)</option>
-                    <option value="ArrowLeftRight">ArrowLeftRight (Transfers)</option>
-                    <option value="ShieldCheck">ShieldCheck (RBAC Security)</option>
-                    <option value="CreditCard">CreditCard (Payments)</option>
-                  </select>
+                    <Edit2 className="h-3.5 w-3.5" />
+                    <span>{editingTab["logo-name"] ? "Close Form" : "Edit Logo & Name"}</span>
+                  </button>
                 </div>
-                <div className="md:col-span-2">
-                  <textarea
-                    rows={2}
-                    value={feat.description}
-                    onChange={(e) => handleFeatureChange(idx, "description", e.target.value)}
-                    placeholder="Feature Description"
-                    className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs focus:outline-none focus:ring-1 focus:ring-brand-primary"
-                  />
+
+                {/* Preview Display */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50/50 dark:bg-slate-800/30 p-5 border border-slate-100 dark:border-slate-800 rounded-none">
+                  {/* Logo Preview */}
+                  <div className="flex items-center gap-4">
+                    <div className="h-16 w-16 bg-white dark:bg-slate-800 border-2 border-dashed border-slate-200 dark:border-slate-700 flex items-center justify-center p-1 rounded-none shadow-xs">
+                      {settings.logoUrl ? (
+                        <img
+                          src={settings.logoUrl}
+                          alt={settings.siteName || "Logo"}
+                          className="w-full h-full object-contain"
+                        />
+                      ) : (
+                        <span className="text-xs font-bold text-slate-400">No Logo</span>
+                      )}
+                    </div>
+                    <div>
+                      <div className="text-xs uppercase font-bold text-slate-400">Current Platform Logo</div>
+                      <div className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                        {settings.logoUrl ? "Custom Cloudinary Asset Loaded" : "Default Icon Active"}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Name Preview */}
+                  <div className="flex flex-col justify-center">
+                    <div className="text-xs uppercase font-bold text-slate-400">Current Platform Name</div>
+                    <div className="text-lg font-black text-slate-900 dark:text-white">
+                      {settings.siteName || "PharmaBiz SaaS"}
+                    </div>
+                    <div className="text-xs text-slate-400 mt-0.5">
+                      Dynamically rendered across the portal
+                    </div>
+                  </div>
+                </div>
+
+                {/* Navbar Live Simulation */}
+                <div className="mt-4 p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center gap-3">
+                  <span className="text-[11px] uppercase font-bold text-slate-400 px-2 border-r border-slate-200 dark:border-slate-700">
+                    Live Header Preview
+                  </span>
+                  <div className="flex items-center gap-2">
+                    {settings.logoUrl ? (
+                      <div className="h-7 w-7 rounded-none bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center p-0.5">
+                        <img src={settings.logoUrl} alt="Logo" className="w-full h-full object-contain" />
+                      </div>
+                    ) : (
+                      <div className="h-7 w-7 rounded-none bg-brand-primary flex items-center justify-center text-white text-xs font-bold">
+                        P
+                      </div>
+                    )}
+                    <span className="font-bold text-sm text-slate-900 dark:text-white">
+                      {settings.siteName || "PharmaBiz"}
+                    </span>
+                  </div>
                 </div>
               </div>
+
+              {/* Edit Form (Hidden after save) */}
+              {editingTab["logo-name"] && (
+                <div className="bg-white dark:bg-slate-900 rounded-none border border-slate-200 dark:border-slate-800 p-6 shadow-xs space-y-6">
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+                    <h3 className="font-bold text-base text-slate-900 dark:text-white">
+                      Update Platform Brand & Logo
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => toggleEdit("logo-name", false)}
+                      className="text-xs font-semibold text-slate-400 hover:text-slate-600 cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Platform Name Input */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                        Platform / Site Name *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={siteName}
+                        onChange={(e) => setSiteName(e.target.value)}
+                        placeholder="e.g. PharmaBiz SaaS"
+                        className="w-full h-11 px-3.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-none text-sm font-semibold focus:outline-none focus:border-brand-primary"
+                      />
+                      <p className="text-[11px] text-slate-400 mt-1">
+                        Updates the top-left navbar title, invoices, browser title, and page footers.
+                      </p>
+                    </div>
+
+                    {/* Logo Uploader */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                        Upload Platform Logo
+                      </label>
+                      <ImageUploader
+                        value={logoUrl}
+                        publicId={logoPublicId}
+                        onChange={(data) => {
+                          setLogoUrl(data?.url || "");
+                          setLogoPublicId(data?.publicId || "");
+                        }}
+                        label="Upload Brand Logo"
+                        hint="PNG, JPG, SVG with transparent background recommended (Max 5MB)"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+                    <button
+                      type="button"
+                      onClick={() => toggleEdit("logo-name", false)}
+                      className="h-10 px-5 rounded-none text-xs sm:text-sm font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 transition cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSaveSettings("logo-name")}
+                      disabled={saving}
+                      className="h-10 px-6 rounded-none text-xs sm:text-sm font-bold bg-brand-primary hover:bg-brand-primary-hover text-white shadow-xs transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                    >
+                      {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                      <span>Save & Apply</span>
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
-          ))}
+          )}
+
+          {/* ======================================================== */}
+          {/* TAB 2: Dynamic Brand Color Theme */}
+          {/* ======================================================== */}
+          {activeSubTab === "brand-color" && (
+            <div className="space-y-6">
+              {/* Active Preview Card */}
+              <div className="bg-white dark:bg-slate-900 rounded-none border border-slate-200 dark:border-slate-800 p-6 shadow-xs">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 mb-4 border-b border-slate-100 dark:border-slate-800 gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Palette className="h-5 w-5 text-brand-primary" />
+                      <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
+                        Active Brand Color Theme
+                      </h2>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Sets the global CSS custom property (<code className="font-mono text-brand-primary">--primary-color</code>) across the whole SaaS.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => toggleEdit("brand-color")}
+                    className="inline-flex items-center gap-2 h-9 px-4 rounded-none bg-brand-primary text-white text-xs font-bold shadow-xs hover:bg-brand-primary-hover transition cursor-pointer self-start sm:self-auto"
+                  >
+                    <Edit2 className="h-3.5 w-3.5" />
+                    <span>{editingTab["brand-color"] ? "Close Form" : "Edit Color Theme"}</span>
+                  </button>
+                </div>
+
+                {/* Color Swatch Preview */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50/50 dark:bg-slate-800/30 p-5 border border-slate-100 dark:border-slate-800 rounded-none">
+                  <div className="flex items-center gap-4">
+                    <div
+                      className="h-16 w-16 border-2 border-white dark:border-slate-700 shadow-md flex items-center justify-center text-white font-black text-xs rounded-none"
+                      style={{ backgroundColor: settings.primaryColor || "#059669" }}
+                    >
+                      {settings.primaryColor}
+                    </div>
+                    <div>
+                      <div className="text-xs uppercase font-bold text-slate-400">Current Hex Color</div>
+                      <div className="text-base font-black text-slate-900 dark:text-white font-mono">
+                        {settings.primaryColor || "#059669"}
+                      </div>
+                      <div className="text-xs text-slate-500 mt-0.5">
+                        Applied dynamically to buttons, badges, links, active tabs
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Interactive Button Preview */}
+                  <div className="flex flex-col justify-center space-y-2">
+                    <div className="text-xs uppercase font-bold text-slate-400">Theme Component Preview</div>
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        className="px-4 py-2 text-xs font-bold text-white shadow-xs rounded-none"
+                        style={{ backgroundColor: settings.primaryColor || "#059669" }}
+                      >
+                        Primary Button
+                      </button>
+                      <span
+                        className="px-3 py-1 text-xs font-bold rounded-none"
+                        style={{
+                          backgroundColor: `${settings.primaryColor || "#059669"}15`,
+                          color: settings.primaryColor || "#059669",
+                        }}
+                      >
+                        Active Badge
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Edit Form (Hidden after save) */}
+              {editingTab["brand-color"] && (
+                <div className="bg-white dark:bg-slate-900 rounded-none border border-slate-200 dark:border-slate-800 p-6 shadow-xs space-y-6">
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+                    <h3 className="font-bold text-base text-slate-900 dark:text-white">
+                      Select or Customize Brand Palette
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => toggleEdit("brand-color", false)}
+                      className="text-xs font-semibold text-slate-400 hover:text-slate-600 cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+
+                  {/* Preset Colors */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">
+                      Curated Presets for Medical & Pharmacy SaaS
+                    </label>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+                      {PRESET_COLORS.map((preset) => {
+                        const isSelected = primaryColor.toLowerCase() === preset.hex.toLowerCase();
+                        return (
+                          <button
+                            key={preset.hex}
+                            type="button"
+                            onClick={() => handleColorSelect(preset.hex)}
+                            className={`p-3 border text-left transition flex flex-col justify-between h-20 rounded-none cursor-pointer ${
+                              isSelected
+                                ? "border-slate-900 dark:border-white ring-2 ring-slate-900 dark:ring-white bg-slate-50 dark:bg-slate-800"
+                                : "border-slate-200 dark:border-slate-700 hover:border-slate-400 bg-white dark:bg-slate-900"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between w-full">
+                              <span
+                                className="h-5 w-5 rounded-none shadow-xs border border-black/10 inline-block"
+                                style={{ backgroundColor: preset.hex }}
+                              />
+                              {isSelected && <Check className="h-4 w-4 text-slate-900 dark:text-white" />}
+                            </div>
+                            <div>
+                              <div className="text-[11px] font-bold text-slate-800 dark:text-slate-200 truncate">
+                                {preset.name}
+                              </div>
+                              <div className="text-[10px] text-slate-400 font-mono">{preset.hex}</div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Custom Hex Picker */}
+                  <div className="max-w-xs">
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                      Or Custom HEX Color
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={primaryColor}
+                        onChange={(e) => handleColorSelect(e.target.value)}
+                        className="h-10 w-12 rounded-none border border-slate-200 dark:border-slate-700 p-0.5 bg-white dark:bg-slate-900 cursor-pointer"
+                      />
+                      <input
+                        type="text"
+                        value={primaryColor}
+                        onChange={(e) => handleColorSelect(e.target.value)}
+                        placeholder="#059669"
+                        className="w-full h-10 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-none text-sm font-mono focus:outline-none focus:border-brand-primary"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+                    <button
+                      type="button"
+                      onClick={() => toggleEdit("brand-color", false)}
+                      className="h-10 px-5 rounded-none text-xs sm:text-sm font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 transition cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSaveSettings("brand-color")}
+                      disabled={saving}
+                      className="h-10 px-6 rounded-none text-xs sm:text-sm font-bold bg-brand-primary hover:bg-brand-primary-hover text-white shadow-xs transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                    >
+                      {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                      <span>Save Theme Color</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ======================================================== */}
+          {/* TAB 3: Landing Page Hero & Branding */}
+          {/* ======================================================== */}
+          {activeSubTab === "landing-hero" && (
+            <div className="space-y-6">
+              {/* Active Preview Card */}
+              <div className="bg-white dark:bg-slate-900 rounded-none border border-slate-200 dark:border-slate-800 p-6 shadow-xs">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 mb-4 border-b border-slate-100 dark:border-slate-800 gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <LayoutTemplate className="h-5 w-5 text-brand-primary" />
+                      <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
+                        Active Landing Page Hero Section
+                      </h2>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Preview of the headline, badge, and call-to-action buttons shown on the main public portal.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => toggleEdit("landing-hero")}
+                    className="inline-flex items-center gap-2 h-9 px-4 rounded-none bg-brand-primary text-white text-xs font-bold shadow-xs hover:bg-brand-primary-hover transition cursor-pointer self-start sm:self-auto"
+                  >
+                    <Edit2 className="h-3.5 w-3.5" />
+                    <span>{editingTab["landing-hero"] ? "Close Form" : "Edit Hero Section"}</span>
+                  </button>
+                </div>
+
+                {/* Hero Preview Box */}
+                <div className="p-6 bg-slate-50/70 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 rounded-none text-center max-w-2xl mx-auto space-y-3">
+                  <span className="inline-block px-3 py-1 text-[11px] font-bold text-brand-primary bg-brand-primary/10 rounded-none">
+                    {settings.hero?.badge || "Next-Gen Multi-Tenant Pharmacy Platform"}
+                  </span>
+                  <h3 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white leading-tight">
+                    {settings.hero?.title || "Empower Your Pharmacy Chain With Smart Offline-First SaaS"}
+                  </h3>
+                  <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+                    {settings.hero?.subtitle ||
+                      "Centralized pricing, real-time inventory management, multi-branch control, automated POS, and zero downtime."}
+                  </p>
+                  <div className="flex items-center justify-center gap-3 pt-2">
+                    <button
+                      type="button"
+                      className="px-4 py-2 bg-brand-primary text-white text-xs font-bold rounded-none shadow-xs"
+                    >
+                      {settings.hero?.ctaPrimaryText || "Get Started Now"}
+                    </button>
+                    <button
+                      type="button"
+                      className="px-4 py-2 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 text-xs font-bold rounded-none"
+                    >
+                      {settings.hero?.ctaSecondaryText || "Explore Plans"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Edit Form (Hidden after save) */}
+              {editingTab["landing-hero"] && (
+                <div className="bg-white dark:bg-slate-900 rounded-none border border-slate-200 dark:border-slate-800 p-6 shadow-xs space-y-4">
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+                    <h3 className="font-bold text-base text-slate-900 dark:text-white">
+                      Edit Hero Copy & Call to Actions
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => toggleEdit("landing-hero", false)}
+                      className="text-xs font-semibold text-slate-400 hover:text-slate-600 cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Hero Badge / Pill Text
+                    </label>
+                    <input
+                      type="text"
+                      value={heroBadge}
+                      onChange={(e) => setHeroBadge(e.target.value)}
+                      placeholder="e.g. Next-Gen Multi-Tenant Pharmacy Platform"
+                      className="w-full h-10 px-3.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-none text-sm focus:outline-none focus:border-brand-primary"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Hero Main Title
+                    </label>
+                    <input
+                      type="text"
+                      value={heroTitle}
+                      onChange={(e) => setHeroTitle(e.target.value)}
+                      placeholder="e.g. Empower Your Pharmacy Chain With Smart Offline-First SaaS"
+                      className="w-full h-10 px-3.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-none text-sm font-semibold focus:outline-none focus:border-brand-primary"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Hero Subtitle / Description
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={heroSubtitle}
+                      onChange={(e) => setHeroSubtitle(e.target.value)}
+                      className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-none text-sm focus:outline-none focus:border-brand-primary"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        Primary CTA Button Text
+                      </label>
+                      <input
+                        type="text"
+                        value={ctaPrimaryText}
+                        onChange={(e) => setCtaPrimaryText(e.target.value)}
+                        placeholder="Get Started Now"
+                        className="w-full h-10 px-3.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-none text-sm focus:outline-none focus:border-brand-primary"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        Secondary CTA Button Text
+                      </label>
+                      <input
+                        type="text"
+                        value={ctaSecondaryText}
+                        onChange={(e) => setCtaSecondaryText(e.target.value)}
+                        placeholder="Explore Plans"
+                        className="w-full h-10 px-3.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-none text-sm focus:outline-none focus:border-brand-primary"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+                    <button
+                      type="button"
+                      onClick={() => toggleEdit("landing-hero", false)}
+                      className="h-10 px-5 rounded-none text-xs sm:text-sm font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 transition cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSaveSettings("landing-hero")}
+                      disabled={saving}
+                      className="h-10 px-6 rounded-none text-xs sm:text-sm font-bold bg-brand-primary hover:bg-brand-primary-hover text-white shadow-xs transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                    >
+                      {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                      <span>Save Hero Section</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ======================================================== */}
+          {/* TAB 4: Dynamic Platform Features */}
+          {/* ======================================================== */}
+          {activeSubTab === "platform-features" && (
+            <div className="space-y-6">
+              {/* Active Preview Card */}
+              <div className="bg-white dark:bg-slate-900 rounded-none border border-slate-200 dark:border-slate-800 p-6 shadow-xs">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 mb-4 border-b border-slate-100 dark:border-slate-800 gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Layers className="h-5 w-5 text-brand-primary" />
+                      <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
+                        Active Platform Features ({settings.features?.length || 0})
+                      </h2>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Highlights and capability cards showcased on the public landing page.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => toggleEdit("platform-features")}
+                    className="inline-flex items-center gap-2 h-9 px-4 rounded-none bg-brand-primary text-white text-xs font-bold shadow-xs hover:bg-brand-primary-hover transition cursor-pointer self-start sm:self-auto"
+                  >
+                    <Edit2 className="h-3.5 w-3.5" />
+                    <span>{editingTab["platform-features"] ? "Close Form" : "Edit Features"}</span>
+                  </button>
+                </div>
+
+                {/* Features Cards Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                  {(settings.features || []).map((feat, idx) => (
+                    <div
+                      key={feat.id || idx}
+                      className="p-4 bg-slate-50/60 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 rounded-none space-y-1.5"
+                    >
+                      <div className="flex items-center gap-2 text-brand-primary font-bold text-xs uppercase tracking-wide">
+                        <Zap className="h-3.5 w-3.5" />
+                        <span>Feature {idx + 1}</span>
+                      </div>
+                      <div className="text-sm font-bold text-slate-900 dark:text-white">
+                        {feat.title}
+                      </div>
+                      <p className="text-xs text-slate-500 leading-normal">
+                        {feat.description}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Edit Form (Hidden after save) */}
+              {editingTab["platform-features"] && (
+                <div className="bg-white dark:bg-slate-900 rounded-none border border-slate-200 dark:border-slate-800 p-6 shadow-xs space-y-5">
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+                    <h3 className="font-bold text-base text-slate-900 dark:text-white">
+                      Manage Feature Capabilities
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={handleAddFeature}
+                      className="h-8 px-3 rounded-none bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      <span>Add Feature</span>
+                    </button>
+                  </div>
+
+                  <div className="space-y-4">
+                    {features.map((feat, index) => (
+                      <div
+                        key={feat.id || index}
+                        className="p-4 border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/40 rounded-none space-y-3"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-black uppercase text-brand-primary">
+                            Feature Card #{index + 1}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveFeature(index)}
+                            className="text-slate-400 hover:text-red-500 text-xs font-bold flex items-center gap-1 cursor-pointer"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            <span>Remove</span>
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                              Feature Title
+                            </label>
+                            <input
+                              type="text"
+                              value={feat.title}
+                              onChange={(e) => handleFeatureChange(index, "title", e.target.value)}
+                              className="w-full h-9 px-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-none text-xs font-bold focus:outline-none focus:border-brand-primary"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                              Icon Keyword (e.g. Zap, Building2, ShieldAlert, CreditCard)
+                            </label>
+                            <input
+                              type="text"
+                              value={feat.icon || "Zap"}
+                              onChange={(e) => handleFeatureChange(index, "icon", e.target.value)}
+                              className="w-full h-9 px-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-none text-xs font-mono focus:outline-none focus:border-brand-primary"
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                            Description
+                          </label>
+                          <textarea
+                            rows={2}
+                            value={feat.description}
+                            onChange={(e) => handleFeatureChange(index, "description", e.target.value)}
+                            className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-none text-xs focus:outline-none focus:border-brand-primary"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+                    <button
+                      type="button"
+                      onClick={() => toggleEdit("platform-features", false)}
+                      className="h-10 px-5 rounded-none text-xs sm:text-sm font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 transition cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSaveSettings("platform-features")}
+                      disabled={saving}
+                      className="h-10 px-6 rounded-none text-xs sm:text-sm font-bold bg-brand-primary hover:bg-brand-primary-hover text-white shadow-xs transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                    >
+                      {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                      <span>Save Features</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ======================================================== */}
+          {/* TAB 5: Company Contact & HQ Details */}
+          {/* ======================================================== */}
+          {activeSubTab === "company-contact" && (
+            <div className="space-y-6">
+              {/* Active Preview Card */}
+              <div className="bg-white dark:bg-slate-900 rounded-none border border-slate-200 dark:border-slate-800 p-6 shadow-xs">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 mb-4 border-b border-slate-100 dark:border-slate-800 gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Building2 className="h-5 w-5 text-brand-primary" />
+                      <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
+                        Active Company Contact & HQ Details
+                      </h2>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Contact numbers, support mail, and physical office location for client inquiries.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => toggleEdit("company-contact")}
+                    className="inline-flex items-center gap-2 h-9 px-4 rounded-none bg-brand-primary text-white text-xs font-bold shadow-xs hover:bg-brand-primary-hover transition cursor-pointer self-start sm:self-auto"
+                  >
+                    <Edit2 className="h-3.5 w-3.5" />
+                    <span>{editingTab["company-contact"] ? "Close Form" : "Edit Contact Details"}</span>
+                  </button>
+                </div>
+
+                {/* Contact Preview Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 bg-slate-50/50 dark:bg-slate-800/30 p-5 border border-slate-100 dark:border-slate-800 rounded-none">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-1.5 text-xs uppercase font-bold text-slate-400">
+                      <Mail className="h-3.5 w-3.5 text-brand-primary" />
+                      <span>Official Email</span>
+                    </div>
+                    <div className="text-sm font-bold text-slate-900 dark:text-white">
+                      {settings.contact?.email || "support@pharmabiz.com"}
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-1.5 text-xs uppercase font-bold text-slate-400">
+                      <Phone className="h-3.5 w-3.5 text-brand-primary" />
+                      <span>Support Hotline</span>
+                    </div>
+                    <div className="text-sm font-bold text-slate-900 dark:text-white">
+                      {settings.contact?.phone || "+880 1700-000000"}
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-1.5 text-xs uppercase font-bold text-slate-400">
+                      <MapPin className="h-3.5 w-3.5 text-brand-primary" />
+                      <span>HQ Address</span>
+                    </div>
+                    <div className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      {settings.contact?.address || "Gulshan-2, Dhaka-1212, Bangladesh"}
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-1.5 text-xs uppercase font-bold text-slate-400">
+                      <Clock className="h-3.5 w-3.5 text-brand-primary" />
+                      <span>Support Hours</span>
+                    </div>
+                    <div className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      {settings.contact?.supportHours || "24/7 Dedicated Support"}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Edit Form (Hidden after save) */}
+              {editingTab["company-contact"] && (
+                <div className="bg-white dark:bg-slate-900 rounded-none border border-slate-200 dark:border-slate-800 p-6 shadow-xs space-y-4">
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+                    <h3 className="font-bold text-base text-slate-900 dark:text-white">
+                      Update Company Contact Information
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => toggleEdit("company-contact", false)}
+                      className="text-xs font-semibold text-slate-400 hover:text-slate-600 cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        Official Support Email
+                      </label>
+                      <input
+                        type="email"
+                        value={contactEmail}
+                        onChange={(e) => setContactEmail(e.target.value)}
+                        placeholder="support@pharmabiz.com"
+                        className="w-full h-10 px-3.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-none text-sm focus:outline-none focus:border-brand-primary"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        Helpline / Phone Number
+                      </label>
+                      <input
+                        type="text"
+                        value={contactPhone}
+                        onChange={(e) => setContactPhone(e.target.value)}
+                        placeholder="+880 1700-000000"
+                        className="w-full h-10 px-3.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-none text-sm focus:outline-none focus:border-brand-primary"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        HQ Office Physical Address
+                      </label>
+                      <input
+                        type="text"
+                        value={contactAddress}
+                        onChange={(e) => setContactAddress(e.target.value)}
+                        placeholder="Gulshan-2, Dhaka-1212, Bangladesh"
+                        className="w-full h-10 px-3.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-none text-sm focus:outline-none focus:border-brand-primary"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        Support Operating Hours
+                      </label>
+                      <input
+                        type="text"
+                        value={supportHours}
+                        onChange={(e) => setSupportHours(e.target.value)}
+                        placeholder="24/7 Dedicated Support"
+                        className="w-full h-10 px-3.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-none text-sm focus:outline-none focus:border-brand-primary"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+                    <button
+                      type="button"
+                      onClick={() => toggleEdit("company-contact", false)}
+                      className="h-10 px-5 rounded-none text-xs sm:text-sm font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 transition cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSaveSettings("company-contact")}
+                      disabled={saving}
+                      className="h-10 px-6 rounded-none text-xs sm:text-sm font-bold bg-brand-primary hover:bg-brand-primary-hover text-white shadow-xs transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                    >
+                      {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                      <span>Save Contact Details</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
-      </div>
-
-      {/* 5. Contact & Support Details */}
-      <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-6">
-        <div className="border-b border-slate-100 dark:border-slate-800 pb-4">
-          <h3 className="text-lg font-bold text-slate-900 dark:text-white">Company Contact & HQ Details</h3>
-          <p className="text-xs text-slate-500">Displayed in the public website contact section and footer</p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 text-sm">
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-              Support Email
-            </label>
-            <input
-              type="email"
-              value={contactEmail}
-              onChange={(e) => setContactEmail(e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-              Support Phone
-            </label>
-            <input
-              type="text"
-              value={contactPhone}
-              onChange={(e) => setContactPhone(e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-              Office Address
-            </label>
-            <input
-              type="text"
-              value={contactAddress}
-              onChange={(e) => setContactAddress(e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-              Support Availability Hours
-            </label>
-            <input
-              type="text"
-              value={supportHours}
-              onChange={(e) => setSupportHours(e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-            />
-          </div>
-        </div>
-      </div>
-    </form>
+      )}
+    </div>
   );
 }

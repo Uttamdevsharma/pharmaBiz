@@ -42,6 +42,7 @@ export const MODULE_TO_PATH: Record<OwnerModule, string> = {
   sal_deduction_rules: "/dashboard/salary/deductions",
   sal_management: "/dashboard/salary/management",
   sal_history: "/dashboard/salary/history",
+  sal_report: "/dashboard/salary/report",
   employee_details: "/dashboard/salary/employees/details",
   staff_salary_history: "/dashboard/salary/staff-history",
 

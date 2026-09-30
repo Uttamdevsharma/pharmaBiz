@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { fetchApi } from "@/lib/api";
+import { showAlert } from "@/lib/swal";
 import {
-  Plus,
+  ShieldPlus,
   Edit2,
   Trash2,
   CheckCircle2,
@@ -13,7 +14,10 @@ import {
   RefreshCw,
   Power,
   X,
+  Shield,
+  KeyRound,
 } from "lucide-react";
+import { Pagination } from "@/components/common/Pagination";
 
 export interface AdminRole {
   id: string;
@@ -32,13 +36,17 @@ export function CreateAdminRoleView() {
   const [loading, setLoading] = useState(true);
   const [actionMsg, setActionMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  // Modal state for Create / Edit role (Role Name ONLY)
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  // Inline form state (Role Name ONLY, no popup modal)
   const [editingRole, setEditingRole] = useState<AdminRole | null>(null);
   const [roleName, setRoleName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 8;
+  const formRef = useRef<HTMLDivElement>(null);
 
   const canManage = isSuperAdmin || hasPermission("roles.manage");
 
@@ -47,8 +55,12 @@ export function CreateAdminRoleView() {
       setLoading(true);
       const res = await fetchApi<AdminRole[]>("/super-admin/roles");
       if (res.success && res.data) {
+        // Exclude system roles (Super Admin master role)
         const customOnly = res.data.filter(
-          (r) => !r.isSystem && r.name.toUpperCase() !== "SUPER_ADMIN" && r.name.toUpperCase() !== "SUPER ADMIN"
+          (r) =>
+            !r.isSystem &&
+            r.name.toUpperCase() !== "SUPER_ADMIN" &&
+            r.name.toUpperCase() !== "SUPER ADMIN"
         );
         setCustomRoles(customOnly);
       }
@@ -63,16 +75,15 @@ export function CreateAdminRoleView() {
     loadRoles();
   }, []);
 
-  const handleOpenCreate = () => {
-    setEditingRole(null);
-    setRoleName("");
-    setIsModalOpen(true);
-  };
-
-  const handleOpenEdit = (role: AdminRole) => {
+  const handleStartEdit = (role: AdminRole) => {
     setEditingRole(role);
     setRoleName(role.name);
-    setIsModalOpen(true);
+    formRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
+
+  const handleCancelEdit = () => {
+    setEditingRole(null);
+    setRoleName("");
   };
 
   const handleSaveRole = async (e: React.FormEvent) => {
@@ -86,6 +97,7 @@ export function CreateAdminRoleView() {
     try {
       setSubmitting(true);
       if (editingRole) {
+        // Update existing role
         const res = await fetchApi(`/super-admin/roles/${editingRole.id}`, {
           method: "PATCH",
           body: JSON.stringify({
@@ -95,30 +107,32 @@ export function CreateAdminRoleView() {
 
         if (res.success) {
           setActionMsg({ type: "success", text: `Role updated to "${trimmed}".` });
-          setIsModalOpen(false);
+          handleCancelEdit();
           await loadRoles();
         } else {
           setActionMsg({ type: "error", text: res.message || "Failed to update role" });
         }
       } else {
+        // Create new role
         const res = await fetchApi("/super-admin/roles", {
           method: "POST",
           body: JSON.stringify({
             name: trimmed,
             permissions: [],
+            isActive: true,
           }),
         });
 
         if (res.success) {
           setActionMsg({ type: "success", text: `Role "${trimmed}" created successfully.` });
-          setIsModalOpen(false);
+          setRoleName("");
           await loadRoles();
         } else {
           setActionMsg({ type: "error", text: res.message || "Failed to create role" });
         }
       }
     } catch (err: any) {
-      setActionMsg({ type: "error", text: err.message || "An error occurred while saving role" });
+      setActionMsg({ type: "error", text: err.message || "Error saving role" });
     } finally {
       setSubmitting(false);
     }
@@ -126,22 +140,22 @@ export function CreateAdminRoleView() {
 
   const handleToggleStatus = async (role: AdminRole) => {
     const currentActive = role.isActive !== false;
-    const newStatus = !currentActive;
+    const nextStatus = !currentActive;
 
     try {
       setTogglingId(role.id);
       const res = await fetchApi(`/super-admin/roles/${role.id}/status`, {
         method: "PATCH",
-        body: JSON.stringify({ isActive: newStatus }),
+        body: JSON.stringify({ isActive: nextStatus }),
       });
 
       if (res.success) {
         setCustomRoles((prev) =>
-          prev.map((r) => (r.id === role.id ? { ...r, isActive: newStatus } : r))
+          prev.map((r) => (r.id === role.id ? { ...r, isActive: nextStatus } : r))
         );
         setActionMsg({
           type: "success",
-          text: `Role "${role.name}" is now ${newStatus ? "Enabled" : "Disabled"}.`,
+          text: `Role "${role.name}" is now ${nextStatus ? "Active" : "Disabled"}.`,
         });
       } else {
         setActionMsg({ type: "error", text: res.message || "Failed to update status" });
@@ -154,7 +168,13 @@ export function CreateAdminRoleView() {
   };
 
   const handleDeleteRole = async (role: AdminRole) => {
-    const confirmed = window.confirm(`Delete role "${role.name}"?`);
+    const confirmed = await showAlert.confirm(
+      "Delete Role",
+      `Are you sure you want to delete role "${role.name}"? Staff assigned to this role will lose their custom permissions.`,
+      "Yes, Delete Role",
+      "Cancel",
+      true
+    );
     if (!confirmed) return;
 
     try {
@@ -176,6 +196,13 @@ export function CreateAdminRoleView() {
     }
   };
 
+  // Pagination calculation
+  const totalPages = Math.ceil(customRoles.length / pageSize) || 1;
+  const paginatedRoles = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return customRoles.slice(start, start + pageSize);
+  }, [customRoles, currentPage, pageSize]);
+
   return (
     <div className="space-y-6 w-full">
       {/* Header Bar */}
@@ -189,37 +216,31 @@ export function CreateAdminRoleView() {
             <span className="text-brand-primary">Create Role</span>
           </div>
           <h1 className="text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2.5">
-            <Power className="h-7 w-7 text-brand-primary" />
+            <KeyRound className="h-7 w-7 text-brand-primary" />
             <span>Create & Manage Roles</span>
           </h1>
+          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+            Define custom roles for your platform staff. Permissions can be assigned under Permission Assignment.
+          </p>
         </div>
 
         <div className="flex items-center gap-3">
           <button
+            type="button"
             onClick={loadRoles}
             disabled={loading}
-            className="h-11 px-5 rounded-xl text-sm font-bold bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 transition flex items-center gap-2 cursor-pointer"
+            className="h-10 px-4 rounded-none text-xs sm:text-sm font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition flex items-center gap-2 cursor-pointer"
           >
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             <span>Refresh</span>
           </button>
-
-          {canManage && (
-            <button
-              onClick={handleOpenCreate}
-              className="h-11 px-5 rounded-xl text-sm font-bold bg-brand-primary hover:bg-brand-primary-hover text-white shadow-xs transition flex items-center gap-2 cursor-pointer"
-            >
-              <Plus className="h-4 w-4" />
-              <span>Create Role</span>
-            </button>
-          )}
         </div>
       </div>
 
       {/* Action Notification */}
       {actionMsg && (
         <div
-          className={`flex items-center justify-between p-4 rounded-xl text-xs font-semibold transition-all ${
+          className={`flex items-center justify-between p-4 rounded-none text-xs font-semibold transition-all ${
             actionMsg.type === "success"
               ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
               : "bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800"
@@ -239,173 +260,205 @@ export function CreateAdminRoleView() {
         </div>
       )}
 
-      {/* Roles List Table */}
-      {loading ? (
-        <div className="py-20 flex flex-col items-center justify-center text-slate-400 gap-2">
-          <Loader2 className="h-6 w-6 animate-spin text-brand-primary" />
-          <span className="text-xs font-medium">Loading platform roles...</span>
-        </div>
-      ) : (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-xs">
-          <table className="w-full text-left text-sm border-collapse">
-            <thead className="bg-slate-50/75 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 text-slate-500 text-xs font-black uppercase tracking-wider">
-              <tr>
-                <th className="px-6 py-4">Role Name</th>
-                <th className="px-6 py-4">Status</th>
-                <th className="px-6 py-4 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300 font-medium">
-              {/* Permanent Super Admin Role */}
-              <tr className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
-                <td className="px-6 py-4 font-bold text-slate-900 dark:text-white text-base">
-                  Super Admin
-                </td>
-                <td className="px-6 py-4">
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                    <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                    Active
-                  </span>
-                </td>
-                <td className="px-6 py-4 text-right text-slate-400 text-xs font-bold uppercase tracking-wider">
-                  DEFAULT SYSTEM ROLE
-                </td>
-              </tr>
-
-              {/* Custom Roles Created by Admin */}
-              {customRoles.map((role) => {
-                const isActive = role.isActive !== false;
-                return (
-                  <tr
-                    key={role.id}
-                    className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors"
-                  >
-                    <td className="px-6 py-4 font-bold text-slate-900 dark:text-white text-base">
-                      {role.name}
-                    </td>
-                    <td className="px-6 py-4">
-                      <span
-                        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${
-                          isActive
-                            ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                            : "bg-red-500/10 text-red-600 dark:text-red-400"
-                        }`}
-                      >
-                        <span
-                          className={`h-2 w-2 rounded-full ${
-                            isActive ? "bg-emerald-500" : "bg-red-500"
-                          }`}
-                        />
-                        {isActive ? "Active" : "Disabled"}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      {canManage && (
-                        <div className="inline-flex items-center justify-end gap-2">
-                          <button
-                            type="button"
-                            onClick={() => handleOpenEdit(role)}
-                            className="h-9 px-3.5 rounded-xl text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 transition flex items-center gap-1.5 cursor-pointer"
-                          >
-                            <Edit2 className="h-3.5 w-3.5" />
-                            <span>Edit</span>
-                          </button>
-
-                          <button
-                            type="button"
-                            disabled={togglingId === role.id}
-                            onClick={() => handleToggleStatus(role)}
-                            className={`h-9 px-3.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
-                              isActive
-                                ? "bg-amber-50 text-amber-700 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-300"
-                                : "bg-emerald-50 text-emerald-600 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300"
-                            }`}
-                          >
-                            {togglingId === role.id ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            ) : (
-                              <Power className="h-3.5 w-3.5" />
-                            )}
-                            <span>{isActive ? "Disable" : "Enable"}</span>
-                          </button>
-
-                          <button
-                            type="button"
-                            disabled={deletingId === role.id}
-                            onClick={() => handleDeleteRole(role)}
-                            className="h-9 w-9 flex items-center justify-center rounded-xl text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50 transition cursor-pointer disabled:opacity-50"
-                            title="Delete Role"
-                          >
-                            {deletingId === role.id ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin text-red-500" />
-                            ) : (
-                              <Trash2 className="h-4 w-4" />
-                            )}
-                          </button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* Modal: Create / Edit Role Name (Matches Image 3) */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-            <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
-              <h3 className="font-bold text-lg text-slate-900 dark:text-white">
-                {editingRole ? "Edit Role" : "Create Role"}
-              </h3>
+      {/* INLINE FORM: Create / Edit Role Name (No popup modal) */}
+      {canManage && (
+        <div
+          ref={formRef}
+          className="bg-white dark:bg-slate-900 rounded-none border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs"
+        >
+          <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-100 dark:border-slate-800">
+            <div className="flex items-center gap-2">
+              <ShieldPlus className="h-5 w-5 text-brand-primary" />
+              <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
+                {editingRole ? `Edit Role: ${editingRole.name}` : "Create New Role"}
+              </h2>
+            </div>
+            {editingRole && (
               <button
-                onClick={() => setIsModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg cursor-pointer"
+                type="button"
+                onClick={handleCancelEdit}
+                className="text-xs font-semibold text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 cursor-pointer"
               >
-                <X className="h-5 w-5" />
+                Cancel Edit
               </button>
+            )}
+          </div>
+
+          <form onSubmit={handleSaveRole} className="space-y-4">
+            <div className="max-w-md">
+              <label className="block text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
+                Role Name *
+              </label>
+              <input
+                type="text"
+                required
+                placeholder="e.g. Senior Pharmacist, Cashier, Inventory Manager"
+                value={roleName}
+                onChange={(e) => setRoleName(e.target.value)}
+                className="w-full h-11 px-3.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-none text-sm font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-brand-primary"
+              />
             </div>
 
-            <form onSubmit={handleSaveRole}>
-              <div className="p-6 space-y-2">
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                  Role Name <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  autoFocus
-                  placeholder="e.g. Senior Pharmacist"
-                  value={roleName}
-                  onChange={(e) => setRoleName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary font-medium"
-                />
-              </div>
-
-              <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 flex justify-end gap-3">
+            <div className="flex items-center gap-3 pt-1">
+              <button
+                type="submit"
+                disabled={submitting}
+                className="h-10 px-6 rounded-none text-xs sm:text-sm font-bold bg-brand-primary hover:bg-brand-primary-hover text-white transition flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+              >
+                {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldPlus className="h-4 w-4" />}
+                <span>{editingRole ? "Update Role" : "Create Role"}</span>
+              </button>
+              {editingRole && (
                 <button
                   type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-5 py-2.5 rounded-xl text-sm font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 transition cursor-pointer"
+                  onClick={handleCancelEdit}
+                  className="h-10 px-4 rounded-none text-xs sm:text-sm font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 transition cursor-pointer"
                 >
                   Cancel
                 </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="px-5 py-2.5 rounded-xl text-sm font-bold bg-brand-primary hover:bg-brand-primary-hover text-white shadow-xs transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
-                >
-                  {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                  <span>{editingRole ? "Save Changes" : "Create Role"}</span>
-                </button>
-              </div>
-            </form>
-          </div>
+              )}
+            </div>
+          </form>
         </div>
       )}
+
+      {/* Roles List Table with Skeleton Loading & Pagination */}
+      <div className="bg-white dark:bg-slate-900 rounded-none border border-slate-200 dark:border-slate-800 overflow-hidden shadow-xs">
+        <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+          <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <Shield className="h-4 w-4 text-brand-primary" />
+            <span>Created Roles ({customRoles.length})</span>
+          </h3>
+          <span className="text-xs text-slate-400 font-medium">
+            Page {currentPage} of {totalPages}
+          </span>
+        </div>
+
+        {loading ? (
+          /* Animated Skeleton Table */
+          <div className="p-4 space-y-3">
+            {[...Array(4)].map((_, i) => (
+              <div
+                key={i}
+                className="animate-pulse flex items-center justify-between py-3.5 px-4 border border-slate-100 dark:border-slate-800/80 rounded-none bg-slate-50/50 dark:bg-slate-800/30"
+              >
+                <div className="h-4 w-48 bg-slate-200 dark:bg-slate-700 rounded-none" />
+                <div className="h-6 w-20 bg-slate-200 dark:bg-slate-700 rounded-none" />
+                <div className="h-8 w-28 bg-slate-200 dark:bg-slate-700 rounded-none" />
+              </div>
+            ))}
+          </div>
+        ) : customRoles.length === 0 ? (
+          <div className="py-16 text-center text-slate-400">
+            <Shield className="h-10 w-10 mx-auto text-slate-300 dark:text-slate-700 mb-2" />
+            <p className="text-sm font-bold text-slate-700 dark:text-slate-300">No custom roles created yet</p>
+            <p className="text-xs text-slate-400 mt-1">Use the form above to create your first platform staff role.</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm border-collapse">
+              <thead className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 text-slate-500 font-bold uppercase tracking-wider text-[11px]">
+                <tr>
+                  <th className="px-5 py-3.5">Role Name</th>
+                  <th className="px-5 py-3.5">Status</th>
+                  <th className="px-5 py-3.5 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-800 dark:text-slate-200 font-medium">
+                {paginatedRoles.map((role) => {
+                  const isActive = role.isActive !== false;
+
+                  return (
+                    <tr
+                      key={role.id}
+                      className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors"
+                    >
+                      <td className="px-5 py-4 font-bold text-slate-900 dark:text-white">
+                        <span>{role.name}</span>
+                      </td>
+
+                      <td className="px-5 py-4">
+                        <span
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-none text-xs font-bold ${
+                            isActive
+                              ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+                              : "bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20"
+                          }`}
+                        >
+                          <span
+                            className={`h-1.5 w-1.5 rounded-none ${
+                              isActive ? "bg-emerald-500" : "bg-red-500"
+                            }`}
+                          />
+                          {isActive ? "Active" : "Disabled"}
+                        </span>
+                      </td>
+
+                      <td className="px-5 py-4 text-right">
+                        {canManage && (
+                          <div className="inline-flex items-center justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleStartEdit(role)}
+                              className="h-8 px-3 rounded-none text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition flex items-center gap-1 cursor-pointer"
+                            >
+                              <Edit2 className="h-3 w-3" />
+                              <span>Edit</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              disabled={togglingId === role.id}
+                              onClick={() => handleToggleStatus(role)}
+                              className={`h-8 px-3 rounded-none text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
+                                isActive
+                                  ? "bg-amber-50 text-amber-700 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-300"
+                                  : "bg-emerald-50 text-emerald-600 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300"
+                              }`}
+                            >
+                              {togglingId === role.id ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <Power className="h-3 w-3" />
+                              )}
+                              <span>{isActive ? "Disable" : "Enable"}</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              disabled={deletingId === role.id}
+                              onClick={() => handleDeleteRole(role)}
+                              className="h-8 w-8 flex items-center justify-center rounded-none text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50 transition cursor-pointer disabled:opacity-50"
+                              title="Delete Role"
+                            >
+                              {deletingId === role.id ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin text-red-500" />
+                              ) : (
+                                <Trash2 className="h-3.5 w-3.5" />
+                              )}
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Pagination Controls */}
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalItems={customRoles.length}
+          pageSize={pageSize}
+          onPageChange={setCurrentPage}
+          alwaysShow={true}
+          rounded="none"
+        />
+      </div>
     </div>
   );
 }

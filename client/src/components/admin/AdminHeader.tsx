@@ -102,7 +102,7 @@ export function AdminHeader({
 
           <Link href="/" className="flex items-center gap-2 sm:gap-2.5 shrink-0">
             {settings.logoUrl ? (
-              <div className="h-9 w-9 rounded-lg overflow-hidden bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center p-0.5 shadow-sm">
+              <div className="h-9 w-9 rounded-none overflow-hidden bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center p-0.5 shadow-sm">
                 <img
                   src={settings.logoUrl}
                   alt={settings.siteName || "Logo"}
@@ -110,7 +110,7 @@ export function AdminHeader({
                 />
               </div>
             ) : (
-              <div className="h-9 w-9 rounded-lg bg-brand-primary flex items-center justify-center text-white shadow-sm">
+              <div className="h-9 w-9 rounded-none bg-brand-primary flex items-center justify-center text-white shadow-sm">
                 <Pill className="h-5 w-5 transform -rotate-45" />
               </div>
             )}
