@@ -1,24 +1,21 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { fetchApi } from "@/lib/api";
 import { OwnerModule } from "./DashboardSidebar";
 import { DateRangeFilter, DatePreset, getComputedDateRange } from "./DateRangeFilter";
 import {
   AlertTriangle,
-  ArrowLeft,
   Search,
   Store,
-  Calendar,
-  DollarSign,
-  Package,
-  Layers,
   ArrowRight,
-  Loader2,
   RefreshCw,
   FileSpreadsheet,
+  ChevronsLeft,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsRight,
 } from "lucide-react";
-
 import { useBranchContext } from "@/context/BranchContext";
 
 interface DamagedProductsViewProps {
@@ -36,10 +33,10 @@ function formatQuantityWithPackaging(qty: number, item: any): string {
     const boxSize = stripsPerBox * tabletsPerStrip;
     if (qty >= boxSize && qty % boxSize === 0) {
       const boxes = qty / boxSize;
-      return `${boxes} Box${boxes > 1 ? "es" : ""} / ${qty} ${baseUnit}s`;
+      return `${boxes} Box${boxes > 1 ? "es" : ""} (${qty} ${baseUnit}s)`;
     } else if (qty >= tabletsPerStrip && qty % tabletsPerStrip === 0) {
       const strips = qty / tabletsPerStrip;
-      return `${strips} Strip${strips > 1 ? "s" : ""} / ${qty} ${baseUnit}s`;
+      return `${strips} Strip${strips > 1 ? "s" : ""} (${qty} ${baseUnit}s)`;
     }
     return `${qty} ${baseUnit}s`;
   }
@@ -47,19 +44,6 @@ function formatQuantityWithPackaging(qty: number, item: any): string {
   const pType = (item.packageType || p?.defaultPackType || baseUnit).toLowerCase();
   return `${qty} ${pType}${qty > 1 && !pType.endsWith("s") ? "s" : ""}`;
 }
-
-// Persistent module cache
-let cachedDamagedData: any = {
-  summary: {
-    totalDamagedUnits: 0,
-    totalMissingUnits: 0,
-    totalDamagedValue: 0,
-    totalMissingValue: 0,
-    totalLossValue: 0,
-    incidentCount: 0,
-  },
-  data: [],
-};
 
 export function DamagedProductsView({ onNavigate, selectedBranchId: propBranchId }: DamagedProductsViewProps) {
   const {
@@ -70,13 +54,27 @@ export function DamagedProductsView({ onNavigate, selectedBranchId: propBranchId
 
   const effectiveBranchId = propBranchId !== undefined ? propBranchId : contextBranchId;
 
-  const [loading, setLoading] = useState(false);
-  const [damagedData, setDamagedData] = useState(() => cachedDamagedData);
+  const [loading, setLoading] = useState(true);
+  const [damagedData, setDamagedData] = useState<any>({
+    summary: {
+      totalDamagedUnits: 0,
+      totalMissingUnits: 0,
+      totalDamagedValue: 0,
+      totalMissingValue: 0,
+      totalLossValue: 0,
+      incidentCount: 0,
+    },
+    data: [],
+  });
 
   const [searchQuery, setSearchQuery] = useState("");
   const [datePreset, setDatePreset] = useState<DatePreset>("ALL");
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
+
+  // Pagination
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
 
   const loadData = async () => {
     try {
@@ -125,31 +123,39 @@ export function DamagedProductsView({ onNavigate, selectedBranchId: propBranchId
     loadData();
   };
 
+  const records = damagedData.data || [];
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchQuery, effectiveBranchId, datePreset, startDate, endDate]);
+
+  const totalPages = Math.ceil(records.length / limit) || 1;
+  const paginatedRecords = useMemo(() => {
+    const start = (page - 1) * limit;
+    return records.slice(start, start + limit);
+  }, [records, page, limit]);
+
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
-        <div>
-          <div className="flex items-center gap-2 text-xs text-slate-400 mb-1">
-            <span>Stock Management</span>
-            <span>/</span>
-            <span className="text-amber-500 font-bold">Damaged Products & Losses</span>
+    <div className="space-y-4 max-w-7xl mx-auto">
+      {/* 1. Header (Exact Standard, No Descriptions, Rounded-None) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-800">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-rose-500/10 text-rose-500 border border-rose-500/20 rounded-none">
+            <AlertTriangle className="h-5 w-5" />
           </div>
-          <h2 className="text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2.5">
-            <AlertTriangle className="h-6 w-6 text-amber-500" />
-            <span>Damaged & Missing Products Ledger</span>
-          </h2>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Permanent records of transfer losses, transit damages, and missing units with batch-level purchase/cost price valuation.
-          </p>
+          <div>
+            <h1 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">
+              Damaged Products
+            </h1>
+          </div>
         </div>
 
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={loadData}
-            className="p-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition"
-            title="Refresh Ledger"
+            className="p-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700 rounded-none text-xs font-bold transition"
+            title="Refresh"
           >
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
           </button>
@@ -157,82 +163,17 @@ export function DamagedProductsView({ onNavigate, selectedBranchId: propBranchId
             <button
               type="button"
               onClick={() => onNavigate("stock_transfer_history")}
-              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition flex items-center gap-1.5"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs sm:text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-700 transition rounded-none"
             >
-              <FileSpreadsheet className="h-4 w-4" />
+              <FileSpreadsheet className="h-4 w-4 text-brand-primary" />
               <span>Transfer Ledger</span>
             </button>
           )}
         </div>
       </div>
 
-      {/* Metric Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex items-center gap-4">
-          <div className="p-3 bg-red-500/10 text-red-500 rounded-2xl">
-            <DollarSign className="h-6 w-6" />
-          </div>
-          <div>
-            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-              Total Transit Loss Value
-            </div>
-            <div className="text-xl font-black text-red-600 dark:text-red-400 mt-0.5">
-              ৳{Math.round(damagedData.summary?.totalLossValue || 0).toLocaleString("en-BD")}
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex items-center gap-4">
-          <div className="p-3 bg-amber-500/10 text-amber-500 rounded-2xl">
-            <AlertTriangle className="h-6 w-6" />
-          </div>
-          <div>
-            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-              Damaged Units
-            </div>
-            <div className="text-xl font-black text-slate-900 dark:text-white mt-0.5">
-              {damagedData.summary?.totalDamagedUnits || 0} Units
-              <span className="text-xs font-normal text-slate-400 ml-1.5">
-                (৳{Math.round(damagedData.summary?.totalDamagedValue || 0).toLocaleString("en-BD")})
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex items-center gap-4">
-          <div className="p-3 bg-rose-500/10 text-rose-500 rounded-2xl">
-            <Package className="h-6 w-6" />
-          </div>
-          <div>
-            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-              Missing Units
-            </div>
-            <div className="text-xl font-black text-slate-900 dark:text-white mt-0.5">
-              {damagedData.summary?.totalMissingUnits || 0} Units
-              <span className="text-xs font-normal text-slate-400 ml-1.5">
-                (৳{Math.round(damagedData.summary?.totalMissingValue || 0).toLocaleString("en-BD")})
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex items-center gap-4">
-          <div className="p-3 bg-slate-500/10 text-slate-500 rounded-2xl">
-            <Layers className="h-6 w-6" />
-          </div>
-          <div>
-            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-              Incident Records
-            </div>
-            <div className="text-xl font-black text-slate-900 dark:text-white mt-0.5">
-              {damagedData.summary?.incidentCount || 0} Batches
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Filter & Search Bar */}
-      <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-3">
+      {/* 2. Filter Bar - Exact FundTransfer Standard (Rounded-None) */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 sm:p-4 rounded-none space-y-3">
         <DateRangeFilter
           datePreset={datePreset}
           setDatePreset={setDatePreset}
@@ -243,161 +184,139 @@ export function DamagedProductsView({ onNavigate, selectedBranchId: propBranchId
           label="Damage Record Date Filter"
         />
 
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
-          <form onSubmit={handleSearchSubmit} className="relative w-full sm:w-80">
-            <Search className="h-4 w-4 text-slate-400 absolute left-3.5 top-3" />
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-xs pt-2 border-t border-slate-100 dark:border-slate-800">
+          <form onSubmit={handleSearchSubmit} className="relative flex-1 min-w-[240px] max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
             <input
               type="text"
               placeholder="Search medication, generic, batch..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none"
+              className="w-full h-9 pl-9 pr-3 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-none text-xs sm:text-sm outline-none focus:border-brand-primary dark:text-white"
             />
           </form>
 
-          <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3.5 py-2 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-300">
+          <div className="flex items-center gap-2 text-xs sm:text-sm text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-800 px-3 py-1.5 border border-slate-300 dark:border-slate-700 rounded-none">
             <Store className="h-4 w-4 text-amber-500" />
             <span>Scope:</span>
             <span className="font-bold text-slate-900 dark:text-white">
-              {isAllBranches ? "Company-Wide (All Branches)" : (currentBranch?.name || "Selected Branch")}
+              {isAllBranches ? "All Branches" : (currentBranch?.name || "Selected Branch")}
             </span>
           </div>
         </div>
+
+        <div className="text-xs text-slate-500 dark:text-slate-400 pt-1">
+          Total incidents: <span className="font-semibold text-slate-800 dark:text-slate-200">{records.length}</span>
+        </div>
       </div>
 
-      {/* Table */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
+      {/* 3. Main Table - Exact FundTransfer Typography & Spacing */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-none overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50 dark:bg-slate-800/60 uppercase font-bold text-slate-500 border-b border-slate-200 dark:border-slate-800">
+          <table className="w-full text-left text-sm border-collapse">
+            <thead className="bg-slate-50 dark:bg-slate-800/75 text-slate-500 dark:text-slate-400 font-bold border-b border-slate-200 dark:border-slate-700 text-xs uppercase tracking-wider">
               <tr>
-                <th className="py-3.5 px-4">Medication & Batch</th>
-                <th className="py-3.5 px-4">Route (From → To)</th>
-                <th className="py-3.5 px-4">Damage / Loss Qty</th>
-                <th className="py-3.5 px-4">Cost Price (৳)</th>
-                <th className="py-3.5 px-4">Total Loss Value (৳)</th>
-                <th className="py-3.5 px-4">Transfer Ref</th>
-                <th className="py-3.5 px-4">Intake Date</th>
+                <th className="py-3 px-4">Medication & Batch</th>
+                <th className="py-3 px-4">Route (From → To)</th>
+                <th className="py-3 px-4">Damaged / Missing Qty</th>
+                <th className="py-3 px-4">Cost Price</th>
+                <th className="py-3 px-4">Total Loss Value</th>
+                <th className="py-3 px-4 text-right">Transfer Ref & Date</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-sm font-medium text-slate-700 dark:text-slate-300">
               {loading ? (
-                Array.from({ length: 6 }).map((_, idx) => (
+                Array.from({ length: 5 }).map((_, idx) => (
                   <tr key={`skeleton-${idx}`} className="animate-pulse">
-                    <td className="py-3.5 px-4">
-                      <div className="space-y-1">
-                        <div className="h-4 w-32 bg-slate-200 dark:bg-slate-700 rounded" />
-                        <div className="h-3 w-20 bg-slate-100 dark:bg-slate-800 rounded" />
+                    <td className="py-3 px-4">
+                      <div className="space-y-1.5">
+                        <div className="h-4 w-40 bg-slate-200 dark:bg-slate-700 rounded-none" />
+                        <div className="h-3 w-24 bg-slate-100 dark:bg-slate-800 rounded-none" />
                       </div>
                     </td>
-                    <td className="py-3.5 px-4">
-                      <div className="flex items-center gap-1.5">
-                        <div className="h-4 w-20 bg-slate-200 dark:bg-slate-700 rounded" />
-                        <div className="h-3 w-3 bg-slate-200 dark:bg-slate-700 rounded" />
-                        <div className="h-4 w-20 bg-slate-200 dark:bg-slate-700 rounded" />
-                      </div>
+                    <td className="py-3 px-4">
+                      <div className="h-4 w-36 bg-slate-200 dark:bg-slate-700 rounded-none" />
                     </td>
-                    <td className="py-3.5 px-4">
-                      <div className="h-5 w-24 bg-slate-200 dark:bg-slate-700 rounded" />
+                    <td className="py-3 px-4">
+                      <div className="h-4 w-28 bg-slate-200 dark:bg-slate-700 rounded-none" />
                     </td>
-                    <td className="py-3.5 px-4">
-                      <div className="h-4 w-16 bg-slate-200 dark:bg-slate-700 rounded" />
+                    <td className="py-3 px-4">
+                      <div className="h-4 w-20 bg-slate-200 dark:bg-slate-700 rounded-none" />
                     </td>
-                    <td className="py-3.5 px-4">
-                      <div className="h-4 w-16 bg-slate-200 dark:bg-slate-700 rounded" />
+                    <td className="py-3 px-4">
+                      <div className="h-4 w-24 bg-slate-200 dark:bg-slate-700 rounded-none" />
                     </td>
-                    <td className="py-3.5 px-4">
-                      <div className="h-4 w-14 bg-slate-200 dark:bg-slate-700 rounded" />
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <div className="h-3.5 w-20 bg-slate-200 dark:bg-slate-700 rounded" />
+                    <td className="py-3 px-4 text-right">
+                      <div className="h-4 w-28 bg-slate-200 dark:bg-slate-700 rounded-none ml-auto" />
                     </td>
                   </tr>
                 ))
-              ) : damagedData.data.length === 0 ? (
+              ) : paginatedRecords.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-20 text-center text-xs text-slate-400 space-y-2">
-                    <Package className="h-10 w-10 mx-auto text-slate-300 dark:text-slate-700 mb-2" />
-                    <p className="font-bold text-slate-600 dark:text-slate-400">
-                      No damaged or missing items recorded.
-                    </p>
-                    <p className="text-[11px] mt-1">
-                      When destination branch managers mark damaged or missing units during shipment intake, they will appear here with full cost accounting.
-                    </p>
+                  <td colSpan={6} className="py-12 text-center text-slate-400 text-sm">
+                    <AlertTriangle className="h-8 w-8 mx-auto mb-2 opacity-40" />
+                    <p className="font-semibold text-slate-600 dark:text-slate-400">No damaged or missing items recorded for this period.</p>
                   </td>
                 </tr>
               ) : (
-                damagedData.data.map((item: any) => {
-                  const hasDamage = (item.damagedQuantity || 0) > 0;
-                  const hasMissing = (item.missingQuantity || 0) > 0;
-                  const totalLineLoss = (Number(item.damagedValue) || 0) + (Number(item.missingValue) || 0);
+                paginatedRecords.map((item: any, idx: number) => {
+                  const hasDamage = Number(item.damagedQuantity || 0) > 0;
+                  const hasMissing = Number(item.missingQuantity || 0) > 0;
+                  const totalLossVal = Number(item.totalLossValue || 0);
 
                   return (
-                    <tr key={item.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
-                      <td className="py-3.5 px-4">
+                    <tr key={`${item.transferId}-${item.productId}-${idx}`} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
+                      <td className="py-3 px-4">
                         <div className="font-bold text-slate-900 dark:text-white">
                           {item.product?.name || "Product"}
                         </div>
-                        <div className="text-[11px] text-slate-400">
-                          {item.product?.genericName}
-                        </div>
-                        <div className="text-[10px] text-slate-500 font-mono mt-0.5">
+                        <div className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5">
                           Batch: {item.batchNumber || "DEFAULT"}
-                          {item.expiryDate ? ` | Exp: ${new Date(item.expiryDate).toLocaleDateString()}` : ""}
                         </div>
                       </td>
 
-                      <td className="py-3.5 px-4">
-                        <div className="flex items-center gap-1.5 text-xs">
-                          <span className="font-bold text-slate-800 dark:text-slate-200">
-                            {item.transfer?.fromBranch?.name || "Source"}
-                          </span>
-                          <ArrowRight className="h-3 w-3 text-slate-400" />
-                          <span className="font-bold text-slate-800 dark:text-slate-200">
-                            {item.transfer?.toBranch?.name || "Destination"}
-                          </span>
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-1.5 font-semibold text-slate-800 dark:text-slate-200">
+                          <span>{item.fromBranch?.name || "Source"}</span>
+                          <ArrowRight className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                          <span>{item.toBranch?.name || "Dest"}</span>
                         </div>
                       </td>
 
-                      <td className="py-3.5 px-4">
-                        <div className="space-y-1">
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           {hasDamage && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
-                              <AlertTriangle className="h-2.5 w-2.5 shrink-0" />
+                            <span className="inline-flex items-center px-2 py-0.5 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400 border border-rose-300 dark:border-rose-800 rounded-none text-xs font-semibold">
                               {formatQuantityWithPackaging(item.damagedQuantity, item)} Damaged
                             </span>
                           )}
                           {hasMissing && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 ml-1">
+                            <span className="inline-flex items-center px-2 py-0.5 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border border-amber-300 dark:border-amber-800 rounded-none text-xs font-semibold">
                               {formatQuantityWithPackaging(item.missingQuantity, item)} Missing
                             </span>
-                          )}
-                          {item.notes && (
-                            <div className="text-[10px] text-slate-400 italic">
-                              "{item.notes}"
-                            </div>
                           )}
                         </div>
                       </td>
 
-                      <td className="py-3.5 px-4 font-bold font-mono text-slate-700 dark:text-slate-300">
-                        ৳{Math.round(Number(item.costPrice || 0)).toLocaleString("en-BD")}
+                      <td className="py-3 px-4 font-mono text-slate-600 dark:text-slate-400 text-sm">
+                        ৳{Number(item.costPrice || 0).toFixed(2)}
                       </td>
 
-                      <td className="py-3.5 px-4 font-black font-mono text-red-600 dark:text-red-400 text-sm">
-                        ৳{Math.round(totalLineLoss).toLocaleString("en-BD")}
+                      <td className="py-3 px-4 font-mono font-bold text-rose-600 dark:text-rose-400 text-sm">
+                        ৳{totalLossVal.toLocaleString("en-BD", { minimumFractionDigits: 2 })}
                       </td>
 
-                      <td className="py-3.5 px-4 font-mono text-xs text-brand-primary">
-                        #{item.transfer?.id ? item.transfer.id.substring(0, 8).toUpperCase() : "TRF"}
-                      </td>
-
-                      <td className="py-3.5 px-4 text-[11px] text-slate-500">
-                        {item.transfer?.receivedDate
-                          ? new Date(item.transfer.receivedDate).toLocaleDateString()
-                          : item.updatedAt
-                          ? new Date(item.updatedAt).toLocaleDateString()
-                          : "-"}
+                      <td className="py-3 px-4 text-right">
+                        <div className="font-mono font-bold text-brand-primary text-sm">
+                          #{item.transferId?.slice(0, 8)}
+                        </div>
+                        <div className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5">
+                          {new Date(item.receivedAt || item.createdAt).toLocaleDateString("en-GB", {
+                            day: "2-digit",
+                            month: "short",
+                            year: "numeric",
+                          })}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -406,6 +325,73 @@ export function DamagedProductsView({ onNavigate, selectedBranchId: propBranchId
             </tbody>
           </table>
         </div>
+
+        {/* Table Pagination Footer - Exact FundTransfer Standard */}
+        {!loading && (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 bg-slate-50/75 dark:bg-slate-800/60 border-t border-slate-200 dark:border-slate-800 text-xs sm:text-sm">
+            <div className="text-slate-500">
+              Page <span className="font-semibold text-slate-800 dark:text-slate-200">{page}</span> of{" "}
+              <span className="font-semibold text-slate-800 dark:text-slate-200">{totalPages}</span>
+            </div>
+
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-slate-500">Rows per page:</span>
+                <select
+                  value={limit}
+                  onChange={(e) => {
+                    setLimit(Number(e.target.value));
+                    setPage(1);
+                  }}
+                  className="px-2 py-1 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs rounded-none outline-none text-slate-700 dark:text-slate-200"
+                >
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                </select>
+              </div>
+
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setPage(1)}
+                  disabled={page <= 1}
+                  className="p-1 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-30 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-none cursor-pointer disabled:cursor-not-allowed"
+                  title="First Page"
+                >
+                  <ChevronsLeft className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page <= 1}
+                  className="p-1 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-30 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-none cursor-pointer disabled:cursor-not-allowed"
+                  title="Previous Page"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page >= totalPages}
+                  className="p-1 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-30 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-none cursor-pointer disabled:cursor-not-allowed"
+                  title="Next Page"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPage(totalPages)}
+                  disabled={page >= totalPages}
+                  className="p-1 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-30 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-none cursor-pointer disabled:cursor-not-allowed"
+                  title="Last Page"
+                >
+                  <ChevronsRight className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

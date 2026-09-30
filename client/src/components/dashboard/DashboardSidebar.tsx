@@ -36,7 +36,6 @@ import {
   PackageCheck,
   CalendarX2,
   CalendarDays,
-  Sliders,
   Wallet,
   Percent,
   AlertTriangle,
@@ -226,7 +225,6 @@ export function DashboardSidebar({
     activeModule === "sal_employees" ||
     activeModule === "sal_attendance" ||
     activeModule === "sal_offdays" ||
-    activeModule === "sal_deduction_rules" ||
     activeModule === "sal_management" ||
     activeModule === "sal_history" ||
     activeModule === "acc_salaries" ||
@@ -655,12 +653,6 @@ export function DashboardSidebar({
       label: "Off-Day Settings",
       icon: CalendarX2,
       visible: isOwner || hasPermission("attendance.offdays"),
-    },
-    {
-      id: "sal_deduction_rules" as OwnerModule,
-      label: "Salary Deduction Rules",
-      icon: Sliders,
-      visible: isOwner || hasPermission("salary.deductions"),
     },
     {
       id: "sal_management" as OwnerModule,

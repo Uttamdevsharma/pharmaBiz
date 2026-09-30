@@ -44,6 +44,7 @@ export class TransferService {
             id: item.inventoryId,
             branchId: data.fromBranchId,
           },
+          include: { locations: true },
         });
       }
 
@@ -54,6 +55,7 @@ export class TransferService {
             productId: item.productId,
             ...(item.batchNumber ? { batchNumber: item.batchNumber } : {}),
           },
+          include: { locations: true },
         });
       }
 
@@ -65,12 +67,14 @@ export class TransferService {
         throw new Error(`Product ID ${item.productId} not found.`);
       }
 
-      const availableQty = inv?.quantity || 0;
-      if (availableQty < item.sentQuantity) {
+      const allocatedToShop = (inv?.locations || []).reduce((sum: number, loc: any) => sum + (Number(loc.quantity) || 0), 0);
+      const godownAvailableQty = Math.max(0, (Number(inv?.quantity) || 0) - allocatedToShop);
+
+      if (godownAvailableQty < item.sentQuantity) {
         throw new Error(
-          `Insufficient stock at ${fromBranch.name} for "${product.name}"${
+          `Insufficient Godown stock at ${fromBranch.name} for "${product.name}"${
             item.batchNumber ? ` (Batch: ${item.batchNumber})` : ""
-          }. Available: ${availableQty}, Requested: ${item.sentQuantity}`
+          }. Available in Godown: ${godownAvailableQty}, Requested: ${item.sentQuantity}. Stock allocated to shop racks/counters cannot be transferred.`
         );
       }
 
