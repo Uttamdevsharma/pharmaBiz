@@ -18,6 +18,9 @@ import {
   listExpensesQuerySchema,
   setSalaryConfigSchema,
   disburseSalarySchema,
+  createTransferRequestSchema,
+  rejectTransferRequestSchema,
+  getTransferRequestsQuerySchema,
 } from "./accounting.validation";
 
 const router = Router();
@@ -71,6 +74,40 @@ router.post(
   requirePermission("accounts.transfer"),
   validateRequest({ body: transferFundsSchema }),
   AccountingController.transferFunds
+);
+
+// Transfer Requests (Maker-Checker Approval Workflow)
+router.post(
+  "/transfer-requests",
+  requirePermission("accounts.transfer"),
+  validateRequest({ body: createTransferRequestSchema }),
+  AccountingController.createTransferRequest
+);
+
+router.get(
+  "/transfer-requests",
+  requirePermission("accounts.transfer"),
+  validateRequest({ query: getTransferRequestsQuerySchema }),
+  AccountingController.getTransferRequests
+);
+
+router.get(
+  "/transfer-requests/pending-count",
+  requirePermission("accounts.transfer"),
+  AccountingController.getPendingTransferRequestsCount
+);
+
+router.post(
+  "/transfer-requests/:id/approve",
+  requirePermission("accounts.manage"),
+  AccountingController.approveTransferRequest
+);
+
+router.post(
+  "/transfer-requests/:id/reject",
+  requirePermission("accounts.manage"),
+  validateRequest({ body: rejectTransferRequestSchema }),
+  AccountingController.rejectTransferRequest
 );
 
 // Income / Expense recording

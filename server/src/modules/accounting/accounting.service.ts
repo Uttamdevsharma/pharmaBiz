@@ -14,6 +14,9 @@ import {
   ListExpensesQuery,
   SetSalaryConfigInput,
   DisburseSalaryInput,
+  CreateTransferRequestInput,
+  RejectTransferRequestInput,
+  GetTransferRequestsQuery,
 } from "./accounting.validation";
 import { AttendanceService } from "../attendance/attendance.service";
 
@@ -302,6 +305,286 @@ export class AccountingService {
     });
 
     return result;
+  }
+
+  /**
+   * Create a Fund Transfer Request (Post-Verification Maker-Checker workflow)
+   */
+  static async createTransferRequest(tenantId: string, userId: string, data: CreateTransferRequestInput) {
+    if (data.sourceAccountId === data.destinationAccountId) {
+      throw new Error("Source and destination accounts must be different");
+    }
+
+    const [sourceAcc, destAcc] = await Promise.all([
+      (prisma as any).financialAccount.findFirst({
+        where: { id: data.sourceAccountId, tenantId },
+      }),
+      (prisma as any).financialAccount.findFirst({
+        where: { id: data.destinationAccountId, tenantId },
+      }),
+    ]);
+
+    if (!sourceAcc) throw new Error("Source financial account not found");
+    if (!destAcc) throw new Error("Destination financial account not found");
+
+    if (Number(sourceAcc.balance) < data.amount) {
+      throw new Error(`Insufficient funds in ${sourceAcc.name}. Current balance: ৳${Number(sourceAcc.balance).toFixed(2)}`);
+    }
+
+    const request = await (prisma as any).fundTransferRequest.create({
+      data: {
+        tenantId,
+        branchId: data.branchId || sourceAcc.branchId,
+        sourceAccountId: sourceAcc.id,
+        destinationAccountId: destAcc.id,
+        amount: data.amount,
+        reference: data.reference || null,
+        note: data.note || `Transfer requested from ${sourceAcc.name} to ${destAcc.name}`,
+        status: "PENDING",
+        requestedById: userId,
+      },
+      include: {
+        sourceAccount: { select: { id: true, name: true, type: true } },
+        destinationAccount: { select: { id: true, name: true, type: true } },
+        requestedBy: { select: { id: true, name: true, username: true, role: true } },
+      },
+    });
+
+    await AuditService.log({
+      tenantId,
+      branchId: data.branchId || sourceAcc.branchId,
+      userId,
+      action: "FUND_TRANSFER_REQUESTED",
+      details: {
+        requestId: request.id,
+        from: sourceAcc.name,
+        to: destAcc.name,
+        amount: data.amount,
+        reference: data.reference,
+        note: data.note,
+      },
+    });
+
+    return request;
+  }
+
+  /**
+   * List fund transfer requests with date filters and status filter
+   */
+  static async getTransferRequests(tenantId: string, query: GetTransferRequestsQuery) {
+    const where: any = { tenantId };
+
+    if (query.status && query.status !== "ALL") {
+      where.status = query.status;
+    }
+
+    if (query.branchId && query.branchId !== "all") {
+      where.branchId = query.branchId;
+    }
+
+    // Date filtering (today, yesterday, month, year, custom)
+    const now = new Date();
+    if (query.period === "today") {
+      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+      const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+      where.createdAt = { gte: startOfDay, lte: endOfDay };
+    } else if (query.period === "yesterday") {
+      const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+      const startOfDay = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 0, 0, 0, 0);
+      const endOfDay = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 23, 59, 59, 999);
+      where.createdAt = { gte: startOfDay, lte: endOfDay };
+    } else if (query.period === "month") {
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+      where.createdAt = { gte: startOfMonth, lte: endOfMonth };
+    } else if (query.period === "year") {
+      const startOfYear = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
+      const endOfYear = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
+      where.createdAt = { gte: startOfYear, lte: endOfYear };
+    } else if (query.period === "custom" || (query.startDate && query.endDate)) {
+      const start = query.startDate ? new Date(query.startDate) : undefined;
+      const end = query.endDate ? new Date(query.endDate) : undefined;
+      if (start && end) {
+        end.setHours(23, 59, 59, 999);
+        where.createdAt = { gte: start, lte: end };
+      } else if (start) {
+        where.createdAt = { gte: start };
+      }
+    }
+
+    const requests = await (prisma as any).fundTransferRequest.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      include: {
+        sourceAccount: { select: { id: true, name: true, type: true } },
+        destinationAccount: { select: { id: true, name: true, type: true } },
+        requestedBy: { select: { id: true, name: true, username: true, role: true } },
+        reviewedBy: { select: { id: true, name: true, username: true, role: true } },
+      },
+    });
+
+    return requests;
+  }
+
+  /**
+   * Quick count of pending transfer requests (for sidebar notification badge)
+   */
+  static async getPendingTransferRequestsCount(tenantId: string) {
+    const count = await (prisma as any).fundTransferRequest.count({
+      where: { tenantId, status: "PENDING" },
+    });
+    return { count };
+  }
+
+  /**
+   * Approve a Fund Transfer Request: Atomically moves funds and updates request status
+   */
+  static async approveTransferRequest(tenantId: string, reviewerId: string, requestId: string) {
+    const request = await (prisma as any).fundTransferRequest.findFirst({
+      where: { id: requestId, tenantId },
+      include: {
+        sourceAccount: true,
+        destinationAccount: true,
+        requestedBy: { select: { id: true, name: true } },
+      },
+    });
+
+    if (!request) throw new Error("Transfer request not found");
+    if (request.status !== "PENDING") {
+      throw new Error(`This transfer request is already ${request.status.toLowerCase()}`);
+    }
+
+    const sourceAcc = request.sourceAccount;
+    const destAcc = request.destinationAccount;
+
+    if (!sourceAcc || !destAcc) {
+      throw new Error("One or both accounts associated with this transfer no longer exist");
+    }
+
+    const amount = Number(request.amount);
+    if (Number(sourceAcc.balance) < amount) {
+      throw new Error(`Insufficient funds in ${sourceAcc.name}. Current balance is ৳${Number(sourceAcc.balance).toFixed(2)}, required: ৳${amount.toFixed(2)}`);
+    }
+
+    const result = await (prisma as any).$transaction(async (tx: any) => {
+      // 1. Decrement source account
+      const updatedSource = await tx.financialAccount.update({
+        where: { id: sourceAcc.id },
+        data: { balance: { decrement: amount } },
+      });
+
+      // 2. Increment destination account
+      const updatedDest = await tx.financialAccount.update({
+        where: { id: destAcc.id },
+        data: { balance: { increment: amount } },
+      });
+
+      // 3. Record atomic ledger transaction
+      const transaction = await tx.financialTransaction.create({
+        data: {
+          tenantId,
+          branchId: request.branchId || sourceAcc.branchId,
+          sourceAccountId: sourceAcc.id,
+          destinationAccountId: destAcc.id,
+          amount,
+          type: "TRANSFER",
+          reference: request.reference || `TRF-APP-${Date.now().toString().slice(-6)}`,
+          note: request.note ? `[Approved] ${request.note}` : `[Approved] Transferred from ${sourceAcc.name} to ${destAcc.name}`,
+          userId: request.requestedById,
+        },
+      });
+
+      // 4. Update request status
+      const updatedRequest = await tx.fundTransferRequest.update({
+        where: { id: request.id },
+        data: {
+          status: "APPROVED",
+          reviewedById: reviewerId,
+          reviewedAt: new Date(),
+          transactionId: transaction.id,
+        },
+        include: {
+          sourceAccount: { select: { id: true, name: true, type: true } },
+          destinationAccount: { select: { id: true, name: true, type: true } },
+          requestedBy: { select: { id: true, name: true, username: true } },
+          reviewedBy: { select: { id: true, name: true, username: true } },
+        },
+      });
+
+      return {
+        request: updatedRequest,
+        transaction,
+        sourceAccount: updatedSource,
+        destinationAccount: updatedDest,
+      };
+    });
+
+    await AuditService.log({
+      tenantId,
+      branchId: request.branchId,
+      userId: reviewerId,
+      action: "FUND_TRANSFER_APPROVED",
+      details: {
+        requestId: request.id,
+        from: sourceAcc.name,
+        to: destAcc.name,
+        amount,
+        requestedBy: request.requestedBy?.name,
+        transactionId: result.transaction.id,
+      },
+    });
+
+    return result.request;
+  }
+
+  /**
+   * Reject a Fund Transfer Request
+   */
+  static async rejectTransferRequest(tenantId: string, reviewerId: string, requestId: string, reason?: string) {
+    const request = await (prisma as any).fundTransferRequest.findFirst({
+      where: { id: requestId, tenantId },
+      include: {
+        sourceAccount: { select: { id: true, name: true } },
+        destinationAccount: { select: { id: true, name: true } },
+      },
+    });
+
+    if (!request) throw new Error("Transfer request not found");
+    if (request.status !== "PENDING") {
+      throw new Error(`This transfer request is already ${request.status.toLowerCase()}`);
+    }
+
+    const updated = await (prisma as any).fundTransferRequest.update({
+      where: { id: request.id },
+      data: {
+        status: "REJECTED",
+        reviewedById: reviewerId,
+        reviewedAt: new Date(),
+        rejectionReason: reason || "Rejected by owner",
+      },
+      include: {
+        sourceAccount: { select: { id: true, name: true, type: true } },
+        destinationAccount: { select: { id: true, name: true, type: true } },
+        requestedBy: { select: { id: true, name: true, username: true } },
+        reviewedBy: { select: { id: true, name: true, username: true } },
+      },
+    });
+
+    await AuditService.log({
+      tenantId,
+      branchId: request.branchId,
+      userId: reviewerId,
+      action: "FUND_TRANSFER_REJECTED",
+      details: {
+        requestId: request.id,
+        from: request.sourceAccount?.name,
+        to: request.destinationAccount?.name,
+        amount: Number(request.amount),
+        rejectionReason: reason,
+      },
+    });
+
+    return updated;
   }
 
   /**

@@ -96,6 +96,7 @@ model Tenant {
   salaryDeductionRules   SalaryDeductionRule[]
   supplierContacts       SupplierContact[]
   supplierPayments       SupplierPayment[]
+  fundTransferRequests   FundTransferRequest[]
 
   @@index([verificationStatus])
 }
@@ -136,6 +137,7 @@ model Branch {
   stockTransfersTo   StockTransfer[]      @relation("TransferTo")
   settlementsFrom    TransferSettlement[] @relation("SettlementFromBranch")
   settlementsTo      TransferSettlement[] @relation("SettlementToBranch")
+  fundTransferRequests FundTransferRequest[]
 
   @@index([tenantId])
   @@index([isActive])

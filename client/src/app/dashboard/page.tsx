@@ -62,6 +62,7 @@ import { CreateFinancialAccountView } from "@/components/dashboard/CreateFinanci
 import { FinancialAccountsListView } from "@/components/dashboard/FinancialAccountsListView";
 import { FinancialAccountsView } from "@/components/dashboard/FinancialAccountsView";
 import { FundTransferView } from "@/components/dashboard/FundTransferView";
+import { FundTransferApprovalView } from "@/components/dashboard/FundTransferApprovalView";
 import { FundTransferHistoryView } from "@/components/dashboard/FundTransferHistoryView";
 import { TransactionHistoryView } from "@/components/dashboard/TransactionHistoryView";
 import { SalesHistoryView } from "@/components/dashboard/SalesHistoryView";
@@ -955,6 +956,13 @@ export default function RoleBasedDashboard() {
           return <TenantAccessRestricted moduleName="Transaction History" requiredPerm="accounts.transaction_history" />;
         }
         return <TransactionHistoryView onNavigate={handleNavigate} />;
+
+      // 🛡️ Maker-Checker & Approvals
+      case "approvals_fund_transfer":
+        if (!isOwner && !hasPermission("accounts.fund_transfer")) {
+          return <TenantAccessRestricted moduleName="Fund Transfer Approval" requiredPerm="accounts.fund_transfer" />;
+        }
+        return <FundTransferApprovalView onNavigate={handleNavigate} />;
 
       // 💸 Expenses & Bills Submenus
       case "exp_create":

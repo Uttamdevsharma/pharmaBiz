@@ -154,3 +154,27 @@ export type ListExpensesQuery = z.infer<typeof listExpensesQuerySchema>;
 export type SetSalaryConfigInput = z.infer<typeof setSalaryConfigSchema>;
 export type DisburseSalaryInput = z.infer<typeof disburseSalarySchema>;
 
+export const createTransferRequestSchema = z.object({
+  branchId: z.string().uuid("Invalid branch ID").optional().nullable(),
+  sourceAccountId: z.string().uuid("Invalid source account ID"),
+  destinationAccountId: z.string().uuid("Invalid destination account ID"),
+  amount: z.number().positive("Transfer amount must be greater than 0"),
+  reference: z.string().optional().nullable(),
+  note: z.string().optional().nullable(),
+});
+export type CreateTransferRequestInput = z.infer<typeof createTransferRequestSchema>;
+
+export const rejectTransferRequestSchema = z.object({
+  reason: z.string().optional().nullable(),
+});
+export type RejectTransferRequestInput = z.infer<typeof rejectTransferRequestSchema>;
+
+export const getTransferRequestsQuerySchema = z.object({
+  status: z.enum(["ALL", "PENDING", "APPROVED", "REJECTED"]).optional(),
+  period: z.enum(["today", "yesterday", "month", "year", "custom"]).optional(),
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
+  branchId: z.string().optional(),
+});
+export type GetTransferRequestsQuery = z.infer<typeof getTransferRequestsQuerySchema>;
+

@@ -102,6 +102,9 @@ export const MODULE_TO_PATH: Record<OwnerModule, string> = {
   subscription_history: "/dashboard/subscription/history",
   settings: "/dashboard/settings",
   change_password: "/dashboard/settings/password",
+
+  // Approvals & Maker-Checker
+  approvals_fund_transfer: "/dashboard/approvals/fund-transfer",
 };
 
 /**
@@ -124,6 +127,8 @@ PATH_TO_MODULE_MAP["/dashboard/sales"] = "pos";
 PATH_TO_MODULE_MAP["/dashboard/locations"] = "loc_group_list";
 PATH_TO_MODULE_MAP["/dashboard/locations/groups"] = "loc_group_list";
 PATH_TO_MODULE_MAP["/dashboard/locations/create"] = "loc_create_group";
+PATH_TO_MODULE_MAP["/dashboard/approvals"] = "approvals_fund_transfer";
+PATH_TO_MODULE_MAP["/dashboard/approvals/fund-transfer"] = "approvals_fund_transfer";
 
 /**
  * Converts an OwnerModule to a clean URL path

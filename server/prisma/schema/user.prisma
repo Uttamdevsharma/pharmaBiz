@@ -58,6 +58,8 @@ model User {
   attendances         EmployeeAttendance[] @relation("EmployeeAttendances")
   markedAttendances   EmployeeAttendance[] @relation("MarkedAttendances")
   monthlyAllowances   EmployeeMonthlyAllowance[]
+  transferRequestsMade     FundTransferRequest[] @relation("TransferReqRequestedBy")
+  transferRequestsReviewed FundTransferRequest[] @relation("TransferReqReviewedBy")
 
   @@index([tenantId])
   @@index([branchId])

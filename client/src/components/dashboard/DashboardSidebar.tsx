@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
+import { fetchApi } from "@/lib/api";
 import {
   LayoutDashboard,
   Building,
@@ -131,13 +132,15 @@ export type OwnerModule =
   | "subscription"
   | "subscription_plans"
   | "subscription_history"
-  | "settings";
+  | "settings"
+  | "approvals_fund_transfer";
 
 interface SubMenuItem {
   id: OwnerModule | string;
   label: string;
   icon: React.ElementType;
   visible?: boolean;
+  badge?: number | string;
   children?: SubMenuItem[];
 }
 
@@ -148,6 +151,7 @@ interface ParentMenuItem {
   children: SubMenuItem[];
   visible: boolean;
   moduleId?: OwnerModule;
+  badge?: number | string;
 }
 
 interface DashboardSidebarProps {
@@ -181,6 +185,29 @@ export function DashboardSidebar({
 
   const isOwner = user?.role === "COMPANY_OWNER" || userRole === "COMPANY_OWNER" || user?.role === "SUPER_ADMIN";
 
+  const [pendingApprovalsCount, setPendingApprovalsCount] = useState<number>(0);
+
+  useEffect(() => {
+    if (!isOwner) return;
+    let isMounted = true;
+    const fetchPending = async () => {
+      try {
+        const res = await fetchApi<{ count: number }>("/accounting/transfer-requests/pending-count", { skipCache: true });
+        if (isMounted && res.success && res.data) {
+          setPendingApprovalsCount(res.data.count || 0);
+        }
+      } catch (e) {
+        // silent fail on network hiccups
+      }
+    };
+    fetchPending();
+    const timer = setInterval(fetchPending, 30000);
+    return () => {
+      isMounted = false;
+      clearInterval(timer);
+    };
+  }, [isOwner]);
+
   const isSupplierActive =
     activeModule.startsWith("sup_") && activeModule !== "sup_payments_due";
   const isCategoryActive = activeModule.startsWith("cat_");
@@ -213,6 +240,8 @@ export function DashboardSidebar({
     activeModule === "acc_transfer_history" ||
     activeModule === "acc_transaction_history" ||
     activeModule === "sup_payments_due";
+
+  const isApprovalsActive = activeModule === "approvals_fund_transfer";
 
   const isExpensesActive =
     activeModule === "exp_create" ||
@@ -250,6 +279,7 @@ export function DashboardSidebar({
     staff_mgmt: isStaffActive,
     sales_pos: isSalesPosActive,
     accounts: isAccountsActive,
+    approvals: isApprovalsActive,
     expenses_bills: isExpensesActive,
     employee_salary: isSalaryActive,
     subscription_mgmt: isSubscriptionActive,
@@ -300,6 +330,9 @@ export function DashboardSidebar({
     if (isAccountsActive) {
       setOpenParents((prev) => ({ ...prev, accounts: true }));
     }
+    if (isApprovalsActive) {
+      setOpenParents((prev) => ({ ...prev, approvals: true }));
+    }
     if (isExpensesActive) {
       setOpenParents((prev) => ({ ...prev, expenses_bills: true }));
       if (
@@ -348,6 +381,7 @@ export function DashboardSidebar({
     isStaffActive,
     isSalesPosActive,
     isAccountsActive,
+    isApprovalsActive,
     isExpensesActive,
     isSalaryActive,
     isSubscriptionActive,
@@ -727,6 +761,17 @@ export function DashboardSidebar({
     },
   ].filter((item) => item.visible);
 
+  // Approvals Section (Pharmacy Owner Maker-Checker)
+  const approvalsChildren: SubMenuItem[] = [
+    {
+      id: "approvals_fund_transfer" as OwnerModule,
+      label: "Fund Transfer Approval",
+      icon: ArrowLeftRight,
+      badge: pendingApprovalsCount > 0 ? pendingApprovalsCount : undefined,
+      visible: isOwner || hasPermission("accounts.fund_transfer"),
+    },
+  ].filter((item) => item.visible);
+
   // Collapsible domain groups list in exact workflow order
   const collapsibleSections: ParentMenuItem[] = [
     {
@@ -806,6 +851,14 @@ export function DashboardSidebar({
       icon: Wallet,
       visible: accountsChildren.length > 0,
       children: accountsChildren,
+    },
+    {
+      id: "approvals",
+      label: "Approvals",
+      icon: CheckSquare,
+      badge: pendingApprovalsCount > 0 ? pendingApprovalsCount : undefined,
+      visible: isOwner || approvalsChildren.length > 0,
+      children: approvalsChildren,
     },
     {
       id: "subscription_mgmt",
@@ -961,7 +1014,12 @@ export function DashboardSidebar({
                     aria-label={section.label}
                   >
                     <ParentIcon className="h-5 w-5 shrink-0" />
-                    {isParentActive && (
+                    {section.badge !== undefined && (
+                      <span className="absolute -top-1 -right-1 h-4 min-w-[16px] px-1 rounded-full bg-amber-500 text-white text-[9px] font-bold flex items-center justify-center ring-2 ring-white dark:ring-slate-900">
+                        {section.badge}
+                      </span>
+                    )}
+                    {isParentActive && !section.badge && (
                       <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-brand-primary ring-2 ring-white dark:ring-slate-900" />
                     )}
                   </button>
@@ -1004,14 +1062,25 @@ export function DashboardSidebar({
                             key={child.id}
                             type="button"
                             onClick={() => handleModuleSelect(child.id as OwnerModule)}
-                            className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer text-left ${
+                            className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer text-left ${
                               isChildActive
                                 ? "bg-brand-primary text-white font-bold"
                                 : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
                             }`}
                           >
-                            <child.icon className="h-3.5 w-3.5 shrink-0" />
-                            <span className="truncate">{child.label}</span>
+                            <div className="flex items-center gap-2 truncate">
+                              <child.icon className="h-3.5 w-3.5 shrink-0" />
+                              <span className="truncate">{child.label}</span>
+                            </div>
+                            {child.badge !== undefined && (
+                              <span
+                                className={`px-1.5 py-0.2 text-[10px] font-bold rounded-full ${
+                                  isChildActive ? "bg-white text-brand-primary" : "bg-amber-500 text-white"
+                                }`}
+                              >
+                                {child.badge}
+                              </span>
+                            )}
                           </button>
                         );
                       })}
@@ -1141,11 +1210,18 @@ export function DashboardSidebar({
                           />
                           <span className="truncate">{section.label}</span>
                         </div>
-                        {isOpen ? (
-                          <ChevronDown className="h-3.5 w-3.5 xl:h-4 xl:w-4 text-slate-400" />
-                        ) : (
-                          <ChevronRight className="h-3.5 w-3.5 xl:h-4 xl:w-4 text-slate-400" />
-                        )}
+                        <div className="flex items-center gap-1.5">
+                          {section.badge !== undefined && (
+                            <span className="px-1.5 py-0.2 bg-amber-500 text-white text-[10px] font-bold rounded-none">
+                              {section.badge}
+                            </span>
+                          )}
+                          {isOpen ? (
+                            <ChevronDown className="h-3.5 w-3.5 xl:h-4 xl:w-4 text-slate-400" />
+                          ) : (
+                            <ChevronRight className="h-3.5 w-3.5 xl:h-4 xl:w-4 text-slate-400" />
+                          )}
+                        </div>
                       </button>
 
                       {/* Sub-items */}
@@ -1214,14 +1290,25 @@ export function DashboardSidebar({
                               <button
                                 key={child.id}
                                 onClick={() => handleModuleSelect(child.id as OwnerModule)}
-                                className={`w-full flex items-center gap-2 xl:gap-2.5 px-2.5 py-1.5 xl:px-3 xl:py-2 2xl:px-3.5 2xl:py-2.5 rounded-lg xl:rounded-xl text-[11px] xl:text-xs 2xl:text-sm font-bold transition-all cursor-pointer ${
+                                className={`w-full flex items-center justify-between gap-2 px-2.5 py-1.5 xl:px-3 xl:py-2 2xl:px-3.5 2xl:py-2.5 rounded-lg xl:rounded-xl text-[11px] xl:text-xs 2xl:text-sm font-bold transition-all cursor-pointer ${
                                   isChildActive
                                     ? "bg-brand-primary text-white shadow-xs"
                                     : "text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white"
                                 }`}
                               >
-                                <ChildIcon className="h-3.5 w-3.5 xl:h-4 xl:w-4 shrink-0" />
-                                <span className="truncate">{child.label}</span>
+                                <div className="flex items-center gap-2 xl:gap-2.5 truncate">
+                                  <ChildIcon className="h-3.5 w-3.5 xl:h-4 xl:w-4 shrink-0" />
+                                  <span className="truncate">{child.label}</span>
+                                </div>
+                                {child.badge !== undefined && (
+                                  <span
+                                    className={`px-1.5 py-0.2 text-[10px] font-bold rounded-none ${
+                                      isChildActive ? "bg-white text-brand-primary" : "bg-amber-500 text-white"
+                                    }`}
+                                  >
+                                    {child.badge}
+                                  </span>
+                                )}
                               </button>
                             );
                           })}
