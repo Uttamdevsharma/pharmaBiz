@@ -36,6 +36,7 @@ model User {
   documentsSubmitted Boolean   @default(false)
   grossSalary      Decimal?      @db.Decimal(15, 2)
   isPermanent      Boolean       @default(false)
+  staffId          String?
   isActive         Boolean       @default(true)
   resignationDate  DateTime?
   resignationReason String?

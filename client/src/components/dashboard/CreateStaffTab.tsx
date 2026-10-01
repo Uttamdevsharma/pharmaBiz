@@ -71,6 +71,7 @@ export function CreateStaffTab({ onNavigate }: CreateStaffTabProps) {
     documentsSubmitted: false,
     grossSalary: "",
     isPermanent: false,
+    staffId: "",
   });
 
   const loadData = async () => {
@@ -180,6 +181,9 @@ export function CreateStaffTab({ onNavigate }: CreateStaffTabProps) {
           documentsSubmitted: formData.documentsSubmitted,
           grossSalary: formData.grossSalary ? Number(formData.grossSalary) : null,
           isPermanent: formData.isPermanent,
+          staffId: formData.staffId?.trim()
+            ? `${formData.isPermanent ? "P" : "T"}-${formData.staffId.trim().replace(/^[PTpt]-?/, "")}`
+            : null,
         }),
       });
 
@@ -209,6 +213,7 @@ export function CreateStaffTab({ onNavigate }: CreateStaffTabProps) {
           documentsSubmitted: false,
           grossSalary: "",
           isPermanent: false,
+          staffId: "",
         });
         // Automatically navigate to Staff List
         if (onNavigate) {
@@ -563,33 +568,94 @@ export function CreateStaffTab({ onNavigate }: CreateStaffTabProps) {
               </div>
             </div>
 
-            {/* Permanent Employee Option */}
-            <div className="md:col-span-2 p-3.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-none">
-              <label className="flex items-start gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={formData.isPermanent}
-                  onChange={(e) => setFormData({ ...formData, isPermanent: e.target.checked })}
-                  className="mt-0.5 h-4 w-4 rounded-none border-slate-300 text-brand-primary focus:ring-brand-primary cursor-pointer shrink-0"
-                />
-                <div>
-                  <div className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                    <span>Permanent Employee</span>
+            {/* Permanent Employee Toggle */}
+            <div
+              onClick={() => setFormData((prev) => ({ ...prev, isPermanent: !prev.isPermanent }))}
+              className="md:col-span-2 p-3.5 sm:p-4 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-none cursor-pointer hover:border-slate-300 dark:hover:border-slate-600 transition select-none"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">
+                      Employment Type:
+                    </span>
                     {formData.isPermanent ? (
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-none bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
-                        Paid Leave Eligible (30 Days/Year)
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                        Permanent Employee (Paid Leave Eligible - 30 Days/Year)
                       </span>
                     ) : (
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-none bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
-                        Probation / Contractual
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-600">
+                        Probation
                       </span>
                     )}
                   </div>
-                  <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    Permanent employees receive statutory annual paid leave (30 days/year) and leave benefits. Marking attendance as Paid Leave will not deduct from their monthly salary.
+                  <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400">
+                    {formData.isPermanent
+                      ? "Eligible for 30 days annual paid leave."
+                      : "Probation period staff."}
                   </p>
                 </div>
-              </label>
+
+                {/* Modern Toggle Switch */}
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={formData.isPermanent}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setFormData((prev) => ({ ...prev, isPermanent: !prev.isPermanent }));
+                  }}
+                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                    formData.isPermanent ? "bg-emerald-600" : "bg-slate-300 dark:bg-slate-600"
+                  }`}
+                  title={formData.isPermanent ? "Click to set as Probation" : "Click to set as Permanent Employee"}
+                >
+                  <span
+                    aria-hidden="true"
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                      formData.isPermanent ? "translate-x-5" : "translate-x-0"
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+
+            {/* Staff Institutional ID */}
+            <div className="md:col-span-2">
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200">
+                  Staff ID / Employee Code
+                </label>
+                <span className={`text-[10px] font-bold px-2 py-0.5 border rounded-none ${
+                  formData.isPermanent
+                    ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800"
+                    : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700"
+                }`}>
+                  Prefix: {formData.isPermanent ? "P (Permanent)" : "T (Temporary)"}
+                </span>
+              </div>
+              <div className="relative flex items-center">
+                <div className={`h-11 px-3.5 flex items-center justify-center font-mono font-black text-sm border border-r-0 border-slate-200 dark:border-slate-700 select-none ${
+                  formData.isPermanent
+                    ? "bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300"
+                    : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300"
+                }`}>
+                  {formData.isPermanent ? "P-" : "T-"}
+                </div>
+                <input
+                  type="text"
+                  value={formData.staffId}
+                  onChange={(e) => setFormData({ ...formData, staffId: e.target.value.replace(/^[PTpt]-?/, "") })}
+                  placeholder="e.g. 221902234"
+                  className="w-full h-11 px-3.5 rounded-none border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary font-mono"
+                />
+              </div>
+              <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                Full Staff ID:{" "}
+                <span className="font-mono font-bold text-slate-800 dark:text-slate-200">
+                  {formData.staffId?.trim() ? `${formData.isPermanent ? "P" : "T"}-${formData.staffId.trim().replace(/^[PTpt]-?/, "")}` : "Not assigned"}
+                </span>
+              </p>
             </div>
           </div>
 

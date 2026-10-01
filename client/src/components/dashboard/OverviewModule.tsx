@@ -25,6 +25,10 @@ import {
   X,
   ArrowUpRight,
   TrendingDown,
+  ArrowLeftRight,
+  Scale,
+  ArrowDownRight,
+  Minus,
 } from "lucide-react";
 
 import { useBranchContext } from "@/context/BranchContext";
@@ -34,7 +38,91 @@ interface OverviewModuleProps {
   selectedBranchId?: string;
 }
 
-type PeriodFilter = "today" | "yesterday" | "7d" | "30d" | "custom";
+type PeriodFilter = "today" | "yesterday" | "30d" | "this_year" | "custom";
+
+interface ComparisonPeriodInfo {
+  period: string;
+  startDate?: string;
+  endDate?: string;
+  label: string;
+  currentLabel: string;
+}
+
+function formatLocalDate(d: Date): string {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getComparisonPeriodInfo(
+  currentPeriod: PeriodFilter,
+  startDateStr?: string,
+  endDateStr?: string
+): ComparisonPeriodInfo {
+  const now = new Date();
+  if (currentPeriod === "today") {
+    return {
+      period: "yesterday",
+      label: "Yesterday",
+      currentLabel: "Today",
+    };
+  }
+  if (currentPeriod === "yesterday") {
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 2);
+    const dateStr = formatLocalDate(d);
+    return {
+      period: "custom",
+      startDate: dateStr,
+      endDate: dateStr,
+      label: "Day Before Yesterday",
+      currentLabel: "Yesterday",
+    };
+  }
+  if (currentPeriod === "30d") {
+    const pEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30);
+    const pStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 59);
+    return {
+      period: "custom",
+      startDate: formatLocalDate(pStart),
+      endDate: formatLocalDate(pEnd),
+      label: "Prior 30 Days",
+      currentLabel: "Last 30 Days",
+    };
+  }
+  if (currentPeriod === "this_year") {
+    const lastYear = now.getFullYear() - 1;
+    return {
+      period: "custom",
+      startDate: `${lastYear}-01-01`,
+      endDate: `${lastYear}-12-31`,
+      label: `Last Year (${lastYear})`,
+      currentLabel: `This Year (${now.getFullYear()})`,
+    };
+  }
+  if (currentPeriod === "custom" && startDateStr && endDateStr) {
+    const s = new Date(startDateStr);
+    const e = new Date(endDateStr);
+    const diffTime = Math.max(0, e.getTime() - s.getTime());
+    const diffDays = Math.max(1, Math.round(diffTime / (1000 * 60 * 60 * 24))) + 1;
+    const pEnd = new Date(s.getTime() - 24 * 60 * 60 * 1000);
+    const pStart = new Date(pEnd.getTime() - (diffDays - 1) * 24 * 60 * 60 * 1000);
+    const sStr = formatLocalDate(pStart);
+    const eStr = formatLocalDate(pEnd);
+    return {
+      period: "custom",
+      startDate: sStr,
+      endDate: eStr,
+      label: `Prior ${diffDays} Days (${sStr} to ${eStr})`,
+      currentLabel: `Selected Range (${startDateStr} to ${endDateStr})`,
+    };
+  }
+  return {
+    period: "yesterday",
+    label: "Previous Period",
+    currentLabel: "Current Period",
+  };
+}
 
 let cachedDashboardData: any = null;
 
@@ -48,18 +136,53 @@ export function OverviewModule({ onNavigate, selectedBranchId: propBranchId }: O
   const [dashboardData, setDashboardData] = useState<any>(() => cachedDashboardData);
   const [showTodayProfitModal, setShowTodayProfitModal] = useState(false);
 
+  // Comparison mode states
+  const [compareMode, setCompareMode] = useState<boolean>(false);
+  const [comparisonData, setComparisonData] = useState<any>(null);
+  const [loadingComparison, setLoadingComparison] = useState<boolean>(false);
+  const [compareMetric, setCompareMetric] = useState<"profit" | "revenue">("profit");
+  const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
+
   // Date filter states
-  const [period, setPeriod] = useState<PeriodFilter>("30d");
+  const [period, setPeriod] = useState<PeriodFilter>("today");
   const [customStartDate, setCustomStartDate] = useState<string>(() => {
     const d = new Date();
     d.setDate(d.getDate() - 30);
-    return d.toISOString().split("T")[0];
+    return formatLocalDate(d);
   });
   const [customEndDate, setCustomEndDate] = useState<string>(() => {
-    return new Date().toISOString().split("T")[0];
+    return formatLocalDate(new Date());
   });
 
+  const compInfo = useMemo(() => {
+    return getComparisonPeriodInfo(period, customStartDate, customEndDate);
+  }, [period, customStartDate, customEndDate]);
+
   const isBranchRestricted = ["BRANCH_MANAGER", "MANAGER", "CASHIER", "INVENTORY_EXECUTIVE"].includes(user?.role || "");
+
+  const loadComparison = async (info = compInfo) => {
+    try {
+      setLoadingComparison(true);
+      const params = new URLSearchParams();
+      params.set("period", info.period);
+
+      if (!isBranchRestricted && effectiveBranchId && effectiveBranchId !== "all") {
+        params.set("branchId", effectiveBranchId);
+      }
+
+      if (info.startDate) params.set("startDate", info.startDate);
+      if (info.endDate) params.set("endDate", info.endDate);
+
+      const compRes = await fetchApi<any>(`/reports/dashboard?${params.toString()}`);
+      if (compRes.success && compRes.data) {
+        setComparisonData(compRes.data);
+      }
+    } catch (err) {
+      console.warn("Error loading comparison metrics", err);
+    } finally {
+      setLoadingComparison(false);
+    }
+  };
 
   const loadDashboard = async (showFullSpinner = false) => {
     try {
@@ -95,9 +218,18 @@ export function OverviewModule({ onNavigate, selectedBranchId: propBranchId }: O
     loadDashboard(true);
   }, [period, effectiveBranchId]);
 
+  useEffect(() => {
+    if (compareMode) {
+      loadComparison();
+    }
+  }, [compareMode, period, effectiveBranchId]);
+
   const handleApplyCustomDate = () => {
     if (period === "custom") {
       loadDashboard(false);
+      if (compareMode) {
+        loadComparison();
+      }
     }
   };
 
@@ -113,6 +245,84 @@ export function OverviewModule({ onNavigate, selectedBranchId: propBranchId }: O
   const totalPeriodProfit = trendData.reduce((sum: number, d: any) => sum + (d.profit || 0), 0);
   const totalPeriodCost = trendData.reduce((sum: number, d: any) => sum + (d.cost || 0), 0);
   const totalPeriodExpenses = trendData.reduce((sum: number, d: any) => sum + (d.expenses || 0), 0);
+
+  // Comparison Data Calculations
+  const compSummary = comparisonData?.summary || {};
+  const compCharts = comparisonData?.charts || {};
+  const compTrendData: any[] = compCharts.dailySalesTrend || [];
+
+  const currRev = Number(summary.totalSalesRevenue || summary.totalRevenue || 0);
+  const prevRev = Number(compSummary.totalSalesRevenue || compSummary.totalRevenue || 0);
+  const diffRev = currRev - prevRev;
+  const pctRev = prevRev > 0 ? (diffRev / prevRev) * 100 : (currRev > 0 ? 100 : 0);
+
+  const currNetProfit = Number(summary.netProfitAfterLoss !== undefined ? summary.netProfitAfterLoss : (summary.totalGrossProfit || 0));
+  const prevNetProfit = Number(compSummary.netProfitAfterLoss !== undefined ? compSummary.netProfitAfterLoss : (compSummary.totalGrossProfit || 0));
+  const diffNetProfit = currNetProfit - prevNetProfit;
+  const pctNetProfit = prevNetProfit !== 0 ? (diffNetProfit / Math.abs(prevNetProfit)) * 100 : (currNetProfit > 0 ? 100 : 0);
+
+  const currGrossProfit = Number(summary.totalGrossProfit || summary.totalProfit || 0);
+  const prevGrossProfit = Number(compSummary.totalGrossProfit || compSummary.totalProfit || 0);
+  const diffGrossProfit = currGrossProfit - prevGrossProfit;
+
+  const currOrders = Number(summary.totalSalesCount || 0);
+  const prevOrders = Number(compSummary.totalSalesCount || 0);
+  const diffOrders = currOrders - prevOrders;
+
+  // Max value for comparison trajectory chart
+  const maxComparisonVal = Math.max(
+    ...trendData.map((d: any) =>
+      compareMetric === "profit"
+        ? Math.max(0, Number(d.profit || 0) - Number(d.expenses || 0))
+        : Number(d.revenue || 0)
+    ),
+    ...compTrendData.map((d: any) =>
+      compareMetric === "profit"
+        ? Math.max(0, Number(d.profit || 0) - Number(d.expenses || 0))
+        : Number(d.revenue || 0)
+    ),
+    100
+  );
+
+  // Helper to find matching comparison point
+  const findCompItem = (item: any, idx: number) => {
+    if (!compTrendData || compTrendData.length === 0) return null;
+    if (item.key) {
+      const match = compTrendData.find((c: any) => c.key === item.key);
+      if (match) return match;
+    }
+    return compTrendData[idx] || null;
+  };
+
+  // Active / Hovered item calculation for live chart inspector
+  const activeSlotIdx = hoveredIdx !== null && hoveredIdx >= 0 && hoveredIdx < trendData.length
+    ? hoveredIdx
+    : (trendData.length > 0
+        ? (trendData.findIndex((d: any) => (compareMetric === "profit" ? d.profit : d.revenue) > 0) !== -1
+            ? trendData.reduce((maxI: number, d: any, i: number, arr: any[]) =>
+                (compareMetric === "profit" ? (d.profit || 0) : (d.revenue || 0)) >
+                (compareMetric === "profit" ? (arr[maxI]?.profit || 0) : (arr[maxI]?.revenue || 0))
+                  ? i
+                  : maxI, 0)
+            : trendData.length - 1)
+        : null);
+
+  const activeItem = activeSlotIdx !== null ? trendData[activeSlotIdx] : null;
+  const activeCompItem = activeItem && activeSlotIdx !== null ? findCompItem(activeItem, activeSlotIdx) : null;
+
+  const activeCurrVal = activeItem
+    ? (compareMetric === "profit"
+        ? Math.round(Number(activeItem.profit || 0) - Number(activeItem.expenses || 0))
+        : Math.round(Number(activeItem.revenue || 0)))
+    : 0;
+
+  const activePrevVal = activeCompItem
+    ? (compareMetric === "profit"
+        ? Math.round(Number(activeCompItem.profit || 0) - Number(activeCompItem.expenses || 0))
+        : Math.round(Number(activeCompItem.revenue || 0)))
+    : 0;
+
+  const activeDiff = activeCurrVal - activePrevVal;
 
   // Category & Stock Distribution
   const stockByCategoryList: any[] = charts.stockByCategory || [];
@@ -190,18 +400,21 @@ export function OverviewModule({ onNavigate, selectedBranchId: propBranchId }: O
 
             {/* Refresh Button */}
             <button
-              onClick={() => loadDashboard(false)}
-              disabled={refreshing}
+              onClick={() => {
+                loadDashboard(false);
+                if (compareMode) loadComparison();
+              }}
+              disabled={refreshing || loadingComparison}
               className="p-1.5 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition rounded-none disabled:opacity-50"
               title="Refresh Analytics"
             >
-              <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin text-brand-primary" : ""}`} />
+              <RefreshCw className={`h-4 w-4 ${refreshing || loadingComparison ? "animate-spin text-brand-primary" : ""}`} />
             </button>
           </div>
         </div>
 
         {/* ========================================================================= */}
-        {/* DATE RANGE FILTER CONTROLS */}
+        {/* DATE RANGE FILTER CONTROLS + COMPARE MODE TOGGLE */}
         {/* ========================================================================= */}
         <div className="pt-2.5 border-t border-slate-200 dark:border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-2.5">
           <div className="flex items-center gap-2 flex-wrap">
@@ -232,16 +445,6 @@ export function OverviewModule({ onNavigate, selectedBranchId: propBranchId }: O
                 Yesterday
               </button>
               <button
-                onClick={() => setPeriod("7d")}
-                className={`px-2.5 py-1 text-xs font-semibold rounded-none transition ${
-                  period === "7d"
-                    ? "bg-white dark:bg-slate-700 text-brand-primary shadow-xs font-bold"
-                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-                }`}
-              >
-                Last 7 Days
-              </button>
-              <button
                 onClick={() => setPeriod("30d")}
                 className={`px-2.5 py-1 text-xs font-semibold rounded-none transition ${
                   period === "30d"
@@ -250,6 +453,16 @@ export function OverviewModule({ onNavigate, selectedBranchId: propBranchId }: O
                 }`}
               >
                 Last 30 Days
+              </button>
+              <button
+                onClick={() => setPeriod("this_year")}
+                className={`px-2.5 py-1 text-xs font-semibold rounded-none transition ${
+                  period === "this_year"
+                    ? "bg-white dark:bg-slate-700 text-brand-primary shadow-xs font-bold"
+                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                }`}
+              >
+                This Year
               </button>
               <button
                 onClick={() => setPeriod("custom")}
@@ -262,6 +475,30 @@ export function OverviewModule({ onNavigate, selectedBranchId: propBranchId }: O
                 Custom Range
               </button>
             </div>
+
+            {/* Compare with Previous Period Toggle Button */}
+            <button
+              type="button"
+              onClick={() => {
+                const nextMode = !compareMode;
+                setCompareMode(nextMode);
+                if (nextMode && !comparisonData) {
+                  loadComparison();
+                }
+              }}
+              className={`inline-flex items-center gap-1.5 px-3 py-1 text-xs font-bold transition rounded-none border cursor-pointer ${
+                compareMode
+                  ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
+                  : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:border-slate-400 hover:text-slate-900 dark:hover:text-white"
+              }`}
+              title="Compare with Previous Period (e.g. Today vs Yesterday)"
+            >
+              <ArrowLeftRight className={`h-3.5 w-3.5 ${compareMode ? "text-white" : "text-brand-primary"}`} />
+              <span>{compareMode ? "Comparison: Active" : "Compare Period"}</span>
+              {compareMode && (
+                <span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse" />
+              )}
+            </button>
           </div>
 
           {/* Custom Date Pickers */}
@@ -290,6 +527,28 @@ export function OverviewModule({ onNavigate, selectedBranchId: propBranchId }: O
             </div>
           )}
         </div>
+
+        {/* Comparison active indicator banner */}
+        {compareMode && (
+          <div className="pt-2 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between flex-wrap gap-2 text-xs">
+            <div className="flex items-center gap-2">
+              <span className="px-2 py-0.5 bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 font-bold border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
+                <Scale className="h-3.5 w-3.5" />
+                Comparison Active
+              </span>
+              <span className="text-slate-600 dark:text-slate-400">
+                Comparing <strong className="text-slate-900 dark:text-white font-mono">{compInfo.currentLabel}</strong> with <strong className="text-slate-900 dark:text-white font-mono">{compInfo.label}</strong>
+              </span>
+            </div>
+
+            {loadingComparison && (
+              <span className="flex items-center gap-1.5 text-slate-500 text-[11px]">
+                <RefreshCw className="h-3 w-3 animate-spin text-brand-primary" />
+                Calculating comparison metrics...
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ========================================================================= */}
@@ -438,37 +697,340 @@ export function OverviewModule({ onNavigate, selectedBranchId: propBranchId }: O
       </div>
 
       {/* ========================================================================= */}
-      {/* 1. SALES & PROFIT TRAJECTORY CHART (CLEAN DESIGN, DUAL BARS & HOVER TOOLTIP) */}
+      {/* PERIOD COMPARISON INSIGHTS (CLEAN MINIMAL CARDS - HEADING & VALUES ONLY) */}
+      {/* ========================================================================= */}
+      {compareMode && (
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 sm:p-5 shadow-xs space-y-4 rounded-none animate-in fade-in duration-150">
+          <div className="flex items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-800">
+            <div className="flex items-center gap-2">
+              <Scale className="h-5 w-5 text-brand-primary" />
+              <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">
+                Comparison: <span className="text-brand-primary">{compInfo.currentLabel}</span> vs <span className="text-slate-600 dark:text-slate-400">{compInfo.label}</span>
+              </h3>
+            </div>
+          </div>
+
+          {/* 3 Clean Stat Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 xl:gap-4">
+            {/* Card 1: Net Profit */}
+            <div className="p-4 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Net Profit</span>
+                <span className={`text-xs font-bold px-2 py-0.5 border ${
+                  diffNetProfit >= 0
+                    ? "bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-300"
+                    : "bg-rose-50 text-rose-700 border-rose-300 dark:bg-rose-950/60 dark:text-rose-300"
+                }`}>
+                  {diffNetProfit >= 0 ? `+৳${Math.round(diffNetProfit).toLocaleString("en-BD")}` : `-৳${Math.round(Math.abs(diffNetProfit)).toLocaleString("en-BD")}`}
+                </span>
+              </div>
+              <div className="text-2xl sm:text-3xl font-black font-mono text-slate-900 dark:text-white">
+                ৳{Math.round(currNetProfit).toLocaleString("en-BD")}
+              </div>
+              <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                {compInfo.label}: <strong className="font-mono text-slate-700 dark:text-slate-300">৳{Math.round(prevNetProfit).toLocaleString("en-BD")}</strong>
+              </div>
+            </div>
+
+            {/* Card 2: Sales Revenue */}
+            <div className="p-4 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Sales Revenue</span>
+                <span className={`text-xs font-bold px-2 py-0.5 border ${
+                  diffRev >= 0
+                    ? "bg-blue-50 text-blue-700 border-blue-300 dark:bg-blue-950/60 dark:text-blue-300"
+                    : "bg-rose-50 text-rose-700 border-rose-300 dark:bg-rose-950/60 dark:text-rose-300"
+                }`}>
+                  {diffRev >= 0 ? `+৳${Math.round(diffRev).toLocaleString("en-BD")}` : `-৳${Math.round(Math.abs(diffRev)).toLocaleString("en-BD")}`}
+                </span>
+              </div>
+              <div className="text-2xl sm:text-3xl font-black font-mono text-slate-900 dark:text-white">
+                ৳{Math.round(currRev).toLocaleString("en-BD")}
+              </div>
+              <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                {compInfo.label}: <strong className="font-mono text-slate-700 dark:text-slate-300">৳{Math.round(prevRev).toLocaleString("en-BD")}</strong>
+              </div>
+            </div>
+
+            {/* Card 3: Orders Count */}
+            <div className="p-4 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Customer Transactions</span>
+                <span className="text-xs font-bold px-2 py-0.5 bg-slate-200 text-slate-700 border border-slate-300 dark:bg-slate-700 dark:text-slate-300 dark:border-slate-600">
+                  {diffOrders >= 0 ? `+${diffOrders}` : diffOrders} orders
+                </span>
+              </div>
+              <div className="text-2xl sm:text-3xl font-black font-mono text-slate-900 dark:text-white">
+                {currOrders.toLocaleString()} <span className="text-xs font-normal text-slate-400">sales</span>
+              </div>
+              <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                {compInfo.label}: <strong className="font-mono text-slate-700 dark:text-slate-300">{prevOrders.toLocaleString()} sales</strong>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 1. SALES & PROFIT TRAJECTORY CHART (CLEAN DUAL BARS / COMPARISON GROUP BARS) */}
       {/* ========================================================================= */}
       <div className="w-full p-4 sm:p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4 rounded-none">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2.5 border-b border-slate-200 dark:border-slate-800">
-          <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+          <div className="flex items-center gap-2">
             <BarChart3 className="h-4 w-4 text-brand-primary" />
-            Sales & Profit Trajectory ({period.toUpperCase()})
-          </h3>
-
-          <div className="flex items-center gap-3 text-xs font-semibold flex-wrap">
-            <span className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
-              <span className="h-2.5 w-2.5 bg-blue-600 rounded-none" />
-              Revenue: ৳{Math.round(totalPeriodRevenue).toLocaleString()}
-            </span>
-            <span className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
-              <span className="h-2.5 w-2.5 bg-slate-400 rounded-none" />
-              Cost: ৳{Math.round(totalPeriodCost).toLocaleString()}
-            </span>
-            <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
-              <span className="h-2.5 w-2.5 bg-emerald-600 rounded-none" />
-              Profit: ৳{Math.round(totalPeriodProfit).toLocaleString()}
-            </span>
+            <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">
+              {compareMode
+                ? `Timeline Comparison (${compInfo.currentLabel} vs ${compInfo.label})`
+                : `Sales & Profit Trajectory (${period.toUpperCase()})`}
+            </h3>
           </div>
+
+          {/* Chart Controls & Legend */}
+          {compareMode ? (
+            <div className="flex items-center gap-3 flex-wrap">
+              {/* Metric Switcher: Profit vs Revenue */}
+              <div className="inline-flex p-0.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold">
+                <button
+                  type="button"
+                  onClick={() => setCompareMetric("profit")}
+                  className={`px-2.5 py-1 transition cursor-pointer ${
+                    compareMetric === "profit"
+                      ? "bg-emerald-600 text-white font-bold shadow-xs"
+                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                  }`}
+                >
+                  💰 Net Profit
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCompareMetric("revenue")}
+                  className={`px-2.5 py-1 transition cursor-pointer ${
+                    compareMetric === "revenue"
+                      ? "bg-blue-600 text-white font-bold shadow-xs"
+                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                  }`}
+                >
+                  📈 Revenue
+                </button>
+              </div>
+
+              {/* Legend */}
+              <div className="flex items-center gap-3 text-xs font-semibold">
+                <span className="flex items-center gap-1.5 text-slate-700 dark:text-slate-200">
+                  <span className={`h-2.5 w-2.5 rounded-none ${compareMetric === "profit" ? "bg-emerald-600" : "bg-blue-600"}`} />
+                  {compInfo.currentLabel}
+                </span>
+                <span className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
+                  <span className="h-2.5 w-2.5 bg-slate-300 dark:bg-slate-600 rounded-none border border-slate-300 dark:border-slate-500" />
+                  {compInfo.label}
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3 text-xs font-semibold flex-wrap">
+              <span className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
+                <span className="h-2.5 w-2.5 bg-blue-600 rounded-none" />
+                Revenue: ৳{Math.round(totalPeriodRevenue).toLocaleString()}
+              </span>
+              <span className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
+                <span className="h-2.5 w-2.5 bg-slate-400 rounded-none" />
+                Cost: ৳{Math.round(totalPeriodCost).toLocaleString()}
+              </span>
+              <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
+                <span className="h-2.5 w-2.5 bg-emerald-600 rounded-none" />
+                Profit: ৳{Math.round(totalPeriodProfit).toLocaleString()}
+              </span>
+            </div>
+          )}
         </div>
 
-        {/* Interactive Chart Columns with clear hover status */}
+        {/* ========================================================================= */}
+        {/* LIVE SLOT INSPECTOR (ALWAYS VISIBLE & ACCURATE WHEN HOVERING / SELECTING) */}
+        {/* ========================================================================= */}
+        {compareMode && activeItem && (
+          <div className="p-3 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex flex-col md:flex-row md:items-center justify-between gap-2.5 text-xs">
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                Inspecting:
+              </span>
+              <span className="font-bold text-slate-900 dark:text-white px-2 py-0.5 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 font-mono">
+                {activeItem.label || activeItem.key || activeItem.date}
+              </span>
+              <span className="text-[11px] text-slate-400 hidden lg:inline">
+                (Move mouse over any bar to inspect)
+              </span>
+            </div>
+
+            <div className="flex items-center gap-4 flex-wrap">
+              {/* Current */}
+              <div className="flex items-center gap-1.5">
+                <span className={`h-2.5 w-2.5 ${compareMetric === "profit" ? "bg-emerald-600" : "bg-blue-600"}`} />
+                <span className="text-slate-600 dark:text-slate-300">{compInfo.currentLabel}:</span>
+                <strong className={`font-mono text-sm ${compareMetric === "profit" ? "text-emerald-600 dark:text-emerald-400" : "text-blue-600 dark:text-blue-400"}`}>
+                  ৳{activeCurrVal.toLocaleString("en-BD")}
+                </strong>
+              </div>
+
+              {/* Previous */}
+              <div className="flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 bg-slate-300 dark:bg-slate-600 border border-slate-300 dark:border-slate-500" />
+                <span className="text-slate-600 dark:text-slate-300">{compInfo.label}:</span>
+                <strong className="font-mono text-sm text-slate-700 dark:text-slate-300">
+                  ৳{activePrevVal.toLocaleString("en-BD")}
+                </strong>
+              </div>
+
+              {/* Difference Badge */}
+              <div className={`px-2 py-0.5 font-bold font-mono text-xs flex items-center gap-1 border ${
+                activeDiff >= 0
+                  ? "bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950 dark:text-emerald-300"
+                  : "bg-rose-100 text-rose-800 border-rose-300 dark:bg-rose-950 dark:text-rose-300"
+              }`}>
+                {activeDiff >= 0 ? <ArrowUpRight className="h-3.5 w-3.5" /> : <ArrowDownRight className="h-3.5 w-3.5" />}
+                <span>{activeDiff >= 0 ? "+" : "−"}৳{Math.abs(activeDiff).toLocaleString("en-BD")}</span>
+              </div>
+
+              {/* Orders count */}
+              <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                Orders: <strong className="text-slate-800 dark:text-slate-200">{activeItem.sales || 0}</strong> vs <strong className="text-slate-800 dark:text-slate-200">{activeCompItem?.sales || 0}</strong>
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* Interactive Chart Columns */}
         {trendData.length === 0 ? (
           <div className="h-56 flex items-center justify-center text-xs text-slate-400">
             No sales activity found in this period.
           </div>
+        ) : compareMode ? (
+          /* ========================================================================= */
+          /* COMPARE MODE GROUPED BAR CHART WITH Y-AXIS GRIDLINES & LIVE HIGHLIGHT */
+          /* ========================================================================= */
+          <div className="relative pt-6 pb-2 border-b border-slate-200 dark:border-slate-800">
+            {/* Y-Axis Guidelines */}
+            <div className="absolute inset-0 pointer-events-none flex flex-col justify-between py-2 z-0">
+              <div className="border-b border-dashed border-slate-200 dark:border-slate-800 flex items-center justify-between text-[10px] text-slate-400 font-mono pb-0.5">
+                <span>৳{Math.round(maxComparisonVal).toLocaleString("en-BD")}</span>
+                <span className="text-slate-400/60 text-[9px]">Peak</span>
+              </div>
+              <div className="border-b border-dashed border-slate-200/80 dark:border-slate-800/80 flex items-center justify-between text-[10px] text-slate-400 font-mono pb-0.5">
+                <span>৳{Math.round(maxComparisonVal * 0.5).toLocaleString("en-BD")}</span>
+                <span className="text-slate-400/60 text-[9px]">50%</span>
+              </div>
+              <div className="border-b border-slate-300 dark:border-slate-700 flex items-center justify-between text-[10px] text-slate-400 font-mono pb-0.5">
+                <span>৳0</span>
+                <span className="text-slate-400/60 text-[9px]">Baseline</span>
+              </div>
+            </div>
+
+            {/* Scrollable Column Area */}
+            <div className="relative z-10 h-64 flex items-end justify-between gap-1 sm:gap-2 overflow-x-auto min-w-full">
+              {trendData.map((item: any, idx: number) => {
+                const compItem = findCompItem(item, idx) || {};
+                const currVal = compareMetric === "profit"
+                  ? Math.round(Number(item.profit || 0) - Number(item.expenses || 0))
+                  : Math.round(Number(item.revenue || 0));
+                const prevVal = compareMetric === "profit"
+                  ? Math.round(Number(compItem.profit || 0) - Number(compItem.expenses || 0))
+                  : Math.round(Number(compItem.revenue || 0));
+
+                const currHeight = Math.max(0, Math.min(100, Math.round((Math.max(0, currVal) / maxComparisonVal) * 100)));
+                const prevHeight = Math.max(0, Math.min(100, Math.round((Math.max(0, prevVal) / maxComparisonVal) * 100)));
+                const slotDiff = currVal - prevVal;
+                const displayLabel = item.label || item.key || item.date;
+                const isSelected = activeSlotIdx === idx;
+
+                return (
+                  <div
+                    key={idx}
+                    onMouseEnter={() => setHoveredIdx(idx)}
+                    onClick={() => setHoveredIdx(idx)}
+                    className={`flex-1 min-w-[36px] sm:min-w-[42px] flex flex-col items-center gap-1.5 h-full justify-end group relative p-1 transition cursor-pointer ${
+                      isSelected
+                        ? "bg-slate-100/90 dark:bg-slate-800/80 ring-1 ring-slate-300 dark:ring-slate-600"
+                        : "hover:bg-slate-50 dark:hover:bg-slate-800/40"
+                    }`}
+                  >
+                    {/* Floating Tooltip Card */}
+                    <div className="absolute bottom-full mb-2 opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-150 z-40 bg-slate-900 text-white text-[11px] p-2.5 border border-slate-700 shadow-xl whitespace-nowrap rounded-none left-1/2 -translate-x-1/2 min-w-[170px]">
+                      <div className="font-bold border-b border-slate-800 pb-1 text-slate-200 flex items-center justify-between gap-2">
+                        <span>{displayLabel}</span>
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 ${slotDiff >= 0 ? "bg-emerald-950 text-emerald-300 border border-emerald-700/60" : "bg-rose-950 text-rose-300 border border-rose-700/60"}`}>
+                          {slotDiff >= 0 ? `▲ +৳${slotDiff.toLocaleString()}` : `▼ -৳${Math.abs(slotDiff).toLocaleString()}`}
+                        </span>
+                      </div>
+                      <div className="pt-1.5 space-y-1 font-mono">
+                        <div className="flex items-center justify-between gap-3 text-emerald-400 font-bold">
+                          <span>{compInfo.currentLabel}:</span>
+                          <span>৳{currVal.toLocaleString()}</span>
+                        </div>
+                        <div className="flex items-center justify-between gap-3 text-slate-400">
+                          <span>{compInfo.label}:</span>
+                          <span>৳{prevVal.toLocaleString()}</span>
+                        </div>
+                        <div className="text-[10px] text-slate-400 pt-1 border-t border-slate-800 font-sans flex justify-between gap-2">
+                          <span>Orders:</span>
+                          <span className="font-mono text-slate-300">{item.sales || 0} vs {compItem.sales || 0}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Grouped Comparison Bars (Current vs Previous) */}
+                    <div className="w-full flex items-end justify-center gap-1 h-full pb-1">
+                      {/* Current Period Bar */}
+                      {currVal > 0 ? (
+                        <div
+                          style={{ height: `${Math.max(6, currHeight)}%` }}
+                          className={`w-1/2 max-w-[14px] rounded-t-xs transition duration-150 shadow-xs ${
+                            compareMetric === "profit"
+                              ? (currVal >= 0 ? "bg-emerald-600 hover:bg-emerald-500" : "bg-rose-600 hover:bg-rose-500")
+                              : "bg-blue-600 hover:bg-blue-500"
+                          } ${isSelected ? "ring-2 ring-emerald-400" : ""}`}
+                          title={`${compInfo.currentLabel}: ৳${currVal.toLocaleString()}`}
+                        />
+                      ) : (
+                        <div
+                          style={{ height: "3px" }}
+                          className="w-1/2 max-w-[14px] bg-slate-300 dark:bg-slate-700 transition"
+                          title={`${compInfo.currentLabel}: ৳0`}
+                        />
+                      )}
+
+                      {/* Previous Period Bar */}
+                      {prevVal > 0 ? (
+                        <div
+                          style={{ height: `${Math.max(6, prevHeight)}%` }}
+                          className={`w-1/2 max-w-[14px] bg-slate-300 dark:bg-slate-600 hover:bg-slate-400 rounded-t-xs transition duration-150 shadow-xs border border-slate-400 dark:border-slate-500 ${
+                            isSelected ? "ring-2 ring-slate-400" : ""
+                          }`}
+                          title={`${compInfo.label}: ৳${prevVal.toLocaleString()}`}
+                        />
+                      ) : (
+                        <div
+                          style={{ height: "3px" }}
+                          className="w-1/2 max-w-[14px] bg-slate-200 dark:bg-slate-700/60 transition"
+                          title={`${compInfo.label}: ৳0`}
+                        />
+                      )}
+                    </div>
+
+                    <span className={`text-[10px] font-semibold truncate max-w-[48px] text-center transition ${
+                      isSelected
+                        ? "text-slate-900 dark:text-white font-bold underline"
+                        : "text-slate-500 dark:text-slate-400"
+                    }`}>
+                      {displayLabel}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         ) : (
+          /* ========================================================================= */
+          /* STANDARD DUAL BAR CHART (REVENUE & PROFIT) */
+          /* ========================================================================= */
           <div className="h-64 flex items-end justify-between gap-1 sm:gap-2 pt-8 pb-2 border-b border-slate-200 dark:border-slate-800 overflow-x-auto min-w-full">
             {trendData.map((item: any, idx: number) => {
               const rev = Number(item.revenue || 0);
@@ -487,7 +1049,7 @@ export function OverviewModule({ onNavigate, selectedBranchId: propBranchId }: O
                   className="flex-1 min-w-[32px] sm:min-w-[40px] flex flex-col items-center gap-1.5 h-full justify-end group relative hover:bg-slate-50 dark:hover:bg-slate-800/50 p-1 transition"
                 >
                   {/* Detailed Hover Card */}
-                  <div className="absolute -top-24 opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-150 z-30 bg-slate-900 text-white text-[11px] p-2.5 border border-slate-700 shadow-xl whitespace-nowrap rounded-none left-1/2 -translate-x-1/2">
+                  <div className="absolute bottom-full mb-2 opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-150 z-30 bg-slate-900 text-white text-[11px] p-2.5 border border-slate-700 shadow-xl whitespace-nowrap rounded-none left-1/2 -translate-x-1/2">
                     <div className="font-bold border-b border-slate-800 pb-1 text-slate-200">
                       {displayLabel}
                     </div>

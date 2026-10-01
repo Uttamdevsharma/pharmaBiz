@@ -732,7 +732,7 @@ export function AttendanceView({
                                   </span>
                                 ) : (
                                   <span className="text-xs font-semibold px-1.5 py-0.2 rounded-none bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
-                                    Contractual
+                                    Probation
                                   </span>
                                 )}
                               </div>

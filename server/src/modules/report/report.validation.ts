@@ -18,7 +18,7 @@ export const vatMisReportSchema = z.object({
 
 export const dashboardQuerySchema = z.object({
   branchId: z.string().optional().transform(v => (v === "" || v === "null" || v === "undefined" || v === "all" ? undefined : v)),
-  period: z.enum(["today", "yesterday", "7d", "30d", "custom", "all"]).optional(),
+  period: z.enum(["today", "yesterday", "7d", "30d", "this_year", "year", "custom", "all"]).optional(),
   startDate: z.string().optional(),
   endDate: z.string().optional(),
 });

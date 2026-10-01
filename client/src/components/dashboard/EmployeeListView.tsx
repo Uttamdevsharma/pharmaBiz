@@ -40,6 +40,7 @@ interface EmployeeItem {
   createdAt: string;
   isActive?: boolean;
   isPermanent?: boolean;
+  staffId?: string | null;
   documentsSubmitted?: boolean;
   nidNumber?: string | null;
   nidFrontUrl?: string | null;
@@ -252,8 +253,19 @@ export function EmployeeListView({
                             <div className="font-semibold text-slate-900 dark:text-white">
                               {emp.name || emp.username}
                             </div>
-                            <div className="text-[11px] text-slate-400 font-mono">
-                              @{emp.username}
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <span className="text-[11px] text-slate-400 font-mono">
+                                @{emp.username}
+                              </span>
+                              {emp.staffId && (
+                                <span className={`text-[10px] font-mono font-bold px-1.5 py-0.2 border ${
+                                  emp.isPermanent
+                                    ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
+                                    : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700"
+                                }`}>
+                                  {emp.staffId}
+                                </span>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -288,7 +300,7 @@ export function EmployeeListView({
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 border border-slate-300 dark:border-slate-700 rounded-none">
-                              Contractual
+                              Probation
                             </span>
                           )}
 

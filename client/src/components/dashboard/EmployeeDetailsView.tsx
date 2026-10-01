@@ -53,6 +53,7 @@ interface EmployeeData {
   createdAt: string;
   isActive: boolean;
   isPermanent?: boolean;
+  staffId?: string | null;
   paidLeavesUsedThisYear?: number;
   annualPaidLeaveAllowance?: number;
   nidNumber?: string | null;
@@ -432,6 +433,15 @@ export function EmployeeDetailsView({ employeeId, selectedBranchId, onBack }: Em
               {employee && (
                 <span className="text-xs font-semibold px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 uppercase">
                   {roleName}
+                </span>
+              )}
+              {employee?.staffId && (
+                <span className={`text-xs font-mono font-bold px-2 py-0.5 border ${
+                  employee.isPermanent
+                    ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
+                    : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700"
+                }`}>
+                  {employee.staffId}
                 </span>
               )}
             </h1>

@@ -312,7 +312,7 @@ export const PHARMACY_MODULE_PERMISSIONS: PermissionDef[] = [
     id: "salaries.base_salary.edit",
     name: "Configure Base Salary",
     category: "Employee & Salary",
-    description: "Set and update employee Base Salary packages and contractual compensation.",
+    description: "Set and update employee Base Salary packages and salary compensation.",
   },
 
   // 11. Staff Management

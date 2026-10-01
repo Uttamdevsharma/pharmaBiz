@@ -89,6 +89,7 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
     documentsSubmitted: false,
     grossSalary: "",
     isPermanent: false,
+    staffId: "",
   });
 
   const loadData = async () => {
@@ -176,6 +177,7 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
       documentsSubmitted: false,
       grossSalary: "",
       isPermanent: false,
+      staffId: "",
     });
     setError(null);
     setShowPassword(false);
@@ -202,6 +204,7 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
       documentsSubmitted: !!member.documentsSubmitted,
       grossSalary: member.grossSalary !== undefined && member.grossSalary !== null ? String(member.grossSalary) : "",
       isPermanent: !!member.isPermanent,
+      staffId: member.staffId ? member.staffId.replace(/^[PTpt]-?/, "") : "",
     });
     setError(null);
     setShowPassword(false);
@@ -277,6 +280,10 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
         }
       }
 
+      const formattedStaffId = formData.staffId?.trim()
+        ? `${formData.isPermanent ? "P" : "T"}-${formData.staffId.trim().replace(/^[PTpt]-?/, "")}`
+        : null;
+
       if (editingStaff) {
         res = await fetchApi(`/users/${editingStaff.id}`, {
           method: "PATCH",
@@ -294,6 +301,7 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
             documentsSubmitted: formData.documentsSubmitted,
             grossSalary: formData.grossSalary ? Number(formData.grossSalary) : null,
             isPermanent: formData.isPermanent,
+            staffId: formattedStaffId,
             ...(formData.password ? { password: formData.password } : {}),
           }),
         });
@@ -316,6 +324,7 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
             documentsSubmitted: formData.documentsSubmitted,
             grossSalary: formData.grossSalary ? Number(formData.grossSalary) : null,
             isPermanent: formData.isPermanent,
+            staffId: formattedStaffId,
           }),
         });
       }
@@ -541,6 +550,7 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
               <thead className="text-[11px] uppercase bg-slate-50 dark:bg-slate-800/50 text-slate-500 border-b border-slate-200 dark:border-slate-800 font-bold tracking-wider">
                 <tr>
                   <th className="px-5 py-3.5">Staff Member</th>
+                  <th className="px-5 py-3.5">Staff ID</th>
                   <th className="px-5 py-3.5">Assigned Role</th>
                   <th className="px-5 py-3.5">Branch</th>
                   <th className="px-5 py-3.5">Phone</th>
@@ -582,6 +592,19 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
                             <div className="text-xs text-slate-400 font-mono">{member.email || member.username}</div>
                           </div>
                         </div>
+                      </td>
+                      <td className="px-5 py-3.5">
+                        {member.staffId ? (
+                          <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-none font-mono text-xs font-bold border ${
+                            member.isPermanent
+                              ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
+                              : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700"
+                          }`}>
+                            {member.staffId}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 font-mono text-xs italic">—</span>
+                        )}
                       </td>
                       <td className="px-5 py-3.5">
                         <span
@@ -652,7 +675,7 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-none text-[10px] font-bold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
-                              Probation / Contract
+                              Probation
                             </span>
                           )}
                         </div>
@@ -875,33 +898,94 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
                   </div>
                 </div>
 
-                {/* Permanent Employee Option */}
-                <div className="sm:col-span-2 p-3.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-none">
-                  <label className="flex items-start gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={formData.isPermanent}
-                      onChange={(e) => setFormData({ ...formData, isPermanent: e.target.checked })}
-                      className="mt-0.5 h-4 w-4 rounded-none border-slate-300 text-brand-primary focus:ring-brand-primary cursor-pointer shrink-0"
-                    />
-                    <div>
-                      <div className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                        <span>Permanent Employee</span>
+                {/* Permanent Employee Toggle */}
+                <div
+                  onClick={() => setFormData((prev) => ({ ...prev, isPermanent: !prev.isPermanent }))}
+                  className="sm:col-span-2 p-3.5 sm:p-4 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-none cursor-pointer hover:border-slate-300 dark:hover:border-slate-600 transition select-none"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">
+                          Employment Type:
+                        </span>
                         {formData.isPermanent ? (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-none bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
-                            Paid Leave Eligible (30 Days/Year)
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                            Permanent Employee (Paid Leave Eligible - 30 Days/Year)
                           </span>
                         ) : (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-none bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
-                            Probation / Contractual
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-600">
+                            Probation
                           </span>
                         )}
                       </div>
-                      <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                        Permanent employees receive statutory annual paid leaves (default 30 days/year). Marking attendance as Paid Leave will not deduct from their monthly salary.
+                      <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400">
+                        {formData.isPermanent
+                          ? "Eligible for 30 days annual paid leave."
+                          : "Probation period staff."}
                       </p>
                     </div>
-                  </label>
+
+                    {/* Modern Toggle Switch */}
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={formData.isPermanent}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setFormData((prev) => ({ ...prev, isPermanent: !prev.isPermanent }));
+                      }}
+                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                        formData.isPermanent ? "bg-emerald-600" : "bg-slate-300 dark:bg-slate-600"
+                      }`}
+                      title={formData.isPermanent ? "Click to set as Probation" : "Click to set as Permanent Employee"}
+                    >
+                      <span
+                        aria-hidden="true"
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                          formData.isPermanent ? "translate-x-5" : "translate-x-0"
+                        }`}
+                      />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Staff Institutional ID */}
+                <div className="sm:col-span-2">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200">
+                      Staff ID / Employee Code
+                    </label>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 border rounded-none ${
+                      formData.isPermanent
+                        ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800"
+                        : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700"
+                    }`}>
+                      Prefix: {formData.isPermanent ? "P (Permanent)" : "T (Temporary)"}
+                    </span>
+                  </div>
+                  <div className="relative flex items-center">
+                    <div className={`h-11 px-3.5 flex items-center justify-center font-mono font-black text-sm border border-r-0 border-slate-200 dark:border-slate-700 select-none ${
+                      formData.isPermanent
+                        ? "bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300"
+                        : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300"
+                    }`}>
+                      {formData.isPermanent ? "P-" : "T-"}
+                    </div>
+                    <input
+                      type="text"
+                      value={formData.staffId}
+                      onChange={(e) => setFormData({ ...formData, staffId: e.target.value.replace(/^[PTpt]-?/, "") })}
+                      placeholder="e.g. 221902234"
+                      className="w-full h-11 px-3.5 rounded-none border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary font-mono"
+                    />
+                  </div>
+                  <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                    Full Staff ID:{" "}
+                    <span className="font-mono font-bold text-slate-800 dark:text-slate-200">
+                      {formData.staffId?.trim() ? `${formData.isPermanent ? "P" : "T"}-${formData.staffId.trim().replace(/^[PTpt]-?/, "")}` : "Not assigned"}
+                    </span>
+                  </p>
                 </div>
               </div>
 
@@ -1144,6 +1228,13 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
                 <span className="mt-0.5 inline-flex items-center gap-1.5 text-xs font-bold text-emerald-600">
                   <span className={`h-2 w-2 rounded-full ${viewingStaff.isActive ? "bg-emerald-500" : "bg-red-500"}`} />
                   <span>{viewingStaff.isActive ? "Active Staff" : "Disabled"}</span>
+                </span>
+              </div>
+
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">Staff ID</span>
+                <span className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200 mt-0.5 block font-mono">
+                  {viewingStaff.staffId || "Not assigned"}
                 </span>
               </div>
             </div>
