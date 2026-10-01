@@ -88,6 +88,7 @@ export type OwnerModule =
   | "exp_settings"
   | "sal_employees"
   | "sal_attendance"
+  | "sal_attendance_sheet"
   | "sal_offdays"
   | "sal_deduction_rules"
   | "sal_management"
@@ -229,6 +230,7 @@ export function DashboardSidebar({
   const isSalaryActive =
     activeModule === "sal_employees" ||
     activeModule === "sal_attendance" ||
+    activeModule === "sal_attendance_sheet" ||
     activeModule === "employee_details" ||
     activeModule === "staff_salary_history";
 
@@ -701,6 +703,12 @@ export function DashboardSidebar({
       label: "Attendance Management",
       icon: CalendarCheck,
       visible: isOwner || hasPermission("attendance.manage"),
+    },
+    {
+      id: "sal_attendance_sheet" as OwnerModule,
+      label: "Attendance Sheet",
+      icon: FileSpreadsheet,
+      visible: isOwner || hasPermission("attendance.manage") || hasPermission("attendance.view"),
     },
   ].filter((item) => item.visible);
 

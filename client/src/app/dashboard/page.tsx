@@ -81,6 +81,7 @@ import { BranchSalaryHistoryView } from "@/components/dashboard/BranchSalaryHist
 import { SalaryReportView } from "@/components/dashboard/SalaryReportView";
 import { EmployeeDetailsView } from "@/components/dashboard/EmployeeDetailsView";
 import { AttendanceView } from "@/components/dashboard/AttendanceView";
+import { AttendanceSheetView } from "@/components/dashboard/AttendanceSheetView";
 import { SalaryDeductionRules } from "@/components/dashboard/SalaryDeductionRules";
 import { StaffSalaryHistoryView } from "@/components/dashboard/StaffSalaryHistoryView";
 import { Product } from "@/types";
@@ -1040,6 +1041,17 @@ export default function RoleBasedDashboard() {
               setEmployeeOriginModule("sal_attendance");
               handleNavigate("employee_details");
             }}
+          />
+        );
+
+      case "sal_attendance_sheet":
+        if (!isOwner && !hasPermission("attendance.manage") && !hasPermission("attendance.view")) {
+          return <TenantAccessRestricted moduleName="Attendance Sheet" requiredPerm="attendance.manage" />;
+        }
+        return (
+          <AttendanceSheetView
+            selectedBranchId={selectedBranchId}
+            onNavigate={handleNavigate}
           />
         );
 

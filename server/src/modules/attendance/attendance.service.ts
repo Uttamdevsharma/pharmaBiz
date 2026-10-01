@@ -562,6 +562,7 @@ export class AttendanceService {
     return {
       employee: {
         id: employee.id,
+        staffId: employee.staffId,
         name: employee.name,
         username: employee.username,
         role: employee.customRoleName || employee.pharmacyRoleName || employee.role.replace(/_/g, " "),
@@ -578,6 +579,7 @@ export class AttendanceService {
         totalWorkingDays,
         presentDays,
         absentDays,
+        lateDays: lateDays ?? 0,
         paidLeaveDays,
         unpaidLeaveDays,
         dailyRate,
@@ -606,10 +608,11 @@ export class AttendanceService {
    * 7. Branch Monthly Attendance and Payroll Summary for all branch staff
    */
   static async getBranchMonthlyAttendanceSummary(tenantId: string, branchId: string, month: string) {
+    const branchFilter = branchId && branchId !== "all" && branchId !== "all-branches" ? { branchId } : {};
     const employees = await (prisma as any).user.findMany({
       where: {
         tenantId,
-        branchId,
+        ...branchFilter,
         role: {
           notIn: ["COMPANY_OWNER", "SUPER_ADMIN"],
         },
@@ -617,6 +620,7 @@ export class AttendanceService {
       },
       select: {
         id: true,
+        staffId: true,
         name: true,
         username: true,
         role: true,
@@ -624,12 +628,13 @@ export class AttendanceService {
         pharmacyRoleName: true,
         avatarUrl: true,
         salaryConfig: true,
+        branchId: true,
       },
       orderBy: [{ name: "asc" }, { username: "asc" }],
     });
 
     const calculations = await Promise.all(
-      employees.map((emp: any) => this.calculateMonthlySalary(tenantId, branchId, emp.id, month))
+      employees.map((emp: any) => this.calculateMonthlySalary(tenantId, emp.branchId || branchId, emp.id, month))
     );
 
     return calculations;

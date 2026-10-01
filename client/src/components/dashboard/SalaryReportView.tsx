@@ -369,50 +369,7 @@ export function SalaryReportView({
           </div>
         </div>
 
-        {/* 2. Executive Statement Summary Strip */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 py-3 px-4 bg-slate-50 dark:bg-slate-800/60 print:bg-slate-100 border border-slate-200 dark:border-slate-700 print:border-black text-xs">
-          <div>
-            <span className="text-slate-500 print:text-black block text-[11px]">Total Staff in Branch:</span>
-            <strong className="text-sm font-bold text-slate-900 dark:text-white print:text-black">
-              {summaryMetrics.totalStaffCount} Employees
-            </strong>
-            <div className="text-[10px] text-slate-400 print:text-slate-600 mt-0.5">
-              Paid: {summaryMetrics.paidStaffCount} | Partial: {summaryMetrics.partialStaffCount} | Unpaid: {summaryMetrics.unpaidStaffCount}
-            </div>
-          </div>
-
-          <div>
-            <span className="text-slate-500 print:text-black block text-[11px]">Total Monthly Payable:</span>
-            <strong className="text-sm font-mono font-bold text-slate-900 dark:text-white print:text-black">
-              ৳{summaryMetrics.totalNetPayable.toLocaleString("en-BD", { minimumFractionDigits: 2 })}
-            </strong>
-            <div className="text-[10px] text-slate-400 print:text-slate-600 mt-0.5">
-              Full Payroll Budget
-            </div>
-          </div>
-
-          <div>
-            <span className="text-slate-500 print:text-black block text-[11px]">Total Disbursed (Paid):</span>
-            <strong className="text-sm font-mono font-black text-emerald-700 dark:text-emerald-400 print:text-black">
-              ৳{summaryMetrics.totalPaidAmount.toLocaleString("en-BD", { minimumFractionDigits: 2 })}
-            </strong>
-            <div className="text-[10px] text-emerald-600 print:text-slate-600 mt-0.5">
-              Debited from Accounts
-            </div>
-          </div>
-
-          <div>
-            <span className="text-slate-500 print:text-black block text-[11px]">Remaining Balance (Due):</span>
-            <strong className="text-sm font-mono font-bold text-amber-700 dark:text-amber-400 print:text-black">
-              ৳{summaryMetrics.totalDueAmount.toLocaleString("en-BD", { minimumFractionDigits: 2 })}
-            </strong>
-            <div className="text-[10px] text-amber-600 print:text-slate-600 mt-0.5">
-              Yet to be Disbursed
-            </div>
-          </div>
-        </div>
-
-        {/* 3. Official Employee-Centric Salary Statement Table */}
+        {/* 2. Official Employee-Centric Salary Statement Table */}
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs sm:text-sm print:text-xs border border-slate-300 dark:border-slate-700 print:border-black border-collapse">
             <thead className="bg-slate-100 dark:bg-slate-800 print:bg-slate-200 text-slate-700 dark:text-slate-300 print:text-black font-bold uppercase tracking-wider">

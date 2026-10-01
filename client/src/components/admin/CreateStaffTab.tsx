@@ -132,6 +132,37 @@ export function CreateStaffTab({
     }
   };
 
+  if (loadingRoles) {
+    return (
+      <div className="space-y-6 w-full animate-pulse">
+        {/* Header Skeleton */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
+          <div className="space-y-2">
+            <div className="h-4 w-36 bg-slate-200 dark:bg-slate-800 rounded" />
+            <div className="h-7 w-56 bg-slate-200 dark:bg-slate-800 rounded" />
+            <div className="h-4 w-80 max-w-full bg-slate-200 dark:bg-slate-800 rounded" />
+          </div>
+          <div className="h-10 w-36 bg-slate-200 dark:bg-slate-800 rounded-none shrink-0" />
+        </div>
+
+        {/* Form Card Skeleton */}
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 sm:p-7 space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="space-y-2">
+                <div className="h-4 w-28 bg-slate-200 dark:bg-slate-800 rounded" />
+                <div className="h-11 w-full bg-slate-100 dark:bg-slate-800/60 rounded-none" />
+              </div>
+            ))}
+          </div>
+          <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-end">
+            <div className="h-11 w-44 bg-slate-200 dark:bg-slate-800 rounded-none" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 w-full">
       {/* Header */}

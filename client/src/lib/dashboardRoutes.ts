@@ -38,6 +38,7 @@ export const MODULE_TO_PATH: Record<OwnerModule, string> = {
   // Salary & Attendance
   sal_employees: "/dashboard/salary/employees",
   sal_attendance: "/dashboard/salary/attendance",
+  sal_attendance_sheet: "/dashboard/salary/attendance-sheet",
   sal_offdays: "/dashboard/salary/offdays",
   sal_deduction_rules: "/dashboard/salary/deductions",
   sal_management: "/dashboard/salary/management",

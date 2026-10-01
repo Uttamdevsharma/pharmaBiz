@@ -35,6 +35,52 @@ interface PharmacyRole {
   isSystem?: boolean;
 }
 
+function CreateStaffSkeleton() {
+  return (
+    <div className="space-y-4 w-full animate-pulse">
+      {/* Header Skeleton */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-800">
+        <div className="h-7 w-48 bg-slate-200 dark:bg-slate-800 rounded-none" />
+        <div className="h-9 w-32 bg-slate-200 dark:bg-slate-800 rounded-none shrink-0" />
+      </div>
+
+      {/* Main Form Card Skeleton */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 sm:p-6 space-y-5 rounded-none">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="space-y-1.5">
+              <div className="h-4 w-28 bg-slate-200 dark:bg-slate-800 rounded-none" />
+              <div className="h-9 sm:h-10 w-full bg-slate-100 dark:bg-slate-800 rounded-none" />
+            </div>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 pt-3 border-t border-slate-100 dark:border-slate-800">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="space-y-1.5">
+              <div className="h-4 w-28 bg-slate-200 dark:bg-slate-800 rounded-none" />
+              <div className="h-9 sm:h-10 w-full bg-slate-100 dark:bg-slate-800 rounded-none" />
+            </div>
+          ))}
+        </div>
+
+        <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-3">
+          <div className="h-4 w-40 bg-slate-200 dark:bg-slate-800 rounded-none" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-xl">
+            <div className="h-28 bg-slate-100 dark:bg-slate-800 rounded-none" />
+            <div className="h-28 bg-slate-100 dark:bg-slate-800 rounded-none" />
+          </div>
+          <div className="h-12 w-full max-w-md bg-slate-100 dark:bg-slate-800 rounded-none" />
+        </div>
+
+        <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-2">
+          <div className="h-9 sm:h-10 w-36 bg-slate-200 dark:bg-slate-800 rounded-none" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 interface CreateStaffTabProps {
   onNavigate?: (module: any) => void;
 }
@@ -244,49 +290,34 @@ export function CreateStaffTab({ onNavigate }: CreateStaffTabProps) {
   const selectedRoleObj = roles.find((r) => r.id === formData.role || r.name === formData.role);
 
   if (loading) {
-    return (
-      <div className="py-24 flex flex-col items-center justify-center text-slate-400 gap-3">
-        <Loader2 className="h-8 w-8 animate-spin text-brand-primary" />
-        <span className="text-xs font-semibold">Loading roles and configuration...</span>
-      </div>
-    );
+    return <CreateStaffSkeleton />;
   }
 
   return (
-    <div className="space-y-6 w-full">
+    <div className="space-y-4 w-full">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
-        <div>
-          <div className="flex items-center gap-2 text-xs font-bold text-slate-400 mb-1">
-            <span>Staff Management</span>
-            <span>/</span>
-            <span className="text-brand-primary">Create Staff</span>
-          </div>
-          <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white flex items-center gap-2.5">
-            <Users className="h-7 w-7 text-brand-primary" />
-            Create Staff Member
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-            Add team members, assign their branch and designate their operational role.
-          </p>
-        </div>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-800">
+        <h1 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+          <Users className="h-5 w-5 text-brand-primary" />
+          Create Staff Member
+        </h1>
 
         {onNavigate && (
           <button
             type="button"
             onClick={() => onNavigate("staff")}
-            className="h-10 px-4 rounded-lg text-xs sm:text-sm font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 transition flex items-center gap-2"
+            className="h-9 px-3 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs sm:text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-700 transition rounded-none flex items-center gap-1.5"
           >
             <span>View Staff List</span>
-            <ArrowRight className="h-4 w-4" />
+            <ArrowRight className="h-3.5 w-3.5 text-brand-primary" />
           </button>
         )}
       </div>
 
       {/* Capacity Alert */}
       {isTotalLimitReached && (
-        <div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-300 text-xs flex items-center gap-3">
-          <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0" />
+        <div className="p-3 rounded-none bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-300 text-xs flex items-center gap-2.5">
+          <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
           <div>
             <strong>Staff Capacity Limit Reached ({staffCount}/{maxStaff})</strong>
             <p className="text-[11px] text-amber-700/80 dark:text-amber-400/80 mt-0.5">
@@ -300,23 +331,23 @@ export function CreateStaffTab({ onNavigate }: CreateStaffTabProps) {
 
       {/* Success Notification */}
       {createdSuccess && (
-        <div className="p-4 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-xs space-y-3 animate-in fade-in">
-          <div className="flex items-center gap-2.5">
-            <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+        <div className="p-3.5 rounded-none bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-xs space-y-2.5 animate-in fade-in">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
             <div>
-              <h4 className="font-bold text-sm">Staff Member Created Successfully!</h4>
-              <p className="text-xs text-emerald-700 dark:text-emerald-400 mt-0.5">
+              <h4 className="font-bold text-xs sm:text-sm">Staff Member Created Successfully!</h4>
+              <p className="text-[11px] sm:text-xs text-emerald-700 dark:text-emerald-400 mt-0.5">
                 <strong>{createdSuccess.name}</strong> has been registered with role{" "}
                 <strong>{createdSuccess.pharmacyRoleName || selectedRoleObj?.name}</strong> and can now log in.
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-3 pt-2">
+          <div className="flex items-center gap-2 pt-1">
             {onNavigate && (
               <button
                 type="button"
                 onClick={() => onNavigate("staff")}
-                className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition"
+                className="h-8 px-3 rounded-none bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-none transition"
               >
                 Go to Staff List
               </button>
@@ -324,7 +355,7 @@ export function CreateStaffTab({ onNavigate }: CreateStaffTabProps) {
             <button
               type="button"
               onClick={() => setCreatedSuccess(null)}
-              className="px-4 py-2 rounded-lg bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 text-emerald-800 dark:text-emerald-300 font-semibold text-xs hover:bg-emerald-50 transition"
+              className="h-8 px-3 rounded-none bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 text-emerald-800 dark:text-emerald-300 font-semibold text-xs hover:bg-emerald-50 transition"
             >
               Add Another Staff
             </button>
@@ -334,41 +365,41 @@ export function CreateStaffTab({ onNavigate }: CreateStaffTabProps) {
 
       {/* Error Alert */}
       {error && (
-        <div className="p-4 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 text-xs flex items-center gap-2.5">
+        <div className="p-3 rounded-none bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 text-xs flex items-center gap-2">
           <AlertCircle className="h-4 w-4 shrink-0 text-rose-500" />
           <span className="font-semibold">{error}</span>
         </div>
       )}
 
       {/* Create Staff Form Card */}
-      <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 p-5 sm:p-7 shadow-xs">
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
-            {/* Full Name */}
-            <div>
-              <label className="block text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
+      <div className="bg-white dark:bg-slate-900 rounded-none border border-slate-200 dark:border-slate-800 p-4 sm:p-5 shadow-none w-full">
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3.5 sm:gap-4">
+            {/* Full Name (4 cols) */}
+            <div className="sm:col-span-1 lg:col-span-4">
+              <label className="block text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-200 mb-1">
                 Full Name *
               </label>
               <div className="relative flex items-center">
-                <User className="h-4 w-4 text-slate-400 absolute left-3.5 pointer-events-none" />
+                <User className="h-4 w-4 text-slate-400 absolute left-3 pointer-events-none" />
                 <input
                   type="text"
                   required
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   placeholder="e.g. Shakil Ahmed"
-                  className="w-full h-11 pl-10 pr-3.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary"
+                  className="w-full h-9 sm:h-10 pl-9 pr-3 rounded-none border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs sm:text-sm font-medium text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary"
                 />
               </div>
             </div>
 
-            {/* Email Address */}
-            <div>
-              <label className="block text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
+            {/* Email Address (4 cols) */}
+            <div className="sm:col-span-1 lg:col-span-4">
+              <label className="block text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-200 mb-1">
                 Email Address *
               </label>
               <div className="relative flex items-center">
-                <Mail className="h-4 w-4 text-slate-400 absolute left-3.5 pointer-events-none" />
+                <Mail className="h-4 w-4 text-slate-400 absolute left-3 pointer-events-none" />
                 <input
                   type="email"
                   required
@@ -381,21 +412,21 @@ export function CreateStaffTab({ onNavigate }: CreateStaffTabProps) {
                     })
                   }
                   placeholder="name@pharmacy.com"
-                  className="w-full h-11 pl-10 pr-3.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary"
+                  className="w-full h-9 sm:h-10 pl-9 pr-3 rounded-none border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs sm:text-sm font-medium text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary"
                 />
               </div>
             </div>
 
-            {/* Phone Number (Strictly Digits Only, 11-12 digits) */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200">
+            {/* Phone Number (4 cols) */}
+            <div className="sm:col-span-2 lg:col-span-4">
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-200">
                   Phone Number
                 </label>
-                <span className="text-[11px] text-slate-400 font-medium">11 or 12 digits</span>
+                <span className="text-[10px] text-slate-400 font-medium">11-12 digits</span>
               </div>
               <div className="relative flex items-center">
-                <Phone className="h-4 w-4 text-slate-400 absolute left-3.5 pointer-events-none" />
+                <Phone className="h-4 w-4 text-slate-400 absolute left-3 pointer-events-none" />
                 <input
                   type="tel"
                   inputMode="numeric"
@@ -404,18 +435,18 @@ export function CreateStaffTab({ onNavigate }: CreateStaffTabProps) {
                   value={formData.phone}
                   onChange={handlePhoneChange}
                   placeholder="01700000000"
-                  className="w-full h-11 pl-10 pr-3.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary"
+                  className="w-full h-9 sm:h-10 pl-9 pr-3 rounded-none border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs sm:text-sm font-medium text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary font-mono"
                 />
               </div>
             </div>
 
-            {/* Password */}
-            <div>
-              <label className="block text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
+            {/* Password (4 cols) */}
+            <div className="sm:col-span-1 lg:col-span-4">
+              <label className="block text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-200 mb-1">
                 Password *
               </label>
               <div className="relative flex items-center">
-                <Lock className="h-4 w-4 text-slate-400 absolute left-3.5 pointer-events-none" />
+                <Lock className="h-4 w-4 text-slate-400 absolute left-3 pointer-events-none" />
                 <input
                   type={showPassword ? "text" : "password"}
                   required
@@ -423,25 +454,25 @@ export function CreateStaffTab({ onNavigate }: CreateStaffTabProps) {
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   placeholder="Min. 6 characters"
-                  className="w-full h-11 pl-10 pr-10 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary"
+                  className="w-full h-9 sm:h-10 pl-9 pr-9 rounded-none border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs sm:text-sm font-medium text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 p-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                  className="absolute right-2.5 p-1 rounded-none text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
             </div>
 
-            {/* Confirm Password */}
-            <div>
-              <label className="block text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
+            {/* Confirm Password (4 cols) */}
+            <div className="sm:col-span-1 lg:col-span-4">
+              <label className="block text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-200 mb-1">
                 Confirm Password *
               </label>
               <div className="relative flex items-center">
-                <Lock className="h-4 w-4 text-slate-400 absolute left-3.5 pointer-events-none" />
+                <Lock className="h-4 w-4 text-slate-400 absolute left-3 pointer-events-none" />
                 <input
                   type={showConfirmPassword ? "text" : "password"}
                   required
@@ -449,36 +480,36 @@ export function CreateStaffTab({ onNavigate }: CreateStaffTabProps) {
                   value={formData.confirmPassword}
                   onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
                   placeholder="Re-type password"
-                  className="w-full h-11 pl-10 pr-10 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary"
+                  className="w-full h-9 sm:h-10 pl-9 pr-9 rounded-none border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs sm:text-sm font-medium text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary"
                 />
                 <button
                   type="button"
                   onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  className="absolute right-3 p-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                  className="absolute right-2.5 p-1 rounded-none text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
                 >
                   {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
             </div>
 
-            {/* Select Role */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200">
+            {/* Select Role (4 cols) */}
+            <div className="sm:col-span-2 lg:col-span-4">
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-200">
                   Select Role *
                 </label>
                 {onNavigate && (
                   <button
                     type="button"
                     onClick={() => onNavigate("create_role")}
-                    className="text-xs font-bold text-brand-primary hover:underline flex items-center gap-1"
+                    className="text-xs font-semibold text-brand-primary hover:underline flex items-center gap-1"
                   >
                     <span>Manage Roles</span>
                   </button>
                 )}
               </div>
               <div className="relative flex items-center">
-                <KeyRound className="h-4 w-4 text-slate-400 absolute left-3.5 pointer-events-none" />
+                <KeyRound className="h-4 w-4 text-slate-400 absolute left-3 pointer-events-none" />
                 <select
                   required
                   value={formData.role}
@@ -492,7 +523,7 @@ export function CreateStaffTab({ onNavigate }: CreateStaffTabProps) {
                       branchId: isAcc ? "" : (prev.branchId || branches[0]?.id || ""),
                     }));
                   }}
-                  className="w-full h-11 pl-10 pr-3.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary cursor-pointer"
+                  className="w-full h-9 sm:h-10 pl-9 pr-3 rounded-none border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs sm:text-sm font-medium text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary cursor-pointer"
                 >
                   {roles.map((r) => (
                     <option key={r.id} value={r.id}>
@@ -503,32 +534,32 @@ export function CreateStaffTab({ onNavigate }: CreateStaffTabProps) {
               </div>
             </div>
 
-            {/* Branch Assignment */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200">
+            {/* Assign to Branch (3 cols) */}
+            <div className="sm:col-span-1 lg:col-span-3">
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-200">
                   Assign to Branch
                 </label>
                 {(selectedRoleObj?.name?.toLowerCase().includes("account") || formData.role === "ACCOUNTS") && (
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                    Company-wide Role
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-none bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                    Company-wide
                   </span>
                 )}
               </div>
               <div className="relative flex items-center">
-                <Building className="h-4 w-4 text-slate-400 absolute left-3.5 pointer-events-none" />
+                <Building className="h-4 w-4 text-slate-400 absolute left-3 pointer-events-none" />
                 {isManager ? (
                   <input
                     type="text"
                     disabled
                     value={branches.find((b) => b.id === user?.branchId)?.name || "Your Branch"}
-                    className="w-full h-11 pl-10 pr-3.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-sm font-semibold text-slate-600 dark:text-slate-400"
+                    className="w-full h-9 sm:h-10 pl-9 pr-3 rounded-none border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-400"
                   />
                 ) : (
                   <select
                     value={formData.branchId}
                     onChange={(e) => setFormData({ ...formData, branchId: e.target.value })}
-                    className="w-full h-11 pl-10 pr-3.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary cursor-pointer"
+                    className="w-full h-9 sm:h-10 pl-9 pr-3 rounded-none border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs sm:text-sm font-medium text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary cursor-pointer"
                   >
                     {(selectedRoleObj?.name?.toLowerCase().includes("account") || formData.role === "ACCOUNTS") && (
                       <option value="">🏢 All Branches (Central Accounts Lead)</option>
@@ -542,59 +573,57 @@ export function CreateStaffTab({ onNavigate }: CreateStaffTabProps) {
                   </select>
                 )}
               </div>
-              {(selectedRoleObj?.name?.toLowerCase().includes("account") || formData.role === "ACCOUNTS") && (
-                <p className="mt-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
-                  ℹ️ Ekjon accounts officer-i sobgula branch er accounts & finances monitor korben.
-                </p>
-              )}
             </div>
 
-            {/* Gross Salary */}
-            <div>
-              <label className="block text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
-                Gross Monthly Salary (৳)
-              </label>
+            {/* Staff ID / Employee Code (3 cols) */}
+            <div className="sm:col-span-1 lg:col-span-3">
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-200">
+                  Staff ID / Employee Code
+                </label>
+                <span className="text-[10px] text-slate-500 font-mono">
+                  Prefix: {formData.isPermanent ? "P-" : "T-"}
+                </span>
+              </div>
               <div className="relative flex items-center">
-                <span className="absolute left-3.5 text-sm font-bold text-slate-400 pointer-events-none font-mono">৳</span>
+                <div className={`h-9 sm:h-10 px-2.5 flex items-center justify-center font-mono font-bold text-xs sm:text-sm border border-r-0 border-slate-300 dark:border-slate-700 select-none ${
+                  formData.isPermanent
+                    ? "bg-emerald-50 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300"
+                    : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300"
+                }`}>
+                  {formData.isPermanent ? "P-" : "T-"}
+                </div>
                 <input
-                  type="number"
-                  min="0"
-                  step="100"
-                  value={formData.grossSalary}
-                  onChange={(e) => setFormData({ ...formData, grossSalary: e.target.value })}
-                  placeholder="e.g. 25000"
-                  className="w-full h-11 pl-9 pr-3.5 rounded-none border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary font-mono"
+                  type="text"
+                  value={formData.staffId}
+                  onChange={(e) => setFormData({ ...formData, staffId: e.target.value.replace(/^[PTpt]-?/, "") })}
+                  placeholder="e.g. 221902234"
+                  className="w-full h-9 sm:h-10 px-3 rounded-none border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs sm:text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary font-mono"
                 />
               </div>
             </div>
 
-            {/* Permanent Employee Toggle */}
-            <div
-              onClick={() => setFormData((prev) => ({ ...prev, isPermanent: !prev.isPermanent }))}
-              className="md:col-span-2 p-3.5 sm:p-4 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-none cursor-pointer hover:border-slate-300 dark:hover:border-slate-600 transition select-none"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">
-                      Employment Type:
-                    </span>
-                    {formData.isPermanent ? (
-                      <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
-                        Permanent Employee (Paid Leave Eligible - 30 Days/Year)
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-600">
-                        Probation
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400">
-                    {formData.isPermanent
-                      ? "Eligible for 30 days annual paid leave."
-                      : "Probation period staff."}
-                  </p>
-                </div>
+            {/* Employment Type Toggle (3 cols) */}
+            <div className="sm:col-span-1 lg:col-span-3">
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-200">
+                  Employment Type
+                </label>
+                <span className={`text-[10px] font-bold px-1.5 py-0.5 border rounded-none ${
+                  formData.isPermanent
+                    ? "bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800"
+                    : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-300 dark:border-slate-700"
+                }`}>
+                  {formData.isPermanent ? "Permanent" : "Probation"}
+                </span>
+              </div>
+              <div
+                onClick={() => setFormData((prev) => ({ ...prev, isPermanent: !prev.isPermanent }))}
+                className="h-9 sm:h-10 px-3 bg-slate-50 dark:bg-slate-800/60 border border-slate-300 dark:border-slate-700 rounded-none cursor-pointer flex items-center justify-between gap-2 select-none hover:border-slate-400 dark:hover:border-slate-600 transition"
+              >
+                <span className={`text-xs sm:text-sm font-semibold truncate ${formData.isPermanent ? "text-emerald-700 dark:text-emerald-400" : "text-slate-700 dark:text-slate-300"}`}>
+                  {formData.isPermanent ? "Permanent (Paid Leave)" : "Probation Period"}
+                </span>
 
                 {/* Modern Toggle Switch */}
                 <button
@@ -605,188 +634,176 @@ export function CreateStaffTab({ onNavigate }: CreateStaffTabProps) {
                     e.stopPropagation();
                     setFormData((prev) => ({ ...prev, isPermanent: !prev.isPermanent }));
                   }}
-                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
                     formData.isPermanent ? "bg-emerald-600" : "bg-slate-300 dark:bg-slate-600"
                   }`}
-                  title={formData.isPermanent ? "Click to set as Probation" : "Click to set as Permanent Employee"}
+                  title={formData.isPermanent ? "Set as Probation" : "Set as Permanent"}
                 >
                   <span
                     aria-hidden="true"
-                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
-                      formData.isPermanent ? "translate-x-5" : "translate-x-0"
+                    className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                      formData.isPermanent ? "translate-x-4" : "translate-x-0"
                     }`}
                   />
                 </button>
               </div>
             </div>
 
-            {/* Staff Institutional ID */}
-            <div className="md:col-span-2">
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200">
-                  Staff ID / Employee Code
-                </label>
-                <span className={`text-[10px] font-bold px-2 py-0.5 border rounded-none ${
-                  formData.isPermanent
-                    ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800"
-                    : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700"
-                }`}>
-                  Prefix: {formData.isPermanent ? "P (Permanent)" : "T (Temporary)"}
-                </span>
-              </div>
+            {/* Gross Salary (3 cols) */}
+            <div className="sm:col-span-1 lg:col-span-3">
+              <label className="block text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-200 mb-1">
+                Gross Monthly Salary (৳)
+              </label>
               <div className="relative flex items-center">
-                <div className={`h-11 px-3.5 flex items-center justify-center font-mono font-black text-sm border border-r-0 border-slate-200 dark:border-slate-700 select-none ${
-                  formData.isPermanent
-                    ? "bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300"
-                    : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300"
-                }`}>
-                  {formData.isPermanent ? "P-" : "T-"}
-                </div>
+                <span className="absolute left-3 text-xs sm:text-sm font-bold text-slate-400 pointer-events-none font-mono">৳</span>
                 <input
-                  type="text"
-                  value={formData.staffId}
-                  onChange={(e) => setFormData({ ...formData, staffId: e.target.value.replace(/^[PTpt]-?/, "") })}
-                  placeholder="e.g. 221902234"
-                  className="w-full h-11 px-3.5 rounded-none border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary font-mono"
+                  type="number"
+                  min="0"
+                  step="100"
+                  value={formData.grossSalary}
+                  onChange={(e) => setFormData({ ...formData, grossSalary: e.target.value })}
+                  placeholder="e.g. 25000"
+                  className="w-full h-9 sm:h-10 pl-8 pr-3 rounded-none border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs sm:text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary font-mono"
                 />
               </div>
-              <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                Full Staff ID:{" "}
-                <span className="font-mono font-bold text-slate-800 dark:text-slate-200">
-                  {formData.staffId?.trim() ? `${formData.isPermanent ? "P" : "T"}-${formData.staffId.trim().replace(/^[PTpt]-?/, "")}` : "Not assigned"}
-                </span>
-              </p>
             </div>
           </div>
 
           {/* Section: Staff NID & Verification Documents */}
-          <div className="pt-4 border-t border-slate-200 dark:border-slate-800 space-y-4">
-            <div>
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <CreditCard className="h-4 w-4 text-brand-primary" />
-                <span>National ID & Verification Documents</span>
+          <div className="pt-3 border-t border-slate-200 dark:border-slate-800 space-y-3">
+            <div className="flex items-center gap-2">
+              <CreditCard className="h-4 w-4 text-brand-primary" />
+              <h3 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">
+                National ID & Documents
               </h3>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* NID Number */}
-              <div className="md:col-span-3 max-w-md">
-                <label className="block text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
-                  NID Card Number
-                </label>
-                <div className="relative flex items-center">
-                  <CreditCard className="h-4 w-4 text-slate-400 absolute left-3.5 pointer-events-none" />
-                  <input
-                    type="text"
-                    value={formData.nidNumber}
-                    onChange={(e) => setFormData({ ...formData, nidNumber: e.target.value })}
-                    placeholder="e.g. 19901234567890123"
-                    className="w-full h-11 pl-10 pr-3.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary font-mono"
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+              {/* Left Column (6 cols): NID Number, Document Checkbox, and Role Preview */}
+              <div className="lg:col-span-6 space-y-3">
+                {/* NID Card Number */}
+                <div>
+                  <label className="block text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-200 mb-1">
+                    NID Card Number
+                  </label>
+                  <div className="relative flex items-center">
+                    <CreditCard className="h-4 w-4 text-slate-400 absolute left-3 pointer-events-none" />
+                    <input
+                      type="text"
+                      value={formData.nidNumber}
+                      onChange={(e) => setFormData({ ...formData, nidNumber: e.target.value })}
+                      placeholder="e.g. 19901234567890123"
+                      className="w-full h-9 sm:h-10 pl-9 pr-3 rounded-none border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs sm:text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-brand-primary font-mono"
+                    />
+                  </div>
+                </div>
+
+                {/* Document Submission Checkbox / Terms */}
+                <div className={`p-3 rounded-none border transition-all ${
+                  formData.documentsSubmitted
+                    ? "bg-emerald-50/60 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800"
+                    : "bg-amber-50/60 dark:bg-amber-950/30 border-amber-300 dark:border-amber-800"
+                }`}>
+                  <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={formData.documentsSubmitted}
+                      onChange={(e) => setFormData({ ...formData, documentsSubmitted: e.target.checked })}
+                      className="mt-0.5 h-4 w-4 rounded-none border-slate-300 text-brand-primary focus:ring-brand-primary cursor-pointer shrink-0"
+                    />
+                    <div className="space-y-0.5">
+                      <div className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                        <FileCheck className={`h-4 w-4 shrink-0 ${formData.documentsSubmitted ? "text-emerald-600" : "text-amber-600"}`} />
+                        <span>All required certificates & documents submitted</span>
+                      </div>
+                      <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400">
+                        {formData.documentsSubmitted
+                          ? "Verified — Staff is eligible for salary disbursement."
+                          : "Unchecked — Salary disbursement blocked until verified."}
+                      </p>
+                    </div>
+                  </label>
+                </div>
+
+                {/* Role Preview Card */}
+                {selectedRoleObj && (
+                  <div className="p-2.5 sm:p-3 rounded-none bg-brand-primary/5 dark:bg-brand-primary/10 border border-brand-primary/20 flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <ShieldCheck className="h-4 w-4 text-brand-primary shrink-0" />
+                      <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">
+                        Assigned Role: {selectedRoleObj.name}
+                      </span>
+                      {selectedRoleObj.description && (
+                        <span className="text-xs text-slate-500 font-medium">
+                          ({selectedRoleObj.description})
+                        </span>
+                      )}
+                    </div>
+                    <span className="px-2 py-0.5 text-[11px] font-bold bg-brand-primary/15 text-brand-primary rounded-none">
+                      {selectedRoleObj.permissions?.length || 0} Modules Permitted
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Right Column (6 cols): NID Front & NID Back side uploads */}
+              <div className="lg:col-span-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* NID Front Side Upload */}
+                <div className="p-3 rounded-none border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
+                    <span className="h-1.5 w-1.5 rounded-full bg-brand-primary"></span>
+                    <span>NID Front Side</span>
+                  </label>
+                  <ImageUploader
+                    value={formData.nidFrontUrl}
+                    publicId={formData.nidFrontPublicId}
+                    folder="pharmacy_saas/staff_nid"
+                    label="Upload NID Front"
+                    hint="PNG, JPG up to 5MB"
+                    aspectRatio="wide"
+                    onChange={(img) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        nidFrontUrl: img?.url || "",
+                        nidFrontPublicId: img?.publicId || "",
+                      }))
+                    }
+                  />
+                </div>
+
+                {/* NID Back Side Upload */}
+                <div className="p-3 rounded-none border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
+                    <span className="h-1.5 w-1.5 rounded-full bg-purple-500"></span>
+                    <span>NID Back Side</span>
+                  </label>
+                  <ImageUploader
+                    value={formData.nidBackUrl}
+                    publicId={formData.nidBackPublicId}
+                    folder="pharmacy_saas/staff_nid"
+                    label="Upload NID Back"
+                    hint="PNG, JPG up to 5MB"
+                    aspectRatio="wide"
+                    onChange={(img) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        nidBackUrl: img?.url || "",
+                        nidBackPublicId: img?.publicId || "",
+                      }))
+                    }
                   />
                 </div>
               </div>
-
-              {/* NID Front Side Upload */}
-              <div className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2 flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-brand-primary"></span>
-                  <span>NID Front Side</span>
-                </label>
-                <ImageUploader
-                  value={formData.nidFrontUrl}
-                  publicId={formData.nidFrontPublicId}
-                  folder="pharmacy_saas/staff_nid"
-                  label="Upload NID Front"
-                  hint="PNG, JPG, WebP up to 5MB"
-                  aspectRatio="wide"
-                  onChange={(img) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      nidFrontUrl: img?.url || "",
-                      nidFrontPublicId: img?.publicId || "",
-                    }))
-                  }
-                />
-              </div>
-
-              {/* NID Back Side Upload */}
-              <div className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2 flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-purple-500"></span>
-                  <span>NID Back Side</span>
-                </label>
-                <ImageUploader
-                  value={formData.nidBackUrl}
-                  publicId={formData.nidBackPublicId}
-                  folder="pharmacy_saas/staff_nid"
-                  label="Upload NID Back"
-                  hint="PNG, JPG, WebP up to 5MB"
-                  aspectRatio="wide"
-                  onChange={(img) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      nidBackUrl: img?.url || "",
-                      nidBackPublicId: img?.publicId || "",
-                    }))
-                  }
-                />
-              </div>
-            </div>
-
-            {/* Document Submission Checkbox / Terms */}
-            <div className={`p-4 rounded-xl border transition-all ${formData.documentsSubmitted
-                ? "bg-emerald-50/60 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800"
-                : "bg-amber-50/60 dark:bg-amber-950/30 border-amber-300 dark:border-amber-800"
-              }`}>
-              <label className="flex items-start gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={formData.documentsSubmitted}
-                  onChange={(e) => setFormData({ ...formData, documentsSubmitted: e.target.checked })}
-                  className="mt-1 h-4 w-4 rounded border-slate-300 text-brand-primary focus:ring-brand-primary cursor-pointer shrink-0"
-                />
-                <div className="space-y-0.5">
-                  <div className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                    <FileCheck className={`h-4 w-4 ${formData.documentsSubmitted ? "text-emerald-600" : "text-amber-600"}`} />
-                    <span>All required certificates & documents submitted</span>
-                  </div>
-                  <p className="text-xs text-slate-500">
-                    {formData.documentsSubmitted
-                      ? "Verified — Staff is eligible for salary disbursement."
-                      : "Unchecked — Salary disbursement blocked until verified."}
-                  </p>
-                </div>
-              </label>
             </div>
           </div>
 
-          {/* Role Preview Card */}
-          {selectedRoleObj && (
-            <div className="p-3.5 rounded-lg bg-brand-primary/5 dark:bg-brand-primary/10 border border-brand-primary/20 flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="h-4 w-4 text-brand-primary" />
-                <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">
-                  Assigned Role: {selectedRoleObj.name}
-                </span>
-                {selectedRoleObj.description && (
-                  <span className="text-xs text-slate-500 font-medium">
-                    ({selectedRoleObj.description})
-                  </span>
-                )}
-              </div>
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-brand-primary/15 text-brand-primary">
-                {selectedRoleObj.permissions?.length || 0} Modules Permitted
-              </span>
-            </div>
-          )}
-
           {/* Submit Action */}
-          <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+          <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100 dark:border-slate-800">
             {onNavigate && (
               <button
                 type="button"
                 onClick={() => onNavigate("staff")}
-                className="h-10 px-5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs sm:text-sm transition"
+                className="h-9 sm:h-10 px-4 rounded-none bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold text-xs sm:text-sm transition"
               >
                 Cancel
               </button>
@@ -795,7 +812,7 @@ export function CreateStaffTab({ onNavigate }: CreateStaffTabProps) {
             <button
               type="submit"
               disabled={submitting || isTotalLimitReached}
-              className="h-10 px-6 rounded-lg bg-brand-primary hover:bg-brand-primary-hover text-white font-bold text-xs sm:text-sm shadow-xs transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="h-9 sm:h-10 px-5 rounded-none bg-brand-primary hover:bg-brand-primary-hover text-white font-semibold text-xs sm:text-sm shadow-none transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {submitting ? (
                 <>
