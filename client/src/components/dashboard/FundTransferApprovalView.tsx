@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { fetchApi } from "@/lib/api";
 import {
@@ -20,6 +20,7 @@ import {
   ShieldCheck,
   Check,
   X,
+  Tag,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -148,6 +149,36 @@ export function FundTransferApprovalView({ onNavigate }: FundTransferApprovalVie
   const [endDate, setEndDate] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Global hotkeys: Ctrl+K or '/' to focus search
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const isInput =
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.isContentEditable;
+
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+      } else if (e.key === "/" && !isInput) {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      } else if (e.key === "Escape" && document.activeElement === searchInputRef.current) {
+        if (searchQuery) {
+          setSearchQuery("");
+        } else {
+          searchInputRef.current?.blur();
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [searchQuery]);
 
   // Pagination
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -496,54 +527,121 @@ export function FundTransferApprovalView({ onNavigate }: FundTransferApprovalVie
           </div>
         )}
 
-        {/* Enhanced Modern Search Bar */}
-        <div className="space-y-1.5 pt-1">
-          <div className="relative flex items-center">
-            <div className="absolute left-3.5 flex items-center pointer-events-none text-slate-400">
+        {/* Executive Modern Search Bar */}
+        <div className="space-y-2 pt-1">
+          {/* Main Search Input Group */}
+          <div className="relative flex items-stretch border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 focus-within:border-brand-primary focus-within:ring-2 focus-within:ring-brand-primary/20 focus-within:bg-white dark:focus-within:bg-slate-900 transition-all rounded-none shadow-xs">
+            {/* Left Prefix Badge */}
+            <div className="hidden sm:flex items-center gap-2 px-3.5 bg-slate-100 dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 select-none">
               <Search className="h-4 w-4 text-brand-primary" />
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                Search
+              </span>
             </div>
 
+            {/* Mobile icon (when prefix badge is hidden) */}
+            <div className="sm:hidden flex items-center pl-3 pointer-events-none text-brand-primary">
+              <Search className="h-4 w-4" />
+            </div>
+
+            {/* Input field */}
             <input
+              ref={searchInputRef}
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by account (Cash, bKash, DBBL), staff name, slip ref..."
-              className="w-full h-10 sm:h-11 pl-10 pr-24 text-xs sm:text-sm font-semibold bg-slate-50 dark:bg-slate-800/60 border border-slate-300 dark:border-slate-700 rounded-none text-slate-900 dark:text-white placeholder:text-slate-400 placeholder:font-normal outline-none focus:border-brand-primary focus:bg-white dark:focus:bg-slate-900 transition-all shadow-2xs"
+              placeholder="Search by account (Cash, bKash, DBBL), staff member, slip reference..."
+              className="w-full h-11 px-3 sm:px-3.5 text-xs sm:text-sm font-semibold bg-transparent rounded-none text-slate-900 dark:text-white placeholder:text-slate-400 placeholder:font-normal outline-none"
             />
 
-            <div className="absolute right-3 flex items-center gap-2">
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery("")}
-                  className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition cursor-pointer"
-                  title="Clear Search"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              )}
+            {/* Right side actions */}
+            <div className="flex items-center gap-1.5 pr-2.5">
               {searchQuery ? (
-                <span className="px-2 py-0.5 text-[10px] font-bold bg-brand-primary/10 text-brand-primary border border-brand-primary/30 rounded-none">
-                  {filteredRequests.length} found
-                </span>
+                <>
+                  <span className="hidden xs:inline-flex items-center px-2 py-0.5 text-[10px] font-black uppercase tracking-wide bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 rounded-none">
+                    {filteredRequests.length} {filteredRequests.length === 1 ? "match" : "matches"}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery("");
+                      searchInputRef.current?.focus();
+                    }}
+                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition cursor-pointer rounded-none"
+                    title="Clear search (Esc)"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </>
               ) : (
-                <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                  Type to filter
-                </span>
+                <div className="hidden sm:flex items-center gap-1 select-none pr-1">
+                  <kbd className="inline-flex items-center px-1.5 py-0.5 text-[10px] font-mono font-bold bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 rounded-none shadow-2xs">
+                    Ctrl + K
+                  </kbd>
+                  <span className="text-slate-300 dark:text-slate-600 text-xs">/</span>
+                  <kbd className="inline-flex items-center px-1.5 py-0.5 text-[10px] font-mono font-bold bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 rounded-none shadow-2xs">
+                    /
+                  </kbd>
+                </div>
               )}
             </div>
           </div>
 
+          {/* Quick Filter Tags / Chips */}
+          <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1 mr-1">
+              <Tag className="h-3 w-3 text-slate-400" />
+              <span>Quick:</span>
+            </span>
+
+            {["Cash", "bKash", "Nagad", "Bank", "DBBL"].map((chip) => {
+              const isSelected = searchQuery.toLowerCase() === chip.toLowerCase();
+              return (
+                <button
+                  key={chip}
+                  type="button"
+                  onClick={() => {
+                    if (isSelected) {
+                      setSearchQuery("");
+                    } else {
+                      setSearchQuery(chip);
+                      searchInputRef.current?.focus();
+                    }
+                  }}
+                  className={`px-2.5 py-1 text-[11px] font-bold transition rounded-none border cursor-pointer ${
+                    isSelected
+                      ? "bg-brand-primary text-white border-brand-primary shadow-xs"
+                      : "bg-slate-50 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white"
+                  }`}
+                >
+                  {chip}
+                </button>
+              );
+            })}
+
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="text-[11px] font-bold text-rose-500 hover:text-rose-700 dark:hover:text-rose-400 ml-auto cursor-pointer hover:underline"
+              >
+                Clear Filter
+              </button>
+            )}
+          </div>
+
+          {/* Search Result Summary Banner if searching */}
           {searchQuery.trim() && (
-            <div className="flex items-center justify-between text-[11px] font-semibold text-slate-500 dark:text-slate-400 px-1">
-              <span>
-                Filtering by &ldquo;<strong className="text-slate-800 dark:text-slate-200">{searchQuery}</strong>&rdquo; — found{" "}
-                <strong className="text-brand-primary font-mono font-black">{filteredRequests.length}</strong> matching request{filteredRequests.length !== 1 ? "s" : ""}
+            <div className="flex items-center justify-between text-xs font-semibold px-3 py-1.5 bg-slate-50 dark:bg-slate-800/50 border border-dashed border-slate-300 dark:border-slate-700 rounded-none">
+              <span className="text-slate-600 dark:text-slate-300">
+                Filtered by: <strong className="text-brand-primary font-bold">&ldquo;{searchQuery}&rdquo;</strong>{" "}
+                — Showing <span className="text-slate-900 dark:text-white font-bold">{filteredRequests.length}</span> of{" "}
+                <span className="text-slate-900 dark:text-white font-bold">{requests.length}</span> total requests
               </span>
               <button
                 type="button"
                 onClick={() => setSearchQuery("")}
-                className="text-brand-primary hover:underline text-[11px] font-bold cursor-pointer"
+                className="text-brand-primary font-bold hover:underline text-xs cursor-pointer"
               >
                 Reset Search
               </button>
