@@ -66,6 +66,31 @@ export function PricingSection() {
   const rawPlans = settings.plans && settings.plans.length > 0 ? settings.plans : fallbackPlans;
   const displayPlans = rawPlans.filter((p: any) => p.isActive !== false);
 
+  const sortedPlans = [...displayPlans].sort((a: any, b: any) => {
+    const isCustomA = Boolean(
+      a.isCustom ||
+      a.features?.isCustom ||
+      (a.tier === "ENTERPRISE" && (a.whatsappNumber || a.features?.whatsappNumber || a.name?.toLowerCase().includes("custom")))
+    );
+    const isCustomB = Boolean(
+      b.isCustom ||
+      b.features?.isCustom ||
+      (b.tier === "ENTERPRISE" && (b.whatsappNumber || b.features?.whatsappNumber || b.name?.toLowerCase().includes("custom")))
+    );
+
+    // Custom plan always at 4th / last position
+    if (isCustomA && !isCustomB) return 1;
+    if (!isCustomA && isCustomB) return -1;
+
+    // Free Trial plan always first
+    const isTrialA = Boolean(a.tier === "TRIAL" || a.isTrial || a.features?.isTrial);
+    const isTrialB = Boolean(b.tier === "TRIAL" || b.isTrial || b.features?.isTrial);
+    if (isTrialA && !isTrialB) return -1;
+    if (!isTrialA && isTrialB) return 1;
+
+    return Number(a.price || 0) - Number(b.price || 0);
+  });
+
   return (
     <section id="pricing" className="py-24 bg-slate-100/60 dark:bg-slate-900/40 border-y border-slate-200/60 dark:border-slate-800/60">
       <div className="w-full max-w-[1720px] mx-auto px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 2xl:px-16 space-y-12 2xl:space-y-16">
@@ -109,21 +134,24 @@ export function PricingSection() {
 
         {/* Pricing Cards Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 2xl:gap-10 items-stretch">
-          {displayPlans.map((plan: any) => {
-            const isGrowth = plan.tier === "GROWTH";
+          {sortedPlans.map((plan: any, idx: number) => {
             const isTrial = Boolean(plan.tier === "TRIAL" || plan.isTrial || plan.features?.isTrial);
             const isCustom = Boolean(plan.isCustom || plan.features?.isCustom);
+            const isGrowth = plan.tier === "GROWTH" && !isTrial && !isCustom;
             const trialDays = Number(plan.trialDays || plan.features?.trialDays || 14);
             const basePrice = Number(plan.price);
             const displayPrice = isYearly ? Math.round(basePrice * 12 * 0.85) : basePrice;
             const period = isTrial ? `/${trialDays} days trial` : isCustom ? "Custom" : (isYearly ? "/year" : "/month");
             const whatsappNum = (plan.whatsappNumber || plan.features?.whatsappNumber || "8801700000000").replace(/\D/g, "");
             const whatsappMsg = encodeURIComponent(plan.customMessage || plan.features?.customMessage || `Hello, I am interested in the ${plan.name} Enterprise plan for PharmaBiz.`);
+            const isCenteredSingle = (sortedPlans.length === 4 && idx === 3) || (sortedPlans.length % 3 === 1 && idx === sortedPlans.length - 1);
 
             return (
               <div
                 key={plan.id}
                 className={`relative rounded-2xl 2xl:rounded-3xl p-8 2xl:p-10 flex flex-col justify-between transition-all duration-300 ${
+                  isCenteredSingle ? "lg:col-start-2" : ""
+                } ${
                   isTrial
                     ? "bg-white dark:bg-slate-900 border-2 border-emerald-500 shadow-xl"
                     : isGrowth

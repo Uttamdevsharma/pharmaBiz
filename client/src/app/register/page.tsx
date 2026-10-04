@@ -1176,7 +1176,16 @@ function RegisterContent() {
                   Choose Subscription Plan *
                 </label>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  {plans.map((p) => {
+                  {plans
+                    .filter((p: any) => !p.isCustom && !p.features?.isCustom && !p.name?.toLowerCase().includes("custom"))
+                    .sort((a: any, b: any) => {
+                      const isTrialA = Boolean(a.tier === "TRIAL" || a.isTrial || a.features?.isTrial || Number(a.price) === 0);
+                      const isTrialB = Boolean(b.tier === "TRIAL" || b.isTrial || b.features?.isTrial || Number(b.price) === 0);
+                      if (isTrialA && !isTrialB) return -1;
+                      if (!isTrialA && isTrialB) return 1;
+                      return Number(a.price || 0) - Number(b.price || 0);
+                    })
+                    .map((p) => {
                     const isSelected = selectedPlanId === p.id;
                     const isTrial = Boolean(p.tier === "TRIAL" || p.isTrial || p.features?.isTrial || Number(p.price) === 0);
                     const pTrialDays = Number(p.trialDays || p.features?.trialDays || 14);

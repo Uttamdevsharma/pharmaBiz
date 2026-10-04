@@ -83,6 +83,31 @@ export default function PricingPage() {
   const rawPlans = settings.plans && settings.plans.length > 0 ? settings.plans : fallbackPlans;
   const displayPlans = rawPlans.filter((p: any) => p.isActive !== false);
 
+  const sortedPlans = [...displayPlans].sort((a: any, b: any) => {
+    const isCustomA = Boolean(
+      a.isCustom ||
+      a.features?.isCustom ||
+      (a.tier === "ENTERPRISE" && (a.whatsappNumber || a.features?.whatsappNumber || a.name?.toLowerCase().includes("custom")))
+    );
+    const isCustomB = Boolean(
+      b.isCustom ||
+      b.features?.isCustom ||
+      (b.tier === "ENTERPRISE" && (b.whatsappNumber || b.features?.whatsappNumber || b.name?.toLowerCase().includes("custom")))
+    );
+
+    // Custom plan always at 4th / last position
+    if (isCustomA && !isCustomB) return 1;
+    if (!isCustomA && isCustomB) return -1;
+
+    // Free Trial plan always first
+    const isTrialA = Boolean(a.tier === "TRIAL" || a.isTrial || a.features?.isTrial);
+    const isTrialB = Boolean(b.tier === "TRIAL" || b.isTrial || b.features?.isTrial);
+    if (isTrialA && !isTrialB) return -1;
+    if (!isTrialA && isTrialB) return 1;
+
+    return Number(a.price || 0) - Number(b.price || 0);
+  });
+
   // Calculate pricing based on cycle (Yearly gets 20% discount)
   const getDisplayPrice = (monthlyPrice: number | string) => {
     const num = typeof monthlyPrice === "string" ? parseFloat(monthlyPrice) : monthlyPrice;
@@ -149,20 +174,23 @@ export default function PricingPage() {
 
 
           {/* Plans Grid */}
-          <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-8 2xl:gap-10 w-full">
-            {displayPlans.map((plan: any, idx: number) => {
+          <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-8 2xl:gap-10 w-full items-stretch">
+            {sortedPlans.map((plan: any, idx: number) => {
               const isTrial = Boolean(plan.tier === "TRIAL" || plan.isTrial || plan.features?.isTrial);
               const isCustom = Boolean(plan.isCustom || plan.features?.isCustom);
               const trialDays = Number(plan.trialDays || plan.features?.trialDays || 14);
               const displayPrice = getDisplayPrice(plan.price);
-              const isPopular = plan.tier === "GROWTH" || plan.isPopular;
+              const isPopular = (plan.tier === "GROWTH" || plan.isPopular) && !isTrial && !isCustom;
               const whatsappNum = (plan.whatsappNumber || plan.features?.whatsappNumber || "8801700000000").replace(/\D/g, "");
               const whatsappMsg = encodeURIComponent(plan.customMessage || plan.features?.customMessage || `Hello, I am interested in the ${plan.name} Enterprise plan for PharmaBiz.`);
+              const isCenteredSingle = (sortedPlans.length === 4 && idx === 3) || (sortedPlans.length % 3 === 1 && idx === sortedPlans.length - 1);
 
               return (
                 <div
                   key={plan.id || idx}
                   className={`relative rounded-3xl bg-white dark:bg-slate-900 border transition-all duration-300 flex flex-col p-6 sm:p-8 2xl:p-10 ${
+                    isCenteredSingle ? "md:col-start-2" : ""
+                  } ${
                     isTrial
                       ? "border-emerald-500 shadow-xl ring-2 ring-emerald-500/30 md:-translate-y-2"
                       : isPopular
