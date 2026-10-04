@@ -123,5 +123,5 @@ if (!process.env.VERCEL) {
   });
 }
 
-// Trigger backend restart on free port 3000
+// Trigger backend reload with latest Prisma Client models
 export default app;

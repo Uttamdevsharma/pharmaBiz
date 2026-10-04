@@ -67,6 +67,12 @@ interface VerificationApplication {
   rejectionReason?: string;
   pendingPlanId?: string;
   pendingBillingCycle?: string;
+  paymentMethod?: string;
+  manualPaymentNumber?: string;
+  manualPaymentTrxId?: string;
+  manualPaymentDocUrl?: string;
+  manualPaymentAmount?: number;
+  payment?: any;
   createdAt: string;
   owner?: {
     id: string;
@@ -111,6 +117,18 @@ export function PharmacyVerificationTab() {
   const [customStartDate, setCustomStartDate] = useState("");
   const [customEndDate, setCustomEndDate] = useState("");
 
+  // Main Tab: "registrations" (Tab 1: New Pharmacies) vs "renewals" (Tab 2: Plan Upgrades & Renewals)
+  const [mainTab, setMainTab] = useState<"registrations" | "renewals">("registrations");
+
+  // Renewals State
+  const [renewals, setRenewals] = useState<any[]>([]);
+  const [loadingRenewals, setLoadingRenewals] = useState(false);
+  const [targetRenewalToApprove, setTargetRenewalToApprove] = useState<any | null>(null);
+  const [targetRenewalToReject, setTargetRenewalToReject] = useState<any | null>(null);
+  const [renewalApproveNotes, setRenewalApproveNotes] = useState("");
+  const [renewalRejectReason, setRenewalRejectReason] = useState("");
+  const [processingRenewal, setProcessingRenewal] = useState(false);
+
   // Selected for full detail modal
   const [detailApp, setDetailApp] = useState<VerificationApplication | null>(null);
 
@@ -132,7 +150,7 @@ export function PharmacyVerificationTab() {
   const [rejecting, setRejecting] = useState(false);
 
   // Active document preview tab inside the Detail Modal
-  const [activeDetailDocTab, setActiveDetailDocTab] = useState<"nid_front" | "nid_back" | "trade" | "drug">("nid_front");
+  const [activeDetailDocTab, setActiveDetailDocTab] = useState<"nid_front" | "nid_back" | "trade" | "drug" | "payment_slip">("nid_front");
   const [inspectorZoom, setInspectorZoom] = useState(1);
   const [inspectorRotate, setInspectorRotate] = useState(0);
 
@@ -216,11 +234,12 @@ export function PharmacyVerificationTab() {
       if (res.success) {
         setFeedback({
           type: "success",
-          message: res.message || `Application for "${targetAppToApprove.name}" approved successfully! Approval email with checkout link dispatched.`,
+          message: res.message || `Application for "${targetAppToApprove.name}" approved and activated! Congratulations email with dashboard access link dispatched.`,
         });
         setIsApproveOpen(false);
         setDetailApp(null);
         loadApplications();
+        loadRenewals();
       } else {
         throw new Error(res.message || "Failed to approve application");
       }
@@ -228,6 +247,89 @@ export function PharmacyVerificationTab() {
       setFeedback({ type: "error", message: err.message || "Approval failed." });
     } finally {
       setApproving(false);
+    }
+  };
+
+  const loadRenewals = useCallback(async () => {
+    setLoadingRenewals(true);
+    try {
+      const res = await fetchApi<any>("/super-admin/pending-renewals");
+      if (res.success && res.data) {
+        setRenewals(res.data);
+      }
+    } catch (err) {
+      console.error("Failed to load pending renewals", err);
+    } finally {
+      setLoadingRenewals(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadRenewals();
+  }, [loadRenewals]);
+
+  const handleConfirmApproveRenewal = async () => {
+    if (!targetRenewalToApprove) return;
+    setProcessingRenewal(true);
+    setFeedback(null);
+
+    try {
+      const res = await fetchApi<any>(`/super-admin/renewals/${targetRenewalToApprove.id}/approve`, {
+        method: "POST",
+        body: JSON.stringify({
+          notes: renewalApproveNotes,
+        }),
+      });
+
+      if (res.success) {
+        setFeedback({
+          type: "success",
+          message: res.message || `Subscription renewal for "${targetRenewalToApprove.pharmacyName}" approved successfully! Renewal confirmation email dispatched.`,
+        });
+        setTargetRenewalToApprove(null);
+        loadRenewals();
+      } else {
+        throw new Error(res.message || "Failed to approve renewal");
+      }
+    } catch (err: any) {
+      setFeedback({ type: "error", message: err.message || "Renewal approval failed." });
+    } finally {
+      setProcessingRenewal(false);
+    }
+  };
+
+  const handleConfirmRejectRenewal = async () => {
+    if (!targetRenewalToReject) return;
+    if (!renewalRejectReason.trim()) {
+      setFeedback({ type: "error", message: "Please enter a reason for rejecting the renewal request." });
+      return;
+    }
+
+    setProcessingRenewal(true);
+    setFeedback(null);
+
+    try {
+      const res = await fetchApi<any>(`/super-admin/renewals/${targetRenewalToReject.id}/reject`, {
+        method: "POST",
+        body: JSON.stringify({
+          reason: renewalRejectReason.trim(),
+        }),
+      });
+
+      if (res.success) {
+        setFeedback({
+          type: "success",
+          message: res.message || `Renewal request for "${targetRenewalToReject.pharmacyName}" rejected. Notice recorded.`,
+        });
+        setTargetRenewalToReject(null);
+        loadRenewals();
+      } else {
+        throw new Error(res.message || "Failed to reject renewal");
+      }
+    } catch (err: any) {
+      setFeedback({ type: "error", message: err.message || "Renewal rejection failed." });
+    } finally {
+      setProcessingRenewal(false);
     }
   };
 
@@ -316,24 +418,45 @@ export function PharmacyVerificationTab() {
     };
   };
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (status: string, app?: VerificationApplication) => {
+    const isTrial = app && (
+      app.paymentMethod === "FREE_TRIAL" ||
+      app.tier === "TRIAL" ||
+      app.subscription?.plan?.tier === "TRIAL" ||
+      (app.subscription?.plan as any)?.features?.isTrial
+    );
+
     switch (status) {
       case "PENDING_APPROVAL":
         return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30 shadow-xs">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+          <div className="flex flex-col gap-1 items-start">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30 shadow-xs">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+              </span>
+              Pending Review
             </span>
-            Pending Review
-          </span>
+            {isTrial && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-black bg-purple-500/15 text-purple-700 dark:text-purple-300 border border-purple-500/30 animate-pulse">
+                🎉 Free Trial
+              </span>
+            )}
+          </div>
         );
       case "APPROVED_PENDING_PAYMENT":
         return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/30">
-            <Clock className="h-3.5 w-3.5" />
-            Approved (Awaiting Payment)
-          </span>
+          <div className="flex flex-col gap-1 items-start">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/30">
+              <Clock className="h-3.5 w-3.5" />
+              Approved (Awaiting Payment)
+            </span>
+            {isTrial && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
+                Free Trial
+              </span>
+            )}
+          </div>
         );
       case "ACTIVE":
         return (
@@ -372,10 +495,15 @@ export function PharmacyVerificationTab() {
         <div>
           <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-2.5">
             <ShieldCheck className="h-6 w-6 text-brand-primary shrink-0" />
-            <span>Pharmacy Verification</span>
+            <span>Pending Approvals & Verifications</span>
             {metrics.pendingReview > 0 && (
               <span className="px-3 py-1 rounded-full text-xs font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
-                {metrics.pendingReview} Pending
+                {metrics.pendingReview} New
+              </span>
+            )}
+            {renewals.length > 0 && (
+              <span className="px-3 py-1 rounded-full text-xs font-bold bg-pink-500/15 text-pink-600 dark:text-pink-400 border border-pink-500/30">
+                {renewals.length} Renewals
               </span>
             )}
           </h1>
@@ -383,16 +511,72 @@ export function PharmacyVerificationTab() {
 
         <button
           type="button"
-          onClick={loadApplications}
-          disabled={loading}
+          onClick={() => {
+            loadApplications();
+            loadRenewals();
+          }}
+          disabled={loading || loadingRenewals}
           className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition flex items-center gap-2 cursor-pointer shadow-xs self-start sm:self-auto active:scale-95"
         >
-          <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin text-brand-primary" : ""}`} />
-          <span>Refresh</span>
+          <RefreshCw className={`h-4 w-4 ${loading || loadingRenewals ? "animate-spin text-brand-primary" : ""}`} />
+          <span>Refresh All</span>
         </button>
       </div>
 
-      {/* Clickable Status KPI Cards */}
+      {/* 2-Tab Navigation Switcher */}
+      <div className="flex items-center gap-2 p-1.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs">
+        <button
+          type="button"
+          onClick={() => setMainTab("registrations")}
+          className={`flex-1 py-3 px-4 rounded-xl font-bold text-xs sm:text-sm transition flex items-center justify-center gap-2.5 cursor-pointer ${
+            mainTab === "registrations"
+              ? "bg-brand-primary text-white shadow-md shadow-brand-primary/20"
+              : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800"
+          }`}
+        >
+          <Building2 className="h-4 w-4" />
+          <span>Tab 1: New Pharmacy Registrations (নতুন রেজিস্ট্রেশন)</span>
+          {metrics.pendingReview > 0 && (
+            <span
+              className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                mainTab === "registrations"
+                  ? "bg-white/20 text-white"
+                  : "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30"
+              }`}
+            >
+              {metrics.pendingReview}
+            </span>
+          )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setMainTab("renewals")}
+          className={`flex-1 py-3 px-4 rounded-xl font-bold text-xs sm:text-sm transition flex items-center justify-center gap-2.5 cursor-pointer ${
+            mainTab === "renewals"
+              ? "bg-brand-primary text-white shadow-md shadow-brand-primary/20"
+              : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800"
+          }`}
+        >
+          <CreditCard className="h-4 w-4" />
+          <span>Tab 2: Plan Upgrades & Renewals (প্ল্যান রিনিউয়াল ও আপগ্রেড)</span>
+          {renewals.length > 0 && (
+            <span
+              className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                mainTab === "renewals"
+                  ? "bg-white/20 text-white"
+                  : "bg-pink-500/15 text-pink-600 dark:text-pink-400 border border-pink-500/30"
+              }`}
+            >
+              {renewals.length}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {mainTab === "registrations" ? (
+        <>
+          {/* Clickable Status KPI Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         {/* Card 1: Pending Review */}
         <div
@@ -630,7 +814,8 @@ export function PharmacyVerificationTab() {
                 <tr>
                   <th className="py-4 px-6">Pharmacy</th>
                   <th className="py-4 px-6">Owner</th>
-                  <th className="py-4 px-6">Plan</th>
+                  <th className="py-4 px-6">Plan & Total</th>
+                  <th className="py-4 px-6">bKash Remittance</th>
                   <th className="py-4 px-6">Applied Date</th>
                   <th className="py-4 px-6">Status</th>
                   <th className="py-4 px-6 text-right">Action</th>
@@ -692,16 +877,100 @@ export function PharmacyVerificationTab() {
                           </div>
                         </td>
 
-                        {/* 3. Selected Plan & Price */}
+                        {/* 3. Selected Plan & Total Price */}
                         <td className="py-4 px-6">
-                          <div>
-                            <div className="font-bold text-slate-800 dark:text-slate-200 text-sm">
-                              {plan?.name || app.tier} Plan
+                          {app.paymentMethod === "FREE_TRIAL" || app.tier === "TRIAL" || plan?.tier === "TRIAL" ? (
+                            <div>
+                              <div className="font-bold text-amber-600 dark:text-amber-400 text-sm flex items-center gap-1.5">
+                                <span>{plan?.name || "Free Trial"}</span>
+                                <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-700 dark:text-amber-300 font-extrabold border border-amber-500/20">
+                                  Trial
+                                </span>
+                              </div>
+                              <div className="text-xs text-amber-500 font-mono font-bold mt-0.5">
+                                ৳0 / {(plan as any)?.features?.trialDays || 7} Days Free
+                              </div>
+                              <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                                Total: ৳0 (No Fee)
+                              </div>
                             </div>
-                            <div className="text-xs text-brand-primary font-mono font-bold mt-0.5">
-                              ৳{payableAmount.toLocaleString()}/{billing === "YEARLY" ? "yr" : "mo"}
+                          ) : (
+                            <div>
+                              <div className="font-bold text-slate-800 dark:text-slate-200 text-sm">
+                                {plan?.name || app.tier} Plan
+                              </div>
+                              <div className="text-xs text-brand-primary font-mono font-bold mt-0.5">
+                                ৳{payableAmount.toLocaleString()}/{billing === "YEARLY" ? "yr" : "mo"}
+                              </div>
+                              <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                                Total: ৳{(app.manualPaymentAmount || payableAmount + 500).toLocaleString()}
+                              </div>
                             </div>
-                          </div>
+                          )}
+                        </td>
+
+                        {/* 4. bKash Payment Remittance */}
+                        <td className="py-4 px-6" onClick={(e) => e.stopPropagation()}>
+                          {app.paymentMethod === "FREE_TRIAL" || app.tier === "TRIAL" || plan?.tier === "TRIAL" ? (
+                            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 text-xs font-bold">
+                              <span>🎉 Free Trial (No Payment)</span>
+                            </div>
+                          ) : app.manualPaymentNumber || app.manualPaymentTrxId ? (
+                            <div className="space-y-0.5 text-xs">
+                              <div className="flex items-center gap-1 font-mono text-slate-800 dark:text-slate-200 font-bold">
+                                <span>{app.manualPaymentNumber}</span>
+                                {app.manualPaymentNumber && (
+                                  <button
+                                    type="button"
+                                    onClick={() => copyToClipboard(app.manualPaymentNumber!, `tbl-sender-${app.id}`)}
+                                    className="text-slate-400 hover:text-slate-600 cursor-pointer"
+                                    title="Copy Sender Number"
+                                  >
+                                    {copiedKey === `tbl-sender-${app.id}` ? (
+                                      <Check className="h-3 w-3 text-emerald-600" />
+                                    ) : (
+                                      <Copy className="h-3 w-3" />
+                                    )}
+                                  </button>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1 font-mono text-[11px] text-pink-600 dark:text-pink-400 font-bold">
+                                <span className="truncate max-w-[120px]">{app.manualPaymentTrxId}</span>
+                                {app.manualPaymentTrxId && (
+                                  <button
+                                    type="button"
+                                    onClick={() => copyToClipboard(app.manualPaymentTrxId!, `tbl-trx-${app.id}`)}
+                                    className="text-slate-400 hover:text-slate-600 cursor-pointer"
+                                    title="Copy TrxID"
+                                  >
+                                    {copiedKey === `tbl-trx-${app.id}` ? (
+                                      <Check className="h-3 w-3 text-emerald-600" />
+                                    ) : (
+                                      <Copy className="h-3 w-3" />
+                                    )}
+                                  </button>
+                                )}
+                              </div>
+                              {(app.manualPaymentDocUrl || app.payment?.screenshotUrl) && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setViewingDoc({
+                                      title: `bKash Payment Slip - ${app.name}`,
+                                      url: app.manualPaymentDocUrl || app.payment?.screenshotUrl,
+                                      number: app.manualPaymentTrxId || app.payment?.tranId,
+                                    })
+                                  }
+                                  className="text-[11px] text-pink-600 dark:text-pink-400 font-bold hover:underline flex items-center gap-1 mt-0.5 cursor-pointer"
+                                >
+                                  <Eye className="h-3 w-3" />
+                                  <span>View Slip</span>
+                                </button>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-slate-400 font-medium">None / Online</span>
+                          )}
                         </td>
 
                         {/* 4. Applied Date */}
@@ -720,7 +989,7 @@ export function PharmacyVerificationTab() {
 
                         {/* 5. Status Badge */}
                         <td className="py-4 px-6 whitespace-nowrap">
-                          {getStatusBadge(app.verificationStatus)}
+                          {getStatusBadge(app.verificationStatus, app)}
                         </td>
 
                         {/* 6. Action Button */}
@@ -810,6 +1079,243 @@ export function PharmacyVerificationTab() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+        </>
+      ) : (
+        /* ========================================================= */
+        /* TAB 2: PLAN UPGRADES & RENEWALS WORKBENCH                 */
+        /* ========================================================= */
+        <div className="space-y-4">
+          {/* Header Info */}
+          <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+            <div>
+              <div className="flex items-center gap-2">
+                <CreditCard className="h-5 w-5 text-pink-600" />
+                <h2 className="text-base font-extrabold text-slate-900 dark:text-white">
+                  Plan Upgrades & Manual bKash Renewals
+                </h2>
+                {renewals.length > 0 && (
+                  <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-pink-500/15 text-pink-600 dark:text-pink-400 border border-pink-500/30">
+                    {renewals.length} Pending
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Review and approve subscription upgrade or renewal remittances submitted by active pharmacies.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={loadRenewals}
+              disabled={loadingRenewals}
+              className="px-3.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 transition flex items-center gap-1.5 self-start sm:self-auto cursor-pointer"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${loadingRenewals ? "animate-spin text-pink-600" : ""}`} />
+              <span>Refresh Renewals</span>
+            </button>
+          </div>
+
+          {loadingRenewals ? (
+            <div className="py-20 text-center space-y-3 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800">
+              <Loader2 className="h-8 w-8 animate-spin text-pink-600 mx-auto" />
+              <p className="text-xs font-bold text-slate-500">Loading subscription renewal requests...</p>
+            </div>
+          ) : renewals.length === 0 ? (
+            <div className="py-20 text-center space-y-3 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 text-slate-500 p-6">
+              <CreditCard className="h-12 w-12 mx-auto text-slate-300 dark:text-slate-700" />
+              <h3 className="font-bold text-sm text-slate-700 dark:text-slate-300">
+                No Pending Plan Renewals
+              </h3>
+              <p className="text-xs max-w-sm mx-auto text-slate-400">
+                All pharmacy subscription upgrade and renewal remittances have been verified and processed.
+              </p>
+            </div>
+          ) : (
+            <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-xs flex flex-col">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead className="bg-slate-50 dark:bg-slate-850/80 border-b border-slate-200 dark:border-slate-800 text-xs font-black uppercase tracking-wider text-slate-500 select-none">
+                    <tr>
+                      <th className="py-4 px-6">Pharmacy</th>
+                      <th className="py-4 px-6">Owner</th>
+                      <th className="py-4 px-6">Current Plan</th>
+                      <th className="py-4 px-6">Requested Plan & Fee</th>
+                      <th className="py-4 px-6">bKash Remittance</th>
+                      <th className="py-4 px-6">Applied Date</th>
+                      <th className="py-4 px-6 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
+                    {renewals.map((item) => (
+                      <tr key={item.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition">
+                        {/* 1. Pharmacy */}
+                        <td className="py-4 px-6">
+                          <div>
+                            <div className="font-extrabold text-slate-900 dark:text-white text-base">
+                              {item.pharmacyName}
+                            </div>
+                            <div className="text-xs text-slate-400 font-mono mt-0.5">
+                              {item.pharmacyEmail || item.pharmacyPhone}
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* 2. Owner */}
+                        <td className="py-4 px-6">
+                          <div>
+                            <div className="font-bold text-slate-800 dark:text-slate-200 text-sm">
+                              {item.ownerName || "Owner"}
+                            </div>
+                            <div className="font-mono text-slate-500 text-xs flex items-center gap-1.5 mt-0.5">
+                              <span>{item.pharmacyPhone}</span>
+                              {item.pharmacyPhone && (
+                                <button
+                                  type="button"
+                                  onClick={() => copyToClipboard(item.pharmacyPhone, `ren-phone-${item.id}`)}
+                                  className="text-slate-400 hover:text-slate-600 cursor-pointer"
+                                >
+                                  {copiedKey === `ren-phone-${item.id}` ? (
+                                    <Check className="h-3.5 w-3.5 text-emerald-600" />
+                                  ) : (
+                                    <Copy className="h-3.5 w-3.5" />
+                                  )}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* 3. Current Plan */}
+                        <td className="py-4 px-6">
+                          <div>
+                            <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                              {item.currentPlanName || item.currentTier}
+                            </span>
+                            <div className="text-[11px] text-slate-400 mt-1">
+                              {item.currentEndDate
+                                ? `Expires: ${new Date(item.currentEndDate).toLocaleDateString()}`
+                                : "No Active End Date"}
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* 4. Requested Plan & Fee */}
+                        <td className="py-4 px-6">
+                          <div>
+                            <div className="font-bold text-slate-900 dark:text-white text-sm">
+                              {item.requestedPlanName || item.requestedPlanTier} ({item.requestedBillingCycle})
+                            </div>
+                            <div className="text-sm font-black font-mono text-pink-600 dark:text-pink-400 mt-0.5">
+                              ৳{item.amount?.toLocaleString()}
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* 5. bKash Details */}
+                        <td className="py-4 px-6">
+                          <div className="space-y-0.5 text-xs">
+                            <div className="flex items-center gap-1 font-mono text-slate-800 dark:text-slate-200 font-bold">
+                              <span className="text-[10px] text-slate-400 uppercase">From:</span>
+                              <span>{item.senderNumber}</span>
+                              {item.senderNumber && (
+                                <button
+                                  type="button"
+                                  onClick={() => copyToClipboard(item.senderNumber, `ren-sender-${item.id}`)}
+                                  className="text-slate-400 hover:text-slate-600 cursor-pointer"
+                                >
+                                  {copiedKey === `ren-sender-${item.id}` ? (
+                                    <Check className="h-3 w-3 text-emerald-600" />
+                                  ) : (
+                                    <Copy className="h-3 w-3" />
+                                  )}
+                                </button>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1 font-mono text-[11px] text-pink-600 dark:text-pink-400 font-bold">
+                              <span className="text-[10px] text-slate-400 uppercase">Trx:</span>
+                              <span className="truncate max-w-[130px]">{item.trxId}</span>
+                              {item.trxId && (
+                                <button
+                                  type="button"
+                                  onClick={() => copyToClipboard(item.trxId, `ren-trx-${item.id}`)}
+                                  className="text-slate-400 hover:text-slate-600 cursor-pointer"
+                                >
+                                  {copiedKey === `ren-trx-${item.id}` ? (
+                                    <Check className="h-3 w-3 text-emerald-600" />
+                                  ) : (
+                                    <Copy className="h-3 w-3" />
+                                  )}
+                                </button>
+                              )}
+                            </div>
+                            {item.screenshotUrl && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setViewingDoc({
+                                    title: `bKash Renewal Slip - ${item.pharmacyName}`,
+                                    url: item.screenshotUrl,
+                                    number: item.trxId,
+                                  })
+                                }
+                                className="text-[11px] text-pink-600 dark:text-pink-400 font-bold hover:underline flex items-center gap-1 mt-1 cursor-pointer"
+                              >
+                                <Eye className="h-3 w-3" />
+                                <span>Inspect Slip</span>
+                              </button>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* 6. Requested Date */}
+                        <td className="py-4 px-6 whitespace-nowrap">
+                          <div className="text-slate-800 dark:text-slate-200 font-semibold text-sm">
+                            {new Date(item.createdAt).toLocaleDateString("en-US", {
+                              day: "numeric",
+                              month: "short",
+                              year: "numeric",
+                            })}
+                          </div>
+                          <div className="text-xs text-slate-400 mt-0.5">
+                            {formatTimeAgo(item.createdAt)}
+                          </div>
+                        </td>
+
+                        {/* 7. Actions */}
+                        <td className="py-4 px-6 text-right whitespace-nowrap">
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setTargetRenewalToReject(item);
+                                setRenewalRejectReason("");
+                              }}
+                              className="px-3 py-1.5 rounded-xl border border-rose-200 dark:border-rose-900 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 font-bold text-xs transition cursor-pointer"
+                            >
+                              Reject
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setTargetRenewalToApprove(item);
+                                setRenewalApproveNotes("");
+                              }}
+                              className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-700 text-white font-bold text-xs shadow-sm transition flex items-center gap-1.5 cursor-pointer"
+                            >
+                              <Check className="h-3.5 w-3.5" />
+                              <span>Approve</span>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -947,6 +1453,80 @@ export function PharmacyVerificationTab() {
                   </div>
                 </div>
 
+                {/* bKash Payment & Remittance Dossier */}
+                <div className="p-4 rounded-2xl bg-pink-500/5 dark:bg-pink-500/10 border border-pink-500/20 space-y-3">
+                  <div className="font-extrabold text-pink-600 dark:text-pink-400 uppercase tracking-wider text-[10px] flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <CreditCard className="h-3.5 w-3.5" />
+                      Payment & Remittance Slip
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-pink-500/15 text-pink-600 dark:text-pink-400 border border-pink-500/30">
+                      {detailApp.paymentMethod === "MANUAL_BKASH" ? "bKash Send Money" : detailApp.paymentMethod || "Manual bKash"}
+                    </span>
+                  </div>
+
+                  <div className="space-y-2 text-slate-600 dark:text-slate-300">
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-400">Total Paid Amount:</span>
+                      <strong className="text-slate-900 dark:text-white font-mono text-sm">
+                        ৳{(detailApp.manualPaymentAmount || Number(detailApp.subscription?.plan?.price || 0) + 500).toLocaleString()}
+                        <span className="text-[10px] text-slate-400 font-normal ml-1">(Lic ৳500 + Plan)</span>
+                      </strong>
+                    </div>
+
+                    <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-pink-500/20 flex items-center justify-between">
+                      <div>
+                        <div className="text-[10px] font-bold text-slate-400 uppercase">bKash Sender Number</div>
+                        <div className="font-mono font-bold text-slate-900 dark:text-white">
+                          {detailApp.manualPaymentNumber || detailApp.payment?.senderNumber || "Not recorded"}
+                        </div>
+                      </div>
+                      {(detailApp.manualPaymentNumber || detailApp.payment?.senderNumber) && (
+                        <button
+                          type="button"
+                          onClick={() => copyToClipboard(detailApp.manualPaymentNumber || detailApp.payment?.senderNumber, "modal-sender")}
+                          className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
+                        >
+                          {copiedKey === "modal-sender" ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-pink-500/20 flex items-center justify-between">
+                      <div>
+                        <div className="text-[10px] font-bold text-slate-400 uppercase">Transaction ID (TrxID)</div>
+                        <div className="font-mono font-bold text-pink-600 dark:text-pink-400">
+                          {detailApp.manualPaymentTrxId || detailApp.payment?.tranId || "Not recorded"}
+                        </div>
+                      </div>
+                      {(detailApp.manualPaymentTrxId || detailApp.payment?.tranId) && (
+                        <button
+                          type="button"
+                          onClick={() => copyToClipboard(detailApp.manualPaymentTrxId || detailApp.payment?.tranId, "modal-trx")}
+                          className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
+                        >
+                          {copiedKey === "modal-trx" ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
+                        </button>
+                      )}
+                    </div>
+
+                    {(detailApp.manualPaymentDocUrl || detailApp.payment?.screenshotUrl) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveDetailDocTab("payment_slip");
+                          setInspectorZoom(1);
+                          setInspectorRotate(0);
+                        }}
+                        className="w-full py-2 px-3 rounded-xl bg-pink-500/10 hover:bg-pink-500/20 text-pink-600 dark:text-pink-400 font-bold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                        <span>Inspect bKash Payment Slip</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
                 {/* Plan Card */}
                 <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 space-y-2">
                   <div className="font-extrabold text-slate-900 dark:text-white uppercase tracking-wider text-[10px] text-brand-primary flex items-center gap-1.5">
@@ -976,7 +1556,7 @@ export function PharmacyVerificationTab() {
               {/* Right Column: High-Res Document Inspector Workbench */}
               <div className="lg:col-span-7 flex flex-col space-y-3">
                 {/* Document Selector Tabs */}
-                <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-800 rounded-2xl text-xs font-bold">
+                <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-800 rounded-2xl text-xs font-bold overflow-x-auto">
                   <button
                     type="button"
                     onClick={() => {
@@ -984,7 +1564,7 @@ export function PharmacyVerificationTab() {
                       setInspectorZoom(1);
                       setInspectorRotate(0);
                     }}
-                    className={`flex-1 py-2 px-2.5 rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5 text-[11px] ${
+                    className={`flex-1 py-2 px-2 rounded-xl transition cursor-pointer flex items-center justify-center gap-1 text-[11px] whitespace-nowrap ${
                       activeDetailDocTab === "nid_front"
                         ? "bg-white dark:bg-slate-900 text-brand-primary shadow-xs"
                         : "text-slate-500 hover:text-slate-800"
@@ -1001,7 +1581,7 @@ export function PharmacyVerificationTab() {
                       setInspectorZoom(1);
                       setInspectorRotate(0);
                     }}
-                    className={`flex-1 py-2 px-2.5 rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5 text-[11px] ${
+                    className={`flex-1 py-2 px-2 rounded-xl transition cursor-pointer flex items-center justify-center gap-1 text-[11px] whitespace-nowrap ${
                       activeDetailDocTab === "nid_back"
                         ? "bg-white dark:bg-slate-900 text-brand-primary shadow-xs"
                         : "text-slate-500 hover:text-slate-800"
@@ -1018,7 +1598,7 @@ export function PharmacyVerificationTab() {
                       setInspectorZoom(1);
                       setInspectorRotate(0);
                     }}
-                    className={`flex-1 py-2 px-2.5 rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5 text-[11px] ${
+                    className={`flex-1 py-2 px-2 rounded-xl transition cursor-pointer flex items-center justify-center gap-1 text-[11px] whitespace-nowrap ${
                       activeDetailDocTab === "trade"
                         ? "bg-white dark:bg-slate-900 text-emerald-600 shadow-xs"
                         : "text-slate-500 hover:text-slate-800"
@@ -1035,7 +1615,7 @@ export function PharmacyVerificationTab() {
                       setInspectorZoom(1);
                       setInspectorRotate(0);
                     }}
-                    className={`flex-1 py-2 px-2.5 rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5 text-[11px] ${
+                    className={`flex-1 py-2 px-2 rounded-xl transition cursor-pointer flex items-center justify-center gap-1 text-[11px] whitespace-nowrap ${
                       activeDetailDocTab === "drug"
                         ? "bg-white dark:bg-slate-900 text-purple-600 shadow-xs"
                         : "text-slate-500 hover:text-slate-800"
@@ -1043,6 +1623,23 @@ export function PharmacyVerificationTab() {
                   >
                     <Pill className="h-3.5 w-3.5" />
                     <span>DGDA Lic</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveDetailDocTab("payment_slip");
+                      setInspectorZoom(1);
+                      setInspectorRotate(0);
+                    }}
+                    className={`flex-1 py-2 px-2 rounded-xl transition cursor-pointer flex items-center justify-center gap-1 text-[11px] whitespace-nowrap ${
+                      activeDetailDocTab === "payment_slip"
+                        ? "bg-white dark:bg-slate-900 text-pink-600 shadow-xs"
+                        : "text-slate-500 hover:text-slate-800"
+                    }`}
+                  >
+                    <CreditCard className="h-3.5 w-3.5" />
+                    <span>bKash Slip</span>
                   </button>
                 </div>
 
@@ -1068,6 +1665,10 @@ export function PharmacyVerificationTab() {
                     docUrl = detailApp.drugLicenseDocUrl || detailApp.drugLicenseFrontUrl || "";
                     docTitle = `DGDA Drug License - ${detailApp.name}`;
                     docNumber = detailApp.drugLicenseNumber || "";
+                  } else if (activeDetailDocTab === "payment_slip") {
+                    docUrl = detailApp.manualPaymentDocUrl || detailApp.payment?.screenshotUrl || "";
+                    docTitle = `bKash Payment Slip / Remittance Screenshot - ${detailApp.name}`;
+                    docNumber = detailApp.manualPaymentTrxId || detailApp.payment?.tranId || "";
                   }
 
                   if (!docUrl) {
@@ -1353,7 +1954,7 @@ export function PharmacyVerificationTab() {
               </div>
 
               <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-800 dark:text-emerald-300 text-[11px] leading-relaxed">
-                <strong>Automated Flow:</strong> Upon approval, an official congratulatory email containing the secure SSLCOMMERZ checkout link will immediately be sent to <strong>{targetAppToApprove.email}</strong>. Once payment clears, their pharmacy dashboard unlocks automatically.
+                <strong>Direct Activation Flow:</strong> Upon approval, this pharmacy and its subscription are immediately <strong>ACTIVATED</strong>, and the payment proof is verified. An official congratulations email will be sent to <strong>{targetAppToApprove.email}</strong> with their login email reminder, password instructions, and direct portal link.
               </div>
             </div>
 
@@ -1486,6 +2087,214 @@ export function PharmacyVerificationTab() {
                   <>
                     <X className="h-4 w-4" />
                     <span>Confirm Rejection & Send Notice</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* RENEWAL APPROVE CONFIRMATION MODAL                        */}
+      {/* ========================================================= */}
+      {targetRenewalToApprove && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-lg w-full shadow-2xl p-6 space-y-5 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="h-11 w-11 rounded-2xl bg-emerald-500/15 text-emerald-600 flex items-center justify-center shadow-sm">
+                  <CheckCircle2 className="h-6 w-6" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-base text-slate-900 dark:text-white">
+                    Approve Plan Upgrade / Renewal
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Pharmacy: <strong>{targetRenewalToApprove.pharmacyName}</strong>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTargetRenewalToApprove(null)}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 text-xs">
+              <div className="flex justify-between">
+                <span className="text-slate-400">Target Plan:</span>
+                <strong className="text-slate-900 dark:text-white font-bold">
+                  {targetRenewalToApprove.requestedPlanName || targetRenewalToApprove.requestedPlanTier} ({targetRenewalToApprove.requestedBillingCycle})
+                </strong>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Remittance Amount:</span>
+                <strong className="text-pink-600 dark:text-pink-400 font-mono font-bold text-sm">
+                  ৳{targetRenewalToApprove.amount?.toLocaleString()}
+                </strong>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">bKash Sender Phone:</span>
+                <span className="font-mono text-slate-800 dark:text-slate-200 font-bold">
+                  {targetRenewalToApprove.senderNumber}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Transaction ID (TrxID):</span>
+                <span className="font-mono text-slate-800 dark:text-slate-200 font-bold">
+                  {targetRenewalToApprove.trxId}
+                </span>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                Internal Verification Notes (Optional)
+              </label>
+              <textarea
+                rows={2}
+                value={renewalApproveNotes}
+                onChange={(e) => setRenewalApproveNotes(e.target.value)}
+                placeholder="e.g. bKash payment verified against statement, activated."
+                className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs focus:outline-none focus:ring-2 focus:ring-brand-primary"
+              />
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-800 dark:text-emerald-300 text-[11px] leading-relaxed">
+              <strong>Instant Activation:</strong> Approving this request instantly upgrades the pharmacy&apos;s active subscription tier, calculates the new validity date, validates the payment record, and sends a formal renewal approval confirmation email to the owner.
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setTargetRenewalToApprove(null)}
+                className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmApproveRenewal}
+                disabled={processingRenewal}
+                className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-700 text-white font-bold text-xs shadow-lg shadow-emerald-500/25 transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {processingRenewal ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Activating Subscription...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="h-4 w-4" />
+                    <span>Confirm Approval & Extend Subscription</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* RENEWAL REJECT CONFIRMATION MODAL                         */}
+      {/* ========================================================= */}
+      {targetRenewalToReject && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-lg w-full shadow-2xl p-6 space-y-5 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="h-11 w-11 rounded-2xl bg-rose-500/15 text-rose-600 flex items-center justify-center shadow-sm">
+                  <XCircle className="h-6 w-6" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-base text-slate-900 dark:text-white">
+                    Reject Renewal Request
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Pharmacy: <strong>{targetRenewalToReject.pharmacyName}</strong> (TrxID: {targetRenewalToReject.trxId})
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTargetRenewalToReject(null)}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                  Reason for Rejection (Required) *
+                </label>
+                <textarea
+                  rows={3}
+                  required
+                  value={renewalRejectReason}
+                  onChange={(e) => setRenewalRejectReason(e.target.value)}
+                  placeholder="Specify why this remittance was rejected (e.g. TrxID not found in statement)..."
+                  className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs focus:outline-none focus:ring-2 focus:ring-rose-500"
+                />
+              </div>
+
+              {/* Quick Preset Chips */}
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5">
+                  Quick Reason Presets:
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    "Transaction ID (TrxID) not found in statement",
+                    "Received amount is less than requested plan fee",
+                    "Duplicate transaction ID submitted",
+                    "Screenshot image is illegible or corrupted",
+                  ].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setRenewalRejectReason(preset)}
+                      className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 text-[10px] font-medium transition cursor-pointer"
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-800 dark:text-rose-300 text-[11px] leading-relaxed">
+                This renewal remittance will be marked as cancelled. The pharmacy owner will be able to submit a corrected payment request.
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setTargetRenewalToReject(null)}
+                className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmRejectRenewal}
+                disabled={processingRenewal || !renewalRejectReason.trim()}
+                className="px-6 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-lg shadow-rose-500/25 transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {processingRenewal ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Rejecting...</span>
+                  </>
+                ) : (
+                  <>
+                    <X className="h-4 w-4" />
+                    <span>Confirm Rejection</span>
                   </>
                 )}
               </button>

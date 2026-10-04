@@ -44,6 +44,12 @@ export const registerOwnerSchema = z.object({
 
   planId: z.string().optional(),
   billingCycle: z.enum(["MONTHLY", "YEARLY"]).optional().default("MONTHLY"),
+
+  // Payment information
+  paymentMethod: z.string().optional().default("MANUAL_BKASH"),
+  manualPaymentNumber: z.string().optional(),
+  manualPaymentTrxId: z.string().optional(),
+  manualPaymentDocument: z.string().optional(), // base64 screenshot
 });
 
 export type RegisterOwnerRequest = z.infer<typeof registerOwnerSchema>;
@@ -61,3 +67,17 @@ export const resendOtpSchema = z.object({
 });
 
 export type ResendOtpRequest = z.infer<typeof resendOtpSchema>;
+
+export const forgotPasswordSchema = z.object({
+  email: z.string().email("Please provide a valid registered email address"),
+});
+
+export type ForgotPasswordRequest = z.infer<typeof forgotPasswordSchema>;
+
+export const resetPasswordSchema = z.object({
+  email: z.string().email("Please provide a valid registered email address"),
+  otpCode: z.string().min(4, "OTP code is required"),
+  newPassword: z.string().min(6, "Password must be at least 6 characters"),
+});
+
+export type ResetPasswordRequest = z.infer<typeof resetPasswordSchema>;

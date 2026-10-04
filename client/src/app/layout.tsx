@@ -98,6 +98,47 @@ export default async function RootLayout({
             `,
           }}
         />
+        <script
+          id="strip-extension-attributes"
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  var strip = function(el) {
+                    if (el && el.removeAttribute) {
+                      el.removeAttribute('bis_skin_checked');
+                    }
+                  };
+                  var observer = new MutationObserver(function(mutations) {
+                    for (var i = 0; i < mutations.length; i++) {
+                      var m = mutations[i];
+                      if (m.type === 'attributes' && m.attributeName === 'bis_skin_checked') {
+                        strip(m.target);
+                      } else if (m.type === 'childList') {
+                        for (var j = 0; j < m.addedNodes.length; j++) {
+                          var node = m.addedNodes[j];
+                          if (node.nodeType === 1) {
+                            strip(node);
+                            if (node.querySelectorAll) {
+                              var items = node.querySelectorAll('[bis_skin_checked]');
+                              for (var k = 0; k < items.length; k++) strip(items[k]);
+                            }
+                          }
+                        }
+                      }
+                    }
+                  });
+                  observer.observe(document.documentElement, {
+                    attributes: true,
+                    subtree: true,
+                    childList: true,
+                    attributeFilter: ['bis_skin_checked']
+                  });
+                } catch (e) {}
+              })();
+            `,
+          }}
+        />
       </head>
       <body
         className="antialiased min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100"

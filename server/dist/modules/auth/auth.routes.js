@@ -10,5 +10,7 @@ router.post("/login", auth_controller_1.AuthController.login);
 router.post("/register-owner", auth_controller_1.AuthController.registerOwner);
 router.post("/verify-otp", auth_controller_1.AuthController.verifyOtp);
 router.post("/resend-otp", auth_controller_1.AuthController.resendOtp);
+router.post("/forgot-password", auth_controller_1.AuthController.forgotPassword);
+router.post("/reset-password", auth_controller_1.AuthController.resetPassword);
 router.get("/verification-status", auth_controller_1.AuthController.getVerificationStatus);
 router.get("/me", authenticate_1.authenticate, auth_controller_1.AuthController.getMe);

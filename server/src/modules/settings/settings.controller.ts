@@ -98,5 +98,36 @@ export class SettingsController {
       res.status(400).json({ success: false, message: error.message });
     }
   }
+
+  static async getPublicPaymentGateways(req: Request, res: Response): Promise<void> {
+    try {
+      const data = await SettingsService.getPublicPaymentGateways();
+      res.status(200).json({ success: true, data });
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
+
+  static async getAdminPaymentGateways(req: Request, res: Response): Promise<void> {
+    try {
+      const data = await SettingsService.getPaymentGatewaySettings();
+      res.status(200).json({ success: true, data });
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
+
+  static async updatePaymentGatewaySettings(req: Request, res: Response): Promise<void> {
+    try {
+      const updated = await SettingsService.updatePaymentGatewaySettings(req.body);
+      res.status(200).json({
+        success: true,
+        message: "Payment gateway configuration saved successfully",
+        data: updated,
+      });
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  }
 }
 

@@ -34,9 +34,12 @@ import {
   Percent,
   X,
   ExternalLink,
-  Info,
   ShieldAlert,
   Database,
+  Copy,
+  Smartphone,
+  CheckCheck,
+  Info,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/common/ThemeToggle";
 
@@ -181,22 +184,51 @@ function RegisterContent() {
     if (error) setError(null);
   };
 
+  // Payment Gateways & Manual bKash State
+  const [gateways, setGateways] = useState<any>({
+    manualBkash: {
+      enabled: true,
+      accountNumber: "01750000000",
+      accountType: "Personal",
+      instructions: "অনুগ্রহ করে এই পার্সোনাল বিকাশ নাম্বারে Send Money করুন। রেফারেন্স হিসেবে আপনার ফার্মেসির নাম ব্যবহার করুন।",
+    },
+    sslcommerz: { enabled: false },
+  });
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<"MANUAL_BKASH" | "SSLCOMMERZ">("MANUAL_BKASH");
+  const [manualSenderNumber, setManualSenderNumber] = useState<string>("");
+  const [manualTrxId, setManualTrxId] = useState<string>("");
+  const [manualPaymentDoc, setManualPaymentDoc] = useState<DocumentUploadState | null>(null);
+  const [copiedNumber, setCopiedNumber] = useState(false);
+
   useEffect(() => {
-    async function loadPlans() {
+    async function loadData() {
       try {
-        const res = await fetchApi<any[]>("/subscriptions/plans");
-        if (res.success && res.data && res.data.length > 0) {
-          setPlans(res.data);
+        const [plansRes, gwRes] = await Promise.all([
+          fetchApi<any[]>("/subscriptions/plans"),
+          fetchApi<any>("/settings/payment-gateways"),
+        ]);
+
+        if (plansRes.success && plansRes.data && plansRes.data.length > 0) {
+          setPlans(plansRes.data);
           if (!selectedPlanId) {
-            const starter = res.data.find((p: any) => p.tier === "STARTER") || res.data[0];
+            const starter = plansRes.data.find((p: any) => p.tier === "STARTER") || plansRes.data[0];
             setSelectedPlanId(starter.id);
           }
         }
+
+        if (gwRes.success && gwRes.data) {
+          setGateways(gwRes.data);
+          if (!gwRes.data.manualBkash?.enabled && gwRes.data.sslcommerz?.enabled) {
+            setSelectedPaymentMethod("SSLCOMMERZ");
+          } else {
+            setSelectedPaymentMethod("MANUAL_BKASH");
+          }
+        }
       } catch (err) {
-        console.warn("Could not fetch plans", err);
+        console.warn("Could not fetch plans or gateway settings", err);
       }
     }
-    loadPlans();
+    loadData();
   }, []);
 
   // OTP Countdown timer
@@ -216,7 +248,15 @@ function RegisterContent() {
     maxBranches: 1,
   };
 
-  const INITIAL_LICENSE_FEE = 5000;
+  const isTrialPlan = Boolean(
+    selectedPlan.tier === "TRIAL" ||
+    selectedPlan.isTrial ||
+    selectedPlan.features?.isTrial ||
+    Number(selectedPlan.price) === 0
+  );
+  const trialDays = Number(selectedPlan.trialDays || selectedPlan.features?.trialDays || 14);
+
+  const INITIAL_LICENSE_FEE = isTrialPlan ? 0 : 5000;
   const DATA_RETENTION_FEE = 3000;
   const DATA_RETENTION_DAYS = 90;
 
@@ -224,8 +264,8 @@ function RegisterContent() {
   const [showTermsModal, setShowTermsModal] = useState(false);
 
   const basePrice = Number(selectedPlan.price || 0);
-  const planPrice = billingCycle === "YEARLY" ? Math.round(basePrice * 12 * 0.85) : basePrice;
-  const totalPrice = INITIAL_LICENSE_FEE + planPrice;
+  const planPrice = isTrialPlan ? 0 : (billingCycle === "YEARLY" ? Math.round(basePrice * 12 * 0.85) : basePrice);
+  const totalPrice = isTrialPlan ? 0 : (INITIAL_LICENSE_FEE + planPrice);
 
   // File Converter helper
   const handleFileChange = (
@@ -347,6 +387,24 @@ function RegisterContent() {
       return;
     }
 
+    if (!isTrialPlan && selectedPaymentMethod === "MANUAL_BKASH") {
+      const pErrors: Record<string, string> = {};
+      if (!manualSenderNumber.trim() || manualSenderNumber.trim().length < 11) {
+        pErrors.manualSenderNumber = "Please enter a valid 11-digit bKash sender phone number.";
+      }
+      if (!manualTrxId.trim() || manualTrxId.trim().length < 4) {
+        pErrors.manualTrxId = "Please enter the Transaction ID (TrxID) from your bKash app.";
+      }
+      if (!manualPaymentDoc) {
+        pErrors.manualPaymentDoc = "Please upload the payment confirmation screenshot.";
+      }
+      if (Object.keys(pErrors).length > 0) {
+        setFieldErrors((prev) => ({ ...prev, ...pErrors }));
+        setError("Please complete all required bKash payment verification details.");
+        return;
+      }
+    }
+
     if (!agreedToTerms) {
       setFieldErrors((prev) => ({
         ...prev,
@@ -384,6 +442,12 @@ function RegisterContent() {
 
           planId: selectedPlan.id,
           billingCycle,
+
+          // Payment Details
+          paymentMethod: isTrialPlan ? "FREE_TRIAL" : selectedPaymentMethod,
+          manualPaymentNumber: isTrialPlan ? undefined : manualSenderNumber,
+          manualPaymentTrxId: isTrialPlan ? undefined : manualTrxId.trim().toUpperCase(),
+          manualPaymentDocument: isTrialPlan ? undefined : manualPaymentDoc?.base64,
         }),
       });
 
@@ -1114,6 +1178,8 @@ function RegisterContent() {
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   {plans.map((p) => {
                     const isSelected = selectedPlanId === p.id;
+                    const isTrial = Boolean(p.tier === "TRIAL" || p.isTrial || p.features?.isTrial || Number(p.price) === 0);
+                    const pTrialDays = Number(p.trialDays || p.features?.trialDays || 14);
                     const price = Number(p.price);
                     return (
                       <div
@@ -1131,10 +1197,26 @@ function RegisterContent() {
                           </div>
                         )}
                         <div>
-                          <div className="text-sm font-bold text-slate-900 dark:text-white">{p.name}</div>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-sm font-bold text-slate-900 dark:text-white">{p.name}</span>
+                            {isTrial && (
+                              <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400">
+                                Free Trial
+                              </span>
+                            )}
+                          </div>
                           <div className="text-xl font-black text-brand-primary mt-1 font-mono">
-                            ৳{price.toLocaleString()}
-                            <span className="text-xs font-normal text-slate-400">/mo</span>
+                            {isTrial ? (
+                              <>
+                                ৳0
+                                <span className="text-xs font-normal text-slate-400"> ({pTrialDays} Days)</span>
+                              </>
+                            ) : (
+                              <>
+                                ৳{price.toLocaleString()}
+                                <span className="text-xs font-normal text-slate-400">/mo</span>
+                              </>
+                            )}
                           </div>
                         </div>
                         <div className="text-xs text-slate-500 mt-2 font-medium">
@@ -1146,26 +1228,28 @@ function RegisterContent() {
                 </div>
               </div>
 
-              {/* Billing Toggle */}
-              <div className="flex items-center justify-between p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 text-sm">
-                <span className="font-bold text-slate-700 dark:text-slate-300">Billing Interval</span>
-                <div className="flex items-center gap-1 bg-slate-200 dark:bg-slate-700 p-1 rounded-lg text-xs font-bold">
-                  <button
-                    type="button"
-                    onClick={() => setBillingCycle("MONTHLY")}
-                    className={`px-3.5 py-1.5 rounded-md ${billingCycle === "MONTHLY" ? "bg-white dark:bg-slate-900 text-brand-primary shadow-xs" : "text-slate-500"}`}
-                  >
-                    Monthly
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setBillingCycle("YEARLY")}
-                    className={`px-3.5 py-1.5 rounded-md ${billingCycle === "YEARLY" ? "bg-white dark:bg-slate-900 text-brand-primary shadow-xs" : "text-slate-500"}`}
-                  >
-                    Yearly (-15%)
-                  </button>
+              {/* Billing Toggle (hidden for free trial) */}
+              {!isTrialPlan && (
+                <div className="flex items-center justify-between p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 text-sm">
+                  <span className="font-bold text-slate-700 dark:text-slate-300">Billing Interval</span>
+                  <div className="flex items-center gap-1 bg-slate-200 dark:bg-slate-700 p-1 rounded-lg text-xs font-bold">
+                    <button
+                      type="button"
+                      onClick={() => setBillingCycle("MONTHLY")}
+                      className={`px-3.5 py-1.5 rounded-md ${billingCycle === "MONTHLY" ? "bg-white dark:bg-slate-900 text-brand-primary shadow-xs" : "text-slate-500"}`}
+                    >
+                      Monthly
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBillingCycle("YEARLY")}
+                      className={`px-3.5 py-1.5 rounded-md ${billingCycle === "YEARLY" ? "bg-white dark:bg-slate-900 text-brand-primary shadow-xs" : "text-slate-500"}`}
+                    >
+                      Yearly (-15%)
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Initial Investment & License Fee Breakdown Card */}
               <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-slate-50 to-brand-primary/5 dark:from-slate-800/60 dark:to-brand-primary/10 border border-brand-primary/20 space-y-3">
@@ -1173,11 +1257,11 @@ function RegisterContent() {
                   <div className="flex items-center gap-2">
                     <ShieldCheck className="h-4 w-4 text-brand-primary" />
                     <span className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
-                      Initial Registration Investment
+                      {isTrialPlan ? "Free Trial Registration Summary" : "Initial Registration Investment"}
                     </span>
                   </div>
                   <span className="text-[11px] font-semibold text-brand-primary bg-brand-primary/10 px-2.5 py-0.5 rounded-full">
-                    Transparent Pricing
+                    {isTrialPlan ? `${trialDays} Days Free Trial` : "Transparent Pricing"}
                   </span>
                 </div>
 
@@ -1187,36 +1271,324 @@ function RegisterContent() {
                       <FileCheck className="h-3.5 w-3.5 text-brand-primary shrink-0" />
                       <span>One-Time Software License Fee:</span>
                     </div>
-                    <span className="font-bold text-slate-900 dark:text-white font-mono">৳5,000</span>
+                    <span className="font-bold text-slate-900 dark:text-white font-mono">
+                      {isTrialPlan ? <span className="text-emerald-600 font-bold">Waived (৳0)</span> : "৳5,000"}
+                    </span>
                   </div>
 
                   <div className="flex items-center justify-between text-slate-600 dark:text-slate-300">
                     <div className="flex items-center gap-1.5">
                       <Sparkles className="h-3.5 w-3.5 text-amber-500 shrink-0" />
                       <span>
-                        {selectedPlan.name} ({billingCycle === "YEARLY" ? "Yearly - 15% Off" : "Monthly"}):
+                        {selectedPlan.name} ({isTrialPlan ? `${trialDays} Days Full Access` : billingCycle === "YEARLY" ? "Yearly - 15% Off" : "Monthly"}):
                       </span>
                     </div>
-                    <span className="font-bold text-slate-900 dark:text-white font-mono">৳{planPrice.toLocaleString()}</span>
+                    <span className="font-bold text-slate-900 dark:text-white font-mono">
+                      {isTrialPlan ? <span className="text-emerald-600 font-bold">৳0</span> : `৳${planPrice.toLocaleString()}`}
+                    </span>
                   </div>
 
                   <div className="border-t border-slate-200 dark:border-slate-700/80 pt-2.5 flex items-center justify-between">
                     <div>
                       <div className="font-extrabold text-sm sm:text-base text-slate-900 dark:text-white">
-                        Total Payable Upon Approval:
+                        {isTrialPlan ? "Total Payable Now:" : "Total Payable Upon Approval:"}
                       </div>
                       <div className="text-[11px] text-slate-400">
-                        License fee (৳5,000) + Selected Plan (৳{planPrice.toLocaleString()})
+                        {isTrialPlan
+                          ? "No payment or credit card required during trial period"
+                          : `License fee (৳5,000) + Selected Plan (৳${planPrice.toLocaleString()})`}
                       </div>
                     </div>
                     <div className="text-right">
-                      <span className="text-xl sm:text-2xl font-black text-brand-primary font-mono">
-                        ৳{totalPrice.toLocaleString()}
+                      <span className="text-xl sm:text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono">
+                        {isTrialPlan ? "৳0" : `৳${totalPrice.toLocaleString()}`}
                       </span>
                     </div>
                   </div>
                 </div>
               </div>
+
+              {/* ================= PAYMENT METHOD SELECTION & DETAILS ================= */}
+              {isTrialPlan ? (
+                <div className="p-5 rounded-2xl bg-gradient-to-br from-emerald-50/80 via-teal-50/50 to-emerald-50/80 dark:from-emerald-950/20 dark:via-teal-950/10 dark:to-emerald-950/20 border-2 border-emerald-500/30 space-y-3">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center font-bold text-sm shadow-sm shadow-emerald-500/20 shrink-0">
+                      <Sparkles className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <div className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                        <span>🎉 Free Trial Registration (পেমেন্ট লাগবে না)</span>
+                        <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300">
+                          {trialDays} Days Free
+                        </span>
+                      </div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400">
+                        No credit card or bKash remittance required
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-xs text-emerald-900 dark:text-emerald-200 leading-relaxed bg-white/80 dark:bg-slate-900/80 p-3.5 rounded-xl border border-emerald-500/20 flex items-start gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+                    <div>
+                      আপনার এই ফ্রি ট্রায়াল রেজিস্ট্রেশনের জন্য কোনো টাকা পাঠানো লাগবে না। ড্রাগ লাইসেন্স ও প্রয়োজনীয় কাগজপত্র যাচাই সাপেক্ষে সুপার অ্যাডমিন অনুমোদন করলেই আপনি <strong>{trialDays} দিন</strong> সম্পূর্ণ ফ্রিতে সফটওয়্যার ব্যবহার করতে পারবেন। নিচের বক্সে সম্মতি দিয়ে OTP ভেরিফিকেশনের জন্য সাবমিট করুন।
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                      <CreditCard className="h-4 w-4 text-brand-primary" />
+                      <span>Payment & Verification (পেমেন্ট ও ভেরিফিকেশন)</span>
+                    </h3>
+                    <span className="text-[11px] font-semibold text-brand-primary bg-brand-primary/10 px-2 py-0.5 rounded-full">
+                      Step 3 of 3
+                    </span>
+                  </div>
+
+                {/* Gateway Switcher if both are active */}
+                {gateways.manualBkash?.enabled && gateways.sslcommerz?.enabled && (
+                  <div className="grid grid-cols-2 gap-3 p-1.5 bg-slate-100 dark:bg-slate-800 rounded-2xl">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPaymentMethod("MANUAL_BKASH")}
+                      className={`py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold transition flex items-center justify-center gap-2 cursor-pointer ${
+                        selectedPaymentMethod === "MANUAL_BKASH"
+                          ? "bg-[#D12053] text-white shadow-md shadow-[#D12053]/20"
+                          : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
+                      }`}
+                    >
+                      <Smartphone className="h-4 w-4" />
+                      <span>bKash Send Money</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPaymentMethod("SSLCOMMERZ")}
+                      className={`py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold transition flex items-center justify-center gap-2 cursor-pointer ${
+                        selectedPaymentMethod === "SSLCOMMERZ"
+                          ? "bg-brand-primary text-white shadow-md shadow-brand-primary/20"
+                          : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
+                      }`}
+                    >
+                      <CreditCard className="h-4 w-4" />
+                      <span>Online Payment (SSLCommerz)</span>
+                    </button>
+                  </div>
+                )}
+
+                {/* MANUAL BKASH PAYMENT BOX */}
+                {selectedPaymentMethod === "MANUAL_BKASH" && (
+                  <div className="p-5 rounded-2xl bg-gradient-to-br from-pink-50/60 to-rose-50/40 dark:from-pink-950/20 dark:to-slate-900 border-2 border-pink-200 dark:border-pink-900/60 space-y-4">
+                    {/* bKash Header Badge & Number Card */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl bg-white dark:bg-slate-900 border border-pink-200/80 dark:border-pink-900/50 shadow-xs">
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-xl bg-[#D12053] text-white flex items-center justify-center font-black text-xs shrink-0 shadow-sm shadow-[#D12053]/30">
+                          bKash
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                              bKash Send Money Number:
+                            </span>
+                            <span className="text-[10px] uppercase font-extrabold px-2 py-0.5 rounded-full bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300">
+                              {gateways.manualBkash?.accountType || "Personal"}
+                            </span>
+                          </div>
+                          <div className="text-base sm:text-lg font-black text-[#D12053] font-mono tracking-wider">
+                            {gateways.manualBkash?.accountNumber || "01750000000"}
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const num = gateways.manualBkash?.accountNumber || "01750000000";
+                          navigator.clipboard.writeText(num);
+                          setCopiedNumber(true);
+                          setTimeout(() => setCopiedNumber(false), 2000);
+                        }}
+                        className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-pink-50 text-[#D12053] hover:bg-pink-100 dark:bg-pink-950/40 dark:hover:bg-pink-900/60 border border-pink-200 dark:border-pink-900 transition active:scale-95 cursor-pointer"
+                      >
+                        {copiedNumber ? (
+                          <>
+                            <CheckCheck className="h-3.5 w-3.5 text-emerald-600" />
+                            <span className="text-emerald-600">কপি হয়েছে!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="h-3.5 w-3.5" />
+                            <span>নম্বর কপি করুন</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+
+                    {/* Instruction Alert */}
+                    <div className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed bg-pink-50/50 dark:bg-pink-950/10 p-3.5 rounded-xl border border-pink-100 dark:border-pink-900/30 flex items-start gap-2">
+                      <Info className="h-4 w-4 text-[#D12053] shrink-0 mt-0.5" />
+                      <div>
+                        {gateways.manualBkash?.instructions ||
+                          "অনুগ্রহ করে উপরের নম্বরে Send Money করুন। মোট প্রদেয়: ৳" + totalPrice.toLocaleString() + "। টাকা পাঠানোর পর প্রেরকের নম্বর, TrxID এবং স্ক্রিনশট আপলোড করুন।"}
+                      </div>
+                    </div>
+
+                    {/* 3 Form Inputs */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                      {/* Sender Phone Number */}
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                          বিকাশ প্রেরকের নম্বর (Sender Phone) <span className="text-rose-500">*</span>
+                        </label>
+                        <div className="relative">
+                          <Phone className="h-4 w-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                          <input
+                            type="text"
+                            value={manualSenderNumber}
+                            onChange={(e) => {
+                              const clean = e.target.value.replace(/\D/g, "").slice(0, 12);
+                              setManualSenderNumber(clean);
+                              if (fieldErrors.manualSenderNumber) {
+                                setFieldErrors((prev) => {
+                                  const n = { ...prev };
+                                  delete n.manualSenderNumber;
+                                  return n;
+                                });
+                              }
+                            }}
+                            placeholder="01XXXXXXXXX"
+                            className={`w-full pl-10 pr-3 py-2.5 rounded-xl border text-sm font-mono focus:outline-none transition ${
+                              fieldErrors.manualSenderNumber
+                                ? "border-rose-500 focus:ring-2 focus:ring-rose-500/20"
+                                : "border-slate-300 dark:border-slate-700 focus:border-[#D12053]"
+                            } bg-white dark:bg-slate-900 text-slate-900 dark:text-white`}
+                          />
+                        </div>
+                        {fieldErrors.manualSenderNumber && (
+                          <p className="text-[11px] text-rose-500 font-medium mt-1">
+                            {fieldErrors.manualSenderNumber}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Transaction ID */}
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                          ট্রানজেকশন আইডি (Transaction ID / TrxID) <span className="text-rose-500">*</span>
+                        </label>
+                        <div className="relative">
+                          <KeyRound className="h-4 w-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                          <input
+                            type="text"
+                            value={manualTrxId}
+                            onChange={(e) => {
+                              setManualTrxId(e.target.value.toUpperCase());
+                              if (fieldErrors.manualTrxId) {
+                                setFieldErrors((prev) => {
+                                  const n = { ...prev };
+                                  delete n.manualTrxId;
+                                  return n;
+                                });
+                              }
+                            }}
+                            placeholder="e.g. BL6A59X..."
+                            className={`w-full pl-10 pr-3 py-2.5 rounded-xl border text-sm font-mono uppercase focus:outline-none transition ${
+                              fieldErrors.manualTrxId
+                                ? "border-rose-500 focus:ring-2 focus:ring-rose-500/20"
+                                : "border-slate-300 dark:border-slate-700 focus:border-[#D12053]"
+                            } bg-white dark:bg-slate-900 text-slate-900 dark:text-white`}
+                          />
+                        </div>
+                        {fieldErrors.manualTrxId && (
+                          <p className="text-[11px] text-rose-500 font-medium mt-1">
+                            {fieldErrors.manualTrxId}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Screenshot Upload */}
+                      <div className="sm:col-span-2">
+                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                          টাকা পাঠানোর স্ক্রিনশট (Payment Screenshot) <span className="text-rose-500">*</span>
+                        </label>
+                        <div
+                          className={`p-4 rounded-xl border-2 border-dashed transition flex flex-col sm:flex-row items-center justify-between gap-3 ${
+                            fieldErrors.manualPaymentDoc
+                              ? "border-rose-400 bg-rose-50/40 dark:bg-rose-950/20"
+                              : manualPaymentDoc
+                              ? "border-emerald-400 bg-emerald-50/40 dark:bg-emerald-950/20"
+                              : "border-slate-300 dark:border-slate-700 bg-white/60 dark:bg-slate-900/60"
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            {manualPaymentDoc ? (
+                              <div className="h-12 w-12 rounded-lg overflow-hidden border border-emerald-300 shrink-0 bg-slate-100 flex items-center justify-center">
+                                <img
+                                  src={manualPaymentDoc.base64}
+                                  alt="Preview"
+                                  className="h-full w-full object-cover"
+                                />
+                              </div>
+                            ) : (
+                              <div className="h-10 w-10 rounded-xl bg-pink-100 text-[#D12053] flex items-center justify-center shrink-0">
+                                <Upload className="h-5 w-5" />
+                              </div>
+                            )}
+                            <div>
+                              <div className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                                {manualPaymentDoc
+                                  ? manualPaymentDoc.name
+                                  : "বিকাশ সাকসেস মেসেজ বা স্ক্রিনশট আপলোড করুন"}
+                              </div>
+                              <div className="text-[11px] text-slate-400">
+                                {manualPaymentDoc
+                                  ? `${(manualPaymentDoc.size / 1024).toFixed(1)} KB &bull; Uploaded`
+                                  : "PNG, JPG বা PDF (Max 10MB)"}
+                              </div>
+                            </div>
+                          </div>
+
+                          <label className="cursor-pointer px-4 py-2 rounded-xl text-xs font-bold bg-[#D12053] text-white hover:opacity-90 transition shrink-0 active:scale-95 shadow-sm">
+                            <span>{manualPaymentDoc ? "ছবি পরিবর্তন করুন" : "ফাইল নির্বাচন করুন"}</span>
+                            <input
+                              type="file"
+                              accept="image/*,application/pdf"
+                              className="hidden"
+                              onChange={(e) =>
+                                handleFileChange(
+                                  e,
+                                  setManualPaymentDoc,
+                                  "Payment Screenshot",
+                                  "manualPaymentDoc"
+                                )
+                              }
+                            />
+                          </label>
+                        </div>
+                        {fieldErrors.manualPaymentDoc && (
+                          <p className="text-[11px] text-rose-500 font-medium mt-1">
+                            {fieldErrors.manualPaymentDoc}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* SSLCommerz Option Info */}
+                {selectedPaymentMethod === "SSLCOMMERZ" && (
+                  <div className="p-4 rounded-2xl bg-blue-50/70 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 text-blue-900 dark:text-blue-300 text-xs space-y-1.5 leading-relaxed">
+                    <div className="font-bold flex items-center gap-1.5 text-blue-700 dark:text-blue-400">
+                      <CreditCard className="h-4 w-4" />
+                      <span>Online Payment Gateway</span>
+                    </div>
+                    <p>
+                      You will be able to pay ৳{totalPrice.toLocaleString()} via Debit/Credit Cards, Mobile Banking, or Internet Banking. After payment, your application will be verified.
+                    </p>
+                  </div>
+                )}
+              </div>
+              )}
 
               {/* Mandatory Terms & Policy Checkbox */}
               <div
@@ -1289,7 +1661,7 @@ function RegisterContent() {
                     </>
                   ) : (
                     <>
-                      <span>Submit Application</span>
+                      <span>{isTrialPlan ? "Submit & Verify with OTP (Free Trial)" : "Submit Application"}</span>
                       <ArrowRight className="h-4 w-4" />
                     </>
                   )}
@@ -1326,7 +1698,10 @@ function RegisterContent() {
                     3
                   </div>
                   <div className="text-sm">
-                    <strong className="text-slate-900 dark:text-white">Approval & Payment:</strong> Receive approval email and complete payment (৳{totalPrice.toLocaleString()} &mdash; includes ৳5,000 license fee + ৳{planPrice.toLocaleString()} plan) to activate your pharmacy.
+                    <strong className="text-slate-900 dark:text-white">{isTrialPlan ? "Approval & Activation:" : "Approval & Payment:"}</strong>{" "}
+                    {isTrialPlan
+                      ? `Admin verifies documents and activates your ${trialDays}-day free trial with zero payment required.`
+                      : `Receive approval email and complete payment (৳${totalPrice.toLocaleString()} — includes ৳5,000 license fee + ৳${planPrice.toLocaleString()} plan) to activate your pharmacy.`}
                   </div>
                 </div>
               </div>
@@ -1468,21 +1843,64 @@ function RegisterContent() {
               <div className="flex justify-between">
                 <span className="text-slate-500">Selected Plan</span>
                 <span className="font-bold text-brand-primary">
-                  {selectedPlan?.name || "Professional"} ({billingCycle})
+                  {selectedPlan?.name || "Professional"} {isTrialPlan ? `(🎉 Free Trial - ${trialDays} Days)` : `(${billingCycle})`}
                 </span>
               </div>
+
+              <div className="flex justify-between">
+                <span className="text-slate-500">Total Investment</span>
+                <span className="font-mono font-bold text-slate-800 dark:text-slate-200">
+                  {isTrialPlan ? "৳0 (Free Trial)" : `৳${totalPrice.toLocaleString()}`}
+                </span>
+              </div>
+
+              {isTrialPlan ? (
+                <div className="flex justify-between border-t border-slate-200/60 dark:border-slate-700/60 pt-2">
+                  <span className="text-slate-500">Payment Status</span>
+                  <span className="font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded">
+                    🎉 Free Trial (No Payment Required)
+                  </span>
+                </div>
+              ) : selectedPaymentMethod === "MANUAL_BKASH" && (
+                <>
+                  <div className="flex justify-between border-t border-slate-200/60 dark:border-slate-700/60 pt-2">
+                    <span className="text-slate-500">Payment Method</span>
+                    <span className="font-bold text-[#D12053]">bKash Send Money</span>
+                  </div>
+                  {manualSenderNumber && (
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Sender Number</span>
+                      <span className="font-mono font-medium text-slate-800 dark:text-slate-200">
+                        {manualSenderNumber}
+                      </span>
+                    </div>
+                  )}
+                  {manualTrxId && (
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Transaction ID (TrxID)</span>
+                      <span className="font-mono font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded">
+                        {manualTrxId}
+                      </span>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
 
-            <div className="p-4 rounded-2xl bg-blue-50/80 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 text-blue-900 dark:text-blue-300 text-sm text-left leading-relaxed space-y-1.5">
-              <div className="font-bold flex items-center gap-1.5 text-blue-700 dark:text-blue-400">
+            <div className="p-4 rounded-2xl bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900 text-emerald-950 dark:text-emerald-300 text-xs sm:text-sm text-left leading-relaxed space-y-1.5">
+              <div className="font-bold flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400">
                 <Clock className="h-4 w-4" />
-                <span>Next Steps</span>
+                <span>পরবর্তী পদক্ষেপ (Next Steps)</span>
               </div>
               <p>
-                Our compliance team is reviewing your National ID, Trade License, and Drug License documents.
+                {isTrialPlan
+                  ? "আমাদের কমপ্লায়েন্স টিম আপনার আপলোডকৃত NID, ট্রেড লাইসেন্স এবং ড্রাগ লাইসেন্স যাচাই করে ফ্রি ট্রায়াল অনুমোদন করবে।"
+                  : "আমাদের কমপ্লায়েন্স টিম আপনার আপলোডকৃত NID, ট্রেড লাইসেন্স, ড্রাগ লাইসেন্স এবং বিকাশ ট্রানজেকশন যাচাই করে অনুমোদন করবে।"}
               </p>
-              <p>
-                Once approved, you will receive an email notification to log in, complete payment, and activate your dashboard.
+              <p className="font-medium text-emerald-800 dark:text-emerald-200">
+                {isTrialPlan
+                  ? `সুপার অ্যাডমিন অনুমোদন সম্পন্ন করলেই সাথে সাথে আপনার ইমেইলে নোটিফিকেশন যাবে এবং ${trialDays} দিনের ফ্রি ট্রায়াল এক্টিভ হয়ে যাবে।`
+                  : "অ্যাডমিন অনুমোদন সম্পন্ন হলে আপনার ইমেইলে একটি অনুমোদন নোটিফিকেশন যাবে এবং সাথে সাথে আপনার ড্যাশবোর্ড অ্যাক্টিভ হয়ে যাবে।"}
               </p>
             </div>
 

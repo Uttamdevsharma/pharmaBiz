@@ -140,6 +140,8 @@ class EmailService {
             console.error(`❌ [EMAIL SERVICE] Invalid recipient email address provided for approval: "${to}"`);
             return { success: false, error: "Invalid recipient email" };
         }
+        const clientUrl = process.env.CLIENT_URL || "http://localhost:3001";
+        const loginUrl = `${clientUrl}/login?email=${encodeURIComponent(recipientEmail)}&approved=true`;
         const html = `
       <!DOCTYPE html>
       <html>
@@ -155,21 +157,21 @@ class EmailService {
             .highlight-msg { font-size: 14px; font-weight: 600; line-height: 1.6; color: #0f172a; background: #f0fdf4; border-left: 4px solid #10b981; border-radius: 0 12px 12px 0; padding: 14px 18px; margin: 16px 0; }
             .cred-box { background: #f8fafc; border: 2px dashed #0284c7; border-radius: 14px; padding: 18px 20px; margin: 18px 0; }
             .plan-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 14px; padding: 18px 20px; margin: 18px 0; }
-            .btn { display: inline-block; background: #0284c7; color: #ffffff !important; font-size: 15px; font-weight: 700; text-decoration: none; padding: 14px 32px; border-radius: 12px; margin-top: 10px; box-shadow: 0 4px 10px -2px rgba(2, 132, 199, 0.3); }
+            .btn { display: inline-block; background: #059669; color: #ffffff !important; font-size: 15px; font-weight: 700; text-decoration: none; padding: 14px 32px; border-radius: 12px; margin-top: 10px; box-shadow: 0 4px 10px -2px rgba(5, 150, 105, 0.3); }
             .footer { padding: 24px; text-align: center; font-size: 11px; color: #64748b; background: #f8fafc; border-top: 1px solid #e2e8f0; }
           </style>
         </head>
         <body>
           <div class="card">
             <div class="header">
-              <h1>Pharmacy Registration Approved! 🎉</h1>
+              <h1>Pharmacy Registration & Payment Approved! 🎉</h1>
               <p>PharmaBiz Multi-Branch Pharmacy SaaS</p>
             </div>
             <div class="body">
               <p style="font-size: 15px; margin-top: 0;">Dear <strong>${name || "Pharmacy Owner"}</strong>,</p>
               
               <div class="highlight-msg">
-                Your pharmacy registration for <strong>${companyName}</strong> has been approved by our compliance team. Use your login credentials below or click the <strong>1-Click Login</strong> button to access your workspace and complete payment.
+                Congratulations! Your pharmacy registration and payment verification for <strong>${companyName}</strong> have been successfully verified and approved. Your workspace is now <strong>fully active</strong>!
               </div>
 
               <!-- Login Credentials Card -->
@@ -182,34 +184,34 @@ class EmailService {
                 </div>
                 ${password ? `
                 <div style="font-size: 14px; color: #334155; margin-bottom: 8px;">
-                  Account Password: <strong style="color: #0f172a; font-family: monospace; font-size: 15px; background: #e2e8f0; padding: 2px 8px; border-radius: 6px;">${password}</strong>
+                  Registered Password: <strong style="color: #0f172a; font-family: monospace; font-size: 15px; background: #e2e8f0; padding: 2px 8px; border-radius: 6px;">${password}</strong>
                 </div>
-                ` : ""}
+                ` : `
+                <div style="font-size: 13px; color: #64748b; margin-bottom: 8px;">
+                  Password: <em>(The secure password you chosen during registration)</em>
+                </div>
+                `}
                 <div style="font-size: 11px; color: #64748b; line-height: 1.4; margin-top: 8px;">
-                  ⚡ <strong>1-Click Access:</strong> You can click the button below to log in directly without typing your password. Please save your password securely for future logins.
+                  💡 Forgot your password? You can reset it anytime from the login page using email OTP verification.
                 </div>
               </div>
 
               <div class="plan-box">
-                <div style="font-size: 11px; font-weight: 700; color: #166534; text-transform: uppercase; margin-bottom: 4px;">Approved Subscription Details</div>
+                <div style="font-size: 11px; font-weight: 700; color: #166534; text-transform: uppercase; margin-bottom: 4px;">Active Subscription Plan</div>
                 <div style="font-size: 18px; font-weight: 800; color: #0f172a;">${planName} (${planTier})</div>
                 <div style="font-size: 13px; color: #475569; margin-top: 6px;">
-                  Billing Cycle: <strong>${billingCycle}</strong> &bull; Plan Price: <strong>৳${Math.max(0, price - 5000).toLocaleString()}</strong> &bull; One-Time License Fee: <strong>৳5,000</strong>
-                </div>
-                <div style="font-size: 15px; color: #059669; font-weight: 800; margin-top: 8px;">
-                  Total Payable: ৳${price.toLocaleString()}
+                  Billing Cycle: <strong>${billingCycle}</strong> &bull; Status: <strong style="color: #059669;">ACTIVE</strong>
                 </div>
               </div>
 
               <div style="text-align: center; margin: 26px 0 16px 0;">
-                <a href="${paymentUrl}" class="btn" target="_blank">
-                  1-Click Login & Complete Payment (৳${price.toLocaleString()}) &rarr;
+                <a href="${loginUrl}" class="btn" target="_blank">
+                  Go to Dashboard &rarr;
                 </a>
               </div>
 
-              <p style="font-size: 12px; color: #64748b; line-height: 1.5; margin-top: 24px;">
-                Direct 1-Click Access Link: <br />
-                <a href="${paymentUrl}" style="color: #0284c7; word-break: break-all;">${paymentUrl}</a>
+              <p style="font-size: 12px; color: #64748b; line-height: 1.5; margin-top: 24px; text-align: center;">
+                Login Portal: <a href="${loginUrl}" style="color: #059669; word-break: break-all;">${loginUrl}</a>
               </p>
             </div>
             <div class="footer">
@@ -431,6 +433,155 @@ class EmailService {
         }
         catch (err) {
             console.error(`❌ [EMAIL SERVICE] Failed to send Expiry Reminder email to ${recipientEmail}:`, err.message);
+            return { success: false, error: err.message };
+        }
+    }
+    /**
+     * Send 6-digit Password Reset OTP Email
+     */
+    static async sendPasswordResetOtpEmail(payload) {
+        const { to, name, otpCode } = payload;
+        const recipientEmail = (to || "").trim().toLowerCase();
+        const senderEmail = getSenderAddress();
+        const subject = `[PharmaBiz] Password Reset Code: ${otpCode}`;
+        if (!recipientEmail || !recipientEmail.includes("@")) {
+            return { success: false, error: "Invalid recipient email" };
+        }
+        const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px; color: #0f172a; }
+            .card { max-width: 520px; margin: 0 auto; background: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
+            .header { background: #0284c7; padding: 28px; text-align: center; color: #ffffff; }
+            .header h1 { margin: 0; font-size: 20px; font-weight: 700; }
+            .body { padding: 28px; text-align: center; }
+            .otp-box { background: #f0f9ff; border: 2px dashed #0284c7; border-radius: 12px; padding: 18px; margin: 24px 0; display: inline-block; min-width: 240px; }
+            .otp-code { font-family: monospace; font-size: 32px; font-weight: 800; letter-spacing: 6px; color: #0284c7; }
+            .footer { padding: 20px; text-align: center; font-size: 11px; color: #64748b; background: #f8fafc; border-top: 1px solid #e2e8f0; }
+          </style>
+        </head>
+        <body>
+          <div class="card">
+            <div class="header">
+              <h1>Password Reset Request</h1>
+            </div>
+            <div class="body">
+              <p style="font-size: 14px; margin-top: 0; color: #334155;">Hello <strong>${name || "User"}</strong>,</p>
+              <p style="font-size: 13px; color: #64748b; line-height: 1.5;">
+                We received a request to reset your password for your PharmaBiz account. Use the verification code below to set a new password:
+              </p>
+              <div class="otp-box">
+                <div class="otp-code">${otpCode}</div>
+                <div style="font-size: 11px; color: #64748b; margin-top: 8px;">Code expires in 15 minutes</div>
+              </div>
+              <p style="font-size: 12px; color: #94a3b8; line-height: 1.4;">
+                If you did not request a password reset, please safely ignore this email. Your password will remain unchanged.
+              </p>
+            </div>
+            <div class="footer">
+              &copy; ${new Date().getFullYear()} PharmaBiz Security &bull; Automated Account Recovery
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+        try {
+            const transporter = getMailTransporter();
+            if (transporter) {
+                const info = await transporter.sendMail({
+                    from: `"PharmaBiz Security" <${senderEmail}>`,
+                    to: recipientEmail,
+                    subject,
+                    html,
+                });
+                return { success: true, messageId: info.messageId };
+            }
+            return { success: true, messageId: `local_${Date.now()}` };
+        }
+        catch (err) {
+            console.error(`❌ [EMAIL SERVICE] Failed to send password reset OTP to ${recipientEmail}:`, err.message);
+            return { success: false, error: err.message };
+        }
+    }
+    /**
+     * Send Renewal / Upgrade Approval Email
+     */
+    static async sendRenewalApprovalEmail(payload) {
+        const { to, name, companyName, planName, planTier, billingCycle, price, endDate } = payload;
+        const recipientEmail = (to || "").trim().toLowerCase();
+        const senderEmail = getSenderAddress();
+        const formattedEnd = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(endDate);
+        const subject = `[PharmaBiz] Subscription Plan Upgraded/Renewed Successfully - ${companyName}`;
+        if (!recipientEmail || !recipientEmail.includes("@")) {
+            return { success: false, error: "Invalid recipient email" };
+        }
+        const clientUrl = process.env.CLIENT_URL || "http://localhost:3001";
+        const dashUrl = `${clientUrl}/dashboard`;
+        const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px; color: #0f172a; }
+            .card { max-width: 540px; margin: 0 auto; background: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
+            .header { background: #059669; padding: 28px; text-align: center; color: #ffffff; }
+            .header h1 { margin: 0; font-size: 20px; font-weight: 700; }
+            .body { padding: 28px; }
+            .info-box { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px; padding: 16px; margin: 18px 0; }
+            .btn { display: inline-block; background: #059669; color: #ffffff !important; font-size: 14px; font-weight: 700; text-decoration: none; padding: 12px 28px; border-radius: 10px; margin-top: 10px; }
+            .footer { padding: 20px; text-align: center; font-size: 11px; color: #64748b; background: #f8fafc; border-top: 1px solid #e2e8f0; }
+          </style>
+        </head>
+        <body>
+          <div class="card">
+            <div class="header">
+              <h1>Subscription Plan Upgraded / Renewed 🎉</h1>
+            </div>
+            <div class="body">
+              <p style="font-size: 14px; margin-top: 0; color: #334155;">Dear <strong>${name || "Pharmacy Owner"}</strong>,</p>
+              <p style="font-size: 13px; color: #475569; line-height: 1.5;">
+                Your subscription payment for <strong>${companyName}</strong> has been approved by the administration. Your plan has been successfully upgraded/renewed.
+              </p>
+              <div class="info-box">
+                <div style="font-size: 11px; font-weight: 700; color: #166534; text-transform: uppercase;">Active Plan</div>
+                <div style="font-size: 18px; font-weight: 800; color: #0f172a; margin-top: 2px;">${planName} (${planTier})</div>
+                <div style="font-size: 13px; color: #334155; margin-top: 6px;">
+                  Billing: <strong>${billingCycle}</strong> &bull; Amount: <strong>৳${price.toLocaleString()}</strong>
+                </div>
+                <div style="font-size: 13px; color: #059669; font-weight: 700; margin-top: 6px;">
+                  Valid Until: ${formattedEnd}
+                </div>
+              </div>
+              <div style="text-align: center; margin: 20px 0 10px 0;">
+                <a href="${dashUrl}" class="btn">Go to Dashboard &rarr;</a>
+              </div>
+            </div>
+            <div class="footer">
+              &copy; ${new Date().getFullYear()} PharmaBiz SaaS Platform &bull; Automated Subscription Management
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+        try {
+            const transporter = getMailTransporter();
+            if (transporter) {
+                const info = await transporter.sendMail({
+                    from: `"PharmaBiz Subscriptions" <${senderEmail}>`,
+                    to: recipientEmail,
+                    subject,
+                    html,
+                });
+                return { success: true, messageId: info.messageId };
+            }
+            return { success: true, messageId: `local_${Date.now()}` };
+        }
+        catch (err) {
+            console.error(`❌ [EMAIL SERVICE] Failed to send Renewal Approval email to ${recipientEmail}:`, err.message);
             return { success: false, error: err.message };
         }
     }

@@ -20,8 +20,12 @@ import {
   ShieldCheck,
   Zap,
   AlertCircle,
+  X,
+  Copy,
+  Phone,
 } from "lucide-react";
 import { getClientPlanConfig, calculateRemainingTrialDays } from "@/lib/planLimits";
+import { ImageUploader } from "@/components/common/ImageUploader";
 
 interface SubscriptionModuleProps {
   onNavigate?: (module: OwnerModule) => void;
@@ -44,14 +48,30 @@ export function SubscriptionModule({ onNavigate }: SubscriptionModuleProps = {})
   const [upgradingPlanId, setUpgradingPlanId] = useState<string | null>(null);
   const [billingCycle, setBillingCycle] = useState<"MONTHLY" | "YEARLY">("MONTHLY");
 
+  // Gateway and Manual bKash Renewal Modal State
+  const [gateways, setGateways] = useState<any>({
+    manualBkash: { enabled: true, number: "", type: "PERSONAL", instructions: "" },
+    sslcommerz: { enabled: false },
+  });
+  const [showRenewalModal, setShowRenewalModal] = useState(false);
+  const [selectedRenewalPlan, setSelectedRenewalPlan] = useState<any | null>(null);
+  const [renewalSenderNumber, setRenewalSenderNumber] = useState("");
+  const [renewalTrxId, setRenewalTrxId] = useState("");
+  const [renewalScreenshotUrl, setRenewalScreenshotUrl] = useState("");
+  const [renewalScreenshotPublicId, setRenewalScreenshotPublicId] = useState("");
+  const [submittingRenewal, setSubmittingRenewal] = useState(false);
+  const [renewalSuccess, setRenewalSuccess] = useState<string | null>(null);
+  const [copiedNumber, setCopiedNumber] = useState(false);
+
   const loadData = async () => {
     try {
       setLoading(true);
-      const [subRes, plansRes, bRes, uRes] = await Promise.all([
+      const [subRes, plansRes, bRes, uRes, gwRes] = await Promise.all([
         fetchApi("/subscriptions/current"),
         fetchApi("/subscriptions/plans"),
         fetchApi("/branches"),
         fetchApi("/users"),
+        fetchApi("/settings/payment-gateways"),
       ]);
 
       if (subRes.success) {
@@ -71,6 +91,9 @@ export function SubscriptionModule({ onNavigate }: SubscriptionModuleProps = {})
       if (uRes.success) {
         setStaff(uRes.data || []);
         cachedStaff = uRes.data || [];
+      }
+      if (gwRes.success && gwRes.data) {
+        setGateways(gwRes.data);
       }
     } catch (err) {
       console.error("Failed to load subscription info", err);
@@ -95,9 +118,23 @@ export function SubscriptionModule({ onNavigate }: SubscriptionModuleProps = {})
       return;
     }
 
+    const targetPlan = plans.find((p) => p.id === targetPlanId) || currentSub?.plan;
+
+    // If manual bKash gateway is enabled, open the bKash payment modal
+    if (gateways?.manualBkash?.enabled) {
+      setSelectedRenewalPlan(targetPlan);
+      setRenewalSenderNumber("");
+      setRenewalTrxId("");
+      setRenewalScreenshotUrl("");
+      setRenewalScreenshotPublicId("");
+      setRenewalSuccess(null);
+      setShowRenewalModal(true);
+      return;
+    }
+
+    // Otherwise, initiate automated SSLCommerz
     try {
       setUpgradingPlanId(targetPlanId);
-      // 1. Change plan
       const planRes = await fetchApi<any>("/subscriptions/change-plan", {
         method: "POST",
         body: JSON.stringify({
@@ -107,7 +144,6 @@ export function SubscriptionModule({ onNavigate }: SubscriptionModuleProps = {})
 
       const subId = planRes.data?.id || currentSub?.id;
 
-      // 2. Initiate SSLCOMMERZ checkout
       const initRes = await fetchApi<any>("/payments/initiate", {
         method: "POST",
         body: JSON.stringify({
@@ -118,12 +154,52 @@ export function SubscriptionModule({ onNavigate }: SubscriptionModuleProps = {})
       if (initRes.success && initRes.data?.gatewayUrl) {
         window.location.href = initRes.data.gatewayUrl;
       } else {
-        alert(initRes.message || "Could not launch SSLCOMMERZ checkout");
+        alert(initRes.message || "Could not launch payment gateway checkout");
       }
     } catch (err: any) {
       alert(err.message || "Error initiating payment");
     } finally {
       setUpgradingPlanId(null);
+    }
+  };
+
+  const handleSubmitManualRenewal = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!renewalSenderNumber.trim()) {
+      alert("অনুগ্রহ করে যে বিকাশ নম্বর থেকে টাকা পাঠিয়েছেন তা লিখুন।");
+      return;
+    }
+    if (!renewalTrxId.trim()) {
+      alert("অনুগ্রহ করে বিকাশ Transaction ID (TrxID) লিখুন।");
+      return;
+    }
+
+    setSubmittingRenewal(true);
+    try {
+      const res = await fetchApi<any>("/subscriptions/manual-renewal", {
+        method: "POST",
+        body: JSON.stringify({
+          planId: selectedRenewalPlan?.id,
+          billingCycle,
+          senderNumber: renewalSenderNumber.trim(),
+          trxId: renewalTrxId.trim(),
+          screenshotUrl: renewalScreenshotUrl || undefined,
+          screenshotPublicId: renewalScreenshotPublicId || undefined,
+        }),
+      });
+
+      if (res.success) {
+        setRenewalSuccess(
+          res.message || "আপনার রিনিউয়াল অনুরোধ সফলভাবে জমা হয়েছে! সুপার অ্যাডমিন ভেরিফাই করে অনুমোদন করলেই প্ল্যান চালু হবে।"
+        );
+        await loadData();
+      } else {
+        alert(res.message || "রিনিউয়াল সাবমিট করতে সমস্যা হয়েছে");
+      }
+    } catch (err: any) {
+      alert(err.message || "Error submitting manual renewal");
+    } finally {
+      setSubmittingRenewal(false);
     }
   };
 
@@ -139,11 +215,11 @@ export function SubscriptionModule({ onNavigate }: SubscriptionModuleProps = {})
   const planConfig = getClientPlanConfig(tier);
 
   const branchCount = branches.length;
-  const maxBranches = subDetails?.usage?.maxBranches || planConfig.maxBranches;
+  const maxBranches = Number(subDetails?.usage?.maxBranches ?? currentSub?.plan?.maxBranches ?? planConfig.maxBranches);
 
   const nonOwnerStaff = staff.filter((s) => s.role !== "COMPANY_OWNER");
   const staffCount = nonOwnerStaff.length;
-  const maxStaff = planConfig.maxTotalStaff || 999;
+  const maxStaff = Number(subDetails?.usage?.maxStaff ?? currentSub?.plan?.features?.maxTotalStaff ?? planConfig.maxTotalStaff ?? (maxBranches * (currentSub?.plan?.features?.maxStaffPerBranch ?? 1)));
 
   const currentMonthlyPrice = Number(currentSub?.plan?.price ?? planConfig.price ?? 500);
   const isExpired = Boolean(subDetails?.isExpired);
@@ -485,329 +561,196 @@ export function SubscriptionModule({ onNavigate }: SubscriptionModuleProps = {})
           </div>
         )}
 
-        {/* 3 Plans Grid */}
+        {/* 3 Plans Grid matching Super Admin Plan Configuration */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8">
-          {/* Plan 1: Starter */}
-          {(() => {
-            const p1 = plans.find((p) => p.tier === "STARTER") || {
-              id: "p1",
-              name: "Plan 1 - Starter",
-              tier: "STARTER",
-              price: 500,
-              maxBranches: 2,
-              yearlyDiscountPercent: 5,
+          {(["STARTER", "GROWTH", "ENTERPRISE"] as const).map((tierKey, idx) => {
+            const plan = plans.find((p) => p.tier === tierKey) || {
+              id: `plan-${tierKey.toLowerCase()}`,
+              name: tierKey === "STARTER" ? "Plan 1 - Starter" : tierKey === "GROWTH" ? "Plan 2 - Growth" : "Plan 3 - Enterprise",
+              tier: tierKey,
+              price: tierKey === "STARTER" ? 999 : tierKey === "GROWTH" ? 1999 : 2999,
+              maxBranches: tierKey === "STARTER" ? 1 : tierKey === "GROWTH" ? 2 : 5,
+              maxStaffPerBranch: tierKey === "STARTER" ? 3 : 5,
+              yearlyDiscountPercent: 17,
             };
-            const discountPercent = Number(p1.yearlyDiscountPercent ?? 5);
-            const pricing = calculatePlanPricing(Number(p1.price || 500), discountPercent);
-            const isCurrent = tier === "STARTER";
-            const btn = getPlanButtonState("STARTER", pricing.displayPrice, "Starter Plan");
+
+            const isPopular = plan.tier === "GROWTH" || plan.isPopular;
+            const isCurrent = tier === plan.tier;
+            const discountPercent = Number(plan.yearlyDiscountPercent ?? 17);
+            const pricing = calculatePlanPricing(Number(plan.price || 0), discountPercent);
+            const btn = getPlanButtonState(plan.tier, pricing.displayPrice, plan.name || plan.tier);
             const BtnIcon = btn.Icon;
 
             return (
               <div
-                key={p1.id}
-                className={`p-6 sm:p-7 rounded-3xl bg-white dark:bg-slate-900 border-2 transition-all flex flex-col justify-between space-y-6 ${
-                  isCurrent
+                key={plan.id || idx}
+                className={`relative rounded-3xl bg-white dark:bg-slate-900 border transition-all duration-300 flex flex-col p-6 sm:p-8 2xl:p-10 ${
+                  isPopular
+                    ? "border-emerald-500 shadow-xl ring-2 ring-emerald-500/30 md:-translate-y-2"
+                    : isCurrent
                     ? "border-brand-primary ring-2 ring-brand-primary/20 shadow-xl"
-                    : "border-slate-200 dark:border-slate-800 shadow-sm hover:border-slate-300 dark:hover:border-slate-700"
+                    : "border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-slate-300 dark:hover:border-slate-700"
                 }`}
               >
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <span className="px-3 py-1 rounded-full text-xs font-black uppercase bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
-                      Starter Tier
-                    </span>
-                    {isCurrent && (
-                      <span className="text-xs font-bold text-emerald-600 flex items-center gap-1">
-                        <Check className="h-4 w-4" /> Active
-                      </span>
-                    )}
+                {isPopular && (
+                  <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 px-4 py-1 rounded-full bg-emerald-600 text-white text-xs font-bold uppercase tracking-wider shadow-md">
+                    Most Popular
                   </div>
+                )}
 
-                  <div>
-                    <h3 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
-                      Starter Plan
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xl font-bold text-slate-900 dark:text-white">
+                      {plan.name || plan.tier}
                     </h3>
-                    <p className="text-xs text-slate-400 mt-0.5">Single store or small pharmacy</p>
-                  </div>
-
-                  <div className="space-y-1">
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white">
-                        ৳{pricing.displayPrice.toLocaleString()}
+                    <div className="flex items-center gap-2">
+                      {isCurrent && (
+                        <span className="text-xs font-bold text-emerald-600 flex items-center gap-1">
+                          <Check className="h-4 w-4" /> Active
+                        </span>
+                      )}
+                      <span className="text-xs font-semibold px-2.5 py-1 rounded-md brand-subtle-bg text-brand-primary uppercase">
+                        {plan.tier}
                       </span>
-                      <span className="text-xs font-bold text-slate-400">{pricing.suffix}</span>
                     </div>
-
-                    {pricing.originalPrice && (
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-slate-400 line-through">
-                          ৳{pricing.originalPrice.toLocaleString()}
-                        </span>
-                        <span className="px-2 py-0.5 rounded-full text-[11px] font-extrabold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
-                          {pricing.savingsText}
-                        </span>
-                      </div>
-                    )}
-                    {billingCycle === "MONTHLY" && pricing.savingsText && (
-                      <div className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
-                        {pricing.savingsText}
-                      </div>
-                    )}
                   </div>
 
-                  <ul className="text-sm text-slate-700 dark:text-slate-300 space-y-2.5 pt-3 border-t border-slate-100 dark:border-slate-800">
+                  <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 min-h-[40px]">
+                    {plan.description ||
+                      (plan.tier === "STARTER"
+                        ? "Essential toolkit for retail pharmacies starting out."
+                        : plan.tier === "GROWTH"
+                        ? "Full multi-branch control and stock transfers."
+                        : "Custom compliance, APIs, and unlimited scale.")}
+                  </p>
+
+                  {/* Price Block */}
+                  <div className="pt-2 flex items-baseline gap-1">
+                    <span className="text-3xl sm:text-4xl font-extrabold text-slate-900 dark:text-white">
+                      ৳ {pricing.displayPrice.toLocaleString()}
+                    </span>
+                    <span className="text-sm font-medium text-slate-500">
+                      {pricing.suffix}
+                    </span>
+                  </div>
+
+                  {pricing.originalPrice && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-slate-400 line-through">
+                        ৳{pricing.originalPrice.toLocaleString()}
+                      </span>
+                      <span className="px-2 py-0.5 rounded-full text-[11px] font-extrabold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                        {pricing.savingsText}
+                      </span>
+                    </div>
+                  )}
+                  {billingCycle === "MONTHLY" && pricing.savingsText && (
+                    <div className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+                      {pricing.savingsText}
+                    </div>
+                  )}
+                </div>
+
+                {/* Plan Call to Action */}
+                <div className="pt-6">
+                  <button
+                    type="button"
+                    onClick={() => handleUpgradeOrRenew(plan.id)}
+                    disabled={btn.disabled || upgradingPlanId === plan.id}
+                    className={btn.className}
+                  >
+                    {upgradingPlanId === plan.id ? (
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                    ) : (
+                      <BtnIcon className="h-5 w-5" />
+                    )}
+                    <span>{btn.text}</span>
+                  </button>
+                </div>
+
+                {/* Features List */}
+                <div className="mt-8 pt-6 border-t border-slate-100 dark:border-slate-800 space-y-3.5 flex-1">
+                  <div className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                    Included Capabilities
+                  </div>
+
+                  <ul className="space-y-3 text-xs sm:text-sm text-slate-600 dark:text-slate-300">
                     <li className="flex items-center gap-2.5">
                       <Check className="h-4 w-4 text-emerald-500 shrink-0" />
-                      <span className="font-medium">Max 2 Branches (Main + 1 Branch)</span>
+                      <span>
+                        <strong>{plan.maxBranches >= 999 ? "Unlimited" : plan.maxBranches}</strong> Branches Included
+                      </span>
                     </li>
                     <li className="flex items-center gap-2.5">
                       <Check className="h-4 w-4 text-emerald-500 shrink-0" />
-                      <span className="font-medium">1 Staff User per branch</span>
+                      <span>
+                        <strong>
+                          {(plan.maxStaffPerBranch ?? plan.features?.maxStaffPerBranch ?? 1) >= 999
+                            ? "Unlimited"
+                            : (plan.maxStaffPerBranch ?? plan.features?.maxStaffPerBranch ?? 1)}
+                        </strong>{" "}
+                        Staff / Branch
+                      </span>
                     </li>
                     <li className="flex items-center gap-2.5">
                       <Check className="h-4 w-4 text-emerald-500 shrink-0" />
-                      <span className="font-medium">Offline-First Counter POS</span>
+                      <span>100% Offline POS & Auto Cloud Sync</span>
                     </li>
                     <li className="flex items-center gap-2.5">
                       <Check className="h-4 w-4 text-emerald-500 shrink-0" />
-                      <span className="font-medium">Basic Audit & Sales History</span>
+                      <span>
+                        {plan.tier === "STARTER"
+                          ? "Real-time Inventory & Stock Tracking"
+                          : plan.tier === "GROWTH"
+                          ? "Multi-Branch Stock & Batch Tracking"
+                          : "Centralized Multi-Store Inventory Control"}
+                      </span>
+                    </li>
+                    <li className="flex items-center gap-2.5">
+                      <Check className="h-4 w-4 text-emerald-500 shrink-0" />
+                      <span>
+                        {plan.tier === "STARTER"
+                          ? "Medicine Expiry & Low-Stock Alerts"
+                          : plan.tier === "GROWTH"
+                          ? "Medicine Expiry, Near-Expiry & Damage Tracking"
+                          : "Full Expiry, Damage & Batch Audit Trails"}
+                      </span>
+                    </li>
+                    <li className="flex items-center gap-2.5">
+                      <Check className="h-4 w-4 text-emerald-500 shrink-0" />
+                      <span>
+                        {plan.tier === "STARTER"
+                          ? "Thermal Receipt & Barcode Support"
+                          : plan.tier === "GROWTH"
+                          ? "Customer Ledger & Credit/Due Tracking"
+                          : "Customer Credit Ledger & Accounts Reports"}
+                      </span>
+                    </li>
+                    <li className="flex items-center gap-2.5">
+                      <Check className="h-4 w-4 text-emerald-500 shrink-0" />
+                      <span>
+                        {plan.tier === "STARTER"
+                          ? "Daily Sales & Revenue Reports"
+                          : plan.tier === "GROWTH"
+                          ? "Custom Staff Roles & Permission Assignment"
+                          : "Unlimited Custom Roles & Granular RBAC"}
+                      </span>
+                    </li>
+                    <li className="flex items-center gap-2.5">
+                      <Check className="h-4 w-4 text-emerald-500 shrink-0" />
+                      <span>
+                        {plan.tier === "STARTER"
+                          ? "Standard Helpdesk & Email Support"
+                          : plan.tier === "GROWTH"
+                          ? "Comprehensive Profit/Loss & Tax Reports"
+                          : "Advanced Business Analytics & VAT/Tax Export"}
+                      </span>
                     </li>
                   </ul>
                 </div>
-
-                <button
-                  type="button"
-                  onClick={() => handleUpgradeOrRenew(p1.id)}
-                  disabled={btn.disabled || upgradingPlanId === p1.id}
-                  className={btn.className}
-                >
-                  {upgradingPlanId === p1.id ? (
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                  ) : (
-                    <BtnIcon className="h-5 w-5" />
-                  )}
-                  <span>{btn.text}</span>
-                </button>
               </div>
             );
-          })()}
-
-          {/* Plan 2: Growth (Most Popular) */}
-          {(() => {
-            const p2 = plans.find((p) => p.tier === "GROWTH") || {
-              id: "p2",
-              name: "Plan 2 - Growth",
-              tier: "GROWTH",
-              price: 1500,
-              maxBranches: 3,
-              yearlyDiscountPercent: 10,
-            };
-            const discountPercent = Number(p2.yearlyDiscountPercent ?? 10);
-            const pricing = calculatePlanPricing(Number(p2.price || 1500), discountPercent);
-            const isCurrent = tier === "GROWTH";
-            const btn = getPlanButtonState("GROWTH", pricing.displayPrice, "Growth Plan");
-            const BtnIcon = btn.Icon;
-
-            return (
-              <div
-                key={p2.id}
-                className={`p-6 sm:p-7 rounded-3xl bg-white dark:bg-slate-900 border-2 transition-all flex flex-col justify-between space-y-6 relative ${
-                  isCurrent
-                    ? "border-brand-primary ring-2 ring-brand-primary/20 shadow-2xl scale-102"
-                    : "border-brand-primary shadow-xl"
-                }`}
-              >
-                <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 px-4 py-1 rounded-full bg-brand-primary text-white text-xs font-black uppercase tracking-wider shadow-md">
-                  Most Popular
-                </div>
-
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <span className="px-3 py-1 rounded-full text-xs font-black uppercase bg-brand-primary/10 text-brand-primary">
-                      Growth Tier
-                    </span>
-                    {isCurrent && (
-                      <span className="text-xs font-bold text-emerald-600 flex items-center gap-1">
-                        <Check className="h-4 w-4" /> Active
-                      </span>
-                    )}
-                  </div>
-
-                  <div>
-                    <h3 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
-                      Growth Plan
-                    </h3>
-                    <p className="text-xs text-slate-400 mt-0.5">Growing multi-branch pharmacies</p>
-                  </div>
-
-                  <div className="space-y-1">
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-3xl sm:text-4xl font-black text-brand-primary">
-                        ৳{pricing.displayPrice.toLocaleString()}
-                      </span>
-                      <span className="text-xs font-bold text-slate-400">{pricing.suffix}</span>
-                    </div>
-
-                    {pricing.originalPrice && (
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-slate-400 line-through">
-                          ৳{pricing.originalPrice.toLocaleString()}
-                        </span>
-                        <span className="px-2 py-0.5 rounded-full text-[11px] font-extrabold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
-                          {pricing.savingsText}
-                        </span>
-                      </div>
-                    )}
-                    {billingCycle === "MONTHLY" && pricing.savingsText && (
-                      <div className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
-                        {pricing.savingsText}
-                      </div>
-                    )}
-                  </div>
-
-                  <ul className="text-sm text-slate-700 dark:text-slate-300 space-y-2.5 pt-3 border-t border-slate-100 dark:border-slate-800">
-                    <li className="flex items-center gap-2.5">
-                      <Check className="h-4 w-4 text-emerald-500 shrink-0" />
-                      <span className="font-medium">Max 3 Branch Stores</span>
-                    </li>
-                    <li className="flex items-center gap-2.5">
-                      <Check className="h-4 w-4 text-emerald-500 shrink-0" />
-                      <span className="font-medium">3 Staff Users per branch (9 Total)</span>
-                    </li>
-                    <li className="flex items-center gap-2.5">
-                      <Check className="h-4 w-4 text-emerald-500 shrink-0" />
-                      <span className="font-medium">Inter-Branch Stock Transfers</span>
-                    </li>
-                    <li className="flex items-center gap-2.5">
-                      <Check className="h-4 w-4 text-emerald-500 shrink-0" />
-                      <span className="font-medium">Regional Admin & Manager Roles</span>
-                    </li>
-                  </ul>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => handleUpgradeOrRenew(p2.id)}
-                  disabled={btn.disabled || upgradingPlanId === p2.id}
-                  className={btn.className}
-                >
-                  {upgradingPlanId === p2.id ? (
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                  ) : (
-                    <BtnIcon className="h-5 w-5" />
-                  )}
-                  <span>{btn.text}</span>
-                </button>
-              </div>
-            );
-          })()}
-
-          {/* Plan 3: Enterprise */}
-          {(() => {
-            const p3 = plans.find((p) => p.tier === "ENTERPRISE") || {
-              id: "p3",
-              name: "Plan 3 - Enterprise",
-              tier: "ENTERPRISE",
-              price: 3000,
-              maxBranches: 999,
-              yearlyDiscountPercent: 15,
-            };
-            const discountPercent = Number(p3.yearlyDiscountPercent ?? 15);
-            const pricing = calculatePlanPricing(Number(p3.price || 3000), discountPercent);
-            const isCurrent = tier === "ENTERPRISE";
-            const btn = getPlanButtonState("ENTERPRISE", pricing.displayPrice, "Enterprise Plan");
-            const BtnIcon = btn.Icon;
-
-            return (
-              <div
-                key={p3.id}
-                className={`p-6 sm:p-7 rounded-3xl bg-white dark:bg-slate-900 border-2 transition-all flex flex-col justify-between space-y-6 ${
-                  isCurrent
-                    ? "border-brand-primary ring-2 ring-brand-primary/20 shadow-xl"
-                    : "border-slate-200 dark:border-slate-800 shadow-sm hover:border-slate-300 dark:hover:border-slate-700"
-                }`}
-              >
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <span className="px-3 py-1 rounded-full text-xs font-black uppercase bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
-                      Enterprise Tier
-                    </span>
-                    {isCurrent && (
-                      <span className="text-xs font-bold text-emerald-600 flex items-center gap-1">
-                        <Check className="h-4 w-4" /> Active
-                      </span>
-                    )}
-                  </div>
-
-                  <div>
-                    <h3 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
-                      Enterprise Plan
-                    </h3>
-                    <p className="text-xs text-slate-400 mt-0.5">Nationwide pharmacy retail chains</p>
-                  </div>
-
-                  <div className="space-y-1">
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white">
-                        ৳{pricing.displayPrice.toLocaleString()}
-                      </span>
-                      <span className="text-xs font-bold text-slate-400">{pricing.suffix}</span>
-                    </div>
-
-                    {pricing.originalPrice && (
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-slate-400 line-through">
-                          ৳{pricing.originalPrice.toLocaleString()}
-                        </span>
-                        <span className="px-2 py-0.5 rounded-full text-[11px] font-extrabold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
-                          {pricing.savingsText}
-                        </span>
-                      </div>
-                    )}
-                    {billingCycle === "MONTHLY" && pricing.savingsText && (
-                      <div className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
-                        {pricing.savingsText}
-                      </div>
-                    )}
-                  </div>
-
-                  <ul className="text-sm text-slate-700 dark:text-slate-300 space-y-2.5 pt-3 border-t border-slate-100 dark:border-slate-800">
-                    <li className="flex items-center gap-2.5">
-                      <Check className="h-4 w-4 text-emerald-500 shrink-0" />
-                      <span className="font-medium">Unlimited Branches</span>
-                    </li>
-                    <li className="flex items-center gap-2.5">
-                      <Check className="h-4 w-4 text-emerald-500 shrink-0" />
-                      <span className="font-medium">Unlimited Staff User Accounts</span>
-                    </li>
-                    <li className="flex items-center gap-2.5">
-                      <Check className="h-4 w-4 text-emerald-500 shrink-0" />
-                      <span className="font-medium">Full VAT/MIS Compliance Export</span>
-                    </li>
-                    <li className="flex items-center gap-2.5">
-                      <Check className="h-4 w-4 text-emerald-500 shrink-0" />
-                      <span className="font-medium">Auditor & Accountant Dedicated Access</span>
-                    </li>
-                  </ul>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => handleUpgradeOrRenew(p3.id)}
-                  disabled={btn.disabled || upgradingPlanId === p3.id}
-                  className={btn.className}
-                >
-                  {upgradingPlanId === p3.id ? (
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                  ) : (
-                    <BtnIcon className="h-5 w-5" />
-                  )}
-                  <span>{btn.text}</span>
-                </button>
-              </div>
-            );
-          })()}
+          })}
         </div>
       </div>
 
@@ -838,6 +781,207 @@ export function SubscriptionModule({ onNavigate }: SubscriptionModuleProps = {})
           </button>
         )}
       </div>
+
+      {/* ========================================================= */}
+      {/* MANUAL BKASH RENEWAL / UPGRADE MODAL                      */}
+      {/* ========================================================= */}
+      {showRenewalModal && selectedRenewalPlan && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-lg w-full max-h-[92vh] overflow-y-auto shadow-2xl p-6 sm:p-7 space-y-5 animate-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="h-10 w-10 rounded-2xl bg-pink-600 text-white flex items-center justify-center font-black text-lg shadow-sm">
+                  ৳
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-base text-slate-900 dark:text-white">
+                    Subscription Renewal & Upgrade
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Target: <strong>{selectedRenewalPlan.name}</strong> ({billingCycle})
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowRenewalModal(false);
+                  setRenewalSuccess(null);
+                }}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {renewalSuccess ? (
+              <div className="py-8 text-center space-y-4">
+                <div className="h-16 w-16 rounded-full bg-emerald-500/15 text-emerald-600 flex items-center justify-center mx-auto shadow-sm">
+                  <CheckCircle2 className="h-8 w-8" />
+                </div>
+                <h4 className="text-lg font-black text-slate-900 dark:text-white">
+                  রিনিউয়াল রিকোয়েস্ট সফলভাবে জমা হয়েছে!
+                </h4>
+                <p className="text-xs text-slate-500 leading-relaxed max-w-sm mx-auto">
+                  {renewalSuccess}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowRenewalModal(false);
+                    setRenewalSuccess(null);
+                  }}
+                  className="px-6 py-2.5 rounded-xl bg-brand-primary text-white text-xs font-bold shadow-md hover:opacity-95 transition cursor-pointer"
+                >
+                  ঠিক আছে (Close)
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleSubmitManualRenewal} className="space-y-4 text-xs">
+                {/* Fee Breakdown Box */}
+                <div className="p-4 rounded-2xl bg-pink-50/40 dark:bg-pink-950/20 border border-pink-500/20 space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-600 dark:text-slate-400 font-medium">Selected Plan:</span>
+                    <strong className="text-slate-900 dark:text-white font-bold">{selectedRenewalPlan.name}</strong>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-600 dark:text-slate-400 font-medium">Billing Cycle:</span>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200">
+                      {billingCycle === "YEARLY" ? "Yearly (15% Discount Applied)" : "Monthly"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center pt-2 border-t border-pink-500/20">
+                    <span className="font-bold text-slate-800 dark:text-slate-200">Total Payable Amount:</span>
+                    <strong className="text-base font-black font-mono text-pink-600 dark:text-pink-400">
+                      ৳{(() => {
+                        const basePrice = Number(selectedRenewalPlan.price || 0);
+                        return (billingCycle === "YEARLY" ? Math.round(basePrice * 12 * 0.85) : basePrice).toLocaleString();
+                      })()}
+                    </strong>
+                  </div>
+                </div>
+
+                {/* bKash Send Money Instruction Card */}
+                <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                      <Phone className="h-3.5 w-3.5 text-pink-600" />
+                      <span>bKash Send Money Account</span>
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-pink-500/15 text-pink-600 dark:text-pink-400 border border-pink-500/30">
+                      {gateways?.manualBkash?.type || "PERSONAL"}
+                    </span>
+                  </div>
+
+                  <div className="p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl flex items-center justify-between">
+                    <div>
+                      <div className="text-[10px] font-bold text-slate-400 uppercase">Send Money To Number</div>
+                      <div className="text-base font-black font-mono text-slate-900 dark:text-white">
+                        {gateways?.manualBkash?.number || "01700-000000"}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (gateways?.manualBkash?.number) {
+                          navigator.clipboard.writeText(gateways.manualBkash.number);
+                          setCopiedNumber(true);
+                          setTimeout(() => setCopiedNumber(false), 2000);
+                        }
+                      }}
+                      className="px-3 py-1.5 rounded-lg bg-pink-500/10 hover:bg-pink-500/20 text-pink-600 dark:text-pink-400 font-bold text-xs transition flex items-center gap-1 cursor-pointer"
+                    >
+                      {copiedNumber ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
+                      <span>{copiedNumber ? "Copied" : "Copy"}</span>
+                    </button>
+                  </div>
+
+                  <p className="text-[11px] text-slate-500 leading-relaxed">
+                    {gateways?.manualBkash?.instructions ||
+                      "যেকোনো বিকাশ একাউন্ট থেকে নির্ধারিত টাকা Send Money করুন এবং সফল ট্রানজেকশনের TrxID নিচে লিখুন।"}
+                  </p>
+                </div>
+
+                {/* Form Inputs */}
+                <div className="space-y-3">
+                  <div>
+                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      আপনার বিকাশ প্রেরক নম্বর (Sender Phone Number) *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={renewalSenderNumber}
+                      onChange={(e) => setRenewalSenderNumber(e.target.value)}
+                      placeholder="e.g. 01712-345678"
+                      className="w-full h-10 px-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-pink-500 font-bold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      বিকাশ ট্রানজেকশন আইডি (Transaction ID / TrxID) *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={renewalTrxId}
+                      onChange={(e) => setRenewalTrxId(e.target.value.toUpperCase())}
+                      placeholder="e.g. BK789XYZ"
+                      className="w-full h-10 px-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-pink-500 font-bold text-pink-600 dark:text-pink-400 uppercase"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      পেমেন্ট স্লিপের স্ক্রিনশট (Payment Screenshot Slip - ঐচ্ছিক)
+                    </label>
+                    <ImageUploader
+                      value={renewalScreenshotUrl}
+                      publicId={renewalScreenshotPublicId}
+                      onChange={(data) => {
+                        setRenewalScreenshotUrl(data?.url || "");
+                        setRenewalScreenshotPublicId(data?.publicId || "");
+                      }}
+                      label="টাকা পাঠানোর স্ক্রিনশট আপলোড করুন"
+                      hint="PNG, JPG, WebP (Max 5MB)"
+                      folder="pharmacy_saas/renewals"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setShowRenewalModal(false)}
+                    className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submittingRenewal}
+                    className="px-6 py-2.5 rounded-xl bg-pink-600 hover:bg-pink-700 text-white font-bold text-xs shadow-lg shadow-pink-500/25 transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    {submittingRenewal ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span>Submitting Request...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="h-4 w-4" />
+                        <span>Submit Renewal Request</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

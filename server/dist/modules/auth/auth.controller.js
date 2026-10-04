@@ -156,5 +156,51 @@ class AuthController {
             res.status(500).json({ success: false, message: error.message });
         }
     }
+    /**
+     * POST /api/auth/forgot-password
+     */
+    static async forgotPassword(req, res) {
+        try {
+            const parsedBody = auth_validation_1.forgotPasswordSchema.parse(req.body);
+            const result = await auth_service_1.AuthService.forgotPassword(parsedBody.email);
+            res.status(200).json({ success: true, message: result.message });
+        }
+        catch (error) {
+            if (error.name === "ZodError") {
+                res.status(400).json({
+                    success: false,
+                    message: error.errors[0]?.message || "Validation failed",
+                });
+                return;
+            }
+            res.status(400).json({
+                success: false,
+                message: error.message || "Failed to process forgot password request",
+            });
+        }
+    }
+    /**
+     * POST /api/auth/reset-password
+     */
+    static async resetPassword(req, res) {
+        try {
+            const parsedBody = auth_validation_1.resetPasswordSchema.parse(req.body);
+            const result = await auth_service_1.AuthService.resetPassword(parsedBody.email, parsedBody.otpCode, parsedBody.newPassword);
+            res.status(200).json({ success: true, message: result.message });
+        }
+        catch (error) {
+            if (error.name === "ZodError") {
+                res.status(400).json({
+                    success: false,
+                    message: error.errors[0]?.message || "Validation failed",
+                });
+                return;
+            }
+            res.status(400).json({
+                success: false,
+                message: error.message || "Failed to reset password",
+            });
+        }
+    }
 }
 exports.AuthController = AuthController;

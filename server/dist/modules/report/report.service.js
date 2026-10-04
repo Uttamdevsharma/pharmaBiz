@@ -619,6 +619,10 @@ class ReportService {
             rangeStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29, 0, 0, 0, 0);
             rangeEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
         }
+        else if (activePeriod === "this_year" || activePeriod === "year") {
+            rangeStart = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
+            rangeEnd = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
+        }
         else if (activePeriod === "custom") {
             if (startDate) {
                 rangeStart = new Date(startDate);
@@ -813,6 +817,13 @@ class ReportService {
                 dynamicTrendMap[dateStr] = { key: dateStr, label, sales: 0, revenue: 0, cost: 0, profit: 0, expenses: 0 };
             }
         }
+        else if (activePeriod === "this_year" || activePeriod === "year") {
+            for (let m = 0; m < 12; m++) {
+                const monthKey = `${now.getFullYear()}-${String(m + 1).padStart(2, "0")}`;
+                const label = new Date(now.getFullYear(), m, 1).toLocaleDateString("en-US", { month: "short" });
+                dynamicTrendMap[monthKey] = { key: monthKey, label, sales: 0, revenue: 0, cost: 0, profit: 0, expenses: 0 };
+            }
+        }
         else if (activePeriod === "custom" && rangeStart && rangeEnd) {
             const diffDays = Math.ceil((rangeEnd.getTime() - rangeStart.getTime()) / (1000 * 60 * 60 * 24));
             if (diffDays <= 2) {
@@ -820,6 +831,14 @@ class ReportService {
                     const hourStr = String(h).padStart(2, "0");
                     const hourLabel = h === 0 ? "12 AM" : h < 12 ? `${h} AM` : h === 12 ? "12 PM" : `${h - 12} PM`;
                     dynamicTrendMap[hourStr] = { key: hourStr, label: hourLabel, sales: 0, revenue: 0, cost: 0, profit: 0, expenses: 0 };
+                }
+            }
+            else if (diffDays > 300) {
+                const yr = rangeStart.getFullYear();
+                for (let m = 0; m < 12; m++) {
+                    const monthKey = `${yr}-${String(m + 1).padStart(2, "0")}`;
+                    const label = new Date(yr, m, 1).toLocaleDateString("en-US", { month: "short" });
+                    dynamicTrendMap[monthKey] = { key: monthKey, label, sales: 0, revenue: 0, cost: 0, profit: 0, expenses: 0 };
                 }
             }
             else {
@@ -924,7 +943,7 @@ class ReportService {
                     dynamicTrendMap[hourStr].profit += profit;
                 }
             }
-            else if (activePeriod === "all") {
+            else if (activePeriod === "all" || activePeriod === "this_year" || activePeriod === "year" || (activePeriod === "custom" && Object.keys(dynamicTrendMap).length === 12)) {
                 const monthKey = `${saleDate.getFullYear()}-${String(saleDate.getMonth() + 1).padStart(2, "0")}`;
                 if (dynamicTrendMap[monthKey]) {
                     dynamicTrendMap[monthKey].sales += 1;
@@ -958,7 +977,7 @@ class ReportService {
                     dynamicTrendMap[hourStr].expenses += amt;
                 }
             }
-            else if (activePeriod === "all") {
+            else if (activePeriod === "all" || activePeriod === "this_year" || activePeriod === "year" || (activePeriod === "custom" && Object.keys(dynamicTrendMap).length === 12)) {
                 const monthKey = `${expDate.getFullYear()}-${String(expDate.getMonth() + 1).padStart(2, "0")}`;
                 if (dynamicTrendMap[monthKey]) {
                     dynamicTrendMap[monthKey].expenses += amt;

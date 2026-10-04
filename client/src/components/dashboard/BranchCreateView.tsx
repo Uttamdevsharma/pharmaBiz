@@ -57,7 +57,8 @@ export function BranchCreateView({ onNavigate }: BranchCreateViewProps) {
 
   const tier = (profile?.tier || "TRIAL").toUpperCase();
   const planConfig = getClientPlanConfig(tier);
-  const maxBranches = planConfig.maxBranches;
+  const maxBranches = Number(profile?.planConfig?.maxBranches ?? profile?.maxBranches ?? planConfig.maxBranches);
+  const planName = profile?.planConfig?.name || planConfig.name;
   const isLimitReached = branches.length >= maxBranches;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -65,7 +66,7 @@ export function BranchCreateView({ onNavigate }: BranchCreateViewProps) {
     if (isLimitReached) {
       showAlert.error(
         "Branch Limit Reached",
-        `Your ${planConfig.name} plan allows up to ${maxBranches >= 999 ? "Unlimited" : maxBranches} branch store(s). Please upgrade your subscription to add more branches.`
+        `Your ${planName} plan allows up to ${maxBranches >= 999 ? "Unlimited" : maxBranches} branch store(s) (including your main branch). Please upgrade your subscription to add more branches.`
       );
       return;
     }
@@ -147,7 +148,7 @@ export function BranchCreateView({ onNavigate }: BranchCreateViewProps) {
             />
             <div>
               <div className="font-bold text-sm sm:text-base">
-                Plan Capacity: {branches.length} of {maxBranches >= 999 ? "Unlimited" : maxBranches} Branches Used ({planConfig.name})
+                Plan Capacity: {branches.length} of {maxBranches >= 999 ? "Unlimited" : maxBranches} Branches Used ({planName})
               </div>
               <div className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mt-0.5 font-medium">
                 {isLimitReached

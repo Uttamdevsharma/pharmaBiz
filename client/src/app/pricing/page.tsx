@@ -9,6 +9,7 @@ import {
   Check,
   Sparkles,
   ArrowRight,
+  MessageSquare,
 } from "lucide-react";
 
 export default function PricingPage() {
@@ -80,7 +81,7 @@ export default function PricingPage() {
   ];
 
   const rawPlans = settings.plans && settings.plans.length > 0 ? settings.plans : fallbackPlans;
-  const paidPlans = rawPlans.filter((p: any) => p.tier !== "TRIAL");
+  const displayPlans = rawPlans.filter((p: any) => p.isActive !== false);
 
   // Calculate pricing based on cycle (Yearly gets 20% discount)
   const getDisplayPrice = (monthlyPrice: number | string) => {
@@ -147,26 +148,37 @@ export default function PricingPage() {
           </div>
 
 
-          {/* Paid Plans Grid */}
+          {/* Plans Grid */}
           <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-8 2xl:gap-10 w-full">
-            {paidPlans.map((plan: any, idx: number) => {
+            {displayPlans.map((plan: any, idx: number) => {
+              const isTrial = Boolean(plan.tier === "TRIAL" || plan.isTrial || plan.features?.isTrial);
+              const isCustom = Boolean(plan.isCustom || plan.features?.isCustom);
+              const trialDays = Number(plan.trialDays || plan.features?.trialDays || 14);
               const displayPrice = getDisplayPrice(plan.price);
               const isPopular = plan.tier === "GROWTH" || plan.isPopular;
+              const whatsappNum = (plan.whatsappNumber || plan.features?.whatsappNumber || "8801700000000").replace(/\D/g, "");
+              const whatsappMsg = encodeURIComponent(plan.customMessage || plan.features?.customMessage || `Hello, I am interested in the ${plan.name} Enterprise plan for PharmaBiz.`);
 
               return (
                 <div
                   key={plan.id || idx}
                   className={`relative rounded-3xl bg-white dark:bg-slate-900 border transition-all duration-300 flex flex-col p-6 sm:p-8 2xl:p-10 ${
-                    isPopular
+                    isTrial
+                      ? "border-emerald-500 shadow-xl ring-2 ring-emerald-500/30 md:-translate-y-2"
+                      : isPopular
                       ? "border-emerald-500 shadow-xl ring-2 ring-emerald-500/30 md:-translate-y-2"
                       : "border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-slate-300 dark:hover:border-slate-700"
                   }`}
                 >
-                  {isPopular && (
+                  {isTrial ? (
+                    <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 px-4 py-1 rounded-full bg-emerald-600 text-white text-xs font-bold uppercase tracking-wider shadow-md">
+                      Free Trial
+                    </div>
+                  ) : isPopular ? (
                     <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 px-4 py-1 rounded-full bg-emerald-600 text-white text-xs font-bold uppercase tracking-wider shadow-md">
                       Most Popular
                     </div>
-                  )}
+                  ) : null}
 
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
@@ -174,13 +186,17 @@ export default function PricingPage() {
                         {plan.name || plan.tier}
                       </h3>
                       <span className="text-xs font-semibold px-2.5 py-1 rounded-md brand-subtle-bg text-brand-primary uppercase">
-                        {plan.tier}
+                        {isTrial ? "Trial" : isCustom ? "Custom" : plan.tier}
                       </span>
                     </div>
 
                     <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 min-h-[40px]">
                       {plan.description ||
-                        (plan.tier === "STARTER"
+                        (isTrial
+                          ? `Experience all features free for ${trialDays} days. No payment required.`
+                          : isCustom
+                          ? "Custom branch limits, dedicated account manager, and on-premise SLA."
+                          : plan.tier === "STARTER"
                           ? "Essential toolkit for retail pharmacies starting out."
                           : plan.tier === "GROWTH"
                           ? "Full multi-branch control and stock transfers."
@@ -189,28 +205,62 @@ export default function PricingPage() {
 
                     {/* Price Block */}
                     <div className="pt-2 flex items-baseline gap-1">
-                      <span className="text-3xl sm:text-4xl font-extrabold text-slate-900 dark:text-white">
-                        ৳ {displayPrice.toLocaleString()}
-                      </span>
-                      <span className="text-sm font-medium text-slate-500">
-                        {billingCycle === "YEARLY" ? "/year" : "/month"}
-                      </span>
+                      {isTrial ? (
+                        <>
+                          <span className="text-3xl sm:text-4xl font-extrabold text-emerald-600 dark:text-emerald-400">
+                            ৳ 0
+                          </span>
+                          <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-full ml-1">
+                            {trialDays} Days Free
+                          </span>
+                        </>
+                      ) : isCustom ? (
+                        <>
+                          <span className="text-3xl sm:text-4xl font-extrabold text-slate-900 dark:text-white">
+                            Custom
+                          </span>
+                          <span className="text-sm font-medium text-slate-500">Contact Sales</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-3xl sm:text-4xl font-extrabold text-slate-900 dark:text-white">
+                            ৳ {displayPrice.toLocaleString()}
+                          </span>
+                          <span className="text-sm font-medium text-slate-500">
+                            {billingCycle === "YEARLY" ? "/year" : "/month"}
+                          </span>
+                        </>
+                      )}
                     </div>
                   </div>
 
                   {/* Plan Call to Action */}
                   <div className="pt-6">
-                    <Link
-                      href={`/register?planId=${plan.id}&billing=${billingCycle}`}
-                      className={`w-full py-3.5 px-4 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all active:scale-95 ${
-                        isPopular
-                          ? "bg-brand-primary text-white shadow-md hover:opacity-95 hover:shadow-lg"
-                          : "bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white hover:bg-slate-200 dark:hover:bg-slate-700"
-                      }`}
-                    >
-                      <span>Choose {plan.name?.split("-")[1] || plan.name || plan.tier}</span>
-                      <ArrowRight className="h-4 w-4" />
-                    </Link>
+                    {isCustom ? (
+                      <a
+                        href={`https://wa.me/${whatsappNum}?text=${whatsappMsg}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full py-3.5 px-4 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all active:scale-95 bg-emerald-600 text-white shadow-md hover:bg-emerald-700 hover:shadow-lg"
+                      >
+                        <MessageSquare className="h-4 w-4" />
+                        <span>Chat on WhatsApp</span>
+                      </a>
+                    ) : (
+                      <Link
+                        href={`/register?planId=${plan.id}${isTrial ? "" : `&billing=${billingCycle}`}`}
+                        className={`w-full py-3.5 px-4 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all active:scale-95 ${
+                          isTrial
+                            ? "bg-emerald-600 text-white shadow-md hover:bg-emerald-700 hover:shadow-lg"
+                            : isPopular
+                            ? "bg-brand-primary text-white shadow-md hover:opacity-95 hover:shadow-lg"
+                            : "bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white hover:bg-slate-200 dark:hover:bg-slate-700"
+                        }`}
+                      >
+                        <span>{isTrial ? `Start ${trialDays}-Day Free Trial` : `Choose ${plan.name?.split("-")[1] || plan.name || plan.tier}`}</span>
+                        <ArrowRight className="h-4 w-4" />
+                      </Link>
+                    )}
                   </div>
 
                   {/* Features List */}
@@ -220,18 +270,35 @@ export default function PricingPage() {
                     </div>
 
                     <ul className="space-y-3 text-xs sm:text-sm text-slate-600 dark:text-slate-300">
-                      <li className="flex items-center gap-2.5">
-                        <Check className="h-4 w-4 text-emerald-500 shrink-0" />
-                        <span>
-                          <strong>{plan.maxBranches >= 999 ? "Unlimited" : plan.maxBranches}</strong> Branches Included
-                        </span>
-                      </li>
-                      <li className="flex items-center gap-2.5">
-                        <Check className="h-4 w-4 text-emerald-500 shrink-0" />
-                        <span>
-                          <strong>{plan.maxStaffPerBranch >= 999 ? "Unlimited" : plan.maxStaffPerBranch}</strong> Staff / Branch
-                        </span>
-                      </li>
+                      {!isCustom && (
+                        <>
+                          <li className="flex items-center gap-2.5">
+                            <Check className="h-4 w-4 text-emerald-500 shrink-0" />
+                            <span>
+                              <strong>{plan.maxBranches >= 999 ? "Unlimited" : plan.maxBranches}</strong> Branches Included
+                            </span>
+                          </li>
+                          <li className="flex items-center gap-2.5">
+                            <Check className="h-4 w-4 text-emerald-500 shrink-0" />
+                            <span>
+                              <strong>
+                                {(plan.maxStaffPerBranch ?? plan.features?.maxStaffPerBranch ?? 1) >= 999
+                                  ? "Unlimited"
+                                  : (plan.maxStaffPerBranch ?? plan.features?.maxStaffPerBranch ?? 1)}
+                              </strong>{" "}
+                              Staff / Branch
+                            </span>
+                          </li>
+                        </>
+                      )}
+                      {isCustom && (
+                        <li className="flex items-center gap-2.5">
+                          <Check className="h-4 w-4 text-emerald-500 shrink-0" />
+                          <span>
+                            <strong>Custom Capacity:</strong> Tailored branch & staff quota
+                          </span>
+                        </li>
+                      )}
                       <li className="flex items-center gap-2.5">
                         <Check className="h-4 w-4 text-emerald-500 shrink-0" />
                         <span>100% Offline POS & Auto Cloud Sync</span>

@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.resendOtpSchema = exports.verifyOtpSchema = exports.registerOwnerSchema = exports.loginSchema = void 0;
+exports.resetPasswordSchema = exports.forgotPasswordSchema = exports.resendOtpSchema = exports.verifyOtpSchema = exports.registerOwnerSchema = exports.loginSchema = void 0;
 const zod_1 = require("zod");
 exports.loginSchema = zod_1.z
     .object({
@@ -39,6 +39,11 @@ exports.registerOwnerSchema = zod_1.z.object({
     drugLicenseDocument: zod_1.z.string().optional(),
     planId: zod_1.z.string().optional(),
     billingCycle: zod_1.z.enum(["MONTHLY", "YEARLY"]).optional().default("MONTHLY"),
+    // Payment information
+    paymentMethod: zod_1.z.string().optional().default("MANUAL_BKASH"),
+    manualPaymentNumber: zod_1.z.string().optional(),
+    manualPaymentTrxId: zod_1.z.string().optional(),
+    manualPaymentDocument: zod_1.z.string().optional(), // base64 screenshot
 });
 exports.verifyOtpSchema = zod_1.z.object({
     email: zod_1.z.string().email("Invalid email address"),
@@ -47,4 +52,12 @@ exports.verifyOtpSchema = zod_1.z.object({
 });
 exports.resendOtpSchema = zod_1.z.object({
     email: zod_1.z.string().email("Invalid email address"),
+});
+exports.forgotPasswordSchema = zod_1.z.object({
+    email: zod_1.z.string().email("Please provide a valid registered email address"),
+});
+exports.resetPasswordSchema = zod_1.z.object({
+    email: zod_1.z.string().email("Please provide a valid registered email address"),
+    otpCode: zod_1.z.string().min(4, "OTP code is required"),
+    newPassword: zod_1.z.string().min(6, "Password must be at least 6 characters"),
 });

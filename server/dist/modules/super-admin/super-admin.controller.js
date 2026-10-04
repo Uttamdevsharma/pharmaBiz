@@ -386,5 +386,48 @@ class SuperAdminController {
             res.status(400).json({ success: false, message: error.message });
         }
     }
+    /**
+     * GET /api/super-admin/pending-renewals
+     */
+    static async getPendingRenewals(req, res) {
+        try {
+            const data = await super_admin_service_1.SuperAdminService.getPendingRenewals();
+            res.status(200).json({
+                success: true,
+                data,
+            });
+        }
+        catch (error) {
+            res.status(500).json({ success: false, message: error.message });
+        }
+    }
+    /**
+     * POST /api/super-admin/renewals/:id/approve
+     */
+    static async approveRenewal(req, res) {
+        try {
+            const paymentId = req.params.id;
+            const adminUserId = req.user.id;
+            const result = await super_admin_service_1.SuperAdminService.approveRenewal(paymentId, adminUserId);
+            res.status(200).json(result);
+        }
+        catch (error) {
+            res.status(400).json({ success: false, message: error.message });
+        }
+    }
+    /**
+     * POST /api/super-admin/renewals/:id/reject
+     */
+    static async rejectRenewal(req, res) {
+        try {
+            const paymentId = req.params.id;
+            const adminUserId = req.user.id;
+            const result = await super_admin_service_1.SuperAdminService.rejectRenewal(paymentId, adminUserId, req.body?.reason);
+            res.status(200).json(result);
+        }
+        catch (error) {
+            res.status(400).json({ success: false, message: error.message });
+        }
+    }
 }
 exports.SuperAdminController = SuperAdminController;

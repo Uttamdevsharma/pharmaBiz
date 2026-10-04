@@ -146,7 +146,13 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
   const nonOwnerStaff = staff.filter(
     (s) => s.role !== "COMPANY_OWNER" && s.role !== "SUPER_ADMIN"
   );
-  const maxStaff = isTrial ? 1 : planConfig.maxTotalStaff || 999;
+  const maxStaff = isTrial
+    ? 1
+    : Number(profile?.planConfig?.maxTotalStaff ?? profile?.maxTotalStaff ?? planConfig.maxTotalStaff ?? 999);
+  const maxStaffPerBranch = Number(
+    profile?.planConfig?.maxStaffPerBranch ?? profile?.maxStaffPerBranch ?? planConfig.maxStaffPerBranch ?? 1
+  );
+  const planName = profile?.planConfig?.name || planConfig.name;
   const isTotalLimitReached = nonOwnerStaff.length >= maxStaff;
 
   const handleOpenCreate = () => {
@@ -155,7 +161,7 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
         "Staff Limit Reached",
         isTrial
           ? `Plan 0 - Free Trial allows a maximum of 1 staff member. Please upgrade to a paid plan to add more staff.`
-          : `You have reached the overall staff limit for ${planConfig.name} (${nonOwnerStaff.length}/${maxStaff} staff members). Please upgrade to a higher plan to add more staff.`
+          : `You have reached the overall staff limit for ${planName} (${nonOwnerStaff.length}/${maxStaff} staff members). Please upgrade to a higher plan to add more staff.`
       );
       return;
     }
@@ -271,7 +277,7 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
             const branchName = branchObj ? branchObj.name : "This branch";
             await showAlert.warning(
               "Branch Staff Limit Reached",
-              `Branch "${branchName}" has reached its maximum staff limit of ${maxBranchStaff} (${planConfig.name}). Upgrade your plan or select another branch.`
+              `Branch "${branchName}" has reached its maximum staff limit of ${maxBranchStaff} (${planName}). Upgrade your plan or select another branch.`
             );
             setError(`Branch staff limit reached for "${branchName}" (${branchStaffCount}/${maxBranchStaff} staff).`);
             setSaving(false);
@@ -496,7 +502,7 @@ export function StaffModule({ onNavigate }: StaffModuleProps = {}) {
               <p className="text-[11px] text-amber-700/80 dark:text-amber-400/80 mt-0.5">
                 {isTrial
                   ? "Plan 0 - Free Trial allows a maximum of 1 staff member. Upgrade to Plan 1, 2, or 3 to add more team members."
-                  : `Your ${planConfig.name} allows up to ${planConfig.maxStaffPerBranch} staff per branch. Upgrade for higher capacity.`}
+                  : `Your ${planName} allows up to ${maxStaffPerBranch >= 999 ? "Unlimited" : maxStaffPerBranch} staff per branch. Upgrade for higher capacity.`}
               </p>
             </div>
           </div>

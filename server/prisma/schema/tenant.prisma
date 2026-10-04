@@ -68,6 +68,14 @@ model Tenant {
   pendingPlanId             String?
   pendingBillingCycle       String?            @default("MONTHLY")
 
+  // Payment Information
+  paymentMethod             String?            @default("MANUAL_BKASH")
+  manualPaymentNumber       String?
+  manualPaymentTrxId        String?
+  manualPaymentDocUrl       String?
+  manualPaymentDocPublicId  String?
+  manualPaymentAmount       Decimal?           @db.Decimal(12, 2)
+
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
 

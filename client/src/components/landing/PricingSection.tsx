@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { useSettings } from "@/context/SettingsContext";
-import { Check, Sparkles, Building, ArrowRight, Users } from "lucide-react";
+import { Check, Sparkles, Building, ArrowRight, Users, MessageSquare } from "lucide-react";
 
 export function PricingSection() {
   const { settings } = useSettings();
@@ -63,9 +63,8 @@ export function PricingSection() {
     },
   ];
 
-  // Filter out TRIAL if in settings.plans so we show Paid tiers in grid with dedicated Free Trial banner
   const rawPlans = settings.plans && settings.plans.length > 0 ? settings.plans : fallbackPlans;
-  const paidPlans = rawPlans.filter((p: any) => p.tier !== "TRIAL");
+  const displayPlans = rawPlans.filter((p: any) => p.isActive !== false);
 
   return (
     <section id="pricing" className="py-24 bg-slate-100/60 dark:bg-slate-900/40 border-y border-slate-200/60 dark:border-slate-800/60">
@@ -110,22 +109,35 @@ export function PricingSection() {
 
         {/* Pricing Cards Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 2xl:gap-10 items-stretch">
-          {paidPlans.map((plan: any) => {
+          {displayPlans.map((plan: any) => {
             const isGrowth = plan.tier === "GROWTH";
+            const isTrial = Boolean(plan.tier === "TRIAL" || plan.isTrial || plan.features?.isTrial);
+            const isCustom = Boolean(plan.isCustom || plan.features?.isCustom);
+            const trialDays = Number(plan.trialDays || plan.features?.trialDays || 14);
             const basePrice = Number(plan.price);
             const displayPrice = isYearly ? Math.round(basePrice * 12 * 0.85) : basePrice;
-            const period = isYearly ? "/year" : "/month";
+            const period = isTrial ? `/${trialDays} days trial` : isCustom ? "Custom" : (isYearly ? "/year" : "/month");
+            const whatsappNum = (plan.whatsappNumber || plan.features?.whatsappNumber || "8801700000000").replace(/\D/g, "");
+            const whatsappMsg = encodeURIComponent(plan.customMessage || plan.features?.customMessage || `Hello, I am interested in the ${plan.name} Enterprise plan for PharmaBiz.`);
 
             return (
               <div
                 key={plan.id}
                 className={`relative rounded-2xl 2xl:rounded-3xl p-8 2xl:p-10 flex flex-col justify-between transition-all duration-300 ${
-                  isGrowth
+                  isTrial
+                    ? "bg-white dark:bg-slate-900 border-2 border-emerald-500 shadow-xl"
+                    : isGrowth
                     ? "bg-white dark:bg-slate-900 border-2 border-brand-primary shadow-xl scale-105 z-10"
                     : "bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-lg"
                 }`}
               >
-                {isGrowth && (
+                {isTrial && (
+                  <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 px-4 py-1 rounded-full bg-emerald-600 text-white text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 shadow-md">
+                    <Sparkles className="h-3.5 w-3.5" />
+                    Free Trial
+                  </div>
+                )}
+                {!isTrial && isGrowth && (
                   <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 px-4 py-1 rounded-full bg-brand-primary text-white text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 shadow-md">
                     <Sparkles className="h-3.5 w-3.5" />
                     Most Popular
@@ -136,36 +148,64 @@ export function PricingSection() {
                   <div>
                     <h3 className="text-2xl font-bold text-slate-900 dark:text-white">{plan.name}</h3>
                     <p className="text-xs text-slate-500 mt-1 uppercase font-semibold tracking-wider">
-                      Tier: {plan.tier}
+                      {isTrial ? "Trial Tier" : isCustom ? "Custom Enterprise" : `Tier: ${plan.tier}`}
                     </p>
                   </div>
 
                   <div className="flex items-baseline gap-1">
-                    <span className="text-4xl sm:text-5xl font-extrabold text-slate-900 dark:text-white">
-                      ৳{displayPrice.toLocaleString()}
-                    </span>
-                    <span className="text-sm font-medium text-slate-500">{period}</span>
+                    {isTrial ? (
+                      <>
+                        <span className="text-4xl sm:text-5xl font-extrabold text-emerald-600 dark:text-emerald-400">
+                          ৳0
+                        </span>
+                        <span className="text-sm font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-full ml-1">
+                          {trialDays} Days Free
+                        </span>
+                      </>
+                    ) : isCustom ? (
+                      <>
+                        <span className="text-3xl sm:text-4xl font-extrabold text-slate-900 dark:text-white">
+                          Custom
+                        </span>
+                        <span className="text-sm font-medium text-slate-500">Contact Us</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-4xl sm:text-5xl font-extrabold text-slate-900 dark:text-white">
+                          ৳{displayPrice.toLocaleString()}
+                        </span>
+                        <span className="text-sm font-medium text-slate-500">{period}</span>
+                      </>
+                    )}
                   </div>
 
-                  <div className="space-y-2">
-                    <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 text-xs font-medium text-slate-700 dark:text-slate-300 flex items-center gap-2">
-                      <Building className="h-4 w-4 text-brand-primary shrink-0" />
-                      <span>
-                        Supports up to <strong>{plan.maxBranches >= 999 ? "Unlimited" : `${plan.maxBranches}`} Branches</strong>
-                      </span>
-                    </div>
+                  {!isCustom && (
+                    <div className="space-y-2">
+                      <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 text-xs font-medium text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                        <Building className="h-4 w-4 text-brand-primary shrink-0" />
+                        <span>
+                          Supports up to <strong>{plan.maxBranches >= 999 ? "Unlimited" : `${plan.maxBranches}`} Branches</strong>
+                        </span>
+                      </div>
 
-                    <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 text-xs font-medium text-slate-700 dark:text-slate-300 flex items-center gap-2">
-                      <Users className="h-4 w-4 text-emerald-500 shrink-0" />
-                      <span>
-                        {plan.tier === "STARTER"
-                          ? "1 Staff per Branch"
-                          : plan.tier === "GROWTH"
-                          ? "3 Staff per Branch"
-                          : "Unlimited Staff"}
-                      </span>
+                      <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 text-xs font-medium text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                        <Users className="h-4 w-4 text-emerald-500 shrink-0" />
+                        <span>
+                          {plan.tier === "STARTER"
+                            ? "1 Staff per Branch"
+                            : plan.tier === "GROWTH"
+                            ? "3 Staff per Branch"
+                            : "Unlimited Staff"}
+                        </span>
+                      </div>
                     </div>
-                  </div>
+                  )}
+                  {isCustom && (
+                    <div className="p-3.5 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/40 text-xs font-medium text-emerald-800 dark:text-emerald-300 flex items-center gap-2">
+                      <Building className="h-4 w-4 text-emerald-600 shrink-0" />
+                      <span>Custom branch capacity & staff limits based on your consultation</span>
+                    </div>
+                  )}
 
                   {/* Feature List */}
                   <ul className="space-y-3 text-sm text-slate-600 dark:text-slate-300">
@@ -227,17 +267,31 @@ export function PricingSection() {
                 </div>
 
                 <div className="pt-8 mt-6 border-t border-slate-100 dark:border-slate-800">
-                  <Link
-                    href={`/register?planId=${plan.id}&billing=${isYearly ? "YEARLY" : "MONTHLY"}`}
-                    className={`w-full py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-sm active:scale-95 ${
-                      isGrowth
-                        ? "bg-brand-primary text-white hover:opacity-90 shadow-md"
-                        : "bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white hover:bg-slate-200 dark:hover:bg-slate-700"
-                    }`}
-                  >
-                    Get Started with {plan.name}
-                    <ArrowRight className="h-4 w-4" />
-                  </Link>
+                  {isCustom ? (
+                    <a
+                      href={`https://wa.me/${whatsappNum}?text=${whatsappMsg}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-sm active:scale-95 bg-emerald-600 text-white hover:bg-emerald-700 shadow-md shadow-emerald-600/20"
+                    >
+                      <MessageSquare className="h-4 w-4" />
+                      <span>Chat on WhatsApp</span>
+                    </a>
+                  ) : (
+                    <Link
+                      href={`/register?planId=${plan.id}${isTrial ? "" : `&billing=${isYearly ? "YEARLY" : "MONTHLY"}`}`}
+                      className={`w-full py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-sm active:scale-95 ${
+                        isTrial
+                          ? "bg-emerald-600 text-white hover:bg-emerald-700 shadow-md shadow-emerald-600/20"
+                          : isGrowth
+                          ? "bg-brand-primary text-white hover:opacity-90 shadow-md"
+                          : "bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white hover:bg-slate-200 dark:hover:bg-slate-700"
+                      }`}
+                    >
+                      {isTrial ? `Start ${trialDays}-Day Free Trial` : `Get Started with ${plan.name}`}
+                      <ArrowRight className="h-4 w-4" />
+                    </Link>
+                  )}
                 </div>
               </div>
             );

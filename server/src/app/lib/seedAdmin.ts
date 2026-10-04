@@ -8,6 +8,24 @@ export async function seedSuperAdmin(): Promise<void> {
     const adminEmail = "admin@gmail.com";
     const adminPassword = "admin1234";
 
+    // 0. Ensure schema columns exist in PostgreSQL
+    try {
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "Tenant" ADD COLUMN IF NOT EXISTS "paymentMethod" TEXT DEFAULT 'MANUAL_BKASH';`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "Tenant" ADD COLUMN IF NOT EXISTS "manualPaymentNumber" TEXT;`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "Tenant" ADD COLUMN IF NOT EXISTS "manualPaymentTrxId" TEXT;`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "Tenant" ADD COLUMN IF NOT EXISTS "manualPaymentDocUrl" TEXT;`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "Tenant" ADD COLUMN IF NOT EXISTS "manualPaymentDocPublicId" TEXT;`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "Tenant" ADD COLUMN IF NOT EXISTS "manualPaymentAmount" DECIMAL(12, 2);`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "resetPasswordOtp" TEXT;`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "resetPasswordOtpExpires" TIMESTAMP;`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "Payment" ADD COLUMN IF NOT EXISTS "senderNumber" TEXT;`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "Payment" ADD COLUMN IF NOT EXISTS "screenshotUrl" TEXT;`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "Payment" ADD COLUMN IF NOT EXISTS "type" TEXT DEFAULT 'SUBSCRIPTION';`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "Payment" ADD COLUMN IF NOT EXISTS "notes" TEXT;`);
+    } catch (colErr: any) {
+      console.warn("[Seed] Column verification note:", colErr.message);
+    }
+
     // 1. Seed Platform Settings if not present
     const existingSettings = await (prisma as any).platformSetting.findUnique({
       where: { key: "landing_page_config" },
@@ -21,6 +39,34 @@ export async function seedSuperAdmin(): Promise<void> {
         },
       });
       console.log("[Seed] Platform Landing Page and Theme Settings seeded.");
+    }
+
+    // Seed Payment Gateway Settings if not present
+    const existingPaymentSettings = await (prisma as any).platformSetting.findUnique({
+      where: { key: "payment_gateway_settings" },
+    });
+
+    if (!existingPaymentSettings) {
+      await (prisma as any).platformSetting.create({
+        data: {
+          key: "payment_gateway_settings",
+          value: {
+            manualBkash: {
+              enabled: true,
+              accountNumber: "01750000000",
+              accountType: "Personal",
+              instructions: "অনুগ্রহ করে এই পার্সোনাল বিকাশ নাম্বারে Send Money করুন। রেফারেন্স হিসেবে আপনার ফার্মেসির নাম ব্যবহার করুন। টাকা পাঠানোর পর প্রেরকের নম্বর, TrxID এবং স্ক্রিনশট আপলোড করে সাবমিট করুন।",
+            },
+            sslcommerz: {
+              enabled: false,
+              storeId: "",
+              storePassword: "",
+              isSandbox: true,
+            },
+          },
+        },
+      });
+      console.log("[Seed] Payment Gateway Settings seeded.");
     }
 
     // 2. Check if Super Admin already exists

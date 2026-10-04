@@ -386,5 +386,48 @@ export class SuperAdminController {
       res.status(400).json({ success: false, message: error.message });
     }
   }
+
+  /**
+   * GET /api/super-admin/pending-renewals
+   */
+  static async getPendingRenewals(req: Request, res: Response): Promise<void> {
+    try {
+      const data = await SuperAdminService.getPendingRenewals();
+      res.status(200).json({
+        success: true,
+        data,
+      });
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
+
+  /**
+   * POST /api/super-admin/renewals/:id/approve
+   */
+  static async approveRenewal(req: Request, res: Response): Promise<void> {
+    try {
+      const paymentId = req.params.id as string;
+      const adminUserId = req.user!.id;
+      const result = await SuperAdminService.approveRenewal(paymentId, adminUserId);
+      res.status(200).json(result);
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  }
+
+  /**
+   * POST /api/super-admin/renewals/:id/reject
+   */
+  static async rejectRenewal(req: Request, res: Response): Promise<void> {
+    try {
+      const paymentId = req.params.id as string;
+      const adminUserId = req.user!.id;
+      const result = await SuperAdminService.rejectRenewal(paymentId, adminUserId, req.body?.reason);
+      res.status(200).json(result);
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  }
 }
 

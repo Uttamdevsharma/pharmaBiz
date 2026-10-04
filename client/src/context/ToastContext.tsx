@@ -122,6 +122,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       {/* Floating Toast Container */}
       <div
         aria-live="polite"
+        suppressHydrationWarning
         className="fixed top-5 right-5 z-[99999] flex flex-col gap-2.5 max-w-sm sm:max-w-md w-full pointer-events-none px-3 sm:px-0"
       >
         {toasts.map((item) => (

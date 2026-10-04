@@ -88,7 +88,8 @@ export function BranchModule({ onNavigate }: BranchModuleProps) {
 
   const tier = (profile?.tier || "TRIAL").toUpperCase();
   const planConfig = getClientPlanConfig(tier);
-  const maxBranches = planConfig.maxBranches;
+  const maxBranches = Number(profile?.planConfig?.maxBranches ?? profile?.maxBranches ?? planConfig.maxBranches);
+  const planName = profile?.planConfig?.name || planConfig.name;
   const isLimitReached = branches.length >= maxBranches;
 
   // Filtered & Paginated Branches
@@ -260,7 +261,7 @@ export function BranchModule({ onNavigate }: BranchModuleProps) {
           </h2>
           <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1 font-medium">
             Managing <strong className="text-slate-800 dark:text-slate-200">{branches.length}</strong> of{" "}
-            <strong>{maxBranches >= 999 ? "Unlimited" : maxBranches}</strong> physical branch stores ({planConfig.name})
+            <strong>{maxBranches >= 999 ? "Unlimited" : maxBranches}</strong> physical branch stores ({planName})
           </p>
         </div>
 
@@ -284,7 +285,7 @@ export function BranchModule({ onNavigate }: BranchModuleProps) {
             <div>
               <strong>Branch Limit Reached ({branches.length}/{maxBranches >= 999 ? "Unlimited" : maxBranches})</strong>
               <p className="text-xs text-amber-700/80 dark:text-amber-400/80 mt-0.5">
-                Your <strong>{planConfig.name}</strong> allows up to {maxBranches >= 999 ? "Unlimited" : maxBranches} physical branch stores. Upgrade your subscription plan to add more.
+                Your <strong>{planName}</strong> allows up to {maxBranches >= 999 ? "Unlimited" : maxBranches} physical branch stores (including your main branch). Upgrade your subscription plan to add more.
               </p>
             </div>
           </div>

@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.disburseSalarySchema = exports.setSalaryConfigSchema = exports.updateExpensePaymentSchema = exports.listExpensesQuerySchema = exports.recordExpensePaymentSchema = exports.updateRecurringExpenseSchema = exports.createRecurringExpenseSchema = exports.listTransactionsQuerySchema = exports.recordTransactionSchema = exports.transferFundsSchema = exports.depositFundsSchema = exports.updateAccountSchema = exports.createAccountSchema = void 0;
+exports.getTransferRequestsQuerySchema = exports.rejectTransferRequestSchema = exports.createTransferRequestSchema = exports.disburseSalarySchema = exports.setSalaryConfigSchema = exports.updateExpensePaymentSchema = exports.listExpensesQuerySchema = exports.recordExpensePaymentSchema = exports.updateRecurringExpenseSchema = exports.createRecurringExpenseSchema = exports.listTransactionsQuerySchema = exports.recordTransactionSchema = exports.transferFundsSchema = exports.depositFundsSchema = exports.updateAccountSchema = exports.createAccountSchema = void 0;
 const zod_1 = require("zod");
 exports.createAccountSchema = zod_1.z.object({
     branchId: zod_1.z.string().uuid("Invalid branch ID").optional().nullable().or(zod_1.z.literal("")),
@@ -127,4 +127,22 @@ exports.disburseSalarySchema = zod_1.z.object({
     paidAmount: zod_1.z.number().positive("Payment amount must be greater than 0"),
     paymentRef: zod_1.z.string().optional().nullable(),
     notes: zod_1.z.string().optional().nullable(),
+});
+exports.createTransferRequestSchema = zod_1.z.object({
+    branchId: zod_1.z.string().uuid("Invalid branch ID").optional().nullable(),
+    sourceAccountId: zod_1.z.string().uuid("Invalid source account ID"),
+    destinationAccountId: zod_1.z.string().uuid("Invalid destination account ID"),
+    amount: zod_1.z.number().positive("Transfer amount must be greater than 0"),
+    reference: zod_1.z.string().optional().nullable(),
+    note: zod_1.z.string().optional().nullable(),
+});
+exports.rejectTransferRequestSchema = zod_1.z.object({
+    reason: zod_1.z.string().optional().nullable(),
+});
+exports.getTransferRequestsQuerySchema = zod_1.z.object({
+    status: zod_1.z.enum(["ALL", "PENDING", "APPROVED", "REJECTED"]).optional(),
+    period: zod_1.z.enum(["today", "yesterday", "month", "year", "custom"]).optional(),
+    startDate: zod_1.z.string().optional(),
+    endDate: zod_1.z.string().optional(),
+    branchId: zod_1.z.string().optional(),
 });

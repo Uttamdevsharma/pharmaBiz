@@ -39,11 +39,16 @@ router.patch(
   SuperAdminController.updateTenantStatus
 );
 
-// ==================== PHARMACY VERIFICATIONS & APPROVALS ====================
+// ==================== PHARMACY VERIFICATIONS & APPROVALS (Tab 1) ====================
 router.get("/verifications", requirePermission("pharmacies.manage"), SuperAdminController.listPharmacyVerifications);
 router.get("/verifications/:id", requirePermission("pharmacies.manage"), SuperAdminController.getPharmacyVerification);
 router.post("/verifications/:id/approve", requirePermission("pharmacies.manage"), SuperAdminController.approvePharmacyVerification);
 router.post("/verifications/:id/reject", requirePermission("pharmacies.manage"), SuperAdminController.rejectPharmacyVerification);
+
+// ==================== SUBSCRIPTION RENEWALS & UPGRADES (Tab 2) ====================
+router.get("/pending-renewals", requirePermission("subscriptions.manage"), SuperAdminController.getPendingRenewals);
+router.post("/renewals/:id/approve", requirePermission("subscriptions.manage"), SuperAdminController.approveRenewal);
+router.post("/renewals/:id/reject", requirePermission("subscriptions.manage"), SuperAdminController.rejectRenewal);
 
 // ==================== SUBSCRIPTIONS ====================
 router.get("/subscriptions", requirePermission("subscriptions.manage"), SuperAdminController.listSubscriptions);

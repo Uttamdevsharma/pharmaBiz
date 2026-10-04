@@ -31,6 +31,7 @@ import {
   Eye,
   Check,
   Building,
+  CreditCard,
 } from "lucide-react";
 
 // Curated preset color palettes for health & enterprise SaaS
@@ -48,7 +49,8 @@ type SettingsSubTab =
   | "brand-color"
   | "landing-hero"
   | "platform-features"
-  | "company-contact";
+  | "company-contact"
+  | "payment-gateways";
 
 export function SettingsTab() {
   const { settings, loading, refreshSettings } = useSettings();
@@ -64,6 +66,7 @@ export function SettingsTab() {
     "landing-hero": false,
     "platform-features": false,
     "company-contact": false,
+    "payment-gateways": false,
   });
 
   // Local form state
@@ -91,6 +94,63 @@ export function SettingsTab() {
   const [supportHours, setSupportHours] = useState(settings.contact?.supportHours || "24/7 Dedicated Support");
 
   const [features, setFeatures] = useState(settings.features || []);
+
+  // Payment Gateway Settings Form State
+  const [gatewaySettings, setGatewaySettings] = useState<any>({
+    manualBkash: {
+      enabled: true,
+      number: "01700000000",
+      type: "PERSONAL",
+      instructions: "bKash Send Money করুন এই নম্বরে এবং ট্রানজেকশন আইডি দিন।",
+    },
+    sslcommerz: {
+      enabled: false,
+      storeId: "",
+      storePassword: "",
+      isSandbox: true,
+    },
+  });
+  const [loadingGateways, setLoadingGateways] = useState(false);
+  const [savingGateways, setSavingGateways] = useState(false);
+
+  const loadGatewaySettings = async () => {
+    setLoadingGateways(true);
+    try {
+      const res = await fetchApi<any>("/settings/admin-payment-gateways");
+      if (res.success && res.data) {
+        setGatewaySettings(res.data);
+      }
+    } catch (err) {
+      console.error("Failed to load gateway settings", err);
+    } finally {
+      setLoadingGateways(false);
+    }
+  };
+
+  useEffect(() => {
+    loadGatewaySettings();
+  }, []);
+
+  const handleSaveGatewaySettings = async () => {
+    setSavingGateways(true);
+    setSuccessMessage(null);
+    try {
+      const res = await fetchApi<any>("/settings/admin-payment-gateways", {
+        method: "PUT",
+        body: JSON.stringify(gatewaySettings),
+      });
+      if (res.success) {
+        setSuccessMessage("Payment gateway settings updated successfully! Live checkout experience updated.");
+        await loadGatewaySettings();
+      } else {
+        alert(res.message || "Failed to update payment gateway settings");
+      }
+    } catch (err: any) {
+      alert(err.message || "Failed to update payment gateway settings");
+    } finally {
+      setSavingGateways(false);
+    }
+  };
 
   // Sync state when settings update from context
   useEffect(() => {
@@ -198,6 +258,7 @@ export function SettingsTab() {
             "landing-hero": false,
             "platform-features": false,
             "company-contact": false,
+            "payment-gateways": false,
           });
         }
       } else {
@@ -324,6 +385,19 @@ export function SettingsTab() {
         >
           <Building2 className="h-4 w-4" />
           <span>Company Contact & HQ Details</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveSubTab("payment-gateways")}
+          className={`flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer rounded-none ${
+            activeSubTab === "payment-gateways"
+              ? "border-brand-primary text-brand-primary bg-brand-primary/5"
+              : "border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800/50"
+          }`}
+        >
+          <CreditCard className="h-4 w-4 text-pink-600" />
+          <span>Payment Gateways & bKash</span>
         </button>
       </div>
 
@@ -1154,6 +1228,296 @@ export function SettingsTab() {
                   </div>
                 </div>
               )}
+            </div>
+          )}
+          {/* ======================================================== */}
+          {/* TAB 6: Payment Gateways & bKash Configuration */}
+          {/* ======================================================== */}
+          {activeSubTab === "payment-gateways" && (
+            <div className="space-y-6">
+              {/* Header Box */}
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-xs">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 mb-4 border-b border-slate-100 dark:border-slate-800 gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <CreditCard className="h-5 w-5 text-pink-600" />
+                      <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
+                        Payment Gateway & Remittance Configuration
+                      </h2>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Configure dynamic payment methods for pharmacy registration (Step 3) and subscription renewals.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={loadGatewaySettings}
+                    disabled={loadingGateways}
+                    className="inline-flex items-center gap-2 h-9 px-4 rounded-none bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 text-xs font-bold transition cursor-pointer self-start sm:self-auto"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${loadingGateways ? "animate-spin text-pink-600" : ""}`} />
+                    <span>Reload</span>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Gateway 1: Manual bKash Send Money */}
+                  <div className={`p-5 border transition-all ${
+                    gatewaySettings.manualBkash?.enabled
+                      ? "border-pink-500/40 bg-pink-50/20 dark:bg-pink-950/10 shadow-xs"
+                      : "border-slate-200 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-850/40 opacity-80"
+                  }`}>
+                    <div className="flex items-center justify-between pb-3 border-b border-pink-500/10 dark:border-slate-800 mb-4">
+                      <div className="flex items-center gap-2.5">
+                        <div className="h-8 w-8 rounded-lg bg-pink-600 text-white flex items-center justify-center font-black text-sm">
+                          ৳
+                        </div>
+                        <div>
+                          <h3 className="font-bold text-sm text-slate-900 dark:text-white">
+                            bKash Send Money Gateway
+                          </h3>
+                          <span className="text-[10px] text-pink-600 dark:text-pink-400 font-bold">
+                            Manual TrxID & Screenshot Verification
+                          </span>
+                        </div>
+                      </div>
+
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(gatewaySettings.manualBkash?.enabled)}
+                          onChange={(e) =>
+                            setGatewaySettings((prev: any) => ({
+                              ...prev,
+                              manualBkash: {
+                                ...prev.manualBkash,
+                                enabled: e.target.checked,
+                              },
+                            }))
+                          }
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-slate-200 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-pink-600"></div>
+                      </label>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          bKash Number (Recieving Account) *
+                        </label>
+                        <input
+                          type="text"
+                          value={gatewaySettings.manualBkash?.number || ""}
+                          onChange={(e) =>
+                            setGatewaySettings((prev: any) => ({
+                              ...prev,
+                              manualBkash: {
+                                ...prev.manualBkash,
+                                number: e.target.value,
+                              },
+                            }))
+                          }
+                          placeholder="e.g. 01700-000000"
+                          className="w-full h-10 px-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-mono focus:outline-none focus:border-pink-500 font-bold"
+                        />
+                        <p className="text-[10px] text-slate-400 mt-1">
+                          The bKash phone number displayed to pharmacy owners for Send Money.
+                        </p>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          Account Type
+                        </label>
+                        <select
+                          value={gatewaySettings.manualBkash?.type || "PERSONAL"}
+                          onChange={(e) =>
+                            setGatewaySettings((prev: any) => ({
+                              ...prev,
+                              manualBkash: {
+                                ...prev.manualBkash,
+                                type: e.target.value,
+                              },
+                            }))
+                          }
+                          className="w-full h-10 px-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold focus:outline-none focus:border-pink-500"
+                        >
+                          <option value="PERSONAL">Personal Account (Send Money)</option>
+                          <option value="AGENT">Agent Account (Cash Out)</option>
+                          <option value="MERCHANT">Merchant Account (Payment)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          Instructions for Applicant
+                        </label>
+                        <textarea
+                          rows={3}
+                          value={gatewaySettings.manualBkash?.instructions || ""}
+                          onChange={(e) =>
+                            setGatewaySettings((prev: any) => ({
+                              ...prev,
+                              manualBkash: {
+                                ...prev.manualBkash,
+                                instructions: e.target.value,
+                              },
+                            }))
+                          }
+                          placeholder="যেকোনো বিকাশ একাউন্ট থেকে উপরে দেওয়া নম্বরে নির্ধারিত ফি Send Money করুন..."
+                          className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs focus:outline-none focus:border-pink-500"
+                        />
+                      </div>
+
+                      {/* Live Customer Preview */}
+                      <div className="p-3 bg-white dark:bg-slate-900 border border-pink-500/20 rounded-none space-y-1.5">
+                        <div className="text-[10px] uppercase font-bold text-slate-400 flex items-center justify-between">
+                          <span>Live Customer Preview</span>
+                          <span className="text-pink-600 font-bold">
+                            {gatewaySettings.manualBkash?.enabled ? "Active on Portal" : "Disabled"}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between font-mono text-xs">
+                          <span className="text-slate-500">Send Money To:</span>
+                          <strong className="text-pink-600 font-bold">
+                            {gatewaySettings.manualBkash?.number || "Not Set"} ({gatewaySettings.manualBkash?.type || "PERSONAL"})
+                          </strong>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Gateway 2: Automated SSLCommerz */}
+                  <div className={`p-5 border transition-all ${
+                    gatewaySettings.sslcommerz?.enabled
+                      ? "border-sky-500/40 bg-sky-50/20 dark:bg-sky-950/10 shadow-xs"
+                      : "border-slate-200 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-850/40 opacity-80"
+                  }`}>
+                    <div className="flex items-center justify-between pb-3 border-b border-sky-500/10 dark:border-slate-800 mb-4">
+                      <div className="flex items-center gap-2.5">
+                        <div className="h-8 w-8 rounded-lg bg-sky-600 text-white flex items-center justify-center font-black text-sm">
+                          <CreditCard className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <h3 className="font-bold text-sm text-slate-900 dark:text-white">
+                            SSLCommerz Automated Gateway
+                          </h3>
+                          <span className="text-[10px] text-sky-600 dark:text-sky-400 font-bold">
+                            Instant Credit Card / Internet Banking / MFS
+                          </span>
+                        </div>
+                      </div>
+
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(gatewaySettings.sslcommerz?.enabled)}
+                          onChange={(e) =>
+                            setGatewaySettings((prev: any) => ({
+                              ...prev,
+                              sslcommerz: {
+                                ...prev.sslcommerz,
+                                enabled: e.target.checked,
+                              },
+                            }))
+                          }
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-slate-200 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-sky-600"></div>
+                      </label>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          Store ID
+                        </label>
+                        <input
+                          type="text"
+                          value={gatewaySettings.sslcommerz?.storeId || ""}
+                          onChange={(e) =>
+                            setGatewaySettings((prev: any) => ({
+                              ...prev,
+                              sslcommerz: {
+                                ...prev.sslcommerz,
+                                storeId: e.target.value,
+                              },
+                            }))
+                          }
+                          placeholder="e.g. testbox_live"
+                          className="w-full h-10 px-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-mono focus:outline-none focus:border-sky-500 font-bold"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          Store Password
+                        </label>
+                        <input
+                          type="password"
+                          value={gatewaySettings.sslcommerz?.storePassword || ""}
+                          onChange={(e) =>
+                            setGatewaySettings((prev: any) => ({
+                              ...prev,
+                              sslcommerz: {
+                                ...prev.sslcommerz,
+                                storePassword: e.target.value,
+                              },
+                            }))
+                          }
+                          placeholder="••••••••••••"
+                          className="w-full h-10 px-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-mono focus:outline-none focus:border-sky-500"
+                        />
+                      </div>
+
+                      <div className="flex items-center gap-2 pt-1">
+                        <input
+                          type="checkbox"
+                          id="ssl-sandbox"
+                          checked={Boolean(gatewaySettings.sslcommerz?.isSandbox)}
+                          onChange={(e) =>
+                            setGatewaySettings((prev: any) => ({
+                              ...prev,
+                              sslcommerz: {
+                                ...prev.sslcommerz,
+                                isSandbox: e.target.checked,
+                              },
+                            }))
+                          }
+                          className="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500"
+                        />
+                        <label htmlFor="ssl-sandbox" className="text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer">
+                          Sandbox / Test Mode (Use sandbox.sslcommerz.com)
+                        </label>
+                      </div>
+
+                      <div className="p-3 bg-white dark:bg-slate-900 border border-sky-500/20 rounded-none text-xs text-slate-500 space-y-1">
+                        <div className="font-bold text-slate-700 dark:text-slate-300">
+                          {gatewaySettings.sslcommerz?.enabled ? "Online Gateway Active" : "Online Gateway Disabled"}
+                        </div>
+                        <p className="text-[11px] leading-relaxed">
+                          Requires active merchant credentials from SSLCommerz. If disabled, all payments route through manual bKash Send Money.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Save Bar */}
+                <div className="flex items-center justify-end gap-3 pt-6 border-t border-slate-100 dark:border-slate-800 mt-6">
+                  <button
+                    type="button"
+                    onClick={handleSaveGatewaySettings}
+                    disabled={savingGateways}
+                    className="h-10 px-6 rounded-none text-xs sm:text-sm font-bold bg-brand-primary hover:bg-brand-primary-hover text-white shadow-xs transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    {savingGateways ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                    <span>Save Payment Gateways</span>
+                  </button>
+                </div>
+              </div>
             </div>
           )}
         </div>

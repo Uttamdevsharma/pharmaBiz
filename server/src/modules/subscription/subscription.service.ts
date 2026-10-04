@@ -1,5 +1,6 @@
 import { prisma } from "../../app/lib/prisma";
 import { SubscribeInput, ChangePlanInput } from "./subscription.validation";
+import { UploadService } from "../upload/upload.service";
 import {
   CENTRAL_PLAN_DEFINITIONS,
   PricingTierType,
@@ -78,7 +79,13 @@ export class SubscriptionService {
     // Prioritize currently active subscription; fallback to most recent
     const activeSub = (tenant.subscriptions || []).find((s: any) => s.status === "ACTIVE");
     const currentSub = activeSub || (tenant.subscriptions && tenant.subscriptions[0]);
-    const tier = (currentSub?.plan?.tier || tenant.tier || "STARTER") as PricingTierType;
+    let dbPlan = currentSub?.plan;
+    const tier = (dbPlan?.tier || tenant.tier || "STARTER") as PricingTierType;
+    if (!dbPlan && tier) {
+      dbPlan = await (prisma as any).subscriptionPlan.findUnique({
+        where: { tier },
+      });
+    }
     const planConfig = getPlanConfig(tier);
 
     const isTrial = false;
@@ -86,12 +93,12 @@ export class SubscriptionService {
     const trialDaysRemaining = 0;
     const isTrialExpired = false;
 
-    const planFeatures = (typeof currentSub?.plan?.features === "object" && currentSub?.plan?.features !== null)
-      ? currentSub.plan.features
+    const planFeatures = (typeof dbPlan?.features === "object" && dbPlan?.features !== null)
+      ? dbPlan.features
       : {};
 
     const branchCount = tenant.branches ? tenant.branches.length : 0;
-    const maxBranches = currentSub?.plan?.maxBranches ?? planConfig.maxBranches;
+    const maxBranches = Number(dbPlan?.maxBranches ?? planConfig.maxBranches);
 
     const nonOwnerStaff = (tenant.users || []).filter(
       (u: any) => u.role !== "COMPANY_OWNER" && u.role !== "SUPER_ADMIN" && !u.username?.startsWith("deleted_")
@@ -99,10 +106,10 @@ export class SubscriptionService {
     const staffCount = nonOwnerStaff.length;
 
     const maxStaffPerBranch = Number(
-      planFeatures.maxStaffPerBranch ?? (currentSub?.plan as any)?.maxStaffPerBranch ?? planConfig.maxStaffPerBranch ?? 1
+      planFeatures.maxStaffPerBranch ?? (dbPlan as any)?.maxStaffPerBranch ?? planConfig.maxStaffPerBranch ?? 1
     );
     const maxStaff = Number(
-      planFeatures.maxTotalStaff ?? (currentSub?.plan as any)?.maxTotalStaff ?? planConfig.maxTotalStaff ?? 999
+      planFeatures.maxTotalStaff ?? (dbPlan as any)?.maxTotalStaff ?? planConfig.maxTotalStaff ?? (maxBranches * maxStaffPerBranch)
     );
 
     return {
@@ -116,9 +123,9 @@ export class SubscriptionService {
       isExpired,
       planConfig: {
         ...planConfig,
-        name: currentSub?.plan?.name || planConfig.name,
-        price: currentSub?.plan ? Number(currentSub.plan.price) : planConfig.price,
-        billingCycle: currentSub?.plan?.billingCycle || planConfig.billingCycle,
+        name: dbPlan?.name || planConfig.name,
+        price: dbPlan ? Number(dbPlan.price) : planConfig.price,
+        billingCycle: dbPlan?.billingCycle || planConfig.billingCycle,
         maxBranches,
         maxStaffPerBranch,
         maxTotalStaff: maxStaff,
@@ -314,5 +321,94 @@ export class SubscriptionService {
     });
 
     return updated;
+  }
+
+  /**
+   * Submit manual bKash renewal/upgrade request
+   */
+  static async submitManualRenewal(tenantId: string, data: {
+    planId: string;
+    billingCycle?: string;
+    senderNumber: string;
+    trxId: string;
+    screenshotDocument?: string;
+  }) {
+    if (!data.trxId || !data.trxId.trim()) {
+      throw new Error("Transaction ID (TrxID) is required.");
+    }
+    if (!data.senderNumber || !data.senderNumber.trim()) {
+      throw new Error("Sender bKash phone number is required.");
+    }
+
+    const plan = await (prisma as any).subscriptionPlan.findUnique({
+      where: { id: data.planId },
+    });
+    if (!plan || !plan.isActive) {
+      throw new Error("Subscription plan not found or inactive.");
+    }
+
+    const tenant = await (prisma as any).tenant.findUnique({
+      where: { id: tenantId },
+      include: {
+        subscriptions: {
+          orderBy: { createdAt: "desc" },
+          take: 1,
+        },
+      },
+    });
+    if (!tenant) {
+      throw new Error("Tenant not found.");
+    }
+
+    const billingCycle = data.billingCycle === "YEARLY" ? "YEARLY" : "MONTHLY";
+    const basePrice = Number(plan.price);
+    const planPrice = billingCycle === "YEARLY" ? Math.round(basePrice * 12 * 0.85) : basePrice;
+
+    // Upload screenshot if provided
+    let screenshotUrl: string | null = null;
+    if (data.screenshotDocument) {
+      try {
+        const upload = await UploadService.uploadImage(data.screenshotDocument, "pharmacy_saas/documents/payments");
+        screenshotUrl = upload.secureUrl;
+      } catch (err: any) {
+        console.warn("[submitManualRenewal] Screenshot upload failed:", err.message);
+      }
+    }
+
+    const cleanTrx = data.trxId.trim().toUpperCase();
+    const cleanNumber = data.senderNumber.trim();
+    const currentSub = tenant.subscriptions?.[0] || null;
+
+    const payment = await (prisma as any).payment.create({
+      data: {
+        tenantId,
+        subscriptionId: currentSub?.id || null,
+        amount: planPrice,
+        currency: "BDT",
+        tranId: `BKASH-${cleanTrx}-${Date.now().toString().slice(-4)}`,
+        status: "PENDING",
+        paymentMethod: "MANUAL_BKASH",
+        senderNumber: cleanNumber,
+        screenshotUrl,
+        type: "RENEWAL",
+        bankTranId: cleanNumber,
+        rawResponse: {
+          trxId: cleanTrx,
+          senderNumber: cleanNumber,
+          screenshotUrl,
+          planId: plan.id,
+          planName: plan.name,
+          planTier: plan.tier,
+          billingCycle,
+          planPrice,
+        },
+      },
+    });
+
+    return {
+      success: true,
+      message: "Your subscription renewal request has been submitted and is pending Super Admin approval.",
+      payment,
+    };
   }
 }

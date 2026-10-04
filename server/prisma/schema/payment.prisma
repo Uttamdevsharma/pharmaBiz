@@ -15,6 +15,10 @@ model Payment {
   valId          String?
   status         PaymentStatus @default(PENDING)
   paymentMethod  String?
+  senderNumber   String?
+  screenshotUrl  String?
+  type           String?       @default("SUBSCRIPTION") // "INITIAL_REGISTRATION" | "RENEWAL" | "UPGRADE"
+  notes          String?
   cardType       String?
   cardBrand      String?
   bankTranId     String?

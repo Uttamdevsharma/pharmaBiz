@@ -43,6 +43,13 @@ router.post(
 );
 
 router.post(
+  "/manual-renewal",
+  authenticate,
+  authorize(["COMPANY_OWNER", "SUPER_ADMIN"]),
+  SubscriptionController.submitManualRenewal
+);
+
+router.post(
   "/cancel",
   authenticate,
   authorize(["COMPANY_OWNER", "SUPER_ADMIN"]),

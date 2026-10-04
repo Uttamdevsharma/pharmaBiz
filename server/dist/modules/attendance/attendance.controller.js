@@ -173,7 +173,8 @@ class AttendanceController {
             const tenantId = req.user.tenantId;
             const branchId = AttendanceController.resolveBranchId(req);
             const month = req.query.month || new Date().toISOString().slice(0, 7);
-            if (!branchId) {
+            const isOwnerOrAdmin = req.user.role === "COMPANY_OWNER" || req.user.role === "SUPER_ADMIN" || req.user.role === "REGIONAL_ADMIN";
+            if (!branchId && !isOwnerOrAdmin) {
                 res.status(400).json({ success: false, message: "Branch ID is required" });
                 return;
             }

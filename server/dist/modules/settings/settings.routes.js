@@ -21,3 +21,8 @@ router.put("/vat", authenticate_1.authenticate, (0, requirePermission_1.requireP
 // Pharmacy-specific settings (receipt notes, prescription message) — per-tenant, not SaaS-level
 router.get("/pharmacy", authenticate_1.authenticate, settings_controller_1.SettingsController.getPharmacySettings);
 router.put("/pharmacy", authenticate_1.authenticate, settings_controller_1.SettingsController.updatePharmacySettings);
+// Public Payment Gateways (for Registration Step 3 and checkout)
+router.get("/payment-gateways", settings_controller_1.SettingsController.getPublicPaymentGateways);
+// Super Admin Payment Gateway Management
+router.get("/admin-payment-gateways", authenticate_1.authenticate, (0, authorize_1.authorize)(["SUPER_ADMIN", "CTO", "PROJECT_MANAGER"]), settings_controller_1.SettingsController.getAdminPaymentGateways);
+router.put("/admin-payment-gateways", authenticate_1.authenticate, (0, authorize_1.authorize)(["SUPER_ADMIN", "CTO", "PROJECT_MANAGER"]), settings_controller_1.SettingsController.updatePaymentGatewaySettings);

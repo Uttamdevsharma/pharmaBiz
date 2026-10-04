@@ -99,6 +99,80 @@ class AccountingController {
             res.status(400).json({ success: false, message: err.message });
         }
     }
+    static async createTransferRequest(req, res) {
+        try {
+            const tenantId = req.user.tenantId;
+            const userId = req.user.id;
+            const result = await accounting_service_1.AccountingService.createTransferRequest(tenantId, userId, req.body);
+            res.status(201).json({
+                success: true,
+                message: "Transfer request submitted for owner approval successfully",
+                data: result,
+            });
+        }
+        catch (err) {
+            res.status(400).json({ success: false, message: err.message });
+        }
+    }
+    static async getTransferRequests(req, res) {
+        try {
+            const tenantId = req.user.tenantId;
+            const result = await accounting_service_1.AccountingService.getTransferRequests(tenantId, req.query);
+            res.json({
+                success: true,
+                data: result,
+            });
+        }
+        catch (err) {
+            res.status(400).json({ success: false, message: err.message });
+        }
+    }
+    static async getPendingTransferRequestsCount(req, res) {
+        try {
+            const tenantId = req.user.tenantId;
+            const result = await accounting_service_1.AccountingService.getPendingTransferRequestsCount(tenantId);
+            res.json({
+                success: true,
+                data: result,
+            });
+        }
+        catch (err) {
+            res.status(400).json({ success: false, message: err.message });
+        }
+    }
+    static async approveTransferRequest(req, res) {
+        try {
+            const tenantId = req.user.tenantId;
+            const reviewerId = req.user.id;
+            const { id } = req.params;
+            const result = await accounting_service_1.AccountingService.approveTransferRequest(tenantId, reviewerId, id);
+            res.json({
+                success: true,
+                message: "Transfer request approved and funds transferred successfully",
+                data: result,
+            });
+        }
+        catch (err) {
+            res.status(400).json({ success: false, message: err.message });
+        }
+    }
+    static async rejectTransferRequest(req, res) {
+        try {
+            const tenantId = req.user.tenantId;
+            const reviewerId = req.user.id;
+            const { id } = req.params;
+            const { reason } = req.body || {};
+            const result = await accounting_service_1.AccountingService.rejectTransferRequest(tenantId, reviewerId, id, reason);
+            res.json({
+                success: true,
+                message: "Transfer request rejected",
+                data: result,
+            });
+        }
+        catch (err) {
+            res.status(400).json({ success: false, message: err.message });
+        }
+    }
     static async recordTransaction(req, res) {
         try {
             const tenantId = req.user.tenantId;

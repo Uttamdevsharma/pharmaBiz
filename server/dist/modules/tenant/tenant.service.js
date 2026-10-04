@@ -25,12 +25,22 @@ class TenantService {
         if (!tenant) {
             throw new Error("Tenant not found");
         }
-        const currentSub = tenant.subscriptions[0] || null;
-        const tier = (currentSub?.plan?.tier || tenant.tier || "TRIAL");
+        const activeSub = (tenant.subscriptions || []).find((s) => s.status === "ACTIVE") || tenant.subscriptions[0] || null;
+        let plan = activeSub?.plan;
+        if (!plan && tenant.tier) {
+            plan = await prisma_1.prisma.subscriptionPlan.findUnique({
+                where: { tier: tenant.tier },
+            });
+        }
+        const tier = (plan?.tier || tenant.tier || "STARTER");
         const planConfig = (0, planLimits_1.getPlanConfig)(tier);
         const isTrial = tier === "TRIAL";
-        const isExpired = currentSub ? (0, planLimits_1.isSubscriptionExpired)(currentSub) : true;
-        const trialDaysRemaining = isTrial && currentSub?.endDate ? (0, planLimits_1.getTrialRemainingDays)(currentSub.endDate) : 0;
+        const isExpired = activeSub ? (0, planLimits_1.isSubscriptionExpired)(activeSub) : true;
+        const trialDaysRemaining = isTrial && activeSub?.endDate ? (0, planLimits_1.getTrialRemainingDays)(activeSub.endDate) : 0;
+        const planFeatures = (typeof plan?.features === "object" && plan?.features !== null) ? plan.features : {};
+        const maxBranches = Number(plan?.maxBranches ?? planConfig.maxBranches);
+        const maxStaffPerBranch = Number(planFeatures.maxStaffPerBranch ?? plan?.maxStaffPerBranch ?? planConfig.maxStaffPerBranch ?? 1);
+        const maxTotalStaff = Number(planFeatures.maxTotalStaff ?? plan?.maxTotalStaff ?? planConfig.maxTotalStaff ?? (maxBranches * maxStaffPerBranch));
         return {
             id: tenant.id,
             name: tenant.name,
@@ -45,13 +55,30 @@ class TenantService {
             isTrial,
             trialDaysRemaining,
             isExpired,
-            planConfig,
+            maxBranches,
+            maxStaffPerBranch,
+            maxTotalStaff,
+            planConfig: {
+                ...planConfig,
+                name: plan?.name || planConfig.name,
+                price: plan ? Number(plan.price) : planConfig.price,
+                billingCycle: plan?.billingCycle || planConfig.billingCycle,
+                maxBranches,
+                maxStaffPerBranch,
+                maxTotalStaff,
+                features: {
+                    ...planConfig.features,
+                    ...planFeatures,
+                    branches: `${maxBranches >= 999 ? "Unlimited" : maxBranches} Branch${maxBranches === 1 ? "" : "es"}`,
+                    staff: `${maxStaffPerBranch >= 999 ? "Unlimited" : maxStaffPerBranch} Staff per Branch`,
+                },
+            },
             stats: {
                 activeBranches: tenant._count.branches,
                 activeUsers: tenant._count.users,
                 activeProducts: tenant._count.products,
             },
-            currentSubscription: currentSub,
+            currentSubscription: activeSub,
         };
     }
     static async updateProfile(tenantId, data) {

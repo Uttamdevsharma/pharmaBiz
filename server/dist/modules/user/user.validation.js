@@ -31,6 +31,7 @@ exports.createUserSchema = zod_1.z.object({
     documentsSubmitted: zod_1.z.boolean().optional(),
     grossSalary: zod_1.z.coerce.number().min(0, "Gross salary must be a positive number").nullable().optional(),
     isPermanent: zod_1.z.boolean().optional(),
+    staffId: zod_1.z.string().nullable().optional(),
 });
 exports.updateUserSchema = zod_1.z.object({
     name: zod_1.z.string().min(2).optional(),
@@ -48,6 +49,7 @@ exports.updateUserSchema = zod_1.z.object({
     documentsSubmitted: zod_1.z.boolean().optional(),
     grossSalary: zod_1.z.coerce.number().min(0, "Gross salary must be a positive number").nullable().optional(),
     isPermanent: zod_1.z.boolean().optional(),
+    staffId: zod_1.z.string().nullable().optional(),
 });
 exports.createPharmacyRoleSchema = zod_1.z.object({
     name: zod_1.z.string().min(2, "Role name must be at least 2 characters"),

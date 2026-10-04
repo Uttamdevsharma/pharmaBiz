@@ -163,7 +163,13 @@ export function CreateStaffTab({ onNavigate }: CreateStaffTabProps) {
   const tier = (profile?.tier || "TRIAL").toUpperCase();
   const planConfig = getClientPlanConfig(tier);
   const isTrial = tier === "TRIAL";
-  const maxStaff = isTrial ? 1 : planConfig.maxTotalStaff || 999;
+  const maxStaff = isTrial
+    ? 1
+    : Number(profile?.planConfig?.maxTotalStaff ?? profile?.maxTotalStaff ?? planConfig.maxTotalStaff ?? 999);
+  const maxStaffPerBranch = Number(
+    profile?.planConfig?.maxStaffPerBranch ?? profile?.maxStaffPerBranch ?? planConfig.maxStaffPerBranch ?? 1
+  );
+  const planName = profile?.planConfig?.name || planConfig.name;
   const isTotalLimitReached = staffCount >= maxStaff;
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -323,7 +329,7 @@ export function CreateStaffTab({ onNavigate }: CreateStaffTabProps) {
             <p className="text-[11px] text-amber-700/80 dark:text-amber-400/80 mt-0.5">
               {isTrial
                 ? "Plan 0 - Free Trial allows a maximum of 1 staff member. Upgrade to a paid plan to add more team members."
-                : `Your current ${planConfig.name} allows up to ${planConfig.maxTotalStaff} staff members.`}
+                : `Your current ${planName} allows up to ${maxStaff >= 999 ? "Unlimited" : maxStaff} staff members.`}
             </p>
           </div>
         </div>

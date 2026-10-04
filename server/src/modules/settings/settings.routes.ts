@@ -40,4 +40,22 @@ router.put(
 router.get("/pharmacy", authenticate, SettingsController.getPharmacySettings);
 router.put("/pharmacy", authenticate, SettingsController.updatePharmacySettings);
 
+// Public Payment Gateways (for Registration Step 3 and checkout)
+router.get("/payment-gateways", SettingsController.getPublicPaymentGateways);
+
+// Super Admin Payment Gateway Management
+router.get(
+  "/admin-payment-gateways",
+  authenticate,
+  authorize(["SUPER_ADMIN", "CTO", "PROJECT_MANAGER"]),
+  SettingsController.getAdminPaymentGateways
+);
+
+router.put(
+  "/admin-payment-gateways",
+  authenticate,
+  authorize(["SUPER_ADMIN", "CTO", "PROJECT_MANAGER"]),
+  SettingsController.updatePaymentGatewaySettings
+);
+
 export { router as settingsRoutes };

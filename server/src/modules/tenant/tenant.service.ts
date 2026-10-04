@@ -31,12 +31,24 @@ export class TenantService {
       throw new Error("Tenant not found");
     }
 
-    const currentSub = tenant.subscriptions[0] || null;
-    const tier = (currentSub?.plan?.tier || tenant.tier || "TRIAL") as PricingTierType;
+    const activeSub = (tenant.subscriptions || []).find((s: any) => s.status === "ACTIVE") || tenant.subscriptions[0] || null;
+    let plan = activeSub?.plan;
+    if (!plan && tenant.tier) {
+      plan = await (prisma as any).subscriptionPlan.findUnique({
+        where: { tier: tenant.tier },
+      });
+    }
+
+    const tier = (plan?.tier || tenant.tier || "STARTER") as PricingTierType;
     const planConfig = getPlanConfig(tier);
     const isTrial = tier === "TRIAL";
-    const isExpired = currentSub ? isSubscriptionExpired(currentSub) : true;
-    const trialDaysRemaining = isTrial && currentSub?.endDate ? getTrialRemainingDays(currentSub.endDate) : 0;
+    const isExpired = activeSub ? isSubscriptionExpired(activeSub) : true;
+    const trialDaysRemaining = isTrial && activeSub?.endDate ? getTrialRemainingDays(activeSub.endDate) : 0;
+
+    const planFeatures = (typeof plan?.features === "object" && plan?.features !== null) ? plan.features : {};
+    const maxBranches = Number(plan?.maxBranches ?? planConfig.maxBranches);
+    const maxStaffPerBranch = Number(planFeatures.maxStaffPerBranch ?? (plan as any)?.maxStaffPerBranch ?? planConfig.maxStaffPerBranch ?? 1);
+    const maxTotalStaff = Number(planFeatures.maxTotalStaff ?? (plan as any)?.maxTotalStaff ?? planConfig.maxTotalStaff ?? (maxBranches * maxStaffPerBranch));
 
     return {
       id: tenant.id,
@@ -52,13 +64,30 @@ export class TenantService {
       isTrial,
       trialDaysRemaining,
       isExpired,
-      planConfig,
+      maxBranches,
+      maxStaffPerBranch,
+      maxTotalStaff,
+      planConfig: {
+        ...planConfig,
+        name: plan?.name || planConfig.name,
+        price: plan ? Number(plan.price) : planConfig.price,
+        billingCycle: plan?.billingCycle || planConfig.billingCycle,
+        maxBranches,
+        maxStaffPerBranch,
+        maxTotalStaff,
+        features: {
+          ...planConfig.features,
+          ...planFeatures,
+          branches: `${maxBranches >= 999 ? "Unlimited" : maxBranches} Branch${maxBranches === 1 ? "" : "es"}`,
+          staff: `${maxStaffPerBranch >= 999 ? "Unlimited" : maxStaffPerBranch} Staff per Branch`,
+        },
+      },
       stats: {
         activeBranches: tenant._count.branches,
         activeUsers: tenant._count.users,
         activeProducts: tenant._count.products,
       },
-      currentSubscription: currentSub,
+      currentSubscription: activeSub,
     };
   }
 

@@ -19,13 +19,13 @@ exports.CENTRAL_PLAN_DEFINITIONS = {
     STARTER: {
         tier: "STARTER",
         name: "Plan 1 - Starter",
-        price: 500.0,
+        price: 999.0,
         billingCycle: "MONTHLY",
-        maxBranches: 2,
+        maxBranches: 1,
         maxStaffPerBranch: 1,
-        maxTotalStaff: 2,
+        maxTotalStaff: 1,
         features: {
-            branches: "Max 2 Branches (Main + 1)",
+            branches: "1 Branch Included (Main Branch)",
             staff: "1 Staff per Branch",
             inventoryTransfers: false,
             regionalAdmin: false,
@@ -38,13 +38,13 @@ exports.CENTRAL_PLAN_DEFINITIONS = {
     GROWTH: {
         tier: "GROWTH",
         name: "Plan 2 - Growth",
-        price: 1500.0,
+        price: 1999.0,
         billingCycle: "MONTHLY",
-        maxBranches: 3,
+        maxBranches: 2,
         maxStaffPerBranch: 3,
-        maxTotalStaff: 9,
+        maxTotalStaff: 6,
         features: {
-            branches: "Max 3 Branches",
+            branches: "Max 2 Branches",
             staff: "3 Staff per Branch",
             inventoryTransfers: true,
             regionalAdmin: true,
@@ -57,14 +57,14 @@ exports.CENTRAL_PLAN_DEFINITIONS = {
     ENTERPRISE: {
         tier: "ENTERPRISE",
         name: "Plan 3 - Enterprise",
-        price: 3000.0,
+        price: 2999.0,
         billingCycle: "MONTHLY",
-        maxBranches: 999,
-        maxStaffPerBranch: 999,
-        maxTotalStaff: 999,
+        maxBranches: 5,
+        maxStaffPerBranch: 5,
+        maxTotalStaff: 25,
         features: {
-            branches: "Unlimited Branches",
-            staff: "Unlimited Staff",
+            branches: "Max 5 Branches",
+            staff: "5 Staff per Branch",
             inventoryTransfers: true,
             regionalAdmin: true,
             customAudit: true,
@@ -125,18 +125,32 @@ async function checkCanAddBranch(tenantId) {
     if (!tenant) {
         return { allowed: false, currentBranches: 0, maxBranches: 0, message: "Tenant not found" };
     }
-    const activeSub = tenant.subscriptions && tenant.subscriptions[0];
-    const tier = (activeSub?.plan?.tier || tenant.tier || "TRIAL");
-    const planConfig = getPlanConfig(tier);
-    const planName = activeSub?.plan?.name || planConfig.name;
-    const maxBranches = activeSub?.plan?.maxBranches ?? planConfig.maxBranches;
+    // Find active subscription plan, or fall back to any latest subscription, or the tenant's tier plan in database
+    let plan = tenant.subscriptions?.[0]?.plan;
+    if (!plan) {
+        const latestSub = await prisma_1.prisma.subscription.findFirst({
+            where: { tenantId },
+            include: { plan: true },
+            orderBy: { createdAt: "desc" },
+        });
+        plan = latestSub?.plan;
+    }
+    if (!plan && tenant.tier) {
+        plan = await prisma_1.prisma.subscriptionPlan.findUnique({
+            where: { tier: tenant.tier },
+        });
+    }
+    const tier = (plan?.tier || tenant.tier || "STARTER");
+    const fallbackConfig = getPlanConfig(tier);
+    const planName = plan?.name || fallbackConfig.name;
+    const maxBranches = Number(plan?.maxBranches ?? fallbackConfig.maxBranches);
     const currentBranches = tenant.branches ? tenant.branches.length : 0;
     if (currentBranches >= maxBranches) {
         return {
             allowed: false,
             currentBranches,
             maxBranches,
-            message: `Branch limit reached (${currentBranches}/${maxBranches}). Your ${planName} allows at most ${maxBranches >= 999 ? "Unlimited" : maxBranches} branch(es). Please upgrade your subscription to add more branches.`,
+            message: `Branch limit reached (${currentBranches}/${maxBranches}). Your ${planName} allows at most ${maxBranches >= 999 ? "Unlimited" : maxBranches} branch store(s) (including the main branch). Please upgrade your subscription to add more branches.`,
         };
     }
     return { allowed: true, currentBranches, maxBranches };
@@ -160,16 +174,30 @@ async function checkCanAddStaff(tenantId, branchId) {
     if (!tenant) {
         return { allowed: false, currentStaff: 0, maxStaff: 0, message: "Tenant not found" };
     }
-    const activeSub = tenant.subscriptions && tenant.subscriptions[0];
-    const tier = (activeSub?.plan?.tier || tenant.tier || "TRIAL");
-    const planConfig = getPlanConfig(tier);
-    const planName = activeSub?.plan?.name || planConfig.name;
-    const planFeatures = (typeof activeSub?.plan?.features === "object" && activeSub?.plan?.features !== null)
-        ? activeSub.plan.features
+    // Find active subscription plan, or fall back to any latest subscription, or the tenant's tier plan in database
+    let plan = tenant.subscriptions?.[0]?.plan;
+    if (!plan) {
+        const latestSub = await prisma_1.prisma.subscription.findFirst({
+            where: { tenantId },
+            include: { plan: true },
+            orderBy: { createdAt: "desc" },
+        });
+        plan = latestSub?.plan;
+    }
+    if (!plan && tenant.tier) {
+        plan = await prisma_1.prisma.subscriptionPlan.findUnique({
+            where: { tier: tenant.tier },
+        });
+    }
+    const tier = (plan?.tier || tenant.tier || "STARTER");
+    const fallbackConfig = getPlanConfig(tier);
+    const planName = plan?.name || fallbackConfig.name;
+    const planFeatures = (typeof plan?.features === "object" && plan?.features !== null)
+        ? plan.features
         : {};
-    // Dynamic limits from database plan features or defaults
-    const maxStaffPerBranch = Number(planFeatures.maxStaffPerBranch ?? activeSub?.plan?.maxStaffPerBranch ?? planConfig.maxStaffPerBranch ?? 1);
-    const maxTotalStaff = Number(planFeatures.maxTotalStaff ?? activeSub?.plan?.maxTotalStaff ?? planConfig.maxTotalStaff ?? (tier === "TRIAL" ? 1 : 999));
+    const maxBranches = Number(plan?.maxBranches ?? fallbackConfig.maxBranches);
+    const maxStaffPerBranch = Number(planFeatures.maxStaffPerBranch ?? plan?.maxStaffPerBranch ?? fallbackConfig.maxStaffPerBranch ?? 1);
+    const maxTotalStaff = Number(planFeatures.maxTotalStaff ?? plan?.maxTotalStaff ?? fallbackConfig.maxTotalStaff ?? (maxBranches * maxStaffPerBranch));
     // Exclude owner, super admin, and deleted users from staff count limit check
     const nonOwnerUsers = (tenant.users || []).filter((u) => u.role !== "COMPANY_OWNER" &&
         u.role !== "SUPER_ADMIN" &&

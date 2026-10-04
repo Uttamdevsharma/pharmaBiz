@@ -286,6 +286,7 @@ class AuthService {
         let tradeBackUpload = null;
         let drugDocUpload = { secureUrl: "", publicId: "" };
         let drugBackUpload = null;
+        let paymentUpload = null;
         try {
             const uploadTasks = [
                 upload_service_1.UploadService.uploadImage(nidFront, "pharmacy_saas/documents/nid_front"),
@@ -301,13 +302,20 @@ class AuthService {
                 uploadTasks.push(upload_service_1.UploadService.uploadImage(drugBack, "pharmacy_saas/documents/drug_back"));
             else
                 uploadTasks.push(Promise.resolve(null));
-            const [nFront, nBack, tDoc, dDoc, tBack, dBack] = await Promise.all(uploadTasks);
+            if (data.manualPaymentDocument) {
+                uploadTasks.push(upload_service_1.UploadService.uploadImage(data.manualPaymentDocument, "pharmacy_saas/documents/payments"));
+            }
+            else {
+                uploadTasks.push(Promise.resolve(null));
+            }
+            const [nFront, nBack, tDoc, dDoc, tBack, dBack, pUpload] = await Promise.all(uploadTasks);
             nidFrontUpload = nFront;
             nidBackUpload = nBack;
             tradeDocUpload = tDoc;
             drugDocUpload = dDoc;
             tradeBackUpload = tBack;
             drugBackUpload = dBack;
+            paymentUpload = pUpload;
         }
         catch (uploadErr) {
             console.error("[registerOwner] Document upload failed:", uploadErr);
@@ -327,6 +335,10 @@ class AuthService {
                 where: { isActive: true },
             });
         }
+        const basePrice = Number(plan?.price || 1500);
+        const planPrice = data.billingCycle === "YEARLY" ? Math.round(basePrice * 12 * 0.85) : basePrice;
+        const INITIAL_LICENSE_FEE = 5000;
+        const totalPayable = INITIAL_LICENSE_FEE + planPrice;
         // 4. Generate 6-digit OTP code with 15-minute expiration
         const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
         const otpExpiresAt = new Date(Date.now() + 15 * 60 * 1000);
@@ -367,6 +379,13 @@ class AuthService {
                     drugLicenseFrontPublicId: drugDocUpload.publicId,
                     drugLicenseBackUrl: drugBackUpload?.secureUrl || null,
                     drugLicenseBackPublicId: drugBackUpload?.publicId || null,
+                    // Payment details
+                    paymentMethod: data.paymentMethod || "MANUAL_BKASH",
+                    manualPaymentNumber: data.manualPaymentNumber || null,
+                    manualPaymentTrxId: data.manualPaymentTrxId || null,
+                    manualPaymentDocUrl: paymentUpload?.secureUrl || null,
+                    manualPaymentDocPublicId: paymentUpload?.publicId || null,
+                    manualPaymentAmount: totalPayable,
                     // OTP
                     otpCode,
                     otpExpiresAt,
@@ -414,6 +433,35 @@ class AuthService {
                     plan: true,
                 },
             });
+            // Create initial Payment entry for manual bKash or online payment
+            if (data.manualPaymentTrxId || data.manualPaymentNumber || paymentUpload) {
+                await tx.payment.create({
+                    data: {
+                        tenantId: tenant.id,
+                        subscriptionId: subscription.id,
+                        amount: totalPayable,
+                        currency: "BDT",
+                        tranId: data.manualPaymentTrxId
+                            ? `BKASH-${data.manualPaymentTrxId.toUpperCase()}-${Date.now().toString().slice(-4)}`
+                            : `REG-${Date.now()}`,
+                        status: "PENDING",
+                        paymentMethod: data.paymentMethod || "MANUAL_BKASH",
+                        senderNumber: data.manualPaymentNumber || null,
+                        screenshotUrl: paymentUpload?.secureUrl || null,
+                        type: "INITIAL_REGISTRATION",
+                        bankTranId: data.manualPaymentNumber || null,
+                        rawResponse: {
+                            trxId: data.manualPaymentTrxId,
+                            senderNumber: data.manualPaymentNumber,
+                            screenshotUrl: paymentUpload?.secureUrl,
+                            planTier: plan?.tier,
+                            planName: plan?.name,
+                            billingCycle: data.billingCycle || "MONTHLY",
+                            totalPayable,
+                        },
+                    },
+                });
+            }
             return { tenant, user, mainBranch, subscription };
         });
         // 5. Seed default catalog variants in background
@@ -634,6 +682,96 @@ class AuthService {
             isRejected,
             isPendingApproval,
             isPendingOtp,
+            // Manual Payment Info
+            paymentMethod: tenant.paymentMethod || "MANUAL_BKASH",
+            manualPaymentNumber: tenant.manualPaymentNumber,
+            manualPaymentTrxId: tenant.manualPaymentTrxId,
+            manualPaymentDocUrl: tenant.manualPaymentDocUrl,
+            manualPaymentAmount: tenant.manualPaymentAmount ? Number(tenant.manualPaymentAmount) : null,
+        };
+    }
+    /**
+     * Request Password Reset OTP
+     */
+    static async forgotPassword(email) {
+        const normalizedEmail = email.trim().toLowerCase();
+        const user = await prisma_1.prisma.user.findFirst({
+            where: {
+                OR: [
+                    { email: { equals: normalizedEmail, mode: "insensitive" } },
+                    { username: { equals: normalizedEmail, mode: "insensitive" } },
+                ],
+            },
+            include: { tenant: true },
+        });
+        if (!user) {
+            throw new Error("No registered account found with this email address.");
+        }
+        const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+        const otpExpires = new Date(Date.now() + 15 * 60 * 1000); // 15 mins
+        await prisma_1.prisma.user.update({
+            where: { id: user.id },
+            data: {
+                resetPasswordOtp: otpCode,
+                resetPasswordOtpExpires: otpExpires,
+            },
+        });
+        await email_service_1.EmailService.sendPasswordResetOtpEmail({
+            to: user.email || normalizedEmail,
+            name: user.name || user.username,
+            otpCode,
+        });
+        return {
+            success: true,
+            message: "A 6-digit password reset OTP has been sent to your registered email address.",
+        };
+    }
+    /**
+     * Reset Password with OTP
+     */
+    static async resetPassword(email, otpCode, newPassword) {
+        const normalizedEmail = email.trim().toLowerCase();
+        const cleanOtp = otpCode.replace(/\D/g, "").trim();
+        const user = await prisma_1.prisma.user.findFirst({
+            where: {
+                OR: [
+                    { email: { equals: normalizedEmail, mode: "insensitive" } },
+                    { username: { equals: normalizedEmail, mode: "insensitive" } },
+                ],
+            },
+            include: { tenant: true },
+        });
+        if (!user) {
+            throw new Error("No account found with this email address.");
+        }
+        if (!user.resetPasswordOtp || user.resetPasswordOtp !== cleanOtp) {
+            throw new Error("Invalid OTP code. Please check your email and enter the correct 6-digit code.");
+        }
+        if (user.resetPasswordOtpExpires && new Date(user.resetPasswordOtpExpires) < new Date()) {
+            throw new Error("The OTP code has expired. Please request a new one.");
+        }
+        const passwordHash = await bcryptjs_1.default.hash(newPassword, 10);
+        await prisma_1.prisma.user.update({
+            where: { id: user.id },
+            data: {
+                passwordHash,
+                resetPasswordOtp: null,
+                resetPasswordOtpExpires: null,
+            },
+        });
+        // If user is owner, also update tenant tempPassword if exists
+        if (user.tenantId) {
+            try {
+                await prisma_1.prisma.tenant.update({
+                    where: { id: user.tenantId },
+                    data: { tempPassword: newPassword },
+                });
+            }
+            catch (e) { }
+        }
+        return {
+            success: true,
+            message: "Password reset successful! You can now log in with your new password.",
         };
     }
 }

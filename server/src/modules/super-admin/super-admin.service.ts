@@ -77,19 +77,26 @@ export class SuperAdminService {
       throw new Error(`A subscription plan already exists for tier ${data.tier}. Please update the existing plan.`);
     }
 
+    const isTrial = data.isTrial || data.tier === "TRIAL";
+    const isCustom = data.isCustom || false;
+
     const feat = {
       ...(data.features || {}),
       ...(data.maxStaffPerBranch !== undefined && { maxStaffPerBranch: data.maxStaffPerBranch }),
       ...(data.maxTotalStaff !== undefined && { maxTotalStaff: data.maxTotalStaff }),
       ...(data.trialDays !== undefined && { trialDays: data.trialDays }),
       ...(data.yearlyDiscountPercent !== undefined && { yearlyDiscountPercent: data.yearlyDiscountPercent }),
+      isTrial,
+      isCustom,
+      ...(data.whatsappNumber !== undefined && { whatsappNumber: data.whatsappNumber }),
+      ...(data.customMessage !== undefined && { customMessage: data.customMessage }),
     };
 
     return await (prisma as any).subscriptionPlan.create({
       data: {
         name: data.name,
         tier: data.tier,
-        price: data.price,
+        price: isTrial ? 0 : data.price,
         billingCycle: data.billingCycle,
         maxBranches: data.maxBranches,
         features: feat,
@@ -111,11 +118,17 @@ export class SuperAdminService {
     return plans.map((p: any) => {
       const feat = (typeof p.features === "object" && p.features !== null) ? p.features : {};
       const fallback: any = (CENTRAL_PLAN_DEFINITIONS as any)[p.tier] || CENTRAL_PLAN_DEFINITIONS.STARTER;
+      const isTrial = feat.isTrial ?? (p.tier === "TRIAL");
+      const isCustom = feat.isCustom ?? false;
       return {
         ...p,
+        isTrial,
+        isCustom,
+        whatsappNumber: feat.whatsappNumber || "",
+        customMessage: feat.customMessage || "",
         maxStaffPerBranch: feat.maxStaffPerBranch ?? fallback.maxStaffPerBranch ?? 1,
         maxTotalStaff: feat.maxTotalStaff ?? fallback.maxTotalStaff ?? (p.maxBranches * (feat.maxStaffPerBranch ?? 1)),
-        trialDays: feat.trialDays ?? (p.tier === "TRIAL" ? 7 : 0),
+        trialDays: feat.trialDays ?? (isTrial ? 7 : 0),
         yearlyDiscountPercent: feat.yearlyDiscountPercent ?? 0,
       };
     });
@@ -143,11 +156,17 @@ export class SuperAdminService {
 
     const feat = (typeof plan.features === "object" && plan.features !== null) ? plan.features : {};
     const fallback: any = (CENTRAL_PLAN_DEFINITIONS as any)[plan.tier] || CENTRAL_PLAN_DEFINITIONS.STARTER;
+    const isTrial = feat.isTrial ?? (plan.tier === "TRIAL");
+    const isCustom = feat.isCustom ?? false;
     return {
       ...plan,
+      isTrial,
+      isCustom,
+      whatsappNumber: feat.whatsappNumber || "",
+      customMessage: feat.customMessage || "",
       maxStaffPerBranch: feat.maxStaffPerBranch ?? fallback.maxStaffPerBranch ?? 1,
       maxTotalStaff: feat.maxTotalStaff ?? fallback.maxTotalStaff ?? (plan.maxBranches * (feat.maxStaffPerBranch ?? 1)),
-      trialDays: feat.trialDays ?? (plan.tier === "TRIAL" ? 7 : 0),
+      trialDays: feat.trialDays ?? (isTrial ? 7 : 0),
       yearlyDiscountPercent: feat.yearlyDiscountPercent ?? 0,
     };
   }
@@ -159,6 +178,9 @@ export class SuperAdminService {
     }
 
     const currentFeatures = (typeof plan.features === "object" && plan.features !== null) ? plan.features : {};
+    const isTrial = data.isTrial !== undefined ? data.isTrial : (plan.tier === "TRIAL" || !!currentFeatures.isTrial);
+    const isCustom = data.isCustom !== undefined ? data.isCustom : (currentFeatures.isCustom || false);
+
     const updatedFeatures = {
       ...currentFeatures,
       ...(data.features || {}),
@@ -166,13 +188,17 @@ export class SuperAdminService {
       ...(data.maxTotalStaff !== undefined && { maxTotalStaff: data.maxTotalStaff }),
       ...(data.trialDays !== undefined && { trialDays: data.trialDays }),
       ...(data.yearlyDiscountPercent !== undefined && { yearlyDiscountPercent: data.yearlyDiscountPercent }),
+      ...(data.isTrial !== undefined && { isTrial: data.isTrial }),
+      ...(data.isCustom !== undefined && { isCustom: data.isCustom }),
+      ...(data.whatsappNumber !== undefined && { whatsappNumber: data.whatsappNumber }),
+      ...(data.customMessage !== undefined && { customMessage: data.customMessage }),
     };
 
     return await (prisma as any).subscriptionPlan.update({
       where: { id },
       data: {
         ...(data.name && { name: data.name }),
-        ...(data.price !== undefined && { price: data.price }),
+        ...(data.price !== undefined && { price: isTrial ? 0 : data.price }),
         ...(data.billingCycle && { billingCycle: data.billingCycle }),
         ...(data.maxBranches !== undefined && { maxBranches: data.maxBranches }),
         features: updatedFeatures,
@@ -1471,6 +1497,10 @@ export class SuperAdminService {
             take: 1,
             include: { plan: true },
           },
+          payments: {
+            orderBy: { createdAt: "desc" },
+            take: 1,
+          },
         },
       }),
       (prisma as any).tenant.count({ where }),
@@ -1484,6 +1514,7 @@ export class SuperAdminService {
     const formatted = tenants.map((t: any) => {
       const owner = t.users?.[0] || null;
       const latestSub = t.subscriptions?.[0] || null;
+      const latestPayment = t.payments?.[0] || null;
       return {
         id: t.id,
         name: t.name,
@@ -1514,6 +1545,12 @@ export class SuperAdminService {
         rejectionReason: t.rejectionReason,
         pendingPlanId: t.pendingPlanId,
         pendingBillingCycle: t.pendingBillingCycle,
+        paymentMethod: t.paymentMethod || "MANUAL_BKASH",
+        manualPaymentNumber: t.manualPaymentNumber,
+        manualPaymentTrxId: t.manualPaymentTrxId,
+        manualPaymentDocUrl: t.manualPaymentDocUrl,
+        manualPaymentAmount: t.manualPaymentAmount ? Number(t.manualPaymentAmount) : null,
+        payment: latestPayment,
         createdAt: t.createdAt,
         owner,
         subscription: latestSub,
@@ -1596,21 +1633,24 @@ export class SuperAdminService {
              await (prisma as any).subscriptionPlan.findFirst();
     }
 
+    const isTrialPlan = plan.tier === "TRIAL" || !!plan.features?.isTrial || tenant.paymentMethod === "FREE_TRIAL";
+    const trialDays = plan.features?.trialDays ? Number(plan.features.trialDays) : 7;
     const billingCycle = data?.billingCycle || tenant.pendingBillingCycle || "MONTHLY";
-    const durationDays = billingCycle === "YEARLY" ? 365 : 30;
+    const durationDays = isTrialPlan ? trialDays : (billingCycle === "YEARLY" ? 365 : 30);
     const startDate = new Date();
     const endDate = new Date(startDate.getTime() + durationDays * 24 * 60 * 60 * 1000);
 
-    const basePrice = Number(plan.price);
-    const planAmount = billingCycle === "YEARLY" ? Math.round(basePrice * 12 * 0.85) : basePrice;
-    const INITIAL_LICENSE_FEE = 5000;
+    const basePrice = isTrialPlan ? 0 : Number(plan.price);
+    const planAmount = isTrialPlan ? 0 : (billingCycle === "YEARLY" ? Math.round(basePrice * 12 * 0.85) : basePrice);
+    const INITIAL_LICENSE_FEE = isTrialPlan ? 0 : 5000;
     const amount = planAmount + INITIAL_LICENSE_FEE;
 
-    // Update Tenant to APPROVED_PENDING_PAYMENT
+    // Update Tenant to ACTIVE directly
     const updatedTenant = await (prisma as any).tenant.update({
       where: { id: tenant.id },
       data: {
-        verificationStatus: "APPROVED_PENDING_PAYMENT",
+        verificationStatus: "ACTIVE",
+        isActive: true,
         approvedAt: new Date(),
         approvedBy: adminUserId,
         approvalNotes: data?.notes || "Approved by Super Admin",
@@ -1620,14 +1660,14 @@ export class SuperAdminService {
       },
     });
 
-    // Update or create pending subscription
+    // Update or create active subscription
     let subscription = tenant.subscriptions?.[0];
     if (subscription) {
       subscription = await (prisma as any).subscription.update({
         where: { id: subscription.id },
         data: {
           planId: plan.id,
-          status: "PENDING",
+          status: "ACTIVE",
           startDate,
           endDate,
         },
@@ -1638,13 +1678,25 @@ export class SuperAdminService {
         data: {
           tenantId: tenant.id,
           planId: plan.id,
-          status: "PENDING",
+          status: "ACTIVE",
           startDate,
           endDate,
         },
         include: { plan: true },
       });
     }
+
+    // Validate any pending initial registration payments
+    await (prisma as any).payment.updateMany({
+      where: {
+        tenantId: tenant.id,
+        status: "PENDING",
+      },
+      data: {
+        status: "VALIDATED",
+        subscriptionId: subscription.id,
+      },
+    });
 
     // Resolve registered password or assign a secure temporary password
     let plainPassword = tenant.tempPassword;
@@ -1669,14 +1721,14 @@ export class SuperAdminService {
       username: owner.username,
       name: owner.name,
       email: owner.email,
-      verificationStatus: "APPROVED_PENDING_PAYMENT",
+      verificationStatus: "ACTIVE",
     };
     const magicToken = jwt.sign(magicPayload, secret, { expiresIn: "30d" });
 
-    // Build payment checkout URL with magic token for 1-click access
-    const paymentUrl = `${clientUrl}/verification-status?tenantId=${tenant.id}&email=${encodeURIComponent(owner.email || tenant.email || "")}&token=${encodeURIComponent(magicToken)}`;
+    // Build login URL
+    const loginUrl = `${clientUrl}/login?email=${encodeURIComponent(owner.email || tenant.email || "")}&approved=true`;
 
-    // Send Approval Email with credentials and 1-click login URL
+    // Send Approval Email with credentials reminder & direct login link
     const emailRecipient = owner.email || tenant.email;
     if (emailRecipient) {
       await EmailService.sendApprovalEmail({
@@ -1687,17 +1739,17 @@ export class SuperAdminService {
         planTier: plan.tier,
         billingCycle,
         price: amount,
-        paymentUrl,
+        paymentUrl: loginUrl,
         password: plainPassword,
       });
     }
 
     return {
       success: true,
-      message: `Pharmacy "${tenant.name}" application approved. Approval email with payment instructions dispatched to ${emailRecipient}.`,
+      message: `Pharmacy "${tenant.name}" application approved & activated. Approval email dispatched to ${emailRecipient}.`,
       tenant: updatedTenant,
       subscription,
-      paymentUrl,
+      loginUrl,
     };
   }
 
@@ -1751,6 +1803,212 @@ export class SuperAdminService {
       success: true,
       message: `Pharmacy application rejected and notification sent to ${emailRecipient}.`,
       tenant: updatedTenant,
+    };
+  }
+
+  /**
+   * Get pending subscription renewals & upgrades (Tab 2)
+   */
+  static async getPendingRenewals() {
+    const pendingPayments = await (prisma as any).payment.findMany({
+      where: {
+        status: "PENDING",
+        type: { in: ["RENEWAL", "UPGRADE"] },
+      },
+      include: {
+        tenant: {
+          include: {
+            users: { where: { role: "COMPANY_OWNER" }, take: 1 },
+            subscriptions: {
+              orderBy: { createdAt: "desc" },
+              include: { plan: true },
+              take: 1,
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    return pendingPayments.map((p: any) => {
+      const raw = (p.rawResponse as any) || {};
+      const currentSub = p.tenant?.subscriptions?.[0] || null;
+      return {
+        id: p.id,
+        tenantId: p.tenantId,
+        pharmacyName: p.tenant?.name,
+        pharmacyEmail: p.tenant?.email,
+        pharmacyPhone: p.tenant?.phone,
+        ownerName: p.tenant?.users?.[0]?.name,
+        currentTier: p.tenant?.tier,
+        currentPlanName: currentSub?.plan?.name || p.tenant?.tier,
+        currentEndDate: currentSub?.endDate || null,
+        requestedPlanId: raw.planId || raw.targetPlanId,
+        requestedPlanTier: raw.planTier,
+        requestedPlanName: raw.planName,
+        requestedBillingCycle: raw.billingCycle || "MONTHLY",
+        amount: Number(p.amount),
+        senderNumber: p.senderNumber || p.bankTranId,
+        trxId: p.tranId?.replace(/^BKASH-/, "").replace(/-\d+$/, "") || raw.trxId,
+        screenshotUrl: p.screenshotUrl || raw.screenshotUrl,
+        paymentMethod: p.paymentMethod || "MANUAL_BKASH",
+        createdAt: p.createdAt,
+      };
+    });
+  }
+
+  /**
+   * Approve subscription renewal or upgrade
+   */
+  static async approveRenewal(paymentId: string, adminUserId: string) {
+    const payment = await (prisma as any).payment.findUnique({
+      where: { id: paymentId },
+      include: {
+        tenant: {
+          include: {
+            users: { where: { role: "COMPANY_OWNER" }, take: 1 },
+            subscriptions: {
+              orderBy: { createdAt: "desc" },
+              include: { plan: true },
+              take: 1,
+            },
+          },
+        },
+      },
+    });
+
+    if (!payment || payment.status !== "PENDING") {
+      throw new Error("Pending renewal payment record not found.");
+    }
+
+    const raw = (payment.rawResponse as any) || {};
+    const targetPlanId = raw.planId || raw.targetPlanId;
+    let targetPlan: any = null;
+    if (targetPlanId) {
+      targetPlan = await (prisma as any).subscriptionPlan.findUnique({
+        where: { id: targetPlanId },
+      });
+    }
+
+    if (!targetPlan && raw.planTier) {
+      targetPlan = await (prisma as any).subscriptionPlan.findUnique({
+        where: { tier: raw.planTier },
+      });
+    }
+
+    if (!targetPlan) {
+      targetPlan = payment.tenant?.subscriptions?.[0]?.plan;
+    }
+
+    if (!targetPlan) {
+      throw new Error("Target subscription plan could not be resolved.");
+    }
+
+    const billingCycle = raw.billingCycle || "MONTHLY";
+    const durationDays = billingCycle === "YEARLY" ? 365 : 30;
+
+    const existingSub = payment.tenant?.subscriptions?.[0];
+    let startDate = new Date();
+    let endDate: Date;
+
+    if (existingSub && new Date(existingSub.endDate) > new Date()) {
+      startDate = new Date(existingSub.startDate);
+      endDate = new Date(new Date(existingSub.endDate).getTime() + durationDays * 24 * 60 * 60 * 1000);
+    } else {
+      startDate = new Date();
+      endDate = new Date(startDate.getTime() + durationDays * 24 * 60 * 60 * 1000);
+    }
+
+    // 1. Update Payment status to VALIDATED
+    await (prisma as any).payment.update({
+      where: { id: payment.id },
+      data: {
+        status: "VALIDATED",
+        updatedAt: new Date(),
+      },
+    });
+
+    // 2. Update or create Subscription
+    let updatedSub: any;
+    if (existingSub) {
+      updatedSub = await (prisma as any).subscription.update({
+        where: { id: existingSub.id },
+        data: {
+          planId: targetPlan.id,
+          status: "ACTIVE",
+          startDate,
+          endDate,
+        },
+        include: { plan: true },
+      });
+    } else {
+      updatedSub = await (prisma as any).subscription.create({
+        data: {
+          tenantId: payment.tenantId,
+          planId: targetPlan.id,
+          status: "ACTIVE",
+          startDate,
+          endDate,
+        },
+        include: { plan: true },
+      });
+    }
+
+    // 3. Update Tenant Tier and Active Status
+    await (prisma as any).tenant.update({
+      where: { id: payment.tenantId },
+      data: {
+        tier: targetPlan.tier,
+        isActive: true,
+      },
+    });
+
+    // 4. Send Renewal Approval Email
+    const owner = payment.tenant?.users?.[0];
+    const emailRecipient = owner?.email || payment.tenant?.email;
+    if (emailRecipient) {
+      await EmailService.sendRenewalApprovalEmail({
+        to: emailRecipient,
+        name: owner?.name || payment.tenant?.name,
+        companyName: payment.tenant?.name,
+        planName: targetPlan.name,
+        planTier: targetPlan.tier,
+        billingCycle,
+        price: Number(payment.amount),
+        endDate,
+      });
+    }
+
+    return {
+      success: true,
+      message: `Subscription for "${payment.tenant?.name}" successfully approved and active until ${endDate.toLocaleDateString()}.`,
+      subscription: updatedSub,
+    };
+  }
+
+  /**
+   * Reject subscription renewal
+   */
+  static async rejectRenewal(paymentId: string, adminUserId: string, reason?: string) {
+    const payment = await (prisma as any).payment.findUnique({
+      where: { id: paymentId },
+    });
+
+    if (!payment) {
+      throw new Error("Renewal payment record not found.");
+    }
+
+    await (prisma as any).payment.update({
+      where: { id: payment.id },
+      data: {
+        status: "CANCELLED",
+        notes: reason || "Rejected by Super Admin",
+      },
+    });
+
+    return {
+      success: true,
+      message: "Subscription renewal request rejected.",
     };
   }
 }

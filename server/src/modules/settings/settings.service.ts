@@ -101,9 +101,19 @@ export class SettingsService {
     let config = setting ? setting.value : DEFAULT_SETTINGS;
 
     // Fetch active subscription plans dynamically
-    const plans = await (prisma as any).subscriptionPlan.findMany({
+    const rawPlans = await (prisma as any).subscriptionPlan.findMany({
       where: { isActive: true },
       orderBy: { price: "asc" },
+    });
+
+    const plans = rawPlans.map((p: any) => {
+      const feat = (typeof p.features === "object" && p.features !== null) ? p.features : {};
+      return {
+        ...p,
+        maxStaffPerBranch: feat.maxStaffPerBranch ?? (p.tier === "STARTER" ? 1 : p.tier === "GROWTH" ? 3 : 5),
+        maxTotalStaff: feat.maxTotalStaff ?? (p.maxBranches * (feat.maxStaffPerBranch ?? 1)),
+        yearlyDiscountPercent: feat.yearlyDiscountPercent ?? 17,
+      };
     });
 
     return {
@@ -239,6 +249,83 @@ export class SettingsService {
       }),
       updatedAt: new Date().toISOString(),
       updatedBy: userId,
+    };
+
+    const setting = await (prisma as any).platformSetting.upsert({
+      where: { key },
+      create: { key, value },
+      update: { value },
+    });
+
+    return setting.value;
+  }
+
+  /**
+   * Get payment gateway settings for Super Admin
+   */
+  static async getPaymentGatewaySettings() {
+    const key = "payment_gateway_settings";
+    const setting = await (prisma as any).platformSetting.findUnique({ where: { key } });
+    if (!setting) {
+      return {
+        manualBkash: {
+          enabled: true,
+          accountNumber: "01750000000",
+          accountType: "Personal",
+          instructions: "অনুগ্রহ করে এই পার্সোনাল বিকাশ নাম্বারে Send Money করুন। রেফারেন্স হিসেবে আপনার ফার্মেসির নাম ব্যবহার করুন। টাকা পাঠানোর পর প্রেরকের নম্বর, TrxID এবং স্ক্রিনশট আপলোড করে সাবমিট করুন।",
+        },
+        sslcommerz: {
+          enabled: false,
+          storeId: "",
+          storePassword: "",
+          isSandbox: true,
+        },
+      };
+    }
+    return setting.value;
+  }
+
+  /**
+   * Get public payment gateway settings (hide store passwords)
+   */
+  static async getPublicPaymentGateways() {
+    const full = await this.getPaymentGatewaySettings();
+    return {
+      manualBkash: {
+        enabled: !!full.manualBkash?.enabled,
+        accountNumber: full.manualBkash?.accountNumber || "",
+        accountType: full.manualBkash?.accountType || "Personal",
+        instructions: full.manualBkash?.instructions || "",
+      },
+      sslcommerz: {
+        enabled: !!full.sslcommerz?.enabled,
+        storeId: full.sslcommerz?.storeId || "",
+        isSandbox: full.sslcommerz?.isSandbox ?? true,
+      },
+    };
+  }
+
+  /**
+   * Update payment gateway settings from Super Admin
+   */
+  static async updatePaymentGatewaySettings(data: any) {
+    const key = "payment_gateway_settings";
+    const current = await this.getPaymentGatewaySettings();
+
+    const value = {
+      manualBkash: {
+        enabled: data.manualBkash?.enabled !== undefined ? !!data.manualBkash.enabled : current.manualBkash?.enabled,
+        accountNumber: data.manualBkash?.accountNumber !== undefined ? String(data.manualBkash.accountNumber).trim() : current.manualBkash?.accountNumber,
+        accountType: data.manualBkash?.accountType || current.manualBkash?.accountType || "Personal",
+        instructions: data.manualBkash?.instructions !== undefined ? String(data.manualBkash.instructions).trim() : current.manualBkash?.instructions,
+      },
+      sslcommerz: {
+        enabled: data.sslcommerz?.enabled !== undefined ? !!data.sslcommerz.enabled : current.sslcommerz?.enabled,
+        storeId: data.sslcommerz?.storeId !== undefined ? String(data.sslcommerz.storeId).trim() : current.sslcommerz?.storeId,
+        storePassword: data.sslcommerz?.storePassword !== undefined ? String(data.sslcommerz.storePassword).trim() : current.sslcommerz?.storePassword,
+        isSandbox: data.sslcommerz?.isSandbox !== undefined ? !!data.sslcommerz.isSandbox : current.sslcommerz?.isSandbox,
+      },
+      updatedAt: new Date().toISOString(),
     };
 
     const setting = await (prisma as any).platformSetting.upsert({

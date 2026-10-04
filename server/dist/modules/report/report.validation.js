@@ -18,7 +18,7 @@ exports.vatMisReportSchema = zod_1.z.object({
 });
 exports.dashboardQuerySchema = zod_1.z.object({
     branchId: zod_1.z.string().optional().transform(v => (v === "" || v === "null" || v === "undefined" || v === "all" ? undefined : v)),
-    period: zod_1.z.enum(["today", "yesterday", "7d", "30d", "custom", "all"]).optional(),
+    period: zod_1.z.enum(["today", "yesterday", "7d", "30d", "this_year", "year", "custom", "all"]).optional(),
     startDate: zod_1.z.string().optional(),
     endDate: zod_1.z.string().optional(),
 });

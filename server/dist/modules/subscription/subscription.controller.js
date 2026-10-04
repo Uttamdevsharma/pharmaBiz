@@ -112,5 +112,15 @@ class SubscriptionController {
             res.status(500).json({ success: false, message: error.message });
         }
     }
+    static async submitManualRenewal(req, res) {
+        try {
+            const tenantId = req.user.tenantId;
+            const result = await subscription_service_1.SubscriptionService.submitManualRenewal(tenantId, req.body);
+            res.status(200).json(result);
+        }
+        catch (error) {
+            res.status(400).json({ success: false, message: error.message });
+        }
+    }
 }
 exports.SubscriptionController = SubscriptionController;

@@ -38,6 +38,8 @@ model User {
   isPermanent      Boolean       @default(false)
   staffId          String?
   isActive         Boolean       @default(true)
+  resetPasswordOtp String?
+  resetPasswordOtpExpires DateTime?
   resignationDate  DateTime?
   resignationReason String?
   deactivatedAt    DateTime?

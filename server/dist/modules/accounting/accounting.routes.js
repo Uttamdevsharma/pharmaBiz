@@ -20,6 +20,12 @@ router.post("/accounts/deposit", (0, requirePermission_1.requirePermission)("acc
 router.delete("/accounts/:id", (0, requirePermission_1.requirePermission)("accounts.manage"), accounting_controller_1.AccountingController.deleteAccount);
 // Double-entry transfer
 router.post("/transfer", (0, requirePermission_1.requirePermission)("accounts.transfer"), (0, validate_1.validateRequest)({ body: accounting_validation_1.transferFundsSchema }), accounting_controller_1.AccountingController.transferFunds);
+// Transfer Requests (Maker-Checker Approval Workflow)
+router.post("/transfer-requests", (0, requirePermission_1.requirePermission)("accounts.transfer"), (0, validate_1.validateRequest)({ body: accounting_validation_1.createTransferRequestSchema }), accounting_controller_1.AccountingController.createTransferRequest);
+router.get("/transfer-requests", (0, requirePermission_1.requirePermission)("accounts.transfer"), (0, validate_1.validateRequest)({ query: accounting_validation_1.getTransferRequestsQuerySchema }), accounting_controller_1.AccountingController.getTransferRequests);
+router.get("/transfer-requests/pending-count", (0, requirePermission_1.requirePermission)("accounts.transfer"), accounting_controller_1.AccountingController.getPendingTransferRequestsCount);
+router.post("/transfer-requests/:id/approve", (0, requirePermission_1.requirePermission)("accounts.manage"), accounting_controller_1.AccountingController.approveTransferRequest);
+router.post("/transfer-requests/:id/reject", (0, requirePermission_1.requirePermission)("accounts.manage"), (0, validate_1.validateRequest)({ body: accounting_validation_1.rejectTransferRequestSchema }), accounting_controller_1.AccountingController.rejectTransferRequest);
 // Income / Expense recording
 router.post("/transactions", (0, requirePermission_1.requirePermission)("accounts.manage"), (0, validate_1.validateRequest)({ body: accounting_validation_1.recordTransactionSchema }), accounting_controller_1.AccountingController.recordTransaction);
 // Ledger list

@@ -22,11 +22,15 @@ router.get("/tenants", (0, requirePermission_1.requirePermission)("pharmacies.ma
 router.get("/tenants/:id", (0, requirePermission_1.requirePermission)("pharmacies.manage"), super_admin_controller_1.SuperAdminController.getTenantDetails);
 router.get("/tenants/:id/subscription", (0, requirePermission_1.requirePermission)("pharmacies.manage"), super_admin_controller_1.SuperAdminController.getTenantSubscription);
 router.patch("/tenants/:id/status", (0, requirePermission_1.requirePermission)("pharmacies.manage"), (0, validate_1.validateRequest)({ body: super_admin_validation_1.updateTenantStatusSchema }), super_admin_controller_1.SuperAdminController.updateTenantStatus);
-// ==================== PHARMACY VERIFICATIONS & APPROVALS ====================
+// ==================== PHARMACY VERIFICATIONS & APPROVALS (Tab 1) ====================
 router.get("/verifications", (0, requirePermission_1.requirePermission)("pharmacies.manage"), super_admin_controller_1.SuperAdminController.listPharmacyVerifications);
 router.get("/verifications/:id", (0, requirePermission_1.requirePermission)("pharmacies.manage"), super_admin_controller_1.SuperAdminController.getPharmacyVerification);
 router.post("/verifications/:id/approve", (0, requirePermission_1.requirePermission)("pharmacies.manage"), super_admin_controller_1.SuperAdminController.approvePharmacyVerification);
 router.post("/verifications/:id/reject", (0, requirePermission_1.requirePermission)("pharmacies.manage"), super_admin_controller_1.SuperAdminController.rejectPharmacyVerification);
+// ==================== SUBSCRIPTION RENEWALS & UPGRADES (Tab 2) ====================
+router.get("/pending-renewals", (0, requirePermission_1.requirePermission)("subscriptions.manage"), super_admin_controller_1.SuperAdminController.getPendingRenewals);
+router.post("/renewals/:id/approve", (0, requirePermission_1.requirePermission)("subscriptions.manage"), super_admin_controller_1.SuperAdminController.approveRenewal);
+router.post("/renewals/:id/reject", (0, requirePermission_1.requirePermission)("subscriptions.manage"), super_admin_controller_1.SuperAdminController.rejectRenewal);
 // ==================== SUBSCRIPTIONS ====================
 router.get("/subscriptions", (0, requirePermission_1.requirePermission)("subscriptions.manage"), super_admin_controller_1.SuperAdminController.listSubscriptions);
 // ==================== PAYMENTS & ANALYTICS ====================
