@@ -15,8 +15,10 @@ export interface ApiResponse<T = any> {
   errors?: any[];
 }
 
-export interface FetchApiOptions extends RequestInit {
+export interface FetchApiOptions extends Omit<RequestInit, "body"> {
+  body?: any;
   skipCache?: boolean;
+  skipProgress?: boolean;
 }
 
 // In-memory GET cache for instant page switches and prefetching without spinners
@@ -49,7 +51,9 @@ export async function fetchApi<T = any>(
     }
   }
 
-  loadingProgress.start();
+  if (!options.skipProgress) {
+    loadingProgress.start();
+  }
   try {
     const headers: HeadersInit = {
       "Content-Type": "application/json",
@@ -60,9 +64,16 @@ export async function fetchApi<T = any>(
 
     const url = endpoint.startsWith("http") ? endpoint : `${API_BASE_URL}${endpoint.startsWith("/") ? "" : "/"}${endpoint}`;
 
+    const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
+    const finalBody =
+      options.body && typeof options.body === "object" && !isFormData
+        ? JSON.stringify(options.body)
+        : options.body;
+
     const response = await fetch(url, {
       ...options,
       headers,
+      body: finalBody,
     });
 
     const data = await response.json();
@@ -73,6 +84,8 @@ export async function fetchApi<T = any>(
 
     return data as ApiResponse<T>;
   } finally {
-    loadingProgress.done();
+    if (!options.skipProgress) {
+      loadingProgress.done();
+    }
   }
 }

@@ -27,6 +27,8 @@ import { ReportsModule } from "@/components/dashboard/ReportsModule";
 import { SubscriptionModule } from "@/components/dashboard/SubscriptionModule";
 import { SubscriptionHistoryView } from "@/components/dashboard/SubscriptionHistoryView";
 import { SettingsModule } from "@/components/dashboard/SettingsModule";
+import { TenantSupportTicketsPage } from "@/components/dashboard/TenantSupportTicketsPage";
+import { TenantNoticesPage } from "@/components/dashboard/TenantNoticesPage";
 
 // Dedicated Domain Subpage Views
 import { CreateCategoryView } from "@/components/dashboard/CreateCategoryView";
@@ -1482,6 +1484,12 @@ export default function RoleBasedDashboard() {
           return <TenantAccessRestricted moduleName="Settings" requiredPerm="settings.manage" />;
         }
         return <SettingsModule />;
+
+      case "support_tickets":
+        return <TenantSupportTicketsPage />;
+
+      case "notices":
+        return <TenantNoticesPage />;
 
       default:
         return <OverviewModule onNavigate={handleNavigate} />;

@@ -393,14 +393,16 @@ async function checkCanAddStaff(tenantId, branchId) {
   const maxTotalStaff = Number(
     planFeatures.maxTotalStaff ?? activeSub?.plan?.maxTotalStaff ?? planConfig.maxTotalStaff ?? (tier === "TRIAL" ? 1 : 999)
   );
-  const nonOwnerUsers = (tenant.users || []).filter((u) => u.role !== "COMPANY_OWNER");
+  const nonOwnerUsers = (tenant.users || []).filter(
+    (u) => u.role !== "COMPANY_OWNER" && u.role !== "SUPER_ADMIN" && !u.username?.startsWith("deleted_")
+  );
   const totalStaffCount = nonOwnerUsers.length;
   if (maxTotalStaff < 999 && totalStaffCount >= maxTotalStaff) {
     return {
       allowed: false,
       currentStaff: totalStaffCount,
       maxStaff: maxTotalStaff,
-      message: `Staff limit reached (${totalStaffCount}/${maxTotalStaff} on ${planName}). Please upgrade your plan or adjust limits to add more staff members.`
+      message: `Staff limit reached: Maximum ${maxTotalStaff} staff members allowed on the ${planName} plan. Upgrade plan to add more.`
     };
   }
   if (branchId && maxStaffPerBranch < 999) {
@@ -410,7 +412,7 @@ async function checkCanAddStaff(tenantId, branchId) {
         allowed: false,
         currentStaff: branchStaff.length,
         maxStaff: maxStaffPerBranch,
-        message: `Branch staff limit reached (${branchStaff.length}/${maxStaffPerBranch} staff for this branch on ${planName}). Please upgrade your plan or adjust branch staff limits.`
+        message: `Branch staff limit reached: Maximum ${maxStaffPerBranch} staff members allowed for this branch on the ${planName} plan.`
       };
     }
   }
@@ -788,7 +790,7 @@ var registerOwnerSchema = z.object({
   companyName: z.string().min(2, "Company name must be at least 2 characters"),
   ownerName: z.string().min(2, "Owner name must be at least 2 characters"),
   email: z.string().email("Invalid email address"),
-  phone: z.string().min(5, "Phone number must be at least 5 digits"),
+  phone: z.string().trim().regex(/^\d+$/, "Phone number must contain digits only").min(11, "Phone number must be at least 11 digits").max(12, "Phone number cannot exceed 12 digits"),
   password: z.string().min(6, "Password must be at least 6 characters"),
   address: z.string().optional(),
   // Regulatory document & license numbers
@@ -1228,9 +1230,9 @@ var ProductService = class {
         barcode: data.barcode || null,
         basePrice: data.basePrice ?? 0,
         category: mainCategoryName,
-        categoryId: mainCategoryId,
+        categoryId: mainCategoryId || null,
         subcategory: subcategoryName,
-        subcategoryId,
+        subcategoryId: subcategoryId || null,
         brandId: data.brandId || null,
         unitId: data.unitId || null,
         productType: calculatedType,
@@ -1245,6 +1247,8 @@ var ProductService = class {
         stripsPerBox: data.stripsPerBox ? Number(data.stripsPerBox) : 10,
         tabletsPerStrip: data.tabletsPerStrip ? Number(data.tabletsPerStrip) : 10,
         minStockAlert: data.minStockAlert !== void 0 ? data.minStockAlert : 10,
+        shopMinStockAlert: data.shopMinStockAlert !== void 0 ? data.shopMinStockAlert : data.minStockAlert !== void 0 ? data.minStockAlert : 10,
+        godownMinStockAlert: data.godownMinStockAlert !== void 0 ? data.godownMinStockAlert : 50,
         description: data.description || null,
         isControlled: data.isControlled || false,
         requiresPrescription: data.requiresPrescription || false,
@@ -1523,12 +1527,12 @@ var ProductService = class {
         ...data.barcode !== void 0 && { barcode: data.barcode },
         ...data.basePrice !== void 0 && { basePrice: data.basePrice },
         category: categoryName,
-        categoryId,
+        ...categoryId !== void 0 && { categoryId: categoryId || null },
         subcategory: subcategoryName,
-        subcategoryId,
+        ...subcategoryId !== void 0 && { subcategoryId: subcategoryId || null },
         productType: calculatedType,
-        ...data.brandId !== void 0 && { brandId: data.brandId },
-        ...data.unitId !== void 0 && { unitId: data.unitId },
+        ...data.brandId !== void 0 && { brandId: data.brandId || null },
+        ...data.unitId !== void 0 && { unitId: data.unitId || null },
         ...data.brandName !== void 0 && { brandName: data.brandName },
         ...data.manufacturer !== void 0 && { manufacturer: data.manufacturer },
         ...data.unit !== void 0 && { unit: data.unit },
@@ -1540,6 +1544,8 @@ var ProductService = class {
         stripsPerBox: data.stripsPerBox !== void 0 ? data.stripsPerBox ? Number(data.stripsPerBox) : null : product.stripsPerBox,
         tabletsPerStrip: data.tabletsPerStrip !== void 0 ? data.tabletsPerStrip ? Number(data.tabletsPerStrip) : null : product.tabletsPerStrip,
         ...data.minStockAlert !== void 0 && { minStockAlert: data.minStockAlert },
+        ...data.shopMinStockAlert !== void 0 && { shopMinStockAlert: data.shopMinStockAlert },
+        ...data.godownMinStockAlert !== void 0 && { godownMinStockAlert: data.godownMinStockAlert },
         ...data.description !== void 0 && { description: data.description },
         ...data.isControlled !== void 0 && { isControlled: data.isControlled },
         ...data.requiresPrescription !== void 0 && { requiresPrescription: data.requiresPrescription },
@@ -1598,14 +1604,31 @@ var ProductService = class {
   static async bulkImport(tenantId, userId, data) {
     const results = [];
     for (const item of data.products) {
-      const existing = await prisma.product.findUnique({
-        where: {
-          tenantId_sku: {
-            tenantId,
-            sku: item.sku
+      let existing = null;
+      if (item.sku && item.sku.trim() !== "") {
+        existing = await prisma.product.findUnique({
+          where: {
+            tenantId_sku: {
+              tenantId,
+              sku: item.sku.trim()
+            }
           }
-        }
-      });
+        });
+      } else if (item.barcode && item.barcode.trim() !== "") {
+        existing = await prisma.product.findFirst({
+          where: {
+            tenantId,
+            barcode: item.barcode.trim()
+          }
+        });
+      } else if (item.name && item.name.trim() !== "") {
+        existing = await prisma.product.findFirst({
+          where: {
+            tenantId,
+            name: { equals: item.name.trim(), mode: "insensitive" }
+          }
+        });
+      }
       const calculatedType = mapCategoryNameToProductType(item.category);
       const isMed = calculatedType === "MEDICINE";
       if (existing) {
@@ -1613,8 +1636,9 @@ var ProductService = class {
           where: { id: existing.id },
           data: {
             name: item.name,
+            genericName: item.genericName || existing.genericName,
             barcode: item.barcode || existing.barcode,
-            basePrice: item.basePrice,
+            basePrice: item.basePrice !== void 0 ? item.basePrice : existing.basePrice,
             category: item.category || existing.category,
             categoryId: item.categoryId || existing.categoryId,
             subcategory: item.subcategory || existing.subcategory,
@@ -1624,9 +1648,12 @@ var ProductService = class {
             manufacturer: item.manufacturer || existing.manufacturer,
             unit: item.unit || existing.unit,
             size: item.size || existing.size,
+            defaultPackType: item.defaultPackType || existing.defaultPackType,
             stripsPerBox: isMed ? item.stripsPerBox || existing.stripsPerBox : null,
             tabletsPerStrip: isMed ? item.tabletsPerStrip || existing.tabletsPerStrip : null,
             minStockAlert: item.minStockAlert !== void 0 ? item.minStockAlert : existing.minStockAlert,
+            shopMinStockAlert: item.shopMinStockAlert !== void 0 ? item.shopMinStockAlert : existing.shopMinStockAlert ?? existing.minStockAlert,
+            godownMinStockAlert: item.godownMinStockAlert !== void 0 ? item.godownMinStockAlert : existing.godownMinStockAlert ?? 50,
             description: item.description || existing.description,
             isControlled: item.isControlled !== void 0 ? item.isControlled : existing.isControlled,
             requiresPrescription: item.requiresPrescription !== void 0 ? item.requiresPrescription : existing.requiresPrescription,
@@ -1635,25 +1662,32 @@ var ProductService = class {
         });
         results.push({ action: "UPDATED", product: updated });
       } else {
+        const generatedSku = item.sku && item.sku.trim() !== "" ? item.sku.trim() : `SKU-${Date.now().toString().slice(-6)}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
         const created = await prisma.product.create({
           data: {
             tenantId,
-            name: item.name,
-            sku: item.sku,
+            name: item.name.trim(),
+            genericName: item.genericName?.trim() || null,
+            sku: generatedSku,
             barcode: item.barcode || null,
-            basePrice: item.basePrice,
+            basePrice: item.basePrice || 0,
             category: item.category || "Medicine",
             categoryId: item.categoryId || null,
             subcategory: item.subcategory || null,
             subcategoryId: item.subcategoryId || null,
+            brandId: item.brandId || null,
+            unitId: item.unitId || null,
             productType: calculatedType,
             brandName: item.brandName || null,
             manufacturer: item.manufacturer || null,
             unit: item.unit || (isMed ? "tablet" : "piece"),
             size: item.size || null,
+            defaultPackType: item.defaultPackType || (isMed ? "BOX" : "PIECE"),
             stripsPerBox: isMed ? item.stripsPerBox || 10 : null,
             tabletsPerStrip: isMed ? item.tabletsPerStrip || 10 : null,
             minStockAlert: item.minStockAlert || 10,
+            shopMinStockAlert: item.shopMinStockAlert || item.minStockAlert || 10,
+            godownMinStockAlert: item.godownMinStockAlert || 50,
             description: item.description || null,
             isControlled: item.isControlled || false,
             requiresPrescription: item.requiresPrescription || false,
@@ -2468,8 +2502,6 @@ var DEFAULT_ROLE_PERMISSIONS = {
     "sales.pos",
     "sales.create",
     "sales.view_own",
-    "stock.stock_list",
-    "inventory.product_list",
     "product.view",
     "inventory.view"
   ],
@@ -2575,7 +2607,7 @@ var PERMISSION_ALIASES = {
   ],
   // Location Management
   "location.create_rack": ["location.manage", "stock.manage", "inventory.manage"],
-  "location.rack_list": ["location.view", "location.manage", "stock.manage", "inventory.manage", "stock.stock_list"],
+  "location.rack_list": ["location.view", "location.manage", "stock.manage", "inventory.manage"],
   "location.manage": ["location.create_rack", "location.rack_list", "stock.manage"],
   "location.view": ["location.rack_list", "location.manage", "stock.manage"],
   // Supplier Management
@@ -4083,11 +4115,17 @@ var SuperAdminService = class _SuperAdminService {
       name: { not: "Platform HQ" },
       ...dateRange ? { createdAt: dateRange } : {}
     };
+    const now = /* @__PURE__ */ new Date();
+    const fifteenDaysAhead = new Date(Date.now() + 15 * 24 * 60 * 60 * 1e3);
     const [
       newPharmacies,
       newSubscriptions,
       paymentsInRange,
       pendingReview,
+      awaitingPayment,
+      rejectedPharmacies,
+      totalActivePharmacies,
+      expiringSoonSubscriptions,
       allApprovedTenants,
       subscriptionsInRange,
       totalTenants,
@@ -4104,9 +4142,29 @@ var SuperAdminService = class _SuperAdminService {
         where: paymentFilter,
         select: { amount: true, createdAt: true }
       }),
-      // 4. Pending Review: Current live status, independent of date filter
+      // Pending Review: Current live status, independent of date filter
       prisma.tenant.count({
         where: { name: { not: "Platform HQ" }, verificationStatus: "PENDING_APPROVAL" }
+      }),
+      // Awaiting Payment: Approved by Admin, waiting for merchant subscription payment
+      prisma.tenant.count({
+        where: { name: { not: "Platform HQ" }, verificationStatus: "APPROVED_PENDING_PAYMENT" }
+      }),
+      // Rejected: Ineligible/declined pharmacy applications
+      prisma.tenant.count({
+        where: { name: { not: "Platform HQ" }, verificationStatus: "REJECTED" }
+      }),
+      // Total Active Pharmacies: Live operational verified tenants
+      prisma.tenant.count({
+        where: { name: { not: "Platform HQ" }, verificationStatus: "ACTIVE", isActive: true }
+      }),
+      // Expiring Soon: Subscriptions active and ending within 15 days
+      prisma.subscription.count({
+        where: {
+          tenant: { name: { not: "Platform HQ" } },
+          status: "ACTIVE",
+          endDate: { gte: now, lte: fifteenDaysAhead }
+        }
       }),
       // For Pharmacy Growth Line Graph
       prisma.tenant.findMany({
@@ -4201,11 +4259,15 @@ var SuperAdminService = class _SuperAdminService {
       return isYearly ? sum + price / 12 : sum + price;
     }, 0);
     return {
-      // 4 Target Stat Cards
+      // Primary Stat Cards
       newPharmacies,
       newSubscriptions,
       subscriptionRevenue: Math.round(subscriptionRevenue * 100) / 100,
       pendingReview,
+      totalActivePharmacies: totalActivePharmacies ?? activeTenants,
+      awaitingPayment,
+      rejectedPharmacies,
+      expiringSoonSubscriptions,
       // 2 Target Charts
       pharmacyGrowth,
       subscriptionByPlan,
@@ -5621,7 +5683,9 @@ var SubscriptionService = class {
     const planFeatures = typeof currentSub?.plan?.features === "object" && currentSub?.plan?.features !== null ? currentSub.plan.features : {};
     const branchCount = tenant.branches ? tenant.branches.length : 0;
     const maxBranches = currentSub?.plan?.maxBranches ?? planConfig.maxBranches;
-    const nonOwnerStaff = (tenant.users || []).filter((u) => u.role !== "COMPANY_OWNER");
+    const nonOwnerStaff = (tenant.users || []).filter(
+      (u) => u.role !== "COMPANY_OWNER" && u.role !== "SUPER_ADMIN" && !u.username?.startsWith("deleted_")
+    );
     const staffCount = nonOwnerStaff.length;
     const maxStaffPerBranch = Number(
       planFeatures.maxStaffPerBranch ?? currentSub?.plan?.maxStaffPerBranch ?? planConfig.maxStaffPerBranch ?? 1
@@ -6808,7 +6872,9 @@ var TenantService = class {
     const planConfig = getPlanConfig(tier);
     const maxBranches = activeSub?.plan?.maxBranches || planConfig.maxBranches;
     const branchCount = tenant.branches ? tenant.branches.length : 0;
-    const nonOwnerStaff = (tenant.users || []).filter((u) => u.role !== "COMPANY_OWNER");
+    const nonOwnerStaff = (tenant.users || []).filter(
+      (u) => u.role !== "COMPANY_OWNER" && u.role !== "SUPER_ADMIN" && !u.username?.startsWith("deleted_")
+    );
     const staffCount = nonOwnerStaff.length;
     const maxStaff = tier === "TRIAL" ? 1 : planConfig.maxTotalStaff || 999;
     return {
@@ -6831,6 +6897,61 @@ var TenantService = class {
         customAudit: tier === "ENTERPRISE",
         apiAccess: tier === "ENTERPRISE"
       }
+    };
+  }
+  static async getBillingLedger(tenantId) {
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      include: {
+        branches: {
+          select: {
+            id: true,
+            name: true,
+            location: true,
+            phone: true,
+            email: true,
+            isActive: true,
+            createdAt: true
+          }
+        },
+        users: {
+          select: {
+            id: true,
+            name: true,
+            username: true,
+            email: true,
+            phone: true,
+            role: true,
+            isActive: true,
+            createdAt: true
+          }
+        },
+        subscriptions: {
+          orderBy: { createdAt: "desc" },
+          include: {
+            plan: true,
+            payments: {
+              orderBy: { createdAt: "desc" }
+            }
+          }
+        },
+        payments: {
+          orderBy: { createdAt: "desc" },
+          include: {
+            subscription: {
+              include: { plan: true }
+            }
+          }
+        }
+      }
+    });
+    if (!tenant) {
+      throw new Error("Tenant not found");
+    }
+    const ownerUser = (tenant.users || []).find((u) => u.role === "COMPANY_OWNER") || tenant.users?.[0] || null;
+    return {
+      tenant,
+      ownerUser
     };
   }
 };
@@ -6883,6 +7004,19 @@ var TenantController = class {
       res.status(500).json({ success: false, message: error.message });
     }
   }
+  static async getBillingLedger(req, res) {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) {
+        res.status(400).json({ success: false, message: "No tenant context found" });
+        return;
+      }
+      const data = await TenantService.getBillingLedger(tenantId);
+      res.status(200).json({ success: true, data });
+    } catch (error) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
 };
 
 // src/modules/tenant/tenant.validation.ts
@@ -6908,6 +7042,7 @@ router5.patch(
 );
 router5.get("/subscription", TenantController.getSubscription);
 router5.get("/usage", TenantController.getUsage);
+router5.get("/billing-ledger", TenantController.getBillingLedger);
 
 // src/modules/branch/branch.routes.ts
 import { Router as Router6 } from "express";
@@ -7581,7 +7716,7 @@ var ALL_PHARMACY_PERMISSIONS = [
     id: "salaries.base_salary.edit",
     name: "Configure Base Salary",
     category: "Employee & Salary",
-    description: "Set and update employee Base Salary packages and contractual compensation."
+    description: "Set and update employee Base Salary packages and salary compensation."
   },
   // 11. Staff Management
   {
@@ -7876,6 +8011,15 @@ var UserService = class {
         pharmacyRoleName: matchedRole?.name || data.role,
         permissions: assignedPermissions,
         branchId: data.branchId || null,
+        nidNumber: data.nidNumber || null,
+        nidFrontUrl: data.nidFrontUrl || null,
+        nidFrontPublicId: data.nidFrontPublicId || null,
+        nidBackUrl: data.nidBackUrl || null,
+        nidBackPublicId: data.nidBackPublicId || null,
+        documentsSubmitted: !!data.documentsSubmitted,
+        grossSalary: data.grossSalary !== void 0 && data.grossSalary !== null && !isNaN(Number(data.grossSalary)) ? Number(data.grossSalary) : null,
+        isPermanent: !!data.isPermanent,
+        staffId: data.staffId ? data.staffId.trim() : null,
         isActive: true
       },
       include: {
@@ -7883,6 +8027,33 @@ var UserService = class {
         branch: { select: { id: true, name: true } }
       }
     });
+    if (data.grossSalary !== void 0 && data.grossSalary !== null && !isNaN(Number(data.grossSalary)) && Number(data.grossSalary) >= 0) {
+      const baseSalary = Number(data.grossSalary);
+      let targetBranch = data.branchId || user.branchId;
+      if (!targetBranch) {
+        const firstBranch = await prisma.branch.findFirst({ where: { tenantId } });
+        targetBranch = firstBranch?.id;
+      }
+      if (targetBranch) {
+        await prisma.employeeSalaryConfig.upsert({
+          where: { userId: user.id },
+          update: {
+            branchId: targetBranch,
+            baseSalary,
+            netSalary: baseSalary
+          },
+          create: {
+            tenantId,
+            branchId: targetBranch,
+            userId: user.id,
+            baseSalary,
+            netSalary: baseSalary,
+            allowances: 0,
+            deductions: 0
+          }
+        });
+      }
+    }
     await AuditService.log({
       tenantId,
       branchId: data.branchId || null,
@@ -7902,6 +8073,15 @@ var UserService = class {
       name: user.name,
       email: user.email,
       phone: user.phone,
+      nidNumber: user.nidNumber,
+      nidFrontUrl: user.nidFrontUrl,
+      nidFrontPublicId: user.nidFrontPublicId,
+      nidBackUrl: user.nidBackUrl,
+      nidBackPublicId: user.nidBackPublicId,
+      documentsSubmitted: user.documentsSubmitted,
+      grossSalary: user.grossSalary ? Number(user.grossSalary) : null,
+      isPermanent: user.isPermanent ?? false,
+      staffId: user.staffId ?? null,
       isActive: user.isActive,
       branch: user.branch,
       createdAt: user.createdAt
@@ -7911,7 +8091,10 @@ var UserService = class {
     const page = query.page || 1;
     const limit = query.limit || 50;
     const skip = (page - 1) * limit;
-    const where = { tenantId };
+    const where = {
+      tenantId,
+      NOT: [{ username: { startsWith: "deleted_" } }]
+    };
     if (userRole === "BRANCH_MANAGER" && userBranchId) {
       where.branchId = userBranchId;
     } else if (query.branchId) {
@@ -7943,7 +8126,8 @@ var UserService = class {
         orderBy: { createdAt: "desc" },
         include: {
           pharmacyRole: true,
-          branch: { select: { id: true, name: true } }
+          branch: { select: { id: true, name: true } },
+          salaryConfig: { select: { baseSalary: true } }
         }
       })
     ]);
@@ -7960,6 +8144,15 @@ var UserService = class {
         name: u.name,
         email: u.email,
         phone: u.phone,
+        nidNumber: u.nidNumber,
+        nidFrontUrl: u.nidFrontUrl,
+        nidFrontPublicId: u.nidFrontPublicId,
+        nidBackUrl: u.nidBackUrl,
+        nidBackPublicId: u.nidBackPublicId,
+        documentsSubmitted: u.documentsSubmitted ?? false,
+        grossSalary: u.grossSalary ? Number(u.grossSalary) : u.salaryConfig?.baseSalary ? Number(u.salaryConfig.baseSalary) : null,
+        isPermanent: u.isPermanent ?? false,
+        staffId: u.staffId ?? null,
         isActive: u.isActive,
         createdAt: u.createdAt,
         branch: u.branch
@@ -7977,7 +8170,8 @@ var UserService = class {
       where: { id: userId, tenantId },
       include: {
         pharmacyRole: true,
-        branch: { select: { id: true, name: true, location: true } }
+        branch: { select: { id: true, name: true, location: true } },
+        salaryConfig: true
       }
     });
     if (!user) {
@@ -7995,6 +8189,16 @@ var UserService = class {
       name: user.name,
       email: user.email,
       phone: user.phone,
+      nidNumber: user.nidNumber,
+      nidFrontUrl: user.nidFrontUrl,
+      nidFrontPublicId: user.nidFrontPublicId,
+      nidBackUrl: user.nidBackUrl,
+      nidBackPublicId: user.nidBackPublicId,
+      documentsSubmitted: user.documentsSubmitted ?? false,
+      grossSalary: user.grossSalary ? Number(user.grossSalary) : user.salaryConfig?.baseSalary ? Number(user.salaryConfig.baseSalary) : null,
+      isPermanent: user.isPermanent ?? false,
+      staffId: user.staffId ?? null,
+      salaryConfig: user.salaryConfig,
       isActive: user.isActive,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
@@ -8039,6 +8243,17 @@ var UserService = class {
       ...data.phone !== void 0 && { phone: data.phone },
       ...data.branchId !== void 0 && { branchId: data.branchId },
       ...data.isActive !== void 0 && { isActive: data.isActive },
+      ...data.nidNumber !== void 0 && { nidNumber: data.nidNumber },
+      ...data.nidFrontUrl !== void 0 && { nidFrontUrl: data.nidFrontUrl },
+      ...data.nidFrontPublicId !== void 0 && { nidFrontPublicId: data.nidFrontPublicId },
+      ...data.nidBackUrl !== void 0 && { nidBackUrl: data.nidBackUrl },
+      ...data.nidBackPublicId !== void 0 && { nidBackPublicId: data.nidBackPublicId },
+      ...data.documentsSubmitted !== void 0 && { documentsSubmitted: data.documentsSubmitted },
+      ...data.grossSalary !== void 0 && {
+        grossSalary: data.grossSalary !== null && !isNaN(Number(data.grossSalary)) ? Number(data.grossSalary) : null
+      },
+      ...data.isPermanent !== void 0 && { isPermanent: data.isPermanent },
+      ...data.staffId !== void 0 && { staffId: data.staffId ? data.staffId.trim() : null },
       pharmacyRoleId,
       pharmacyRoleName,
       permissions
@@ -8061,6 +8276,33 @@ var UserService = class {
       action: "USER_UPDATE",
       details: { updatedUserId: userId, changes: Object.keys(data) }
     });
+    if (data.grossSalary !== void 0 && data.grossSalary !== null && !isNaN(Number(data.grossSalary)) && Number(data.grossSalary) >= 0) {
+      const baseSalary = Number(data.grossSalary);
+      let targetBranch = data.branchId || updated.branchId;
+      if (!targetBranch) {
+        const firstBranch = await prisma.branch.findFirst({ where: { tenantId } });
+        targetBranch = firstBranch?.id;
+      }
+      if (targetBranch) {
+        await prisma.employeeSalaryConfig.upsert({
+          where: { userId },
+          update: {
+            branchId: targetBranch,
+            baseSalary,
+            netSalary: baseSalary
+          },
+          create: {
+            tenantId,
+            branchId: targetBranch,
+            userId,
+            baseSalary,
+            netSalary: baseSalary,
+            allowances: 0,
+            deductions: 0
+          }
+        });
+      }
+    }
     return {
       id: updated.id,
       tenantId: updated.tenantId,
@@ -8073,6 +8315,15 @@ var UserService = class {
       name: updated.name,
       email: updated.email,
       phone: updated.phone,
+      nidNumber: updated.nidNumber,
+      nidFrontUrl: updated.nidFrontUrl,
+      nidFrontPublicId: updated.nidFrontPublicId,
+      nidBackUrl: updated.nidBackUrl,
+      nidBackPublicId: updated.nidBackPublicId,
+      documentsSubmitted: updated.documentsSubmitted ?? false,
+      grossSalary: updated.grossSalary ? Number(updated.grossSalary) : null,
+      isPermanent: updated.isPermanent ?? false,
+      staffId: updated.staffId ?? null,
       isActive: updated.isActive,
       updatedAt: updated.updatedAt,
       branch: updated.branch
@@ -8123,9 +8374,42 @@ var UserService = class {
     if (user.id === deleterId) {
       throw new Error("You cannot delete your own account.");
     }
-    await prisma.user.delete({
-      where: { id: userId }
+    await prisma.sale.updateMany({
+      where: { userId },
+      data: { userId: deleterId }
     });
+    await prisma.financialTransaction.updateMany({
+      where: { userId },
+      data: { userId: deleterId }
+    });
+    await prisma.auditLog.updateMany({
+      where: { userId },
+      data: { userId: null }
+    });
+    await prisma.notification.deleteMany({
+      where: { userId }
+    });
+    try {
+      await prisma.user.delete({
+        where: { id: userId }
+      });
+    } catch (dbErr) {
+      await prisma.user.update({
+        where: { id: userId },
+        data: {
+          isActive: false,
+          deactivatedAt: /* @__PURE__ */ new Date(),
+          deactivatedById: deleterId,
+          resignationDate: /* @__PURE__ */ new Date(),
+          resignationReason: "Deleted by administrator",
+          permissions: [],
+          branchId: null,
+          pharmacyRoleId: null,
+          username: `deleted_${Date.now()}_${user.username}`,
+          email: user.email ? `deleted_${Date.now()}_${user.email}` : null
+        }
+      });
+    }
     await AuditService.log({
       tenantId,
       branchId: user.branchId,
@@ -8413,7 +8697,16 @@ var createUserSchema = z7.object({
   email: z7.string().email("Invalid email format").optional(),
   phone: z7.string().optional(),
   role: z7.string().min(1, "Role is required"),
-  branchId: z7.string().nullable().optional()
+  branchId: z7.string().nullable().optional(),
+  nidNumber: z7.string().nullable().optional(),
+  nidFrontUrl: z7.string().nullable().optional(),
+  nidFrontPublicId: z7.string().nullable().optional(),
+  nidBackUrl: z7.string().nullable().optional(),
+  nidBackPublicId: z7.string().nullable().optional(),
+  documentsSubmitted: z7.boolean().optional(),
+  grossSalary: z7.coerce.number().min(0, "Gross salary must be a positive number").nullable().optional(),
+  isPermanent: z7.boolean().optional(),
+  staffId: z7.string().nullable().optional()
 });
 var updateUserSchema = z7.object({
   name: z7.string().min(2).optional(),
@@ -8422,7 +8715,16 @@ var updateUserSchema = z7.object({
   role: z7.string().optional(),
   branchId: z7.string().nullable().optional(),
   password: z7.string().min(6).optional(),
-  isActive: z7.boolean().optional()
+  isActive: z7.boolean().optional(),
+  nidNumber: z7.string().nullable().optional(),
+  nidFrontUrl: z7.string().nullable().optional(),
+  nidFrontPublicId: z7.string().nullable().optional(),
+  nidBackUrl: z7.string().nullable().optional(),
+  nidBackPublicId: z7.string().nullable().optional(),
+  documentsSubmitted: z7.boolean().optional(),
+  grossSalary: z7.coerce.number().min(0, "Gross salary must be a positive number").nullable().optional(),
+  isPermanent: z7.boolean().optional(),
+  staffId: z7.string().nullable().optional()
 });
 var createPharmacyRoleSchema = z7.object({
   name: z7.string().min(2, "Role name must be at least 2 characters"),
@@ -8833,6 +9135,8 @@ var createProductSchema = z8.object({
   stripsPerBox: z8.number().int().positive().optional().nullable(),
   tabletsPerStrip: z8.number().int().positive().optional().nullable(),
   minStockAlert: z8.number().int().nonnegative().optional().default(10),
+  shopMinStockAlert: z8.number().int().nonnegative().optional().default(10),
+  godownMinStockAlert: z8.number().int().nonnegative().optional().default(50),
   description: z8.string().optional().nullable(),
   isControlled: z8.boolean().optional().default(false),
   requiresPrescription: z8.boolean().default(false)
@@ -11418,7 +11722,8 @@ var TransferService = class {
           where: {
             id: item.inventoryId,
             branchId: data.fromBranchId
-          }
+          },
+          include: { locations: true }
         });
       }
       if (!inv) {
@@ -11427,7 +11732,8 @@ var TransferService = class {
             branchId: data.fromBranchId,
             productId: item.productId,
             ...item.batchNumber ? { batchNumber: item.batchNumber } : {}
-          }
+          },
+          include: { locations: true }
         });
       }
       const product = await prisma.product.findUnique({
@@ -11436,10 +11742,11 @@ var TransferService = class {
       if (!product) {
         throw new Error(`Product ID ${item.productId} not found.`);
       }
-      const availableQty = inv?.quantity || 0;
-      if (availableQty < item.sentQuantity) {
+      const allocatedToShop = (inv?.locations || []).reduce((sum, loc) => sum + (Number(loc.quantity) || 0), 0);
+      const godownAvailableQty = Math.max(0, (Number(inv?.quantity) || 0) - allocatedToShop);
+      if (godownAvailableQty < item.sentQuantity) {
         throw new Error(
-          `Insufficient stock at ${fromBranch.name} for "${product.name}"${item.batchNumber ? ` (Batch: ${item.batchNumber})` : ""}. Available: ${availableQty}, Requested: ${item.sentQuantity}`
+          `Insufficient Godown stock at ${fromBranch.name} for "${product.name}"${item.batchNumber ? ` (Batch: ${item.batchNumber})` : ""}. Available in Godown: ${godownAvailableQty}, Requested: ${item.sentQuantity}. Stock allocated to shop racks/counters cannot be transferred.`
         );
       }
       const effectiveCostPrice = Number(item.costPrice ?? inv?.purchasePrice ?? product.basePrice ?? 0);
@@ -13600,6 +13907,11 @@ var ReportService = class {
     let totalUnitsSold = 0;
     const hourlyMap = {};
     for (let i = 0; i < 24; i++) hourlyMap[i] = { count: 0, revenue: 0 };
+    const dayOfWeekNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    const dayOfWeekMap = {};
+    for (let i = 0; i < 7; i++) {
+      dayOfWeekMap[i] = { day: dayOfWeekNames[i], count: 0, revenue: 0 };
+    }
     sales.forEach((s) => {
       const saleSubTotal = Number(s.subTotal || 0);
       const saleDiscount = Number(s.discount || 0);
@@ -13633,9 +13945,15 @@ var ReportService = class {
       } else {
         paymentBreakdown.other += saleTotal;
       }
-      const hour = new Date(s.createdAt).getHours();
+      const saleDate = new Date(s.createdAt);
+      const hour = saleDate.getHours();
       hourlyMap[hour].count += 1;
       hourlyMap[hour].revenue += saleTotal;
+      const dayIndex = saleDate.getDay();
+      if (dayOfWeekMap[dayIndex]) {
+        dayOfWeekMap[dayIndex].count += 1;
+        dayOfWeekMap[dayIndex].revenue += saleTotal;
+      }
       (s.items || []).forEach((item) => {
         const prod = item.product;
         const pId = item.productId;
@@ -13751,7 +14069,8 @@ var ReportService = class {
       },
       productSales: productSalesList,
       transactions: transactionList,
-      hourlyBreakdown: hourlyMap
+      hourlyBreakdown: hourlyMap,
+      dayOfWeekBreakdown: dayOfWeekMap
     };
   }
   /**
@@ -14059,6 +14378,9 @@ var ReportService = class {
     } else if (activePeriod === "30d") {
       rangeStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29, 0, 0, 0, 0);
       rangeEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    } else if (activePeriod === "this_year" || activePeriod === "year") {
+      rangeStart = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
+      rangeEnd = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
     } else if (activePeriod === "custom") {
       if (startDate) {
         rangeStart = new Date(startDate);
@@ -14108,7 +14430,7 @@ var ReportService = class {
       transferLossWhere.transfer = transferDateFilter;
     }
     const ninetyDaysFuture = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1e3);
-    const [sales, inventories, accounts, suppliers, allBranches, transferLossItems, directDamageMovements] = await Promise.all([
+    const [sales, inventories, accounts, suppliers, allBranches, transferLossItems, directDamageMovements, expenses] = await Promise.all([
       prisma.sale.findMany({
         where: saleWhere,
         include: {
@@ -14182,6 +14504,26 @@ var ReportService = class {
             }
           } : {}
         }
+      }).catch(() => []),
+      prisma.branchExpense.findMany({
+        where: {
+          tenantId,
+          ...effectiveBranchId ? { branchId: effectiveBranchId } : {},
+          ...rangeStart || rangeEnd ? {
+            paymentDate: {
+              ...rangeStart ? { gte: rangeStart } : {},
+              ...rangeEnd ? { lte: rangeEnd } : {}
+            }
+          } : {}
+        },
+        select: {
+          id: true,
+          branchId: true,
+          category: true,
+          amount: true,
+          paymentDate: true,
+          title: true
+        }
       }).catch(() => [])
     ]);
     const activeBranch = effectiveBranchId ? allBranches.find((b) => b.id === effectiveBranchId) : null;
@@ -14201,21 +14543,27 @@ var ReportService = class {
       for (let h = 0; h < 24; h++) {
         const hourStr = String(h).padStart(2, "0");
         const hourLabel = h === 0 ? "12 AM" : h < 12 ? `${h} AM` : h === 12 ? "12 PM" : `${h - 12} PM`;
-        dynamicTrendMap[hourStr] = { key: hourStr, label: hourLabel, sales: 0, revenue: 0, profit: 0 };
+        dynamicTrendMap[hourStr] = { key: hourStr, label: hourLabel, sales: 0, revenue: 0, cost: 0, profit: 0, expenses: 0 };
       }
     } else if (activePeriod === "7d") {
       for (let i = 6; i >= 0; i--) {
         const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
         const dateStr = d.toISOString().split("T")[0];
         const label = d.toLocaleDateString("en-US", { weekday: "short" });
-        dynamicTrendMap[dateStr] = { key: dateStr, label, sales: 0, revenue: 0, profit: 0 };
+        dynamicTrendMap[dateStr] = { key: dateStr, label, sales: 0, revenue: 0, cost: 0, profit: 0, expenses: 0 };
       }
     } else if (activePeriod === "30d") {
       for (let i = 29; i >= 0; i--) {
         const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
         const dateStr = d.toISOString().split("T")[0];
         const label = `${d.getDate()} ${d.toLocaleDateString("en-US", { month: "short" })}`;
-        dynamicTrendMap[dateStr] = { key: dateStr, label, sales: 0, revenue: 0, profit: 0 };
+        dynamicTrendMap[dateStr] = { key: dateStr, label, sales: 0, revenue: 0, cost: 0, profit: 0, expenses: 0 };
+      }
+    } else if (activePeriod === "this_year" || activePeriod === "year") {
+      for (let m = 0; m < 12; m++) {
+        const monthKey = `${now.getFullYear()}-${String(m + 1).padStart(2, "0")}`;
+        const label = new Date(now.getFullYear(), m, 1).toLocaleDateString("en-US", { month: "short" });
+        dynamicTrendMap[monthKey] = { key: monthKey, label, sales: 0, revenue: 0, cost: 0, profit: 0, expenses: 0 };
       }
     } else if (activePeriod === "custom" && rangeStart && rangeEnd) {
       const diffDays = Math.ceil((rangeEnd.getTime() - rangeStart.getTime()) / (1e3 * 60 * 60 * 24));
@@ -14223,7 +14571,14 @@ var ReportService = class {
         for (let h = 0; h < 24; h++) {
           const hourStr = String(h).padStart(2, "0");
           const hourLabel = h === 0 ? "12 AM" : h < 12 ? `${h} AM` : h === 12 ? "12 PM" : `${h - 12} PM`;
-          dynamicTrendMap[hourStr] = { key: hourStr, label: hourLabel, sales: 0, revenue: 0, profit: 0 };
+          dynamicTrendMap[hourStr] = { key: hourStr, label: hourLabel, sales: 0, revenue: 0, cost: 0, profit: 0, expenses: 0 };
+        }
+      } else if (diffDays > 300) {
+        const yr = rangeStart.getFullYear();
+        for (let m = 0; m < 12; m++) {
+          const monthKey = `${yr}-${String(m + 1).padStart(2, "0")}`;
+          const label = new Date(yr, m, 1).toLocaleDateString("en-US", { month: "short" });
+          dynamicTrendMap[monthKey] = { key: monthKey, label, sales: 0, revenue: 0, cost: 0, profit: 0, expenses: 0 };
         }
       } else {
         const stepDays = Math.min(diffDays, 60);
@@ -14232,7 +14587,7 @@ var ReportService = class {
           if (d >= rangeStart) {
             const dateStr = d.toISOString().split("T")[0];
             const label = `${d.getDate()} ${d.toLocaleDateString("en-US", { month: "short" })}`;
-            dynamicTrendMap[dateStr] = { key: dateStr, label, sales: 0, revenue: 0, profit: 0 };
+            dynamicTrendMap[dateStr] = { key: dateStr, label, sales: 0, revenue: 0, cost: 0, profit: 0, expenses: 0 };
           }
         }
       }
@@ -14241,7 +14596,7 @@ var ReportService = class {
         const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
         const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
         const label = d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
-        dynamicTrendMap[key] = { key, label, sales: 0, revenue: 0, profit: 0 };
+        dynamicTrendMap[key] = { key, label, sales: 0, revenue: 0, cost: 0, profit: 0, expenses: 0 };
       }
     }
     const branchStatsMap = {};
@@ -14257,6 +14612,7 @@ var ReportService = class {
         costOfSold: 0,
         grossProfit: 0,
         damagedMissingLoss: 0,
+        expenses: 0,
         netProfit: 0
       };
     });
@@ -14306,13 +14662,15 @@ var ReportService = class {
         if (dynamicTrendMap[hourStr]) {
           dynamicTrendMap[hourStr].sales += 1;
           dynamicTrendMap[hourStr].revenue += saleAmount;
+          dynamicTrendMap[hourStr].cost += saleCost;
           dynamicTrendMap[hourStr].profit += profit;
         }
-      } else if (activePeriod === "all") {
+      } else if (activePeriod === "all" || activePeriod === "this_year" || activePeriod === "year" || activePeriod === "custom" && Object.keys(dynamicTrendMap).length === 12) {
         const monthKey = `${saleDate.getFullYear()}-${String(saleDate.getMonth() + 1).padStart(2, "0")}`;
         if (dynamicTrendMap[monthKey]) {
           dynamicTrendMap[monthKey].sales += 1;
           dynamicTrendMap[monthKey].revenue += saleAmount;
+          dynamicTrendMap[monthKey].cost += saleCost;
           dynamicTrendMap[monthKey].profit += profit;
         }
       } else {
@@ -14320,7 +14678,33 @@ var ReportService = class {
         if (dynamicTrendMap[dateKey]) {
           dynamicTrendMap[dateKey].sales += 1;
           dynamicTrendMap[dateKey].revenue += saleAmount;
+          dynamicTrendMap[dateKey].cost += saleCost;
           dynamicTrendMap[dateKey].profit += profit;
+        }
+      }
+    });
+    let totalExpenses = 0;
+    (expenses || []).forEach((e) => {
+      const amt = Number(e.amount || 0);
+      totalExpenses += amt;
+      if (e.branchId && branchStatsMap[e.branchId]) {
+        branchStatsMap[e.branchId].expenses += amt;
+      }
+      const expDate = new Date(e.paymentDate || e.createdAt);
+      if (activePeriod === "today" || activePeriod === "yesterday" || activePeriod === "custom" && Object.keys(dynamicTrendMap).length === 24) {
+        const hourStr = String(expDate.getHours()).padStart(2, "0");
+        if (dynamicTrendMap[hourStr]) {
+          dynamicTrendMap[hourStr].expenses += amt;
+        }
+      } else if (activePeriod === "all" || activePeriod === "this_year" || activePeriod === "year" || activePeriod === "custom" && Object.keys(dynamicTrendMap).length === 12) {
+        const monthKey = `${expDate.getFullYear()}-${String(expDate.getMonth() + 1).padStart(2, "0")}`;
+        if (dynamicTrendMap[monthKey]) {
+          dynamicTrendMap[monthKey].expenses += amt;
+        }
+      } else {
+        const dateKey = expDate.toISOString().split("T")[0];
+        if (dynamicTrendMap[dateKey]) {
+          dynamicTrendMap[dateKey].expenses += amt;
         }
       }
     });
@@ -14409,12 +14793,12 @@ var ReportService = class {
       }
     });
     const totalGrossProfit = Math.max(0, totalSalesRevenue - totalCostOfSold);
-    const netProfitAfterLoss = Math.round((totalGrossProfit - totalDamagedMissingLoss) * 100) / 100;
+    const netProfitAfterLoss = Math.round((totalGrossProfit - totalDamagedMissingLoss - totalExpenses) * 100) / 100;
     const grossMargin = totalSalesRevenue > 0 ? Math.round(totalGrossProfit / totalSalesRevenue * 1e3) / 10 : 0;
     const netMargin = totalSalesRevenue > 0 ? Math.round(netProfitAfterLoss / totalSalesRevenue * 1e3) / 10 : 0;
     const branchWiseList = Object.values(branchStatsMap).map((b) => {
       const gross = Math.max(0, b.salesRevenue - b.costOfSold);
-      const net = Math.round(gross - b.damagedMissingLoss);
+      const net = Math.round(gross - b.damagedMissingLoss - (b.expenses || 0));
       const margin = b.salesRevenue > 0 ? Math.round(gross / b.salesRevenue * 1e3) / 10 : 0;
       return {
         ...b,
@@ -14423,10 +14807,79 @@ var ReportService = class {
         costOfSold: Math.round(b.costOfSold),
         grossProfit: Math.round(gross),
         damagedMissingLoss: Math.round(b.damagedMissingLoss),
+        expenses: Math.round(b.expenses),
         netProfit: net,
         profitMargin: margin
       };
     });
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    let todaySummary = null;
+    if (activePeriod === "today") {
+      todaySummary = {
+        salesRevenue: Math.round(totalSalesRevenue),
+        costOfSold: Math.round(totalCostOfSold),
+        grossProfit: Math.round(totalGrossProfit),
+        damagedMissingLoss: Math.round(totalDamagedMissingLoss),
+        expenses: Math.round(totalExpenses),
+        netProfit: Math.round(netProfitAfterLoss),
+        salesCount: sales.length
+      };
+    } else {
+      try {
+        const todaySales = await prisma.sale.findMany({
+          where: {
+            tenantId,
+            status: "COMPLETED",
+            ...effectiveBranchId ? { branchId: effectiveBranchId } : {},
+            createdAt: { gte: todayStart, lte: todayEnd }
+          },
+          include: {
+            items: true
+          }
+        });
+        const todayExpensesList = await prisma.branchExpense.findMany({
+          where: {
+            tenantId,
+            ...effectiveBranchId ? { branchId: effectiveBranchId } : {},
+            paymentDate: { gte: todayStart, lte: todayEnd }
+          },
+          select: { amount: true }
+        });
+        let tRev = 0;
+        let tCost = 0;
+        (todaySales || []).forEach((s) => {
+          tRev += Number(s.totalAmount || 0);
+          (s.items || []).forEach((item) => {
+            const baseUnits = Number(item.lowestUnitQuantity || Number(item.quantity || 0) * Number(item.unitMultiplier || 1));
+            const purchaseP = Number(item.purchasePrice || 0);
+            tCost += purchaseP * baseUnits;
+          });
+        });
+        const tGross = Math.max(0, tRev - tCost);
+        const tExp = (todayExpensesList || []).reduce((sum, e) => sum + Number(e.amount || 0), 0);
+        const tNet = Math.round(tGross - tExp);
+        todaySummary = {
+          salesRevenue: Math.round(tRev),
+          costOfSold: Math.round(tCost),
+          grossProfit: Math.round(tGross),
+          damagedMissingLoss: 0,
+          expenses: Math.round(tExp),
+          netProfit: tNet,
+          salesCount: todaySales.length
+        };
+      } catch (err) {
+        todaySummary = {
+          salesRevenue: 0,
+          costOfSold: 0,
+          grossProfit: 0,
+          damagedMissingLoss: 0,
+          expenses: 0,
+          netProfit: 0,
+          salesCount: 0
+        };
+      }
+    }
     let cashBalance = 0;
     let bankBalance = 0;
     let digitalWalletBalance = 0;
@@ -14468,7 +14921,9 @@ var ReportService = class {
         // 5. Damaged & Missing Stock Loss in Period
         totalDamagedMissingLoss: Math.round(totalDamagedMissingLoss),
         damagedMissingUnitsCount,
-        // 6. Net Realized Profit After Loss
+        // 6. Total Operating Expenses in Period
+        totalExpenses: Math.round(totalExpenses),
+        // 7. Net Realized Profit After Loss & Expenses
         netProfitAfterLoss: Math.round(netProfitAfterLoss),
         netMargin,
         // Alerts & Stock Counts
@@ -14481,6 +14936,7 @@ var ReportService = class {
         bankBalance: Math.round(bankBalance * 100) / 100,
         digitalWalletBalance: Math.round(digitalWalletBalance * 100) / 100
       },
+      todaySummary,
       branchWisePerformance: branchWiseList,
       charts: {
         dailySalesTrend: Object.values(dynamicTrendMap),
@@ -14633,7 +15089,7 @@ var vatMisReportSchema = z12.object({
 });
 var dashboardQuerySchema = z12.object({
   branchId: z12.string().optional().transform((v) => v === "" || v === "null" || v === "undefined" || v === "all" ? void 0 : v),
-  period: z12.enum(["today", "yesterday", "7d", "30d", "custom", "all"]).optional(),
+  period: z12.enum(["today", "yesterday", "7d", "30d", "this_year", "year", "custom", "all"]).optional(),
   startDate: z12.string().optional(),
   endDate: z12.string().optional()
 });
@@ -16435,6 +16891,7 @@ var SupplierService = class {
               quantity: { increment: item.quantity },
               purchasePrice: item.unitPurchasePrice,
               sellingPrice: item.unitSellingPrice,
+              ...item.barcode && { barcode: item.barcode },
               supplierId: data.supplierId || existingInventory.supplierId,
               shelfLocation: item.shelfLocation || existingInventory.shelfLocation,
               receivedDate: data.purchaseDate ? new Date(data.purchaseDate) : existingInventory.receivedDate || /* @__PURE__ */ new Date()
@@ -16464,6 +16921,12 @@ var SupplierService = class {
             }
           });
           inventoryId = newInv.id;
+        }
+        if (item.barcode && item.barcode.trim() !== "") {
+          await tx.product.update({
+            where: { id: item.productId },
+            data: { barcode: item.barcode.trim() }
+          });
         }
         await tx.stockMovement.create({
           data: {
@@ -17375,6 +17838,7 @@ var AttendanceService = class {
         pharmacyRoleName: true,
         avatarUrl: true,
         phone: true,
+        isPermanent: true,
         salaryConfig: {
           select: {
             baseSalary: true,
@@ -17383,6 +17847,27 @@ var AttendanceService = class {
         }
       },
       orderBy: [{ name: "asc" }, { username: "asc" }]
+    });
+    const deductionRule = await prisma.salaryDeductionRule.findUnique({
+      where: { branchId }
+    });
+    const annualPaidLeaveAllowance = deductionRule?.annualPaidLeaveDays ?? 30;
+    const year = date.slice(0, 4);
+    const yearlyPaidLeaves = await prisma.employeeAttendance.groupBy({
+      by: ["userId"],
+      where: {
+        tenantId,
+        branchId,
+        date: { startsWith: year },
+        status: "PAID_LEAVE"
+      },
+      _count: {
+        date: true
+      }
+    });
+    const paidLeaveCountMap = /* @__PURE__ */ new Map();
+    yearlyPaidLeaves.forEach((item) => {
+      paidLeaveCountMap.set(item.userId, item._count?.date || 0);
     });
     const existing = await prisma.employeeAttendance.findMany({
       where: {
@@ -17399,6 +17884,7 @@ var AttendanceService = class {
     const recordMap = new Map(existing.map((r) => [r.userId, r]));
     const roster = employees.map((emp) => {
       const record = recordMap.get(emp.id);
+      const paidLeavesUsed = paidLeaveCountMap.get(emp.id) || 0;
       return {
         id: emp.id,
         name: emp.name,
@@ -17406,6 +17892,9 @@ var AttendanceService = class {
         role: emp.customRoleName || emp.pharmacyRoleName || emp.role.replace(/_/g, " "),
         avatarUrl: emp.avatarUrl,
         phone: emp.phone,
+        isPermanent: Boolean(emp.isPermanent),
+        paidLeavesUsed,
+        annualPaidLeaveAllowance,
         status: record ? record.status : isOffDay ? "OFF_DAY" : "PRESENT",
         hasSavedRecord: Boolean(record),
         notes: record?.notes || "",
@@ -17418,6 +17907,7 @@ var AttendanceService = class {
       month,
       isOffDay,
       dayOfWeek: dayMeta?.dayOfWeek || "",
+      annualPaidLeaveAllowance,
       roster
     };
   }
@@ -17425,6 +17915,21 @@ var AttendanceService = class {
    * 4. Manager saves/finalizes daily attendance in bulk
    */
   static async markBulkDailyAttendance(tenantId, branchId, date, data, actorId) {
+    const paidLeaveUserIds = data.attendances.filter((item) => item.status === "PAID_LEAVE").map((item) => item.userId);
+    if (paidLeaveUserIds.length > 0) {
+      const nonPermanentUsers = await prisma.user.findMany({
+        where: {
+          id: { in: paidLeaveUserIds },
+          isPermanent: false
+        },
+        select: { id: true, name: true }
+      });
+      if (nonPermanentUsers.length > 0) {
+        throw new Error(
+          `Staff member "${nonPermanentUsers[0].name}" is not a permanent employee and is not entitled to statutory paid leave.`
+        );
+      }
+    }
     const results = await prisma.$transaction(
       data.attendances.map(
         (item) => prisma.employeeAttendance.upsert({
@@ -17537,6 +18042,19 @@ var AttendanceService = class {
         markedBy: record?.markedBy || null
       };
     });
+    const year = month.slice(0, 4);
+    const yearlyPaidLeavesCount = await prisma.employeeAttendance.count({
+      where: {
+        tenantId,
+        userId,
+        date: { startsWith: year },
+        status: "PAID_LEAVE"
+      }
+    });
+    const deductionRule = await prisma.salaryDeductionRule.findUnique({
+      where: { branchId }
+    });
+    const annualPaidLeaveAllowance = deductionRule?.annualPaidLeaveDays ?? 30;
     return {
       employee: {
         id: employee.id,
@@ -17545,6 +18063,9 @@ var AttendanceService = class {
         role: employee.customRoleName || employee.pharmacyRoleName || employee.role.replace(/_/g, " "),
         branch: employee.branch,
         isActive: employee.isActive,
+        isPermanent: Boolean(employee.isPermanent),
+        paidLeavesUsedThisYear: yearlyPaidLeavesCount,
+        annualPaidLeaveAllowance,
         resignationDate: employee.resignationDate,
         resignationReason: employee.resignationReason,
         deactivatedAt: employee.deactivatedAt
@@ -17608,9 +18129,19 @@ var AttendanceService = class {
       (sum, item) => sum + Number(item.amount || 0),
       0
     );
+    const taxExemptionAnnual = deductionRule?.taxExemptionAnnual ? Number(deductionRule.taxExemptionAnnual) : 0;
+    const taxRatePercent = deductionRule?.taxRatePercent ? Number(deductionRule.taxRatePercent) : 0;
+    const taxFiscalYear = deductionRule?.taxFiscalYear || null;
+    let monthlyTaxDeduction = 0;
+    const annualProjectedGross = (baseSalary + packageAllowances) * 12;
+    if (taxExemptionAnnual > 0 && taxRatePercent > 0 && annualProjectedGross > taxExemptionAnnual) {
+      const taxableAmount = annualProjectedGross - taxExemptionAnnual;
+      const annualTax = taxableAmount * (taxRatePercent / 100);
+      monthlyTaxDeduction = Number((annualTax / 12).toFixed(2));
+    }
     const totalAllowances = Number((packageAllowances + dynamicAllowancesTotal).toFixed(2));
-    const totalDeductions = Number((packageDeductions + attendanceDeduction).toFixed(2));
-    const finalPayable = Math.max(0, Number((baseSalary - attendanceDeduction + totalAllowances - packageDeductions).toFixed(2)));
+    const totalDeductions = Number((packageDeductions + attendanceDeduction + monthlyTaxDeduction).toFixed(2));
+    const finalPayable = Math.max(0, Number((baseSalary - attendanceDeduction + totalAllowances - packageDeductions - monthlyTaxDeduction).toFixed(2)));
     const disbursements = await prisma.salaryDisbursement.findMany({
       where: { tenantId, userId, month },
       include: {
@@ -17625,11 +18156,13 @@ var AttendanceService = class {
     return {
       employee: {
         id: employee.id,
+        staffId: employee.staffId,
         name: employee.name,
         username: employee.username,
         role: employee.customRoleName || employee.pharmacyRoleName || employee.role.replace(/_/g, " "),
         branch: employee.branch,
         isActive: employee.isActive,
+        isPermanent: Boolean(employee.isPermanent),
         resignationDate: employee.resignationDate
       },
       month,
@@ -17640,11 +18173,17 @@ var AttendanceService = class {
         totalWorkingDays,
         presentDays,
         absentDays,
+        lateDays: lateDays ?? 0,
         paidLeaveDays,
         unpaidLeaveDays,
         dailyRate,
         attendanceDeduction,
         // Locked/read-only
+        monthlyTaxDeduction,
+        taxFiscalYear,
+        taxExemptionAnnual,
+        taxRatePercent,
+        annualProjectedGross,
         packageAllowances,
         dynamicAllowancesTotal,
         totalAllowances,
@@ -17663,10 +18202,11 @@ var AttendanceService = class {
    * 7. Branch Monthly Attendance and Payroll Summary for all branch staff
    */
   static async getBranchMonthlyAttendanceSummary(tenantId, branchId, month) {
+    const branchFilter = branchId && branchId !== "all" && branchId !== "all-branches" ? { branchId } : {};
     const employees = await prisma.user.findMany({
       where: {
         tenantId,
-        branchId,
+        ...branchFilter,
         role: {
           notIn: ["COMPANY_OWNER", "SUPER_ADMIN"]
         },
@@ -17674,18 +18214,20 @@ var AttendanceService = class {
       },
       select: {
         id: true,
+        staffId: true,
         name: true,
         username: true,
         role: true,
         customRoleName: true,
         pharmacyRoleName: true,
         avatarUrl: true,
-        salaryConfig: true
+        salaryConfig: true,
+        branchId: true
       },
       orderBy: [{ name: "asc" }, { username: "asc" }]
     });
     const calculations = await Promise.all(
-      employees.map((emp) => this.calculateMonthlySalary(tenantId, branchId, emp.id, month))
+      employees.map((emp) => this.calculateMonthlySalary(tenantId, emp.branchId || branchId, emp.id, month))
     );
     return calculations;
   }
@@ -18004,7 +18546,7 @@ var AccountingService = class {
       const transaction = await tx.financialTransaction.create({
         data: {
           tenantId,
-          branchId: data.branchId,
+          branchId: data.branchId || sourceAcc.branchId,
           sourceAccountId: sourceAcc.id,
           destinationAccountId: destAcc.id,
           amount: data.amount,
@@ -18042,6 +18584,250 @@ var AccountingService = class {
       }
     });
     return result;
+  }
+  /**
+   * Create a Fund Transfer Request (Post-Verification Maker-Checker workflow)
+   */
+  static async createTransferRequest(tenantId, userId, data) {
+    if (data.sourceAccountId === data.destinationAccountId) {
+      throw new Error("Source and destination accounts must be different");
+    }
+    const [sourceAcc, destAcc] = await Promise.all([
+      prisma.financialAccount.findFirst({
+        where: { id: data.sourceAccountId, tenantId }
+      }),
+      prisma.financialAccount.findFirst({
+        where: { id: data.destinationAccountId, tenantId }
+      })
+    ]);
+    if (!sourceAcc) throw new Error("Source financial account not found");
+    if (!destAcc) throw new Error("Destination financial account not found");
+    if (Number(sourceAcc.balance) < data.amount) {
+      throw new Error(`Insufficient funds in ${sourceAcc.name}. Current balance: \u09F3${Number(sourceAcc.balance).toFixed(2)}`);
+    }
+    const request = await prisma.fundTransferRequest.create({
+      data: {
+        tenantId,
+        branchId: data.branchId || sourceAcc.branchId,
+        sourceAccountId: sourceAcc.id,
+        destinationAccountId: destAcc.id,
+        amount: data.amount,
+        reference: data.reference || null,
+        note: data.note || `Transfer requested from ${sourceAcc.name} to ${destAcc.name}`,
+        status: "PENDING",
+        requestedById: userId
+      },
+      include: {
+        sourceAccount: { select: { id: true, name: true, type: true } },
+        destinationAccount: { select: { id: true, name: true, type: true } },
+        requestedBy: { select: { id: true, name: true, username: true, role: true } }
+      }
+    });
+    await AuditService.log({
+      tenantId,
+      branchId: data.branchId || sourceAcc.branchId,
+      userId,
+      action: "FUND_TRANSFER_REQUESTED",
+      details: {
+        requestId: request.id,
+        from: sourceAcc.name,
+        to: destAcc.name,
+        amount: data.amount,
+        reference: data.reference,
+        note: data.note
+      }
+    });
+    return request;
+  }
+  /**
+   * List fund transfer requests with date filters and status filter
+   */
+  static async getTransferRequests(tenantId, query) {
+    const where = { tenantId };
+    if (query.status && query.status !== "ALL") {
+      where.status = query.status;
+    }
+    if (query.branchId && query.branchId !== "all") {
+      where.branchId = query.branchId;
+    }
+    const now = /* @__PURE__ */ new Date();
+    if (query.period === "today") {
+      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+      const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+      where.createdAt = { gte: startOfDay, lte: endOfDay };
+    } else if (query.period === "yesterday") {
+      const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+      const startOfDay = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 0, 0, 0, 0);
+      const endOfDay = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 23, 59, 59, 999);
+      where.createdAt = { gte: startOfDay, lte: endOfDay };
+    } else if (query.period === "month") {
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+      where.createdAt = { gte: startOfMonth, lte: endOfMonth };
+    } else if (query.period === "year") {
+      const startOfYear = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
+      const endOfYear = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
+      where.createdAt = { gte: startOfYear, lte: endOfYear };
+    } else if (query.period === "custom" || query.startDate && query.endDate) {
+      const start = query.startDate ? new Date(query.startDate) : void 0;
+      const end = query.endDate ? new Date(query.endDate) : void 0;
+      if (start && end) {
+        end.setHours(23, 59, 59, 999);
+        where.createdAt = { gte: start, lte: end };
+      } else if (start) {
+        where.createdAt = { gte: start };
+      }
+    }
+    const requests = await prisma.fundTransferRequest.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      include: {
+        sourceAccount: { select: { id: true, name: true, type: true } },
+        destinationAccount: { select: { id: true, name: true, type: true } },
+        requestedBy: { select: { id: true, name: true, username: true, role: true } },
+        reviewedBy: { select: { id: true, name: true, username: true, role: true } }
+      }
+    });
+    return requests;
+  }
+  /**
+   * Quick count of pending transfer requests (for sidebar notification badge)
+   */
+  static async getPendingTransferRequestsCount(tenantId) {
+    const count = await prisma.fundTransferRequest.count({
+      where: { tenantId, status: "PENDING" }
+    });
+    return { count };
+  }
+  /**
+   * Approve a Fund Transfer Request: Atomically moves funds and updates request status
+   */
+  static async approveTransferRequest(tenantId, reviewerId, requestId) {
+    const request = await prisma.fundTransferRequest.findFirst({
+      where: { id: requestId, tenantId },
+      include: {
+        sourceAccount: true,
+        destinationAccount: true,
+        requestedBy: { select: { id: true, name: true } }
+      }
+    });
+    if (!request) throw new Error("Transfer request not found");
+    if (request.status !== "PENDING") {
+      throw new Error(`This transfer request is already ${request.status.toLowerCase()}`);
+    }
+    const sourceAcc = request.sourceAccount;
+    const destAcc = request.destinationAccount;
+    if (!sourceAcc || !destAcc) {
+      throw new Error("One or both accounts associated with this transfer no longer exist");
+    }
+    const amount = Number(request.amount);
+    if (Number(sourceAcc.balance) < amount) {
+      throw new Error(`Insufficient funds in ${sourceAcc.name}. Current balance is \u09F3${Number(sourceAcc.balance).toFixed(2)}, required: \u09F3${amount.toFixed(2)}`);
+    }
+    const result = await prisma.$transaction(async (tx) => {
+      const updatedSource = await tx.financialAccount.update({
+        where: { id: sourceAcc.id },
+        data: { balance: { decrement: amount } }
+      });
+      const updatedDest = await tx.financialAccount.update({
+        where: { id: destAcc.id },
+        data: { balance: { increment: amount } }
+      });
+      const transaction = await tx.financialTransaction.create({
+        data: {
+          tenantId,
+          branchId: request.branchId || sourceAcc.branchId,
+          sourceAccountId: sourceAcc.id,
+          destinationAccountId: destAcc.id,
+          amount,
+          type: "TRANSFER",
+          reference: request.reference || `TRF-APP-${Date.now().toString().slice(-6)}`,
+          note: request.note ? `[Approved] ${request.note}` : `[Approved] Transferred from ${sourceAcc.name} to ${destAcc.name}`,
+          userId: request.requestedById
+        }
+      });
+      const updatedRequest = await tx.fundTransferRequest.update({
+        where: { id: request.id },
+        data: {
+          status: "APPROVED",
+          reviewedById: reviewerId,
+          reviewedAt: /* @__PURE__ */ new Date(),
+          transactionId: transaction.id
+        },
+        include: {
+          sourceAccount: { select: { id: true, name: true, type: true } },
+          destinationAccount: { select: { id: true, name: true, type: true } },
+          requestedBy: { select: { id: true, name: true, username: true } },
+          reviewedBy: { select: { id: true, name: true, username: true } }
+        }
+      });
+      return {
+        request: updatedRequest,
+        transaction,
+        sourceAccount: updatedSource,
+        destinationAccount: updatedDest
+      };
+    });
+    await AuditService.log({
+      tenantId,
+      branchId: request.branchId,
+      userId: reviewerId,
+      action: "FUND_TRANSFER_APPROVED",
+      details: {
+        requestId: request.id,
+        from: sourceAcc.name,
+        to: destAcc.name,
+        amount,
+        requestedBy: request.requestedBy?.name,
+        transactionId: result.transaction.id
+      }
+    });
+    return result.request;
+  }
+  /**
+   * Reject a Fund Transfer Request
+   */
+  static async rejectTransferRequest(tenantId, reviewerId, requestId, reason) {
+    const request = await prisma.fundTransferRequest.findFirst({
+      where: { id: requestId, tenantId },
+      include: {
+        sourceAccount: { select: { id: true, name: true } },
+        destinationAccount: { select: { id: true, name: true } }
+      }
+    });
+    if (!request) throw new Error("Transfer request not found");
+    if (request.status !== "PENDING") {
+      throw new Error(`This transfer request is already ${request.status.toLowerCase()}`);
+    }
+    const updated = await prisma.fundTransferRequest.update({
+      where: { id: request.id },
+      data: {
+        status: "REJECTED",
+        reviewedById: reviewerId,
+        reviewedAt: /* @__PURE__ */ new Date(),
+        rejectionReason: reason || "Rejected by owner"
+      },
+      include: {
+        sourceAccount: { select: { id: true, name: true, type: true } },
+        destinationAccount: { select: { id: true, name: true, type: true } },
+        requestedBy: { select: { id: true, name: true, username: true } },
+        reviewedBy: { select: { id: true, name: true, username: true } }
+      }
+    });
+    await AuditService.log({
+      tenantId,
+      branchId: request.branchId,
+      userId: reviewerId,
+      action: "FUND_TRANSFER_REJECTED",
+      details: {
+        requestId: request.id,
+        from: request.sourceAccount?.name,
+        to: request.destinationAccount?.name,
+        amount: Number(request.amount),
+        rejectionReason: reason
+      }
+    });
+    return updated;
   }
   /**
    * Record manual Income or Expense
@@ -18114,7 +18900,11 @@ var AccountingService = class {
       ];
     }
     if (query.type) {
-      where.type = query.type;
+      if (query.type.includes(",")) {
+        where.type = { in: query.type.split(",").map((t) => t.trim()) };
+      } else {
+        where.type = query.type;
+      }
     }
     if (query.startDate || query.endDate) {
       where.createdAt = {};
@@ -18217,6 +19007,18 @@ var AccountingService = class {
         d.setHours(23, 59, 59, 999);
         periodEnd = d;
       }
+    } else if (options?.period === "today") {
+      periodStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+      periodEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    } else if (options?.period === "thisWeek") {
+      const firstDay = new Date(now);
+      firstDay.setDate(now.getDate() - now.getDay());
+      firstDay.setHours(0, 0, 0, 0);
+      periodStart = firstDay;
+      periodEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    } else if (options?.period === "thisMonth") {
+      periodStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+      periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
     } else if (options?.period === "lastMonth") {
       periodStart = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
       periodEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
@@ -18227,6 +19029,14 @@ var AccountingService = class {
       periodStart = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
       periodEnd = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
     }
+    const suppliers = await prisma.supplier.findMany({
+      where: { tenantId, isActive: true },
+      select: { id: true, totalDue: true }
+    });
+    const supplierLifetimeDue = suppliers.reduce(
+      (sum, s) => sum + Number(s.totalDue || 0),
+      0
+    );
     const purchaseWhere = {
       tenantId,
       dueAmount: { gt: 0 }
@@ -18234,27 +19044,37 @@ var AccountingService = class {
     if (branchId) {
       purchaseWhere.branchId = branchId;
     }
-    if (options?.startDate || options?.endDate || options?.period) {
-      purchaseWhere.purchaseDate = { gte: periodStart, lte: periodEnd };
-    }
     const unpaidPurchases = await prisma.purchase.findMany({
       where: purchaseWhere,
       select: { dueAmount: true }
     });
-    let totalSupplierDues = unpaidPurchases.reduce(
+    const totalPurchaseDues = unpaidPurchases.reduce(
       (sum, p) => sum + Number(p.dueAmount || 0),
       0
     );
-    if (totalSupplierDues === 0 && !branchId && !options?.startDate && !options?.endDate && !options?.period) {
-      const suppliers = await prisma.supplier.findMany({
-        where: { tenantId, isActive: true },
-        select: { totalDue: true, dueBalance: true }
-      });
-      totalSupplierDues = suppliers.reduce(
-        (sum, s) => sum + Number(s.totalDue ?? s.dueBalance ?? 0),
-        0
-      );
+    let totalSupplierDues = supplierLifetimeDue;
+    if (branchId && totalPurchaseDues > 0) {
+      totalSupplierDues = totalPurchaseDues;
+    } else {
+      totalSupplierDues = Math.max(supplierLifetimeDue, totalPurchaseDues);
     }
+    const customerDuesWhere = {
+      tenantId,
+      status: "COMPLETED",
+      dueAmount: { gt: 0 }
+    };
+    if (branchId) customerDuesWhere.branchId = branchId;
+    if (options?.startDate || options?.endDate || options?.period) {
+      customerDuesWhere.createdAt = { gte: periodStart, lte: periodEnd };
+    }
+    const unpaidSales = await prisma.sale.findMany({
+      where: customerDuesWhere,
+      select: { dueAmount: true }
+    });
+    const totalCustomerDues = unpaidSales.reduce(
+      (sum, s) => sum + Number(s.dueAmount || 0),
+      0
+    );
     const periodSalesWhere = {
       tenantId,
       status: "COMPLETED",
@@ -18297,6 +19117,37 @@ var AccountingService = class {
         periodOtherSales += amt;
       }
     }
+    const directIncomeWhere = {
+      tenantId,
+      type: "INCOME",
+      createdAt: { gte: periodStart, lte: periodEnd }
+    };
+    if (branchId) directIncomeWhere.branchId = branchId;
+    const directIncomes = await prisma.financialTransaction.findMany({
+      where: directIncomeWhere,
+      select: { amount: true }
+    });
+    const periodDirectIncome = directIncomes.reduce(
+      (sum, d) => sum + Number(d.amount || 0),
+      0
+    );
+    const periodTotalInflow = periodTotalSales + periodDirectIncome;
+    const periodExpenseWhere = {
+      tenantId,
+      paymentDate: { gte: periodStart, lte: periodEnd }
+    };
+    if (branchId) periodExpenseWhere.branchId = branchId;
+    const [periodBranchExpenses, periodSalaries] = await Promise.all([
+      prisma.branchExpense.findMany({
+        where: periodExpenseWhere,
+        select: { amount: true }
+      }),
+      prisma.salaryDisbursement.findMany({
+        where: periodExpenseWhere,
+        select: { paidAmount: true }
+      })
+    ]);
+    const periodTotalExpenses = periodBranchExpenses.reduce((sum, e) => sum + Number(e.amount || 0), 0) + periodSalaries.reduce((sum, s) => sum + Number(s.paidAmount || 0), 0);
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
     const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
     const todaySales = await prisma.sale.findMany({
@@ -18322,6 +19173,37 @@ var AccountingService = class {
       else if (m === "NAGAD") todayNagad += amt;
       else if (m === "BANK" || m === "CARD") todayBank += amt;
     }
+    const todayDirectIncomeWhere = {
+      tenantId,
+      type: "INCOME",
+      createdAt: { gte: todayStart, lte: todayEnd }
+    };
+    if (branchId) todayDirectIncomeWhere.branchId = branchId;
+    const todayDirectIncomes = await prisma.financialTransaction.findMany({
+      where: todayDirectIncomeWhere,
+      select: { amount: true }
+    });
+    const todayDirectIncomeTotal = todayDirectIncomes.reduce(
+      (sum, d) => sum + Number(d.amount || 0),
+      0
+    );
+    todayRevenue += todayDirectIncomeTotal;
+    const todayExpWhere = {
+      tenantId,
+      paymentDate: { gte: todayStart, lte: todayEnd }
+    };
+    if (branchId) todayExpWhere.branchId = branchId;
+    const [todayBranchExp, todaySalaryExp] = await Promise.all([
+      prisma.branchExpense.findMany({
+        where: todayExpWhere,
+        select: { amount: true }
+      }),
+      prisma.salaryDisbursement.findMany({
+        where: todayExpWhere,
+        select: { paidAmount: true }
+      })
+    ]);
+    const todayExpenses = todayBranchExp.reduce((sum, e) => sum + Number(e.amount || 0), 0) + todaySalaryExp.reduce((sum, s) => sum + Number(s.paidAmount || 0), 0);
     const hourlySlots = [
       { label: "8-10 AM", startHour: 8, endHour: 10 },
       { label: "10-12 PM", startHour: 10, endHour: 12 },
@@ -18350,16 +19232,46 @@ var AccountingService = class {
       d.setDate(d.getDate() - i);
       const dayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
       const dayEnd = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
-      const dSales = await prisma.sale.findMany({
-        where: {
-          tenantId,
-          status: "COMPLETED",
-          ...branchId ? { branchId } : {},
-          createdAt: { gte: dayStart, lte: dayEnd }
-        },
-        select: { totalAmount: true, paidAmount: true, paymentMethod: true }
-      });
-      const dayRevenue = dSales.reduce((acc, s) => acc + Number(s.paidAmount || s.totalAmount || 0), 0);
+      const [dSales, dIncomes, dExpenses, dSalaries] = await Promise.all([
+        prisma.sale.findMany({
+          where: {
+            tenantId,
+            status: "COMPLETED",
+            ...branchId ? { branchId } : {},
+            createdAt: { gte: dayStart, lte: dayEnd }
+          },
+          select: { totalAmount: true, paidAmount: true, paymentMethod: true }
+        }),
+        prisma.financialTransaction.findMany({
+          where: {
+            tenantId,
+            type: "INCOME",
+            createdAt: { gte: dayStart, lte: dayEnd },
+            ...branchId ? { branchId } : {}
+          },
+          select: { amount: true }
+        }),
+        prisma.branchExpense.findMany({
+          where: {
+            tenantId,
+            ...branchId ? { branchId } : {},
+            paymentDate: { gte: dayStart, lte: dayEnd }
+          },
+          select: { amount: true }
+        }),
+        prisma.salaryDisbursement.findMany({
+          where: {
+            tenantId,
+            ...branchId ? { branchId } : {},
+            paymentDate: { gte: dayStart, lte: dayEnd }
+          },
+          select: { paidAmount: true }
+        })
+      ]);
+      const daySalesRevenue = dSales.reduce((acc, s) => acc + Number(s.paidAmount || s.totalAmount || 0), 0);
+      const dayDirectIncome = dIncomes.reduce((acc, d2) => acc + Number(d2.amount || 0), 0);
+      const dayRevenue = daySalesRevenue + dayDirectIncome;
+      const dayExpense = dExpenses.reduce((acc, e) => acc + Number(e.amount || 0), 0) + dSalaries.reduce((acc, s) => acc + Number(s.paidAmount || 0), 0);
       let dayCash = 0;
       let dayDigital = 0;
       for (const s of dSales) {
@@ -18372,6 +19284,7 @@ var AccountingService = class {
         dayName: dayStart.toLocaleDateString("en-US", { weekday: "short" }),
         dateKey: `${dayStart.getFullYear()}-${String(dayStart.getMonth() + 1).padStart(2, "0")}-${String(dayStart.getDate()).padStart(2, "0")}`,
         revenue: dayRevenue,
+        expense: dayExpense,
         orderCount: dSales.length,
         cashAmount: dayCash,
         digitalAmount: dayDigital
@@ -18383,21 +19296,52 @@ var AccountingService = class {
       d.setDate(d.getDate() - i);
       const dayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
       const dayEnd = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
-      const dSales = await prisma.sale.findMany({
-        where: {
-          tenantId,
-          status: "COMPLETED",
-          ...branchId ? { branchId } : {},
-          createdAt: { gte: dayStart, lte: dayEnd }
-        },
-        select: { totalAmount: true, paidAmount: true, paymentMethod: true }
-      });
-      const dayRevenue = dSales.reduce((acc, s) => acc + Number(s.paidAmount || s.totalAmount || 0), 0);
+      const [dSales, dIncomes, dExpenses, dSalaries] = await Promise.all([
+        prisma.sale.findMany({
+          where: {
+            tenantId,
+            status: "COMPLETED",
+            ...branchId ? { branchId } : {},
+            createdAt: { gte: dayStart, lte: dayEnd }
+          },
+          select: { totalAmount: true, paidAmount: true, paymentMethod: true }
+        }),
+        prisma.financialTransaction.findMany({
+          where: {
+            tenantId,
+            type: "INCOME",
+            createdAt: { gte: dayStart, lte: dayEnd },
+            ...branchId ? { branchId } : {}
+          },
+          select: { amount: true }
+        }),
+        prisma.branchExpense.findMany({
+          where: {
+            tenantId,
+            ...branchId ? { branchId } : {},
+            paymentDate: { gte: dayStart, lte: dayEnd }
+          },
+          select: { amount: true }
+        }),
+        prisma.salaryDisbursement.findMany({
+          where: {
+            tenantId,
+            ...branchId ? { branchId } : {},
+            paymentDate: { gte: dayStart, lte: dayEnd }
+          },
+          select: { paidAmount: true }
+        })
+      ]);
+      const daySalesRevenue = dSales.reduce((acc, s) => acc + Number(s.paidAmount || s.totalAmount || 0), 0);
+      const dayDirectIncome = dIncomes.reduce((acc, d2) => acc + Number(d2.amount || 0), 0);
+      const dayRevenue = daySalesRevenue + dayDirectIncome;
+      const dayExpense = dExpenses.reduce((acc, e) => acc + Number(e.amount || 0), 0) + dSalaries.reduce((acc, s) => acc + Number(s.paidAmount || 0), 0);
       last30Days.push({
         date: dayStart.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
         dayName: dayStart.toLocaleDateString("en-US", { weekday: "narrow" }),
         dateKey: `${dayStart.getFullYear()}-${String(dayStart.getMonth() + 1).padStart(2, "0")}-${String(dayStart.getDate()).padStart(2, "0")}`,
         revenue: dayRevenue,
+        expense: dayExpense,
         orderCount: dSales.length
       });
     }
@@ -18406,19 +19350,37 @@ var AccountingService = class {
       const mDate = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const mStart = new Date(mDate.getFullYear(), mDate.getMonth(), 1, 0, 0, 0, 0);
       const mEnd = new Date(mDate.getFullYear(), mDate.getMonth() + 1, 0, 23, 59, 59, 999);
-      const mSales = await prisma.sale.findMany({
-        where: {
-          tenantId,
-          status: "COMPLETED",
-          ...branchId ? { branchId } : {},
-          createdAt: { gte: mStart, lte: mEnd }
-        },
-        select: {
-          totalAmount: true,
-          paidAmount: true,
-          paymentMethod: true
-        }
-      });
+      const [mSales, mExpenses, mSalaries] = await Promise.all([
+        prisma.sale.findMany({
+          where: {
+            tenantId,
+            status: "COMPLETED",
+            ...branchId ? { branchId } : {},
+            createdAt: { gte: mStart, lte: mEnd }
+          },
+          select: {
+            totalAmount: true,
+            paidAmount: true,
+            paymentMethod: true
+          }
+        }),
+        prisma.branchExpense.findMany({
+          where: {
+            tenantId,
+            ...branchId ? { branchId } : {},
+            paymentDate: { gte: mStart, lte: mEnd }
+          },
+          select: { amount: true }
+        }),
+        prisma.salaryDisbursement.findMany({
+          where: {
+            tenantId,
+            ...branchId ? { branchId } : {},
+            paymentDate: { gte: mStart, lte: mEnd }
+          },
+          select: { paidAmount: true }
+        })
+      ]);
       let mRevenue = 0;
       let mCash = 0;
       let mDigital = 0;
@@ -18428,11 +19390,13 @@ var AccountingService = class {
         if (s.paymentMethod === "CASH") mCash += amt;
         else mDigital += amt;
       }
+      const mExpense = mExpenses.reduce((acc, e) => acc + Number(e.amount || 0), 0) + mSalaries.reduce((acc, s) => acc + Number(s.paidAmount || 0), 0);
       monthlyTrend.push({
         month: mStart.toLocaleDateString("en-US", { month: "short", year: "numeric" }),
         monthShort: mStart.toLocaleDateString("en-US", { month: "short" }),
         monthKey: `${mStart.getFullYear()}-${String(mStart.getMonth() + 1).padStart(2, "0")}`,
         revenue: mRevenue,
+        expense: mExpense,
         salesCount: mSales.length,
         cashAmount: mCash,
         digitalAmount: mDigital
@@ -18450,7 +19414,9 @@ var AccountingService = class {
     });
     return {
       summary: {
-        totalSales: periodTotalSales,
+        totalSales: periodTotalInflow,
+        totalExpenses: periodTotalExpenses,
+        netInflow: periodTotalInflow - periodTotalExpenses,
         cashSales: periodCashSales,
         bkashSales: periodBkashSales,
         nagadSales: periodNagadSales,
@@ -18458,12 +19424,15 @@ var AccountingService = class {
         otherSales: periodOtherSales,
         totalTransactions: periodSales.length,
         totalSupplierDues,
+        totalCustomerDues,
         currentCashBalance: totalCash,
         currentBkashBalance: totalBkash,
         currentNagadBalance: totalNagad,
         currentBankBalance: totalBank,
         totalLiquidity,
         todayRevenue,
+        todayExpenses,
+        todayNet: todayRevenue - todayExpenses,
         todaySalesCount: todaySales.length,
         todayCash,
         todayBkash,
@@ -18687,6 +19656,119 @@ var AccountingService = class {
       return expense;
     });
   }
+  static async updateExpense(tenantId, id, userId, data) {
+    const existing = await prisma.branchExpense.findFirst({
+      where: { id, tenantId },
+      include: { financialAccount: true }
+    });
+    if (!existing) {
+      throw new Error("Expense record not found");
+    }
+    return prisma.$transaction(async (tx) => {
+      let finalAccountId = existing.financialAccountId;
+      const oldAmount = Number(existing.amount);
+      const newAmount = data.amount !== void 0 ? data.amount : oldAmount;
+      if (data.financialAccountId && data.financialAccountId !== existing.financialAccountId) {
+        await tx.financialAccount.update({
+          where: { id: existing.financialAccountId },
+          data: { balance: { increment: oldAmount } }
+        });
+        const newAcc = await tx.financialAccount.findFirst({
+          where: { id: data.financialAccountId, tenantId, isActive: true }
+        });
+        if (!newAcc) throw new Error("Target financial account not found or inactive");
+        if (Number(newAcc.balance) < newAmount) {
+          throw new Error(`Insufficient balance in ${newAcc.name}`);
+        }
+        await tx.financialAccount.update({
+          where: { id: data.financialAccountId },
+          data: { balance: { decrement: newAmount } }
+        });
+        finalAccountId = data.financialAccountId;
+      } else if (data.amount !== void 0 && data.amount !== oldAmount) {
+        const diff = data.amount - oldAmount;
+        if (diff > 0) {
+          const acc = await tx.financialAccount.findFirst({ where: { id: existing.financialAccountId } });
+          if (Number(acc.balance) < diff) {
+            throw new Error(`Insufficient balance to cover expense increment of \u09F3${diff}`);
+          }
+          await tx.financialAccount.update({
+            where: { id: existing.financialAccountId },
+            data: { balance: { decrement: diff } }
+          });
+        } else {
+          await tx.financialAccount.update({
+            where: { id: existing.financialAccountId },
+            data: { balance: { increment: Math.abs(diff) } }
+          });
+        }
+      }
+      const updated = await tx.branchExpense.update({
+        where: { id },
+        data: {
+          ...data.title && { title: data.title.trim() },
+          ...data.expenseMonth && { expenseMonth: data.expenseMonth },
+          ...data.amount !== void 0 && { amount: data.amount },
+          financialAccountId: finalAccountId,
+          ...data.voucherNo !== void 0 && { voucherNo: data.voucherNo?.trim() || null },
+          ...data.reference !== void 0 && { reference: data.reference?.trim() || null },
+          ...data.notes !== void 0 && { notes: data.notes?.trim() || null },
+          ...data.paymentDate && { paymentDate: new Date(data.paymentDate) }
+        },
+        include: {
+          financialAccount: true,
+          branch: true
+        }
+      });
+      await AuditService.log({
+        tenantId,
+        branchId: existing.branchId,
+        userId,
+        action: "EXPENSE_UPDATED",
+        details: { expenseId: id, updatedData: data }
+      });
+      return updated;
+    });
+  }
+  static async deleteExpense(tenantId, id, userId) {
+    const existing = await prisma.branchExpense.findFirst({
+      where: { id, tenantId },
+      include: { financialAccount: true }
+    });
+    if (!existing) {
+      throw new Error("Expense record not found");
+    }
+    return prisma.$transaction(async (tx) => {
+      await tx.financialAccount.update({
+        where: { id: existing.financialAccountId },
+        data: { balance: { increment: existing.amount } }
+      });
+      await tx.financialTransaction.deleteMany({
+        where: {
+          tenantId,
+          sourceAccountId: existing.financialAccountId,
+          reference: existing.voucherNo || existing.reference || existing.id,
+          type: "EXPENSE"
+        }
+      });
+      await tx.branchExpense.delete({
+        where: { id }
+      });
+      await AuditService.log({
+        tenantId,
+        branchId: existing.branchId,
+        userId,
+        action: "EXPENSE_DELETED",
+        details: {
+          expenseId: id,
+          title: existing.title,
+          amount: Number(existing.amount),
+          refundedToAccount: existing.financialAccount?.name
+        }
+      });
+      return { success: true, message: "Expense record deleted and account balance restored." };
+    });
+  }
   static async getExpenseSummary(tenantId, branchId, month) {
     const where = { tenantId };
     if (branchId) where.branchId = branchId;
@@ -18765,6 +19847,11 @@ var AccountingService = class {
         branchId: true,
         branch: { select: { id: true, name: true } },
         salaryConfig: true,
+        nidNumber: true,
+        nidFrontUrl: true,
+        nidBackUrl: true,
+        documentsSubmitted: true,
+        isPermanent: true,
         isActive: true,
         resignationDate: true,
         resignationReason: true,
@@ -18816,6 +19903,11 @@ var AccountingService = class {
           branchId: u.branchId,
           branchName: u.branch?.name,
           createdAt: u.createdAt,
+          nidNumber: u.nidNumber,
+          nidFrontUrl: u.nidFrontUrl,
+          nidBackUrl: u.nidBackUrl,
+          documentsSubmitted: u.documentsSubmitted ?? false,
+          isPermanent: Boolean(u.isPermanent),
           isActive: u.isActive,
           resignationDate: u.resignationDate,
           resignationReason: u.resignationReason,
@@ -18845,6 +19937,7 @@ var AccountingService = class {
             dailyRate: calc?.metrics?.dailyRate ?? 0,
             attendanceDeduction: calc?.metrics?.attendanceDeduction ?? 0,
             totalAllowances: calc?.metrics?.totalAllowances ?? 0,
+            monthlyAllowances: calc?.monthlyAllowances || [],
             netSalary,
             paidAmount,
             dueAmount,
@@ -18895,6 +19988,11 @@ var AccountingService = class {
       include: { salaryConfig: true }
     });
     if (!employee) throw new Error("Employee not found in this branch.");
+    if (!employee.documentsSubmitted) {
+      throw new Error(
+        "Salary disbursement blocked: Employee has not submitted required certificates/documents."
+      );
+    }
     const account = await prisma.financialAccount.findFirst({
       where: { id: data.financialAccountId, branchId: data.branchId, tenantId, isActive: true }
     });
@@ -19023,7 +20121,14 @@ var AccountingService = class {
         createdAt: true,
         branchId: true,
         branch: { select: { id: true, name: true } },
-        salaryConfig: true
+        salaryConfig: true,
+        nidNumber: true,
+        nidFrontUrl: true,
+        nidFrontPublicId: true,
+        nidBackUrl: true,
+        nidBackPublicId: true,
+        documentsSubmitted: true,
+        isPermanent: true
       }
     });
     if (!employee) throw new Error("Employee not found.");
@@ -19118,9 +20223,11 @@ var AccountingController = class {
     try {
       const tenantId = req.user.tenantId;
       const user = req.user;
-      const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN" || user.role === "REGIONAL_ADMIN";
-      const branchId = isOwner ? req.query.branchId || req.headers["x-branch-id"] || void 0 : user.branchId || void 0;
-      const cleanBranchId = !branchId || branchId === "all" || branchId === "all-branches" ? void 0 : branchId;
+      const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN" || user.role === "REGIONAL_ADMIN" || user.role === "ACCOUNTS" || user.role === "CTO";
+      const queryBranch = req.query.branchId;
+      const headerBranch = req.headers["x-branch-id"];
+      const rawBranchId = queryBranch !== void 0 ? queryBranch : isOwner ? headerBranch : user.branchId;
+      const cleanBranchId = !rawBranchId || rawBranchId === "all" || rawBranchId === "all-branches" ? void 0 : rawBranchId;
       const accounts = await AccountingService.listAccounts(tenantId, cleanBranchId);
       res.json({ success: true, data: accounts });
     } catch (err) {
@@ -19131,6 +20238,15 @@ var AccountingController = class {
     try {
       const tenantId = req.user.tenantId;
       const userId = req.user.id;
+      if (!req.body.branchId) {
+        const firstBranch = await prisma.branch.findFirst({
+          where: { tenantId },
+          select: { id: true }
+        });
+        if (firstBranch) {
+          req.body.branchId = firstBranch.id;
+        }
+      }
       const account = await AccountingService.createAccount(tenantId, userId, req.body);
       res.status(201).json({ success: true, data: account });
     } catch (err) {
@@ -19187,6 +20303,75 @@ var AccountingController = class {
       res.status(400).json({ success: false, message: err.message });
     }
   }
+  static async createTransferRequest(req, res) {
+    try {
+      const tenantId = req.user.tenantId;
+      const userId = req.user.id;
+      const result = await AccountingService.createTransferRequest(tenantId, userId, req.body);
+      res.status(201).json({
+        success: true,
+        message: "Transfer request submitted for owner approval successfully",
+        data: result
+      });
+    } catch (err) {
+      res.status(400).json({ success: false, message: err.message });
+    }
+  }
+  static async getTransferRequests(req, res) {
+    try {
+      const tenantId = req.user.tenantId;
+      const result = await AccountingService.getTransferRequests(tenantId, req.query);
+      res.json({
+        success: true,
+        data: result
+      });
+    } catch (err) {
+      res.status(400).json({ success: false, message: err.message });
+    }
+  }
+  static async getPendingTransferRequestsCount(req, res) {
+    try {
+      const tenantId = req.user.tenantId;
+      const result = await AccountingService.getPendingTransferRequestsCount(tenantId);
+      res.json({
+        success: true,
+        data: result
+      });
+    } catch (err) {
+      res.status(400).json({ success: false, message: err.message });
+    }
+  }
+  static async approveTransferRequest(req, res) {
+    try {
+      const tenantId = req.user.tenantId;
+      const reviewerId = req.user.id;
+      const { id } = req.params;
+      const result = await AccountingService.approveTransferRequest(tenantId, reviewerId, id);
+      res.json({
+        success: true,
+        message: "Transfer request approved and funds transferred successfully",
+        data: result
+      });
+    } catch (err) {
+      res.status(400).json({ success: false, message: err.message });
+    }
+  }
+  static async rejectTransferRequest(req, res) {
+    try {
+      const tenantId = req.user.tenantId;
+      const reviewerId = req.user.id;
+      const { id } = req.params;
+      const { reason } = req.body || {};
+      const result = await AccountingService.rejectTransferRequest(tenantId, reviewerId, id, reason);
+      res.json({
+        success: true,
+        message: "Transfer request rejected",
+        data: result
+      });
+    } catch (err) {
+      res.status(400).json({ success: false, message: err.message });
+    }
+  }
   static async recordTransaction(req, res) {
     try {
       const tenantId = req.user.tenantId;
@@ -19214,9 +20399,11 @@ var AccountingController = class {
     try {
       const user = req.user;
       const tenantId = user.tenantId;
-      const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN" || user.role === "REGIONAL_ADMIN";
-      const branchId = isOwner ? req.query.branchId || req.headers["x-branch-id"] || void 0 : user.branchId || void 0;
-      const cleanBranchId = !branchId || branchId === "all" || branchId === "all-branches" ? void 0 : branchId;
+      const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN" || user.role === "REGIONAL_ADMIN" || user.role === "ACCOUNTS" || user.role === "CTO";
+      const queryBranch = req.query.branchId;
+      const headerBranch = req.headers["x-branch-id"];
+      const rawBranchId = queryBranch !== void 0 ? queryBranch : isOwner ? headerBranch : user.branchId;
+      const cleanBranchId = !rawBranchId || rawBranchId === "all" || rawBranchId === "all-branches" ? void 0 : rawBranchId;
       const options = {
         startDate: req.query.startDate,
         endDate: req.query.endDate,
@@ -19247,7 +20434,7 @@ var AccountingController = class {
     try {
       const user = req.user;
       const tenantId = user.tenantId;
-      const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN" || user.role === "REGIONAL_ADMIN";
+      const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN" || user.role === "REGIONAL_ADMIN" || user.role === "ACCOUNTS" || user.role === "CTO";
       const branchId = isOwner ? req.query.branchId || req.headers["x-branch-id"] || void 0 : user.branchId || void 0;
       const cleanBranchId = !branchId || branchId === "all" || branchId === "all-branches" ? void 0 : branchId;
       const includeInactive = req.query.includeInactive === "true" || req.query.includeInactive === "1";
@@ -19306,6 +20493,26 @@ var AccountingController = class {
       res.status(400).json({ success: false, message: err.message });
     }
   }
+  static async updateExpense(req, res) {
+    try {
+      const tenantId = req.user.tenantId;
+      const userId = req.user.id;
+      const updated = await AccountingService.updateExpense(tenantId, req.params.id, userId, req.body);
+      res.json({ success: true, data: updated, message: "Expense record updated successfully" });
+    } catch (err) {
+      res.status(400).json({ success: false, message: err.message });
+    }
+  }
+  static async deleteExpense(req, res) {
+    try {
+      const tenantId = req.user.tenantId;
+      const userId = req.user.id;
+      const result = await AccountingService.deleteExpense(tenantId, req.params.id, userId);
+      res.json(result);
+    } catch (err) {
+      res.status(400).json({ success: false, message: err.message });
+    }
+  }
   static async getExpenseSummary(req, res) {
     try {
       const tenantId = req.user.tenantId;
@@ -19324,7 +20531,7 @@ var AccountingController = class {
     try {
       const tenantId = req.user.tenantId;
       const user = req.user;
-      const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN" || user.role === "REGIONAL_ADMIN";
+      const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN" || user.role === "REGIONAL_ADMIN" || user.role === "ACCOUNTS" || user.role === "CTO";
       const branchId = isOwner ? req.query.branchId || req.headers["x-branch-id"] || void 0 : user.branchId || void 0;
       const cleanBranchId = !branchId || branchId === "all" || branchId === "all-branches" ? void 0 : branchId;
       const month = req.query.month || (/* @__PURE__ */ new Date()).toISOString().slice(0, 7);
@@ -19339,7 +20546,7 @@ var AccountingController = class {
     try {
       const user = req.user;
       const tenantId = user.tenantId;
-      const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN";
+      const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN" || user.role === "ACCOUNTS";
       const isBranchManager = user.role === "BRANCH_MANAGER" || user.pharmacyRoleName?.toLowerCase().includes("branch manager") || user.customRoleName?.toLowerCase().includes("branch manager") || user.permissions?.includes("salaries.base_salary.edit") || user.permissions?.includes("accounts.salaries") || user.permissions?.includes("*");
       if (!isOwner && !isBranchManager) {
         const existing = await prisma.employeeSalaryConfig.findUnique({
@@ -19374,7 +20581,7 @@ var AccountingController = class {
       const user = req.user;
       const tenantId = user.tenantId;
       const disbursedById = user.id;
-      const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN";
+      const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN" || user.role === "ACCOUNTS";
       const branchId = isOwner ? req.body.branchId || user.branchId || "" : user.branchId || req.body.branchId || "";
       if (!branchId) {
         res.status(400).json({ success: false, message: "Branch ID is required" });
@@ -19394,7 +20601,7 @@ var AccountingController = class {
     try {
       const tenantId = req.user.tenantId;
       const user = req.user;
-      const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN" || user.role === "REGIONAL_ADMIN";
+      const isOwner = user.role === "COMPANY_OWNER" || user.role === "SUPER_ADMIN" || user.role === "REGIONAL_ADMIN" || user.role === "ACCOUNTS" || user.role === "CTO";
       const branchId = isOwner ? req.query.branchId || req.headers["x-branch-id"] || void 0 : user.branchId || void 0;
       const cleanBranchId = !branchId || branchId === "all" || branchId === "all-branches" ? void 0 : branchId;
       const month = req.query.month;
@@ -19444,7 +20651,7 @@ var AccountingController = class {
 // src/modules/accounting/accounting.validation.ts
 import { z as z18 } from "zod";
 var createAccountSchema = z18.object({
-  branchId: z18.string().uuid("Invalid branch ID"),
+  branchId: z18.string().uuid("Invalid branch ID").optional().nullable().or(z18.literal("")),
   name: z18.string().min(2, "Account name must be at least 2 characters"),
   type: z18.enum(["CASH", "BANK", "BKASH", "NAGAD", "MOBILE", "CARD_SETTLEMENT", "OTHER"]),
   accountNumber: z18.string().optional().nullable(),
@@ -19471,7 +20678,7 @@ var depositFundsSchema = z18.object({
   description: z18.string().optional().nullable()
 });
 var transferFundsSchema = z18.object({
-  branchId: z18.string().uuid("Invalid branch ID"),
+  branchId: z18.string().uuid("Invalid branch ID").optional().nullable(),
   sourceAccountId: z18.string().uuid("Invalid source account ID"),
   destinationAccountId: z18.string().uuid("Invalid destination account ID"),
   amount: z18.number().positive("Transfer amount must be greater than 0"),
@@ -19489,7 +20696,7 @@ var recordTransactionSchema = z18.object({
 var listTransactionsQuerySchema = z18.object({
   branchId: z18.string().uuid().optional(),
   accountId: z18.string().uuid().optional(),
-  type: z18.enum(["INCOME", "EXPENSE", "TRANSFER", "SALE_PAYMENT", "PURCHASE_PAYMENT", "REFUND"]).optional(),
+  type: z18.string().optional(),
   startDate: z18.string().datetime().optional().or(z18.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()),
   endDate: z18.string().datetime().optional().or(z18.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()),
   page: z18.coerce.number().int().positive().optional().default(1),
@@ -19536,6 +20743,16 @@ var listExpensesQuerySchema = z18.object({
   page: z18.coerce.number().int().positive().optional().default(1),
   limit: z18.coerce.number().int().positive().max(500).optional().default(100)
 });
+var updateExpensePaymentSchema = z18.object({
+  title: z18.string().min(1, "Expense title is required").optional(),
+  expenseMonth: z18.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Format must be YYYY-MM").optional(),
+  amount: z18.number().positive("Amount must be greater than 0").optional(),
+  financialAccountId: z18.string().uuid("Invalid financial account ID").optional(),
+  voucherNo: z18.string().optional().nullable(),
+  reference: z18.string().optional().nullable(),
+  notes: z18.string().optional().nullable(),
+  paymentDate: z18.string().optional()
+});
 var setSalaryConfigSchema = z18.object({
   branchId: z18.string().uuid("Invalid branch ID"),
   userId: z18.string().uuid("Invalid user/employee ID"),
@@ -19555,6 +20772,24 @@ var disburseSalarySchema = z18.object({
   paidAmount: z18.number().positive("Payment amount must be greater than 0"),
   paymentRef: z18.string().optional().nullable(),
   notes: z18.string().optional().nullable()
+});
+var createTransferRequestSchema = z18.object({
+  branchId: z18.string().uuid("Invalid branch ID").optional().nullable(),
+  sourceAccountId: z18.string().uuid("Invalid source account ID"),
+  destinationAccountId: z18.string().uuid("Invalid destination account ID"),
+  amount: z18.number().positive("Transfer amount must be greater than 0"),
+  reference: z18.string().optional().nullable(),
+  note: z18.string().optional().nullable()
+});
+var rejectTransferRequestSchema = z18.object({
+  reason: z18.string().optional().nullable()
+});
+var getTransferRequestsQuerySchema = z18.object({
+  status: z18.enum(["ALL", "PENDING", "APPROVED", "REJECTED"]).optional(),
+  period: z18.enum(["today", "yesterday", "month", "year", "custom"]).optional(),
+  startDate: z18.string().optional(),
+  endDate: z18.string().optional(),
+  branchId: z18.string().optional()
 });
 
 // src/modules/accounting/accounting.routes.ts
@@ -19598,6 +20833,34 @@ router19.post(
   requirePermission("accounts.transfer"),
   validateRequest({ body: transferFundsSchema }),
   AccountingController.transferFunds
+);
+router19.post(
+  "/transfer-requests",
+  requirePermission("accounts.transfer"),
+  validateRequest({ body: createTransferRequestSchema }),
+  AccountingController.createTransferRequest
+);
+router19.get(
+  "/transfer-requests",
+  requirePermission("accounts.transfer"),
+  validateRequest({ query: getTransferRequestsQuerySchema }),
+  AccountingController.getTransferRequests
+);
+router19.get(
+  "/transfer-requests/pending-count",
+  requirePermission("accounts.transfer"),
+  AccountingController.getPendingTransferRequestsCount
+);
+router19.post(
+  "/transfer-requests/:id/approve",
+  requirePermission("accounts.manage"),
+  AccountingController.approveTransferRequest
+);
+router19.post(
+  "/transfer-requests/:id/reject",
+  requirePermission("accounts.manage"),
+  validateRequest({ body: rejectTransferRequestSchema }),
+  AccountingController.rejectTransferRequest
 );
 router19.post(
   "/transactions",
@@ -19649,6 +20912,17 @@ router19.post(
   requirePermission("expenses.pay"),
   validateRequest({ body: recordExpensePaymentSchema }),
   AccountingController.recordExpense
+);
+router19.put(
+  "/expenses/:id",
+  requirePermission("expenses.pay"),
+  validateRequest({ body: updateExpensePaymentSchema }),
+  AccountingController.updateExpense
+);
+router19.delete(
+  "/expenses/:id",
+  requirePermission("expenses.pay"),
+  AccountingController.deleteExpense
 );
 router19.get(
   "/expenses/summary",
@@ -19850,7 +21124,8 @@ var AttendanceController = class _AttendanceController {
       const tenantId = req.user.tenantId;
       const branchId = _AttendanceController.resolveBranchId(req);
       const month = req.query.month || (/* @__PURE__ */ new Date()).toISOString().slice(0, 7);
-      if (!branchId) {
+      const isOwnerOrAdmin = req.user.role === "COMPANY_OWNER" || req.user.role === "SUPER_ADMIN" || req.user.role === "REGIONAL_ADMIN";
+      if (!branchId && !isOwnerOrAdmin) {
         res.status(400).json({ success: false, message: "Branch ID is required" });
         return;
       }
@@ -19960,7 +21235,14 @@ var DeductionRuleController = class {
       });
       res.status(200).json({
         success: true,
-        data: rule || { absentRuleRatio: null, lateRuleRatio: null }
+        data: rule || {
+          absentRuleRatio: null,
+          lateRuleRatio: null,
+          annualPaidLeaveDays: 30,
+          taxExemptionAnnual: null,
+          taxRatePercent: null,
+          taxFiscalYear: null
+        }
       });
     } catch (error) {
       console.error("[DeductionRuleController.getRules] Error:", error.message);
@@ -19969,7 +21251,15 @@ var DeductionRuleController = class {
   }
   static async setRules(req, res) {
     try {
-      const { branchId, absentRuleRatio, lateRuleRatio } = req.body;
+      const {
+        branchId,
+        absentRuleRatio,
+        lateRuleRatio,
+        annualPaidLeaveDays,
+        taxExemptionAnnual,
+        taxRatePercent,
+        taxFiscalYear
+      } = req.body;
       const user = req.user;
       const tenantId = user.tenantId;
       if (!branchId || branchId === "all") {
@@ -19983,17 +21273,29 @@ var DeductionRuleController = class {
       };
       const parsedAbsent = parseRatio(absentRuleRatio);
       const parsedLate = parseRatio(lateRuleRatio);
+      const parsedPaidLeaveDays = parseRatio(annualPaidLeaveDays) !== null ? Math.round(Number(annualPaidLeaveDays)) : 30;
+      const parsedTaxExemption = parseRatio(taxExemptionAnnual);
+      const parsedTaxRate = parseRatio(taxRatePercent);
+      const parsedFiscalYear = taxFiscalYear?.trim() || null;
       const rule = await prisma.salaryDeductionRule.upsert({
         where: { branchId: String(branchId) },
         update: {
           absentRuleRatio: parsedAbsent,
-          lateRuleRatio: parsedLate
+          lateRuleRatio: parsedLate,
+          annualPaidLeaveDays: parsedPaidLeaveDays,
+          taxExemptionAnnual: parsedTaxExemption,
+          taxRatePercent: parsedTaxRate,
+          taxFiscalYear: parsedFiscalYear
         },
         create: {
           tenantId,
           branchId: String(branchId),
           absentRuleRatio: parsedAbsent,
           lateRuleRatio: parsedLate,
+          annualPaidLeaveDays: parsedPaidLeaveDays,
+          taxExemptionAnnual: parsedTaxExemption,
+          taxRatePercent: parsedTaxRate,
+          taxFiscalYear: parsedFiscalYear,
           createdById: user.id
         }
       });
@@ -20002,7 +21304,14 @@ var DeductionRuleController = class {
         branchId: String(branchId),
         userId: user.id,
         action: "SALARY_DEDUCTION_RULE_UPDATED",
-        details: { absentRuleRatio: parsedAbsent, lateRuleRatio: parsedLate }
+        details: {
+          absentRuleRatio: parsedAbsent,
+          lateRuleRatio: parsedLate,
+          annualPaidLeaveDays: parsedPaidLeaveDays,
+          taxExemptionAnnual: parsedTaxExemption,
+          taxRatePercent: parsedTaxRate,
+          taxFiscalYear: parsedFiscalYear
+        }
       });
       res.status(200).json({
         success: true,
@@ -20255,7 +21564,8 @@ var LocationService = class {
     if (numberOfShelves > 0) {
       shelvesData = Array.from({ length: numberOfShelves }, (_, s) => {
         const sIdx = s + 1;
-        const shelfName = formatName(shelfPrefix, sIdx);
+        const customName = data.customShelves && data.customShelves[s] ? data.customShelves[s].trim() : "";
+        const shelfName = customName || formatName(shelfPrefix, sIdx);
         const shelfObj = {
           name: shelfName,
           isActive
@@ -20279,6 +21589,7 @@ var LocationService = class {
       branchId,
       name: rackName,
       type: data.type?.trim() || "RACK",
+      location: data.location !== void 0 ? data.location : null,
       isActive
     };
     if (shelvesData && shelvesData.length > 0) {
@@ -20328,6 +21639,7 @@ var LocationService = class {
         branchId,
         name: rackName,
         type: data.type?.trim() || "RACK",
+        location: data.location !== void 0 ? data.location : null,
         isActive: data.isActive ?? true
       },
       include: {
@@ -20341,6 +21653,10 @@ var LocationService = class {
     const updateData = {};
     if (data.name !== void 0) updateData.name = data.name.trim();
     if (data.type !== void 0) updateData.type = data.type;
+    if (data.location !== void 0) {
+      const locVal = data.location;
+      updateData.location = locVal && typeof locVal === "string" ? locVal.trim() : null;
+    }
     if (data.isActive !== void 0) updateData.isActive = data.isActive;
     return prisma.rack.update({
       where: { id },
@@ -20650,11 +21966,13 @@ var CreateRackSchema = z20.object({
   name: z20.string().min(1, "Rack name is required"),
   branchId: z20.string().optional(),
   type: z20.string().optional().default("RACK"),
+  location: z20.string().optional(),
   isActive: z20.boolean().optional()
 });
 var UpdateRackSchema = z20.object({
   name: z20.string().min(1, "Name cannot be empty").optional(),
   type: z20.string().optional(),
+  location: z20.string().optional().nullable(),
   isActive: z20.boolean().optional()
 });
 var CreateShelfSchema = z20.object({
@@ -20679,10 +21997,12 @@ var QuickCreateRackSchema = z20.object({
   name: z20.string().min(1, "Storage unit name/code is required").max(60, "Name is too long"),
   branchId: z20.string().optional(),
   type: z20.string().optional().default("RACK"),
+  location: z20.string().optional(),
   shelfPrefix: z20.string().max(30).optional().default("Shelf"),
   numberOfShelves: z20.coerce.number().int().min(0, "Shelves cannot be negative").max(50, "Maximum 50 shelves allowed").default(0),
   binPrefix: z20.string().max(30).optional().default("Bin"),
   binsPerShelf: z20.coerce.number().int().min(0, "Bins cannot be negative").max(50, "Maximum 50 bins per shelf allowed").default(0),
+  customShelves: z20.array(z20.string()).optional(),
   isActive: z20.boolean().optional()
 });
 
@@ -20954,6 +22274,1602 @@ router21.post("/bins", requirePermission("location.create_rack"), LocationContro
 router21.patch("/bins/:id", requirePermission("location.create_rack"), LocationController.updateBin);
 router21.delete("/bins/:id", requirePermission("location.create_rack"), LocationController.deleteBin);
 var location_routes_default = router21;
+
+// src/modules/live-chat/live-chat.routes.ts
+import { Router as Router22 } from "express";
+
+// src/modules/live-chat/live-chat.service.ts
+import { randomUUID } from "crypto";
+var LiveChatService = class {
+  /**
+   * Helper to format department name for greetings
+   */
+  static formatDept(dept) {
+    switch (dept) {
+      case "TECH_SUPPORT":
+        return "TECH SUPPORT";
+      case "SALES":
+        return "SALES";
+      case "BILLING":
+        return "BILLING";
+      default:
+        return "GENERAL";
+    }
+  }
+  /**
+   * 1. Create a new visitor chat session
+   */
+  static async createSession(data) {
+    const sessionToken = `chat_${randomUUID()}`;
+    const deptLabel = this.formatDept(data.department);
+    const session = await prisma.live_chat_sessions.create({
+      data: {
+        session_token: sessionToken,
+        visitor_name: data.name,
+        visitor_email: data.email,
+        visitor_phone: data.phone,
+        department: data.department || "GENERAL",
+        status: "WAITING",
+        current_url: data.current_url || null,
+        user_agent: data.user_agent || null,
+        last_message_at: /* @__PURE__ */ new Date()
+      }
+    });
+    const visitorMsg = await prisma.live_chat_messages.create({
+      data: {
+        session_id: session.id,
+        sender_type: "VISITOR",
+        sender_name: data.name,
+        message: data.question,
+        is_read: false
+      }
+    });
+    const systemGreeting = await prisma.live_chat_messages.create({
+      data: {
+        session_id: session.id,
+        sender_type: "SYSTEM",
+        sender_name: "System",
+        message: `Hello ${data.name}! Thank you for contacting our ${deptLabel} team. A pharmacy software specialist has been notified and will reply shortly.`,
+        is_read: true
+      }
+    });
+    return {
+      session,
+      messages: [visitorMsg, systemGreeting]
+    };
+  }
+  /**
+   * 2. Get session details and all conversation messages by sessionToken
+   */
+  static async getSessionByToken(sessionToken) {
+    const session = await prisma.live_chat_sessions.findUnique({
+      where: { session_token: sessionToken }
+    });
+    if (!session) {
+      throw new Error("Chat session not found");
+    }
+    const messages = await prisma.live_chat_messages.findMany({
+      where: { session_id: session.id },
+      orderBy: { created_at: "asc" }
+    });
+    return { session, messages };
+  }
+  /**
+   * 3. Fetch newly arrived messages (lightweight visitor polling)
+   */
+  static async getMessagesAfter(sessionToken, afterId) {
+    const session = await prisma.live_chat_sessions.findUnique({
+      where: { session_token: sessionToken },
+      select: { id: true, status: true }
+    });
+    if (!session) {
+      throw new Error("Chat session not found");
+    }
+    const whereClause = { session_id: session.id };
+    if (afterId && !isNaN(afterId)) {
+      whereClause.id = { gt: afterId };
+    }
+    const messages = await prisma.live_chat_messages.findMany({
+      where: whereClause,
+      orderBy: { created_at: "asc" }
+    });
+    return { messages, status: session.status };
+  }
+  /**
+   * 4. Visitor sends a new message
+   */
+  static async sendVisitorMessage(data) {
+    const session = await prisma.live_chat_sessions.findUnique({
+      where: { session_token: data.sessionToken }
+    });
+    if (!session) {
+      throw new Error("Chat session not found");
+    }
+    const message = await prisma.live_chat_messages.create({
+      data: {
+        session_id: session.id,
+        sender_type: "VISITOR",
+        sender_name: session.visitor_name,
+        message: data.message,
+        is_read: false
+      }
+    });
+    const newStatus = session.status === "RESOLVED" || session.status === "CLOSED" ? "WAITING" : session.status;
+    await prisma.live_chat_sessions.update({
+      where: { id: session.id },
+      data: {
+        last_message_at: /* @__PURE__ */ new Date(),
+        status: newStatus
+      }
+    });
+    return message;
+  }
+  /**
+   * 5. Super Admin: List all sessions with filters and counts
+   */
+  static async listAdminSessions(query) {
+    const { search, department, status } = query;
+    const where = {};
+    if (department && department !== "ALL" && department !== "All Depts") {
+      where.department = department;
+    }
+    if (status && status !== "ALL") {
+      where.status = status;
+    }
+    if (search && search.trim().length > 0) {
+      const q = search.trim();
+      where.OR = [
+        { visitor_name: { contains: q, mode: "insensitive" } },
+        { visitor_email: { contains: q, mode: "insensitive" } },
+        { visitor_phone: { contains: q, mode: "insensitive" } }
+      ];
+    }
+    const sessions = await prisma.live_chat_sessions.findMany({
+      where,
+      orderBy: { last_message_at: "desc" },
+      include: {
+        messages: {
+          orderBy: { created_at: "desc" },
+          take: 1
+        }
+      }
+    });
+    const sessionIds = sessions.map((s) => s.id);
+    let unreadMap = {};
+    if (sessionIds.length > 0) {
+      const unreadGroup = await prisma.live_chat_messages.groupBy({
+        by: ["session_id"],
+        where: {
+          session_id: { in: sessionIds },
+          sender_type: "VISITOR",
+          is_read: false
+        },
+        _count: { id: true }
+      });
+      unreadGroup.forEach((g) => {
+        unreadMap[g.session_id] = g._count.id;
+      });
+    }
+    const mappedSessions = sessions.map((s) => ({
+      ...s,
+      unread_count: unreadMap[s.id] || 0,
+      last_message: s.messages && s.messages[0] ? s.messages[0] : null,
+      messages: void 0
+    }));
+    const totalChats = await prisma.live_chat_sessions.count();
+    const waitingChats = await prisma.live_chat_sessions.count({
+      where: { status: "WAITING" }
+    });
+    const totalUnreadMessages = await prisma.live_chat_messages.count({
+      where: {
+        sender_type: "VISITOR",
+        is_read: false
+      }
+    });
+    return {
+      sessions: mappedSessions,
+      metrics: {
+        totalChats,
+        waitingChats,
+        unreadTotal: totalUnreadMessages
+      }
+    };
+  }
+  /**
+   * 6. Super Admin: Get single session conversation and mark visitor messages as read
+   */
+  static async getAdminSessionDetails(sessionId) {
+    const session = await prisma.live_chat_sessions.findUnique({
+      where: { id: sessionId }
+    });
+    if (!session) {
+      throw new Error("Chat session not found");
+    }
+    await prisma.live_chat_messages.updateMany({
+      where: {
+        session_id: sessionId,
+        sender_type: "VISITOR",
+        is_read: false
+      },
+      data: { is_read: true }
+    });
+    const messages = await prisma.live_chat_messages.findMany({
+      where: { session_id: sessionId },
+      orderBy: { created_at: "asc" }
+    });
+    return { session, messages };
+  }
+  /**
+   * 7. Super Admin: Send agent reply
+   */
+  static async sendAdminReply(sessionId, senderName, messageText) {
+    const session = await prisma.live_chat_sessions.findUnique({
+      where: { id: sessionId }
+    });
+    if (!session) {
+      throw new Error("Chat session not found");
+    }
+    const message = await prisma.live_chat_messages.create({
+      data: {
+        session_id: sessionId,
+        sender_type: "AGENT",
+        sender_name: senderName || "Super Admin",
+        message: messageText,
+        is_read: true
+      }
+    });
+    await prisma.live_chat_sessions.update({
+      where: { id: sessionId },
+      data: {
+        last_message_at: /* @__PURE__ */ new Date(),
+        status: "ACTIVE"
+      }
+    });
+    return message;
+  }
+  /**
+   * 8. Super Admin: Update session status (ACTIVE, RESOLVED, CLOSED)
+   */
+  static async updateSessionStatus(sessionId, status, agentName) {
+    const session = await prisma.live_chat_sessions.findUnique({
+      where: { id: sessionId }
+    });
+    if (!session) {
+      throw new Error("Chat session not found");
+    }
+    const updated = await prisma.live_chat_sessions.update({
+      where: { id: sessionId },
+      data: { status }
+    });
+    if (status === "RESOLVED") {
+      await prisma.live_chat_messages.create({
+        data: {
+          session_id: sessionId,
+          sender_type: "SYSTEM",
+          sender_name: "System",
+          message: `This support conversation was marked as resolved by ${agentName || "Support Specialist"}.`,
+          is_read: true
+        }
+      });
+    } else if (status === "CLOSED") {
+      await prisma.live_chat_messages.create({
+        data: {
+          session_id: sessionId,
+          sender_type: "SYSTEM",
+          sender_name: "System",
+          message: "This chat session has been closed.",
+          is_read: true
+        }
+      });
+    }
+    return updated;
+  }
+};
+
+// src/modules/live-chat/live-chat.controller.ts
+var LiveChatController = class {
+  // Visitor: POST /api/live-chat/session
+  static async createSession(req, res) {
+    try {
+      const { name, email, phone, department, question } = req.body;
+      const current_url = req.body.current_url || req.headers.referer;
+      const user_agent = req.body.user_agent || req.headers["user-agent"];
+      const result = await LiveChatService.createSession({
+        name,
+        email,
+        phone,
+        department,
+        question,
+        current_url,
+        user_agent
+      });
+      res.status(201).json({
+        success: true,
+        message: "Chat session initialized successfully",
+        data: result
+      });
+    } catch (error) {
+      console.error("[LiveChatController.createSession]", error);
+      res.status(500).json({
+        success: false,
+        message: error.message || "Failed to create chat session"
+      });
+    }
+  }
+  // Visitor: GET /api/live-chat/session?sessionToken=...
+  static async getSession(req, res) {
+    try {
+      const sessionToken = req.query.sessionToken;
+      if (!sessionToken) {
+        res.status(400).json({
+          success: false,
+          message: "sessionToken query parameter is required"
+        });
+        return;
+      }
+      const result = await LiveChatService.getSessionByToken(sessionToken);
+      res.status(200).json({
+        success: true,
+        data: result
+      });
+    } catch (error) {
+      console.error("[LiveChatController.getSession]", error);
+      res.status(404).json({
+        success: false,
+        message: error.message || "Session not found"
+      });
+    }
+  }
+  // Visitor: GET /api/live-chat/messages?sessionToken=...&afterId=...
+  static async getMessages(req, res) {
+    try {
+      const sessionToken = req.query.sessionToken;
+      const afterId = req.query.afterId ? parseInt(req.query.afterId, 10) : void 0;
+      if (!sessionToken) {
+        res.status(400).json({
+          success: false,
+          message: "sessionToken query parameter is required"
+        });
+        return;
+      }
+      const result = await LiveChatService.getMessagesAfter(sessionToken, afterId);
+      res.status(200).json({
+        success: true,
+        data: result
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: error.message || "Failed to fetch messages"
+      });
+    }
+  }
+  // Visitor: POST /api/live-chat/messages
+  static async sendVisitorMessage(req, res) {
+    try {
+      const { sessionToken, message } = req.body;
+      const result = await LiveChatService.sendVisitorMessage({
+        sessionToken,
+        message
+      });
+      res.status(201).json({
+        success: true,
+        message: "Message sent successfully",
+        data: { message: result }
+      });
+    } catch (error) {
+      console.error("[LiveChatController.sendVisitorMessage]", error);
+      res.status(500).json({
+        success: false,
+        message: error.message || "Failed to send message"
+      });
+    }
+  }
+  // Super Admin: GET /api/super-admin/live-chat/sessions
+  static async listAdminSessions(req, res) {
+    try {
+      const { search, department, status } = req.query;
+      const result = await LiveChatService.listAdminSessions({
+        search,
+        department,
+        status
+      });
+      res.status(200).json({
+        success: true,
+        data: result
+      });
+    } catch (error) {
+      console.error("[LiveChatController.listAdminSessions]", error);
+      res.status(500).json({
+        success: false,
+        message: error.message || "Failed to retrieve chat sessions"
+      });
+    }
+  }
+  // Super Admin: GET /api/super-admin/live-chat/sessions/:id
+  static async getAdminSessionDetails(req, res) {
+    try {
+      const sessionId = parseInt(req.params.id, 10);
+      if (isNaN(sessionId)) {
+        res.status(400).json({
+          success: false,
+          message: "Invalid session id"
+        });
+        return;
+      }
+      const result = await LiveChatService.getAdminSessionDetails(sessionId);
+      res.status(200).json({
+        success: true,
+        data: result
+      });
+    } catch (error) {
+      console.error("[LiveChatController.getAdminSessionDetails]", error);
+      res.status(404).json({
+        success: false,
+        message: error.message || "Chat session not found"
+      });
+    }
+  }
+  // Super Admin: POST /api/super-admin/live-chat/sessions/:id
+  static async sendAdminReply(req, res) {
+    try {
+      const sessionId = parseInt(req.params.id, 10);
+      const { message } = req.body;
+      const senderName = req.user?.name || req.user?.email?.split("@")[0] || "Super Admin";
+      if (isNaN(sessionId)) {
+        res.status(400).json({
+          success: false,
+          message: "Invalid session id"
+        });
+        return;
+      }
+      const result = await LiveChatService.sendAdminReply(sessionId, senderName, message);
+      res.status(201).json({
+        success: true,
+        message: "Reply sent successfully",
+        data: { message: result }
+      });
+    } catch (error) {
+      console.error("[LiveChatController.sendAdminReply]", error);
+      res.status(500).json({
+        success: false,
+        message: error.message || "Failed to send agent reply"
+      });
+    }
+  }
+  // Super Admin: PATCH /api/super-admin/live-chat/sessions/:id
+  static async updateSessionStatus(req, res) {
+    try {
+      const sessionId = parseInt(req.params.id, 10);
+      const { status } = req.body;
+      const agentName = req.user?.name || "Support Specialist";
+      if (isNaN(sessionId)) {
+        res.status(400).json({
+          success: false,
+          message: "Invalid session id"
+        });
+        return;
+      }
+      const result = await LiveChatService.updateSessionStatus(sessionId, status, agentName);
+      res.status(200).json({
+        success: true,
+        message: `Chat session status updated to ${status}`,
+        data: { session: result }
+      });
+    } catch (error) {
+      console.error("[LiveChatController.updateSessionStatus]", error);
+      res.status(500).json({
+        success: false,
+        message: error.message || "Failed to update session status"
+      });
+    }
+  }
+};
+
+// src/modules/live-chat/live-chat.validation.ts
+import { z as z21 } from "zod";
+var createSessionSchema = z21.object({
+  name: z21.string().trim().min(2, "Name must be at least 2 characters"),
+  email: z21.string().trim().email("Invalid email address"),
+  phone: z21.string().trim().min(5, "Phone number is required"),
+  department: z21.enum(["SALES", "TECH_SUPPORT", "BILLING", "GENERAL"]).default("GENERAL"),
+  question: z21.string().trim().min(2, "Question or message cannot be empty"),
+  current_url: z21.string().optional(),
+  user_agent: z21.string().optional()
+});
+var visitorMessageSchema = z21.object({
+  sessionToken: z21.string().min(5, "Session token is required"),
+  message: z21.string().trim().min(1, "Message cannot be empty")
+});
+var adminReplySchema = z21.object({
+  message: z21.string().trim().min(1, "Message cannot be empty")
+});
+var updateStatusSchema = z21.object({
+  status: z21.enum(["WAITING", "ACTIVE", "RESOLVED", "CLOSED"])
+});
+
+// src/modules/live-chat/live-chat.routes.ts
+var visitorRouter = Router22();
+visitorRouter.post(
+  "/session",
+  validateRequest({ body: createSessionSchema }),
+  LiveChatController.createSession
+);
+visitorRouter.get(
+  "/session",
+  LiveChatController.getSession
+);
+visitorRouter.get(
+  "/messages",
+  LiveChatController.getMessages
+);
+visitorRouter.post(
+  "/messages",
+  validateRequest({ body: visitorMessageSchema }),
+  LiveChatController.sendVisitorMessage
+);
+var adminRouter = Router22();
+var requirePlatformStaff = (req, res, next) => {
+  const role = req.user?.role;
+  const isPlatform = role === "SUPER_ADMIN" || role === "CTO" || role === "PROJECT_MANAGER" || role === "REGIONAL_ADMIN" || !req.user?.tenantId;
+  if (!isPlatform) {
+    res.status(403).json({
+      success: false,
+      message: "Forbidden - Platform support console privileges required"
+    });
+    return;
+  }
+  next();
+};
+adminRouter.use(authenticate);
+adminRouter.use(requirePlatformStaff);
+adminRouter.get("/sessions", LiveChatController.listAdminSessions);
+adminRouter.get("/sessions/:id", LiveChatController.getAdminSessionDetails);
+adminRouter.post(
+  "/sessions/:id",
+  validateRequest({ body: adminReplySchema }),
+  LiveChatController.sendAdminReply
+);
+adminRouter.patch(
+  "/sessions/:id",
+  validateRequest({ body: updateStatusSchema }),
+  LiveChatController.updateSessionStatus
+);
+
+// src/modules/support-ticket/support-ticket.routes.ts
+import { Router as Router23 } from "express";
+
+// src/modules/support-ticket/support-ticket.service.ts
+var SupportTicketService = class {
+  /**
+   * Helper to generate unique sequential ticket number (e.g. TCK-1001, TCK-1002)
+   */
+  static async generateTicketNo() {
+    const latest = await prisma.support_tickets.findFirst({
+      orderBy: { id: "desc" },
+      select: { ticket_no: true, id: true }
+    });
+    if (!latest || !latest.ticket_no) {
+      return "TCK-1001";
+    }
+    const match = latest.ticket_no.match(/TCK-(\d+)/i);
+    if (match && match[1]) {
+      const nextNum = parseInt(match[1], 10) + 1;
+      return `TCK-${nextNum}`;
+    }
+    return `TCK-${1e3 + (latest.id || 0) + 1}`;
+  }
+  /**
+   * 1. Tenant: Create a new support ticket
+   */
+  static async createTicket(tenantId, userId, data) {
+    const ticketNo = await this.generateTicketNo();
+    const ticket = await prisma.support_tickets.create({
+      data: {
+        ticket_no: ticketNo,
+        business_id: tenantId,
+        user_id: userId,
+        branch_id: data.branchId || null,
+        subject: data.subject,
+        message: data.message,
+        category: data.category || "QUERY",
+        priority: data.priority || "MEDIUM",
+        status: "PENDING",
+        attachments: data.attachments || null,
+        is_admin_read: false
+      }
+    });
+    return ticket;
+  }
+  /**
+   * 2. Tenant: List tickets for the logged-in pharmacy tenant
+   */
+  static async listTenantTickets(tenantId, query) {
+    const where = { business_id: tenantId };
+    if (query.status && query.status !== "ALL") {
+      where.status = query.status;
+    }
+    if (query.category && query.category !== "ALL") {
+      where.category = query.category;
+    }
+    if (query.priority && query.priority !== "ALL") {
+      where.priority = query.priority;
+    }
+    if (query.search && query.search.trim()) {
+      const s = query.search.trim();
+      where.OR = [
+        { ticket_no: { contains: s, mode: "insensitive" } },
+        { subject: { contains: s, mode: "insensitive" } },
+        { message: { contains: s, mode: "insensitive" } }
+      ];
+    }
+    const tickets = await prisma.support_tickets.findMany({
+      where,
+      orderBy: { updated_at: "desc" },
+      include: {
+        _count: {
+          select: { replies: true }
+        }
+      }
+    });
+    const ticketIds = tickets.map((t) => t.id);
+    let unreadMap = {};
+    if (ticketIds.length > 0) {
+      const unreadGroup = await prisma.ticket_replies.groupBy({
+        by: ["ticket_id"],
+        where: {
+          ticket_id: { in: ticketIds },
+          sender_type: "SUPER_ADMIN",
+          is_read: false
+        },
+        _count: { id: true }
+      });
+      unreadGroup.forEach((g) => {
+        unreadMap[g.ticket_id] = g._count.id;
+      });
+    }
+    const mappedTickets = tickets.map((t) => ({
+      ...t,
+      unread_count: unreadMap[t.id] || 0,
+      reply_count: t._count?.replies || 0,
+      _count: void 0
+    }));
+    const total = await prisma.support_tickets.count({
+      where: { business_id: tenantId }
+    });
+    const pending = await prisma.support_tickets.count({
+      where: { business_id: tenantId, status: "PENDING" }
+    });
+    const inProgress = await prisma.support_tickets.count({
+      where: {
+        business_id: tenantId,
+        status: { in: ["CHECKING", "WORKING", "TESTING"] }
+      }
+    });
+    const resolved = await prisma.support_tickets.count({
+      where: {
+        business_id: tenantId,
+        status: { in: ["SOLVED", "CLOSED"] }
+      }
+    });
+    const unreadTotal = mappedTickets.reduce((acc, cur) => acc + (cur.unread_count || 0), 0);
+    return {
+      tickets: mappedTickets,
+      unread_total: unreadTotal,
+      metrics: {
+        total,
+        pending,
+        inProgress,
+        resolved
+      }
+    };
+  }
+  /**
+   * 3. Super Admin: List all tickets across all pharmacy tenants
+   */
+  static async listAdminTickets(query) {
+    const where = {};
+    if (query.business_id && query.business_id !== "ALL") {
+      where.business_id = query.business_id;
+    }
+    if (query.status && query.status !== "ALL") {
+      where.status = query.status;
+    }
+    if (query.category && query.category !== "ALL") {
+      where.category = query.category;
+    }
+    if (query.priority && query.priority !== "ALL") {
+      where.priority = query.priority;
+    }
+    if (query.search && query.search.trim()) {
+      const s = query.search.trim();
+      where.OR = [
+        { ticket_no: { contains: s, mode: "insensitive" } },
+        { subject: { contains: s, mode: "insensitive" } },
+        { message: { contains: s, mode: "insensitive" } }
+      ];
+    }
+    const tickets = await prisma.support_tickets.findMany({
+      where,
+      orderBy: { updated_at: "desc" },
+      include: {
+        _count: {
+          select: { replies: true }
+        }
+      }
+    });
+    const ticketIds = tickets.map((t) => t.id);
+    let unreadMap = {};
+    if (ticketIds.length > 0) {
+      const unreadGroup = await prisma.ticket_replies.groupBy({
+        by: ["ticket_id"],
+        where: {
+          ticket_id: { in: ticketIds },
+          sender_type: "TENANT_USER",
+          is_read: false
+        },
+        _count: { id: true }
+      });
+      unreadGroup.forEach((g) => {
+        unreadMap[g.ticket_id] = g._count.id;
+      });
+    }
+    const tenantIds = Array.from(new Set(tickets.map((t) => t.business_id)));
+    const userIds = Array.from(new Set(tickets.map((t) => t.user_id)));
+    const tenants = await prisma.tenant.findMany({
+      where: { id: { in: tenantIds } },
+      select: { id: true, name: true, phone: true, email: true }
+    });
+    const tenantMap = new Map(tenants.map((tn) => [tn.id, tn]));
+    const users = await prisma.user.findMany({
+      where: { id: { in: userIds } },
+      select: { id: true, name: true, email: true, phone: true }
+    });
+    const userMap = new Map(users.map((u) => [u.id, u]));
+    const mappedTickets = tickets.map((t) => ({
+      ...t,
+      unread_count: unreadMap[t.id] || 0,
+      reply_count: t._count?.replies || 0,
+      tenant: tenantMap.get(t.business_id) || null,
+      creator: userMap.get(t.user_id) || null,
+      _count: void 0
+    }));
+    const allCount = await prisma.support_tickets.count();
+    const pendingCount = await prisma.support_tickets.count({
+      where: { status: "PENDING" }
+    });
+    const checkingCount = await prisma.support_tickets.count({
+      where: { status: "CHECKING" }
+    });
+    const workingCount = await prisma.support_tickets.count({
+      where: { status: "WORKING" }
+    });
+    const solvedCount = await prisma.support_tickets.count({
+      where: { status: "SOLVED" }
+    });
+    const unreadTotal = mappedTickets.reduce((acc, cur) => acc + (cur.unread_count || 0), 0);
+    return {
+      tickets: mappedTickets,
+      unread_total: unreadTotal,
+      metrics: {
+        all: allCount,
+        pending: pendingCount,
+        checking: checkingCount,
+        working: workingCount,
+        solved: solvedCount
+      }
+    };
+  }
+  /**
+   * 4. Get Ticket Details & Chronological Conversation (Auto-marks unread as read)
+   */
+  static async getTicketDetails(ticketId, viewerType) {
+    const ticket = await prisma.support_tickets.findUnique({
+      where: { id: ticketId }
+    });
+    if (!ticket) {
+      throw new Error("Support ticket not found");
+    }
+    const targetSenderType = viewerType === "TENANT" ? "SUPER_ADMIN" : "TENANT_USER";
+    await prisma.ticket_replies.updateMany({
+      where: {
+        ticket_id: ticketId,
+        sender_type: targetSenderType,
+        is_read: false
+      },
+      data: { is_read: true }
+    });
+    const replies = await prisma.ticket_replies.findMany({
+      where: { ticket_id: ticketId },
+      orderBy: { created_at: "asc" }
+    });
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: ticket.business_id },
+      select: { id: true, name: true, phone: true, email: true }
+    });
+    const creator = await prisma.user.findUnique({
+      where: { id: ticket.user_id },
+      select: { id: true, name: true, email: true, phone: true }
+    });
+    return {
+      ticket,
+      replies,
+      tenant,
+      creator
+    };
+  }
+  /**
+   * 5. Add a Reply to ticket thread
+   */
+  static async addReply(ticketId, senderId, senderType, data) {
+    const ticket = await prisma.support_tickets.findUnique({
+      where: { id: ticketId }
+    });
+    if (!ticket) {
+      throw new Error("Support ticket not found");
+    }
+    const reply = await prisma.ticket_replies.create({
+      data: {
+        ticket_id: ticketId,
+        sender_id: senderId,
+        sender_type: senderType,
+        message: data.message,
+        attachments: data.attachments || null,
+        is_read: false
+      }
+    });
+    const updateData = { updated_at: /* @__PURE__ */ new Date() };
+    if (senderType === "TENANT_USER" && (ticket.status === "SOLVED" || ticket.status === "CLOSED")) {
+      updateData.status = "WORKING";
+    }
+    await prisma.support_tickets.update({
+      where: { id: ticketId },
+      data: updateData
+    });
+    return reply;
+  }
+  /**
+   * 6. Update Ticket Status (Super Admin / Tenant)
+   */
+  static async updateStatus(ticketId, status) {
+    const ticket = await prisma.support_tickets.findUnique({
+      where: { id: ticketId }
+    });
+    if (!ticket) {
+      throw new Error("Support ticket not found");
+    }
+    const updated = await prisma.support_tickets.update({
+      where: { id: ticketId },
+      data: {
+        status,
+        updated_at: /* @__PURE__ */ new Date()
+      }
+    });
+    return updated;
+  }
+};
+
+// src/modules/support-ticket/support-ticket.controller.ts
+var SupportTicketController = class {
+  // Tenant: POST /api/tenant/support-tickets
+  static async createTenantTicket(req, res) {
+    try {
+      const tenantId = req.user?.tenantId;
+      const userId = req.user?.id;
+      const branchId = req.headers["x-branch-id"] || req.user?.branchId;
+      if (!tenantId) {
+        res.status(400).json({ success: false, message: "Tenant context missing" });
+        return;
+      }
+      const ticket = await SupportTicketService.createTicket(tenantId, userId, {
+        ...req.body,
+        branchId
+      });
+      res.status(201).json({
+        success: true,
+        message: "Support ticket created successfully",
+        data: { ticket }
+      });
+    } catch (error) {
+      console.error("[SupportTicketController.createTenantTicket]", error);
+      res.status(500).json({
+        success: false,
+        message: error.message || "Failed to create support ticket"
+      });
+    }
+  }
+  // Tenant: GET /api/tenant/support-tickets
+  static async listTenantTickets(req, res) {
+    try {
+      const tenantId = req.user?.tenantId;
+      if (!tenantId) {
+        res.status(400).json({ success: false, message: "Tenant context missing" });
+        return;
+      }
+      const { search, status, category, priority } = req.query;
+      const result = await SupportTicketService.listTenantTickets(tenantId, {
+        search,
+        status,
+        category,
+        priority
+      });
+      res.status(200).json({
+        success: true,
+        data: result
+      });
+    } catch (error) {
+      console.error("[SupportTicketController.listTenantTickets]", error);
+      res.status(500).json({
+        success: false,
+        message: error.message || "Failed to list support tickets"
+      });
+    }
+  }
+  // Tenant: GET /api/tenant/support-tickets/:id
+  static async getTenantTicketDetails(req, res) {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) {
+        res.status(400).json({ success: false, message: "Invalid ticket ID" });
+        return;
+      }
+      const result = await SupportTicketService.getTicketDetails(id, "TENANT");
+      res.status(200).json({
+        success: true,
+        data: result
+      });
+    } catch (error) {
+      console.error("[SupportTicketController.getTenantTicketDetails]", error);
+      res.status(404).json({
+        success: false,
+        message: error.message || "Ticket not found"
+      });
+    }
+  }
+  // Tenant: POST /api/tenant/support-tickets/:id/replies
+  static async addTenantReply(req, res) {
+    try {
+      const id = parseInt(req.params.id, 10);
+      const userId = req.user?.id;
+      if (isNaN(id)) {
+        res.status(400).json({ success: false, message: "Invalid ticket ID" });
+        return;
+      }
+      const reply = await SupportTicketService.addReply(
+        id,
+        userId,
+        "TENANT_USER",
+        req.body
+      );
+      res.status(201).json({
+        success: true,
+        message: "Reply sent successfully",
+        data: { reply }
+      });
+    } catch (error) {
+      console.error("[SupportTicketController.addTenantReply]", error);
+      res.status(500).json({
+        success: false,
+        message: error.message || "Failed to send reply"
+      });
+    }
+  }
+  // Super Admin: GET /api/super-admin/support-tickets
+  static async listAdminTickets(req, res) {
+    try {
+      const { search, business_id, status, category, priority } = req.query;
+      const result = await SupportTicketService.listAdminTickets({
+        search,
+        business_id,
+        status,
+        category,
+        priority
+      });
+      res.status(200).json({
+        success: true,
+        data: result
+      });
+    } catch (error) {
+      console.error("[SupportTicketController.listAdminTickets]", error);
+      res.status(500).json({
+        success: false,
+        message: error.message || "Failed to list support tickets"
+      });
+    }
+  }
+  // Super Admin: GET /api/super-admin/support-tickets/:id
+  static async getAdminTicketDetails(req, res) {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) {
+        res.status(400).json({ success: false, message: "Invalid ticket ID" });
+        return;
+      }
+      const result = await SupportTicketService.getTicketDetails(id, "SUPER_ADMIN");
+      res.status(200).json({
+        success: true,
+        data: result
+      });
+    } catch (error) {
+      console.error("[SupportTicketController.getAdminTicketDetails]", error);
+      res.status(404).json({
+        success: false,
+        message: error.message || "Ticket not found"
+      });
+    }
+  }
+  // Super Admin: POST /api/super-admin/support-tickets/:id/replies
+  static async addAdminReply(req, res) {
+    try {
+      const id = parseInt(req.params.id, 10);
+      const userId = req.user?.id || "admin";
+      if (isNaN(id)) {
+        res.status(400).json({ success: false, message: "Invalid ticket ID" });
+        return;
+      }
+      const reply = await SupportTicketService.addReply(
+        id,
+        userId,
+        "SUPER_ADMIN",
+        req.body
+      );
+      res.status(201).json({
+        success: true,
+        message: "Admin reply sent successfully",
+        data: { reply }
+      });
+    } catch (error) {
+      console.error("[SupportTicketController.addAdminReply]", error);
+      res.status(500).json({
+        success: false,
+        message: error.message || "Failed to send admin reply"
+      });
+    }
+  }
+  // Super Admin / Tenant: PATCH /api/super-admin/support-tickets/:id
+  static async updateTicketStatus(req, res) {
+    try {
+      const id = parseInt(req.params.id, 10);
+      const { status } = req.body;
+      if (isNaN(id)) {
+        res.status(400).json({ success: false, message: "Invalid ticket ID" });
+        return;
+      }
+      const ticket = await SupportTicketService.updateStatus(id, status);
+      res.status(200).json({
+        success: true,
+        message: `Ticket status updated to ${status}`,
+        data: { ticket }
+      });
+    } catch (error) {
+      console.error("[SupportTicketController.updateTicketStatus]", error);
+      res.status(500).json({
+        success: false,
+        message: error.message || "Failed to update ticket status"
+      });
+    }
+  }
+};
+
+// src/modules/support-ticket/support-ticket.validation.ts
+import { z as z22 } from "zod";
+var createTicketSchema = z22.object({
+  subject: z22.string().trim().min(3, "Subject must be at least 3 characters").max(255),
+  message: z22.string().trim().min(5, "Message must be at least 5 characters"),
+  category: z22.enum(["BUG", "FEATURE", "QUERY"]).default("QUERY"),
+  priority: z22.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]).default("MEDIUM"),
+  attachments: z22.any().optional(),
+  branchId: z22.string().optional()
+});
+var createReplySchema = z22.object({
+  message: z22.string().trim().min(1, "Message cannot be empty"),
+  attachments: z22.any().optional()
+});
+var updateTicketStatusSchema = z22.object({
+  status: z22.enum(["PENDING", "CHECKING", "WORKING", "TESTING", "SOLVED", "CLOSED"])
+});
+
+// src/modules/support-ticket/support-ticket.routes.ts
+var tenantRouter = Router23();
+tenantRouter.use(authenticate);
+tenantRouter.get("/", SupportTicketController.listTenantTickets);
+tenantRouter.post(
+  "/",
+  validateRequest({ body: createTicketSchema }),
+  SupportTicketController.createTenantTicket
+);
+tenantRouter.get("/:id", SupportTicketController.getTenantTicketDetails);
+tenantRouter.post(
+  "/:id/replies",
+  validateRequest({ body: createReplySchema }),
+  SupportTicketController.addTenantReply
+);
+tenantRouter.patch(
+  "/:id",
+  validateRequest({ body: updateTicketStatusSchema }),
+  SupportTicketController.updateTicketStatus
+);
+var adminRouter2 = Router23();
+var requirePlatformStaff2 = (req, res, next) => {
+  const role = req.user?.role;
+  const isPlatform = role === "SUPER_ADMIN" || role === "CTO" || role === "PROJECT_MANAGER" || role === "REGIONAL_ADMIN" || !req.user?.tenantId;
+  if (!isPlatform) {
+    res.status(403).json({
+      success: false,
+      message: "Forbidden - Platform support console privileges required"
+    });
+    return;
+  }
+  next();
+};
+adminRouter2.use(authenticate);
+adminRouter2.use(requirePlatformStaff2);
+adminRouter2.get("/", SupportTicketController.listAdminTickets);
+adminRouter2.get("/:id", SupportTicketController.getAdminTicketDetails);
+adminRouter2.post(
+  "/:id/replies",
+  validateRequest({ body: createReplySchema }),
+  SupportTicketController.addAdminReply
+);
+adminRouter2.patch(
+  "/:id",
+  validateRequest({ body: updateTicketStatusSchema }),
+  SupportTicketController.updateTicketStatus
+);
+
+// src/modules/notices/notices.routes.ts
+import { Router as Router24 } from "express";
+
+// src/modules/notices/notices.service.ts
+var NoticesService = class {
+  /**
+   * 1. Super Admin: List all notices with read counts and remaining banner days
+   */
+  static async superAdminListNotices(query = {}) {
+    const where = {};
+    if (query.type && query.type !== "ALL") {
+      where.type = query.type;
+    }
+    if (query.is_published !== void 0 && query.is_published !== "ALL") {
+      where.is_published = query.is_published === "true";
+    }
+    if (query.search && query.search.trim()) {
+      const s = query.search.trim();
+      where.OR = [
+        { title: { contains: s, mode: "insensitive" } },
+        { content: { contains: s, mode: "insensitive" } },
+        { badge_text: { contains: s, mode: "insensitive" } }
+      ];
+    }
+    const notices = await prisma.system_notices.findMany({
+      where,
+      orderBy: [
+        { pinned: "desc" },
+        { created_at: "desc" }
+      ],
+      include: {
+        _count: {
+          select: { reads: true }
+        }
+      }
+    });
+    const now = /* @__PURE__ */ new Date();
+    const formattedNotices = notices.map((n) => {
+      const isBannerActive = n.show_banner && n.banner_expires_at && new Date(n.banner_expires_at) > now;
+      let remainingDays = 0;
+      if (isBannerActive) {
+        const diffMs = new Date(n.banner_expires_at).getTime() - now.getTime();
+        remainingDays = Math.max(1, Math.ceil(diffMs / (1e3 * 60 * 60 * 24)));
+      }
+      return {
+        ...n,
+        reads_count: n._count?.reads || 0,
+        is_banner_active: isBannerActive,
+        remaining_banner_days: remainingDays,
+        _count: void 0
+      };
+    });
+    const totalCount = await prisma.system_notices.count();
+    const publishedCount = await prisma.system_notices.count({
+      where: { is_published: true }
+    });
+    return {
+      notices: formattedNotices,
+      metrics: {
+        total: totalCount,
+        published: publishedCount
+      }
+    };
+  }
+  /**
+   * 2. Super Admin: Create a notice
+   */
+  static async superAdminCreateNotice(data) {
+    const durationDays = data.banner_duration_days || 7;
+    const bannerExpiresAt = new Date(Date.now() + durationDays * 24 * 60 * 60 * 1e3);
+    const notice = await prisma.system_notices.create({
+      data: {
+        title: data.title.trim(),
+        content: data.content.trim(),
+        type: data.type || "ANNOUNCEMENT",
+        badge_text: data.badge_text ? data.badge_text.trim() : null,
+        pinned: data.pinned ?? false,
+        is_published: data.is_published ?? true,
+        show_banner: data.show_banner ?? true,
+        banner_duration_days: durationDays,
+        banner_expires_at: bannerExpiresAt,
+        target_type: data.target_type || "ALL",
+        target_business_ids: data.target_type === "SPECIFIC" ? data.target_business_ids || [] : null
+      }
+    });
+    return notice;
+  }
+  /**
+   * 3. Super Admin: Update a notice
+   */
+  static async superAdminUpdateNotice(id, data) {
+    const existing = await prisma.system_notices.findUnique({
+      where: { id }
+    });
+    if (!existing) {
+      throw new Error("Notice not found");
+    }
+    const updateData = {};
+    if (data.title !== void 0) updateData.title = data.title.trim();
+    if (data.content !== void 0) updateData.content = data.content.trim();
+    if (data.type !== void 0) updateData.type = data.type;
+    if (data.badge_text !== void 0) updateData.badge_text = data.badge_text ? data.badge_text.trim() : null;
+    if (data.pinned !== void 0) updateData.pinned = data.pinned;
+    if (data.is_published !== void 0) updateData.is_published = data.is_published;
+    if (data.show_banner !== void 0) updateData.show_banner = data.show_banner;
+    if (data.target_type !== void 0) updateData.target_type = data.target_type;
+    if (data.target_business_ids !== void 0) {
+      updateData.target_business_ids = data.target_type === "SPECIFIC" ? data.target_business_ids : null;
+    }
+    if (data.banner_duration_days !== void 0) {
+      updateData.banner_duration_days = data.banner_duration_days;
+      updateData.banner_expires_at = new Date(
+        Date.now() + data.banner_duration_days * 24 * 60 * 60 * 1e3
+      );
+    }
+    const updated = await prisma.system_notices.update({
+      where: { id },
+      data: updateData
+    });
+    return updated;
+  }
+  /**
+   * 4. Super Admin: Delete a notice
+   */
+  static async superAdminDeleteNotice(id) {
+    const existing = await prisma.system_notices.findUnique({
+      where: { id }
+    });
+    if (!existing) {
+      throw new Error("Notice not found");
+    }
+    await prisma.system_notices.delete({
+      where: { id }
+    });
+    return { message: "Notice deleted successfully" };
+  }
+  /**
+   * 5. Super Admin: Get eligible active pharmacies for target selector
+   */
+  static async getEligibleBusinesses() {
+    const tenants = await prisma.tenant.findMany({
+      where: {
+        verificationStatus: { in: ["ACTIVE", "APPROVED_PENDING_PAYMENT"] }
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        verificationStatus: true
+      },
+      orderBy: { name: "asc" }
+    });
+    return tenants;
+  }
+  /**
+   * 6. Tenant: Fetch targeted published notices, unread state, and active banner notices
+   */
+  static async tenantListNotices(tenantId, query = {}) {
+    const allPublished = await prisma.system_notices.findMany({
+      where: {
+        is_published: true
+      },
+      orderBy: [
+        { pinned: "desc" },
+        { created_at: "desc" }
+      ]
+    });
+    const targeted = allPublished.filter((n) => {
+      if (n.target_type === "ALL") return true;
+      if (Array.isArray(n.target_business_ids)) {
+        return n.target_business_ids.includes(tenantId);
+      }
+      return false;
+    });
+    const noticeIds = targeted.map((n) => n.id);
+    const reads = await prisma.system_notice_reads.findMany({
+      where: {
+        notice_id: { in: noticeIds },
+        business_id: tenantId
+      },
+      select: { notice_id: true, read_at: true }
+    });
+    const readMap = new Map(reads.map((r) => [r.notice_id, r.read_at]));
+    let notices = targeted.map((n) => ({
+      ...n,
+      is_read: readMap.has(n.id),
+      read_at: readMap.get(n.id) || null
+    }));
+    if (query.type && query.type !== "ALL") {
+      notices = notices.filter((n) => n.type.toUpperCase() === query.type?.toUpperCase());
+    }
+    if (query.search && query.search.trim()) {
+      const s = query.search.toLowerCase().trim();
+      notices = notices.filter(
+        (n) => n.title.toLowerCase().includes(s) || n.content.toLowerCase().includes(s) || n.badge_text && n.badge_text.toLowerCase().includes(s)
+      );
+    }
+    const now = /* @__PURE__ */ new Date();
+    const bannerNotices = targeted.filter((n) => {
+      if (!n.show_banner) return false;
+      if (!n.banner_expires_at) return true;
+      return new Date(n.banner_expires_at) > now;
+    }).map((n) => ({
+      id: n.id,
+      title: n.title,
+      content: n.content,
+      type: n.type,
+      badge_text: n.badge_text,
+      is_read: readMap.has(n.id),
+      created_at: n.created_at
+    }));
+    const unreadCount = notices.filter((n) => !n.is_read).length;
+    return {
+      notices,
+      banner_notices: bannerNotices,
+      unread_count: unreadCount
+    };
+  }
+  /**
+   * 7. Tenant: Mark a notice as read
+   */
+  static async tenantMarkRead(noticeId, tenantId, userId) {
+    const read = await prisma.system_notice_reads.upsert({
+      where: {
+        notice_id_business_id: {
+          notice_id: noticeId,
+          business_id: tenantId
+        }
+      },
+      create: {
+        notice_id: noticeId,
+        business_id: tenantId,
+        user_id: userId || null,
+        read_at: /* @__PURE__ */ new Date()
+      },
+      update: {
+        read_at: /* @__PURE__ */ new Date(),
+        user_id: userId || void 0
+      }
+    });
+    return read;
+  }
+};
+
+// src/modules/notices/notices.controller.ts
+var NoticesController = class {
+  // --- Super Admin Actions ---
+  static async superAdminList(req, res) {
+    try {
+      const result = await NoticesService.superAdminListNotices({
+        search: req.query.search,
+        type: req.query.type,
+        is_published: req.query.is_published
+      });
+      return res.json({
+        success: true,
+        data: result
+      });
+    } catch (error) {
+      console.error("[SuperAdminListNotices Error]", error);
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to fetch notices"
+      });
+    }
+  }
+  static async superAdminCreate(req, res) {
+    try {
+      const notice = await NoticesService.superAdminCreateNotice(req.body);
+      return res.status(201).json({
+        success: true,
+        data: notice,
+        message: "Notice published successfully"
+      });
+    } catch (error) {
+      console.error("[SuperAdminCreateNotice Error]", error);
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to create notice"
+      });
+    }
+  }
+  static async superAdminUpdate(req, res) {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) {
+        return res.status(400).json({ success: false, message: "Invalid notice ID" });
+      }
+      const notice = await NoticesService.superAdminUpdateNotice(id, req.body);
+      return res.json({
+        success: true,
+        data: notice,
+        message: "Notice updated successfully"
+      });
+    } catch (error) {
+      console.error("[SuperAdminUpdateNotice Error]", error);
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to update notice"
+      });
+    }
+  }
+  static async superAdminDelete(req, res) {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) {
+        return res.status(400).json({ success: false, message: "Invalid notice ID" });
+      }
+      const result = await NoticesService.superAdminDeleteNotice(id);
+      return res.json({
+        success: true,
+        data: result
+      });
+    } catch (error) {
+      console.error("[SuperAdminDeleteNotice Error]", error);
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to delete notice"
+      });
+    }
+  }
+  static async superAdminGetEligibleBusinesses(req, res) {
+    try {
+      const businesses = await NoticesService.getEligibleBusinesses();
+      return res.json({
+        success: true,
+        data: businesses
+      });
+    } catch (error) {
+      console.error("[GetEligibleBusinesses Error]", error);
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to get businesses"
+      });
+    }
+  }
+  // --- Tenant Actions ---
+  static async tenantList(req, res) {
+    try {
+      const tenantId = req.user?.tenantId;
+      if (!tenantId) {
+        return res.status(400).json({ success: false, message: "Tenant context missing" });
+      }
+      const result = await NoticesService.tenantListNotices(tenantId, {
+        search: req.query.search,
+        type: req.query.type
+      });
+      return res.json({
+        success: true,
+        data: result
+      });
+    } catch (error) {
+      console.error("[TenantListNotices Error]", error);
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to fetch tenant notices"
+      });
+    }
+  }
+  static async tenantMarkRead(req, res) {
+    try {
+      const tenantId = req.user?.tenantId;
+      const userId = req.user?.id;
+      const noticeId = req.body.notice_id;
+      if (!tenantId || !noticeId) {
+        return res.status(400).json({ success: false, message: "Tenant context and notice_id are required" });
+      }
+      const read = await NoticesService.tenantMarkRead(noticeId, tenantId, userId);
+      return res.json({
+        success: true,
+        data: read
+      });
+    } catch (error) {
+      console.error("[TenantMarkRead Error]", error);
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to mark notice as read"
+      });
+    }
+  }
+};
+
+// src/modules/notices/notices.validation.ts
+import { z as z23 } from "zod";
+var CreateNoticeSchema = z23.object({
+  title: z23.string().min(1, "Notice title is required").max(255),
+  content: z23.string().min(1, "Notice content is required"),
+  type: z23.enum(["ANNOUNCEMENT", "MAINTENANCE", "FEATURE", "UPDATE"]).default("ANNOUNCEMENT"),
+  badge_text: z23.string().max(50).nullable().optional(),
+  pinned: z23.boolean().default(false),
+  is_published: z23.boolean().default(true),
+  show_banner: z23.boolean().default(true),
+  banner_duration_days: z23.number().int().min(1).max(365).default(7),
+  target_type: z23.enum(["ALL", "SPECIFIC"]).default("ALL"),
+  target_business_ids: z23.array(z23.string()).nullable().optional()
+});
+var UpdateNoticeSchema = z23.object({
+  title: z23.string().min(1).max(255).optional(),
+  content: z23.string().min(1).optional(),
+  type: z23.enum(["ANNOUNCEMENT", "MAINTENANCE", "FEATURE", "UPDATE"]).optional(),
+  badge_text: z23.string().max(50).nullable().optional(),
+  pinned: z23.boolean().optional(),
+  is_published: z23.boolean().optional(),
+  show_banner: z23.boolean().optional(),
+  banner_duration_days: z23.number().int().min(1).max(365).optional(),
+  target_type: z23.enum(["ALL", "SPECIFIC"]).optional(),
+  target_business_ids: z23.array(z23.string()).nullable().optional()
+});
+var MarkNoticeReadSchema = z23.object({
+  notice_id: z23.number().int().positive()
+});
+
+// src/modules/notices/notices.routes.ts
+var requirePlatformStaff3 = (req, res, next) => {
+  const role = req.user?.role;
+  const isPlatform = role === "SUPER_ADMIN" || role === "CTO" || role === "PROJECT_MANAGER" || role === "REGIONAL_ADMIN" || !req.user?.tenantId;
+  if (!isPlatform) {
+    res.status(403).json({
+      success: false,
+      message: "Forbidden - Platform admin privileges required"
+    });
+    return;
+  }
+  next();
+};
+var superAdminNoticeRoutes = Router24();
+superAdminNoticeRoutes.use(authenticate);
+superAdminNoticeRoutes.use(requirePlatformStaff3);
+superAdminNoticeRoutes.get("/", NoticesController.superAdminList);
+superAdminNoticeRoutes.post(
+  "/",
+  validateRequest({ body: CreateNoticeSchema }),
+  NoticesController.superAdminCreate
+);
+superAdminNoticeRoutes.put(
+  "/:id",
+  validateRequest({ body: UpdateNoticeSchema }),
+  NoticesController.superAdminUpdate
+);
+superAdminNoticeRoutes.delete("/:id", NoticesController.superAdminDelete);
+superAdminNoticeRoutes.get(
+  "/eligible-businesses",
+  NoticesController.superAdminGetEligibleBusinesses
+);
+var tenantNoticeRoutes = Router24();
+tenantNoticeRoutes.use(authenticate);
+tenantNoticeRoutes.get("/", NoticesController.tenantList);
+tenantNoticeRoutes.post(
+  "/mark-read",
+  validateRequest({ body: MarkNoticeReadSchema }),
+  NoticesController.tenantMarkRead
+);
 
 // src/app.ts
 import path3 from "path";
@@ -25584,6 +28500,12 @@ app.use("/api/suppliers", supplierRoutes);
 app.use("/api/accounting", accountingRoutes);
 app.use("/api/attendance", attendanceRoutes);
 app.use("/api/locations", location_routes_default);
+app.use("/api/live-chat", visitorRouter);
+app.use("/api/super-admin/live-chat", adminRouter);
+app.use("/api/tenant/support-tickets", tenantRouter);
+app.use("/api/super-admin/support-tickets", adminRouter2);
+app.use("/api/super-admin/notices", superAdminNoticeRoutes);
+app.use("/api/tenant/notices", tenantNoticeRoutes);
 app.all("/payment/success", PaymentController.handleSuccess);
 app.all("/payment/fail", PaymentController.handleFail);
 app.all("/payment/cancel", PaymentController.handleCancel);

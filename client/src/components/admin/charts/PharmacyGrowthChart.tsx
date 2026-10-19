@@ -20,12 +20,12 @@ export function PharmacyGrowthChart({ data, loading }: PharmacyGrowthChartProps)
 
   if (loading) {
     return (
-      <div className="p-5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col justify-between h-[360px] animate-pulse">
+      <div className="p-5 rounded-none bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col justify-between h-[360px] animate-pulse">
         <div className="space-y-2">
-          <div className="h-5 w-44 bg-slate-200 dark:bg-slate-800 rounded-md" />
-          <div className="h-3 w-64 bg-slate-100 dark:bg-slate-800/60 rounded-md" />
+          <div className="h-5 w-44 bg-slate-200 dark:bg-slate-800 rounded-none" />
+          <div className="h-3 w-64 bg-slate-100 dark:bg-slate-800/60 rounded-none" />
         </div>
-        <div className="h-44 w-full bg-slate-100 dark:bg-slate-800/40 rounded-md" />
+        <div className="h-44 w-full bg-slate-100 dark:bg-slate-800/40 rounded-none" />
       </div>
     );
   }
@@ -89,13 +89,13 @@ export function PharmacyGrowthChart({ data, loading }: PharmacyGrowthChartProps)
   const labelInterval = points.length > 15 ? Math.ceil(points.length / 8) : 1;
 
   return (
-    <div className="p-5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col justify-between relative overflow-hidden">
+    <div className="p-5 rounded-none bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col justify-between relative overflow-hidden">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
         <div>
           <div className="flex items-center gap-2">
             <h3 className="text-base font-bold text-slate-900 dark:text-white">Pharmacy Growth</h3>
-            <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+            <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-none bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
               <TrendingUp className="h-3 w-3" />
               +{totalInPeriod} in range
             </span>
@@ -105,7 +105,7 @@ export function PharmacyGrowthChart({ data, loading }: PharmacyGrowthChartProps)
 
         <div className="flex items-center gap-3 text-xs text-slate-500">
           <div className="flex items-center gap-1.5">
-            <span className="h-2.5 w-2.5 rounded-full bg-sky-500" />
+            <span className="h-2.5 w-2.5 rounded-none bg-sky-500" />
             <span className="text-[11px] font-medium">New Approvals</span>
           </div>
         </div>
@@ -224,7 +224,7 @@ export function PharmacyGrowthChart({ data, loading }: PharmacyGrowthChartProps)
           {/* Floating Hover Tooltip */}
           {hoveredIdx !== null && coords[hoveredIdx] && (
             <div
-              className="absolute pointer-events-none transform -translate-x-1/2 -translate-y-full z-20 px-3 py-2 rounded-xl bg-slate-900/95 dark:bg-white/95 text-white dark:text-slate-900 text-xs shadow-xl backdrop-blur-xs border border-white/10 dark:border-slate-800 transition-all duration-75"
+              className="absolute pointer-events-none transform -translate-x-1/2 -translate-y-full z-20 px-3 py-2 rounded-none bg-slate-900/95 dark:bg-white/95 text-white dark:text-slate-900 text-xs shadow-xl backdrop-blur-xs border border-white/10 dark:border-slate-800 transition-all duration-75"
               style={{
                 left: `${(coords[hoveredIdx].x / width) * 100}%`,
                 top: `${(coords[hoveredIdx].y / height) * 100 - 8}%`,

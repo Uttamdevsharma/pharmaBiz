@@ -29,6 +29,9 @@ const accounting_routes_1 = require("./modules/accounting/accounting.routes");
 const attendance_routes_1 = require("./modules/attendance/attendance.routes");
 const location_routes_1 = __importDefault(require("./modules/location/location.routes"));
 const payment_controller_1 = require("./modules/payment/payment.controller");
+const live_chat_routes_1 = require("./modules/live-chat/live-chat.routes");
+const support_ticket_routes_1 = require("./modules/support-ticket/support-ticket.routes");
+const notices_routes_1 = require("./modules/notices/notices.routes");
 const app = (0, express_1.default)();
 const port = process.env.PORT || 3000;
 // CORS middleware
@@ -83,6 +86,12 @@ app.use("/api/suppliers", supplier_routes_1.supplierRoutes);
 app.use("/api/accounting", accounting_routes_1.accountingRoutes);
 app.use("/api/attendance", attendance_routes_1.attendanceRoutes);
 app.use("/api/locations", location_routes_1.default);
+app.use("/api/live-chat", live_chat_routes_1.liveChatRoutes);
+app.use("/api/super-admin/live-chat", live_chat_routes_1.superAdminLiveChatRoutes);
+app.use("/api/tenant/support-tickets", support_ticket_routes_1.tenantSupportTicketRoutes);
+app.use("/api/super-admin/support-tickets", support_ticket_routes_1.superAdminSupportTicketRoutes);
+app.use("/api/super-admin/notices", notices_routes_1.superAdminNoticeRoutes);
+app.use("/api/tenant/notices", notices_routes_1.tenantNoticeRoutes);
 // Fallback & direct gateway callbacks on root /payment/* (Supports both GET and POST)
 app.all("/payment/success", payment_controller_1.PaymentController.handleSuccess);
 app.all("/payment/fail", payment_controller_1.PaymentController.handleFail);

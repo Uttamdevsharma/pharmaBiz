@@ -1,0 +1,34 @@
+model system_notices {
+  id                   Int                   @id @default(autoincrement())
+  title                String                @db.VarChar(255)
+  content              String                @db.Text
+  type                 String                @default("ANNOUNCEMENT") @db.VarChar(50)
+  badge_text           String?               @db.VarChar(50)
+  pinned               Boolean               @default(false)
+  is_published         Boolean               @default(true)
+  show_banner          Boolean               @default(true)
+  banner_duration_days Int                   @default(7)
+  banner_expires_at    DateTime?
+  target_type          String                @default("ALL") @db.VarChar(20)
+  target_business_ids  Json?
+  created_at           DateTime              @default(now())
+  updated_at           DateTime              @default(now()) @updatedAt
+  reads                system_notice_reads[]
+
+  @@index([is_published])
+  @@index([pinned])
+  @@index([created_at])
+  @@index([type])
+}
+
+model system_notice_reads {
+  id          Int            @id @default(autoincrement())
+  notice_id   Int
+  business_id String         @db.VarChar(100)
+  user_id     String?        @db.VarChar(100)
+  read_at     DateTime       @default(now())
+  notice      system_notices @relation(fields: [notice_id], references: [id], onDelete: Cascade)
+
+  @@unique([notice_id, business_id])
+  @@index([business_id])
+}

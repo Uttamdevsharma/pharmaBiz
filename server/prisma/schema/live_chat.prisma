@@ -1,0 +1,58 @@
+enum live_chat_status {
+  WAITING
+  ACTIVE
+  RESOLVED
+  CLOSED
+}
+
+enum live_chat_department {
+  SALES
+  TECH_SUPPORT
+  BILLING
+  GENERAL
+}
+
+enum live_chat_sender_type {
+  VISITOR
+  AGENT
+  SYSTEM
+}
+
+model live_chat_sessions {
+  id               Int                   @id @default(autoincrement())
+  session_token    String                @unique @db.VarChar(100)
+  visitor_name     String                @db.VarChar(255)
+  visitor_email    String                @db.VarChar(255)
+  visitor_phone    String                @db.VarChar(50)
+  department       live_chat_department  @default(GENERAL)
+  status           live_chat_status      @default(WAITING)
+  current_url      String?               @db.VarChar(500)
+  user_agent       String?               @db.VarChar(500)
+  assigned_user_id Int?
+  last_message_at  DateTime              @default(now())
+  created_at       DateTime              @default(now())
+  updated_at       DateTime              @default(now()) @updatedAt
+  messages         live_chat_messages[]
+
+  @@index([status])
+  @@index([department])
+  @@index([visitor_email])
+  @@index([last_message_at])
+}
+
+model live_chat_messages {
+  id          Int                   @id @default(autoincrement())
+  session_id  Int
+  sender_type live_chat_sender_type @default(VISITOR)
+  sender_name String                @db.VarChar(255)
+  message     String                @db.Text
+  attachments Json?
+  is_read     Boolean               @default(false)
+  created_at  DateTime              @default(now())
+  session     live_chat_sessions    @relation(fields: [session_id], references: [id], onDelete: Cascade)
+
+  @@index([session_id])
+  @@index([sender_type])
+  @@index([is_read])
+  @@index([created_at])
+}

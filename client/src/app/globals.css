@@ -462,4 +462,27 @@
   transform: rotate(3deg) translate(0px, -4px);
 }
 
+/* Announcement Marquee Banner */
+@keyframes noticeMarquee {
+  0% {
+    transform: translateX(100%);
+  }
+  100% {
+    transform: translateX(-100%);
+  }
+}
+
+.notice-marquee-track {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  will-change: transform;
+  animation: noticeMarquee 32s linear infinite;
+}
+
+.notice-marquee-track:hover {
+  animation-play-state: paused;
+}
+
+
 

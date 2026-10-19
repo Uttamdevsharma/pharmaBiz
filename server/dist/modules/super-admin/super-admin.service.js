@@ -624,16 +624,38 @@ class SuperAdminService {
             name: { not: "Platform HQ" },
             ...(dateRange ? { createdAt: dateRange } : {}),
         };
-        const [newPharmacies, newSubscriptions, paymentsInRange, pendingReview, allApprovedTenants, subscriptionsInRange, totalTenants, activeTenants, suspendedTenants, totalSubscriptions, activeSubscriptions, activeSubsWithPlans, recentTenants,] = await Promise.all([
+        const now = new Date();
+        const fifteenDaysAhead = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000);
+        const [newPharmacies, newSubscriptions, paymentsInRange, pendingReview, awaitingPayment, rejectedPharmacies, totalActivePharmacies, expiringSoonSubscriptions, allApprovedTenants, subscriptionsInRange, totalTenants, activeTenants, suspendedTenants, totalSubscriptions, activeSubscriptions, activeSubsWithPlans, recentTenants,] = await Promise.all([
             prisma_1.prisma.tenant.count({ where: approvedFilter }),
             prisma_1.prisma.subscription.count({ where: subFilter }),
             prisma_1.prisma.payment.findMany({
                 where: paymentFilter,
                 select: { amount: true, createdAt: true },
             }),
-            // 4. Pending Review: Current live status, independent of date filter
+            // Pending Review: Current live status, independent of date filter
             prisma_1.prisma.tenant.count({
                 where: { name: { not: "Platform HQ" }, verificationStatus: "PENDING_APPROVAL" },
+            }),
+            // Awaiting Payment: Approved by Admin, waiting for merchant subscription payment
+            prisma_1.prisma.tenant.count({
+                where: { name: { not: "Platform HQ" }, verificationStatus: "APPROVED_PENDING_PAYMENT" },
+            }),
+            // Rejected: Ineligible/declined pharmacy applications
+            prisma_1.prisma.tenant.count({
+                where: { name: { not: "Platform HQ" }, verificationStatus: "REJECTED" },
+            }),
+            // Total Active Pharmacies: Live operational verified tenants
+            prisma_1.prisma.tenant.count({
+                where: { name: { not: "Platform HQ" }, verificationStatus: "ACTIVE", isActive: true },
+            }),
+            // Expiring Soon: Subscriptions active and ending within 15 days
+            prisma_1.prisma.subscription.count({
+                where: {
+                    tenant: { name: { not: "Platform HQ" } },
+                    status: "ACTIVE",
+                    endDate: { gte: now, lte: fifteenDaysAhead },
+                },
             }),
             // For Pharmacy Growth Line Graph
             prisma_1.prisma.tenant.findMany({
@@ -728,11 +750,15 @@ class SuperAdminService {
             return isYearly ? sum + price / 12 : sum + price;
         }, 0);
         return {
-            // 4 Target Stat Cards
+            // Primary Stat Cards
             newPharmacies,
             newSubscriptions,
             subscriptionRevenue: Math.round(subscriptionRevenue * 100) / 100,
             pendingReview,
+            totalActivePharmacies: totalActivePharmacies ?? activeTenants,
+            awaitingPayment,
+            rejectedPharmacies,
+            expiringSoonSubscriptions,
             // 2 Target Charts
             pharmacyGrowth,
             subscriptionByPlan,

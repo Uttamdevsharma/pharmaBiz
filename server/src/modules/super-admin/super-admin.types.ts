@@ -22,11 +22,15 @@ export interface SubscriptionByPlanData {
 }
 
 export interface PlatformAnalyticsResponse {
-  // 4 Primary Date-Filtered Stat Cards
+  // Primary Stat Cards
   newPharmacies: number;
   newSubscriptions: number;
   subscriptionRevenue: number;
   pendingReview: number;
+  totalActivePharmacies: number;
+  awaitingPayment: number;
+  rejectedPharmacies: number;
+  expiringSoonSubscriptions: number;
 
   // 2 Primary Charts
   pharmacyGrowth: PharmacyGrowthPoint[];

@@ -20,6 +20,9 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Settings,
+  MessageSquare,
+  LifeBuoy,
+  Megaphone,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { ThemeToggle } from "@/components/common/ThemeToggle";
@@ -27,6 +30,9 @@ import { loadingProgress } from "@/lib/loadingProgress";
 
 export type AdminTab =
   | "overview"
+  | "live-chat"
+  | "support-tickets"
+  | "notices"
   | "verifications"
   | "tenants"
   | "staff"
@@ -209,6 +215,63 @@ export function AdminSidebar({
               </div>
             )}
 
+            {/* Live Chat Support */}
+            <div className="relative group w-full flex justify-center">
+              <button
+                type="button"
+                onClick={() => handleTabClick("live-chat")}
+                className={`h-11 w-11 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
+                  activeTab === "live-chat"
+                    ? "bg-brand-primary text-white shadow-md shadow-brand-primary/20"
+                    : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
+                }`}
+                aria-label="Live Chat Support"
+              >
+                <MessageSquare className="h-5 w-5 shrink-0" />
+              </button>
+              <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 px-3 py-1.5 rounded-xl bg-slate-900 dark:bg-slate-800 text-white text-xs font-bold shadow-xl opacity-0 pointer-events-none group-hover:opacity-100 transition whitespace-nowrap z-50 border border-slate-700">
+                Live Chat Support
+              </div>
+            </div>
+
+            {/* Helpdesk Support Tickets */}
+            <div className="relative group w-full flex justify-center">
+              <button
+                type="button"
+                onClick={() => handleTabClick("support-tickets")}
+                className={`h-11 w-11 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
+                  activeTab === "support-tickets"
+                    ? "bg-brand-primary text-white shadow-md shadow-brand-primary/20"
+                    : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
+                }`}
+                aria-label="Support Tickets"
+              >
+                <LifeBuoy className="h-5 w-5 shrink-0" />
+              </button>
+              <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 px-3 py-1.5 rounded-xl bg-slate-900 dark:bg-slate-800 text-white text-xs font-bold shadow-xl opacity-0 pointer-events-none group-hover:opacity-100 transition whitespace-nowrap z-50 border border-slate-700">
+                Support Tickets
+              </div>
+            </div>
+
+            {/* Platform Notices */}
+            <div className="relative group w-full flex justify-center">
+              <button
+                type="button"
+                onClick={() => handleTabClick("notices")}
+                className={`h-11 w-11 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
+                  activeTab === "notices"
+                    ? "bg-brand-primary text-white shadow-md shadow-brand-primary/20"
+                    : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
+                }`}
+                aria-label="Platform Notices"
+              >
+                <Megaphone className="h-5 w-5 shrink-0" />
+              </button>
+              <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 px-3 py-1.5 rounded-xl bg-slate-900 dark:bg-slate-800 text-white text-xs font-bold shadow-xl opacity-0 pointer-events-none group-hover:opacity-100 transition whitespace-nowrap z-50 border border-slate-700">
+                Notices & Announcements
+              </div>
+            </div>
+
             {/* Staff */}
             {canViewAnyStaffMenu && (
               <div className="relative group w-full flex justify-center">
@@ -344,6 +407,45 @@ export function AdminSidebar({
                 <span>Pharmacies</span>
               </button>
             )}
+
+            {/* Live Chat Support */}
+            <button
+              onClick={() => handleTabClick("live-chat")}
+              className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-sm sm:text-base font-bold transition-all cursor-pointer ${
+                activeTab === "live-chat"
+                  ? "bg-brand-primary text-white shadow-sm"
+                  : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white"
+              }`}
+            >
+              <MessageSquare className="h-5 w-5 shrink-0" />
+              <span>Live Chat Support</span>
+            </button>
+
+            {/* Helpdesk Support Tickets */}
+            <button
+              onClick={() => handleTabClick("support-tickets")}
+              className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-sm sm:text-base font-bold transition-all cursor-pointer ${
+                activeTab === "support-tickets"
+                  ? "bg-brand-primary text-white shadow-sm"
+                  : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white"
+              }`}
+            >
+              <LifeBuoy className="h-5 w-5 shrink-0" />
+              <span>Support Tickets</span>
+            </button>
+
+            {/* Platform Notices & Announcements */}
+            <button
+              onClick={() => handleTabClick("notices")}
+              className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-sm sm:text-base font-bold transition-all cursor-pointer ${
+                activeTab === "notices"
+                  ? "bg-brand-primary text-white shadow-sm"
+                  : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white"
+              }`}
+            >
+              <Megaphone className="h-5 w-5 shrink-0" />
+              <span>Notices & Announcements</span>
+            </button>
 
             {/* ==================== STAFF MANAGEMENT GROUP ==================== */}
             {canViewAnyStaffMenu && (

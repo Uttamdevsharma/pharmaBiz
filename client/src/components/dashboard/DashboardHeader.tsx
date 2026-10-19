@@ -24,6 +24,7 @@ import { useBranchContext } from "@/context/BranchContext";
 import { OwnerModule } from "./DashboardSidebar";
 import { ChangePasswordModal } from "./ChangePasswordModal";
 import { ThemeToggle } from "@/components/common/ThemeToggle";
+import { AnnouncementBanner } from "@/components/common/AnnouncementBanner";
 
 interface DashboardHeaderProps {
   tenantName?: string;
@@ -111,6 +112,7 @@ export function DashboardHeader({
 
   return (
     <>
+      <AnnouncementBanner onNavigate={onNavigate} />
       <header className="h-16 2xl:h-20 border-b border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md px-3 sm:px-6 2xl:px-10 flex items-center justify-between sticky top-0 z-40 transition-all duration-200 shrink-0 gap-2 print:hidden">
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           {/* Mobile / Tablet Sidebar Hamburger Toggle */}

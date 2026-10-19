@@ -29,12 +29,12 @@ export function SubscriptionPlanDonutChart({ data, loading }: SubscriptionPlanDo
 
   if (loading) {
     return (
-      <div className="p-5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col justify-between h-[360px] animate-pulse">
+      <div className="p-5 rounded-none bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col justify-between h-[360px] animate-pulse">
         <div className="space-y-2">
-          <div className="h-5 w-44 bg-slate-200 dark:bg-slate-800 rounded-md" />
-          <div className="h-3 w-56 bg-slate-100 dark:bg-slate-800/60 rounded-md" />
+          <div className="h-5 w-44 bg-slate-200 dark:bg-slate-800 rounded-none" />
+          <div className="h-3 w-56 bg-slate-100 dark:bg-slate-800/60 rounded-none" />
         </div>
-        <div className="h-44 w-44 mx-auto rounded-full bg-slate-100 dark:bg-slate-800/40" />
+        <div className="h-44 w-44 mx-auto rounded-none bg-slate-100 dark:bg-slate-800/40" />
       </div>
     );
   }
@@ -71,13 +71,13 @@ export function SubscriptionPlanDonutChart({ data, loading }: SubscriptionPlanDo
   const activeItem = slices.find((s) => s.tier === activeTier);
 
   return (
-    <div className="p-5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col justify-between relative overflow-hidden">
+    <div className="p-5 rounded-none bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col justify-between relative overflow-hidden">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
         <div>
           <div className="flex items-center gap-2">
             <h3 className="text-base font-bold text-slate-900 dark:text-white">Subscriptions by Plan</h3>
-            <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
+            <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-none bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
               <Layers className="h-3 w-3" />
               {total} Total
             </span>
@@ -167,7 +167,7 @@ export function SubscriptionPlanDonutChart({ data, loading }: SubscriptionPlanDo
                 key={item.tier}
                 onMouseEnter={() => setActiveTier(item.tier)}
                 onMouseLeave={() => setActiveTier(null)}
-                className={`p-2.5 rounded-xl border transition cursor-pointer ${
+                className={`p-2.5 rounded-none border transition cursor-pointer ${
                   isHovered
                     ? "bg-slate-50 dark:bg-slate-800/80 border-slate-300 dark:border-slate-700 shadow-xs"
                     : "border-slate-100 dark:border-slate-800/50 hover:bg-slate-50/50 dark:hover:bg-slate-800/40"
@@ -176,7 +176,7 @@ export function SubscriptionPlanDonutChart({ data, loading }: SubscriptionPlanDo
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span
-                      className="h-3 w-3 rounded-full shrink-0"
+                      className="h-3 w-3 rounded-none shrink-0"
                       style={{ backgroundColor: item.color }}
                     />
                     <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
@@ -194,9 +194,9 @@ export function SubscriptionPlanDonutChart({ data, loading }: SubscriptionPlanDo
                 </div>
 
                 {/* Mini percentage bar */}
-                <div className="mt-1.5 h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                <div className="mt-1.5 h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-none overflow-hidden">
                   <div
-                    className="h-full rounded-full transition-all duration-500"
+                    className="h-full rounded-none transition-all duration-500"
                     style={{
                       width: `${item.percentage}%`,
                       backgroundColor: item.color,

@@ -54,11 +54,15 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Compass,
+  LifeBuoy,
+  Megaphone,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/common/ThemeToggle";
 
 export type OwnerModule =
   | "overview"
+  | "notices"
+  | "support_tickets"
   | "medicine_locator"
   | "pos"
   | "pos_sale"
@@ -186,6 +190,8 @@ export function DashboardSidebar({
   const isOwner = user?.role === "COMPANY_OWNER" || userRole === "COMPANY_OWNER" || user?.role === "SUPER_ADMIN";
 
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState<number>(0);
+  const [unreadTicketsCount, setUnreadTicketsCount] = useState<number>(0);
+  const [unreadNoticesCount, setUnreadNoticesCount] = useState<number>(0);
 
   useEffect(() => {
     if (!isOwner) return;
@@ -207,6 +213,54 @@ export function DashboardSidebar({
       clearInterval(timer);
     };
   }, [isOwner]);
+
+  // Support tickets unread polling
+  useEffect(() => {
+    let isMounted = true;
+    const fetchTicketsUnread = async () => {
+      try {
+        const res = await fetchApi<{ unread_total?: number; metrics?: any }>("/tenant/support-tickets", {
+          skipCache: true,
+          skipProgress: true,
+        });
+        if (isMounted && res.success && res.data) {
+          setUnreadTicketsCount(res.data.unread_total || 0);
+        }
+      } catch (e) {
+        // silent fail
+      }
+    };
+    fetchTicketsUnread();
+    const timer = setInterval(fetchTicketsUnread, 15000);
+    return () => {
+      isMounted = false;
+      clearInterval(timer);
+    };
+  }, []);
+
+  // Notices unread polling
+  useEffect(() => {
+    let isMounted = true;
+    const fetchNoticesUnread = async () => {
+      try {
+        const res = await fetchApi<{ unread_count?: number }>("/tenant/notices", {
+          skipCache: true,
+          skipProgress: true,
+        });
+        if (isMounted && res.success && res.data) {
+          setUnreadNoticesCount(res.data.unread_count || 0);
+        }
+      } catch (e) {
+        // silent fail
+      }
+    };
+    fetchNoticesUnread();
+    const timer = setInterval(fetchNoticesUnread, 30000);
+    return () => {
+      isMounted = false;
+      clearInterval(timer);
+    };
+  }, []);
 
   const isSupplierActive =
     activeModule.startsWith("sup_") && activeModule !== "sup_payments_due";
@@ -879,8 +933,22 @@ export function DashboardSidebar({
     },
   ];
 
-  // Pharmacy Owner Enterprise Settings
+  // Pharmacy Owner Enterprise Settings & Support
   const enterpriseItems = [
+    {
+      id: "notices" as OwnerModule,
+      label: "Notices",
+      icon: Megaphone,
+      visible: true,
+      badge: unreadNoticesCount > 0 ? unreadNoticesCount : undefined,
+    },
+    {
+      id: "support_tickets" as OwnerModule,
+      label: "Support Tickets",
+      icon: LifeBuoy,
+      visible: true,
+      badge: unreadTicketsCount > 0 ? unreadTicketsCount : undefined,
+    },
     {
       id: "settings" as OwnerModule,
       label: "Settings",
@@ -1101,7 +1169,7 @@ export function DashboardSidebar({
                   <button
                     type="button"
                     onClick={() => handleModuleSelect(item.id)}
-                    className={`h-11 w-11 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
+                    className={`h-11 w-11 rounded-xl flex items-center justify-center relative transition-all cursor-pointer ${
                       isActive
                         ? "bg-brand-primary text-white shadow-md shadow-brand-primary/20"
                         : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
@@ -1109,6 +1177,11 @@ export function DashboardSidebar({
                     aria-label={item.label}
                   >
                     <Icon className="h-5 w-5 shrink-0" />
+                    {item.badge !== undefined && (
+                      <span className="absolute -top-1 -right-1 h-4 min-w-[16px] px-1 rounded-full bg-rose-500 text-white text-[9px] font-bold flex items-center justify-center ring-2 ring-white dark:ring-slate-900 animate-pulse">
+                        {item.badge}
+                      </span>
+                    )}
                   </button>
                   <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 px-2.5 py-1.5 rounded-xl bg-slate-900 dark:bg-slate-800 text-white text-xs font-semibold shadow-xl opacity-0 pointer-events-none group-hover:opacity-100 transition whitespace-nowrap z-50 border border-slate-700">
                     {item.label}
@@ -1333,14 +1406,21 @@ export function DashboardSidebar({
                     <button
                       key={item.id}
                       onClick={() => handleModuleSelect(item.id)}
-                      className={`w-full flex items-center gap-2.5 xl:gap-3 px-3 py-2 xl:px-3.5 xl:py-2.5 2xl:px-4 2xl:py-3 rounded-xl xl:rounded-2xl text-xs xl:text-sm 2xl:text-base font-bold transition-all cursor-pointer ${
+                      className={`w-full flex items-center justify-between px-3 py-2 xl:px-3.5 xl:py-2.5 2xl:px-4 2xl:py-3 rounded-xl xl:rounded-2xl text-xs xl:text-sm 2xl:text-base font-bold transition-all cursor-pointer ${
                         isActive
                           ? "bg-brand-primary text-white shadow-sm"
                           : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white"
                       }`}
                     >
-                      <Icon className="h-4 w-4 xl:h-4.5 xl:w-4.5 2xl:h-5 2xl:w-5 shrink-0" />
-                      <span className="truncate">{item.label}</span>
+                      <div className="flex items-center gap-2.5 xl:gap-3 truncate">
+                        <Icon className="h-4 w-4 xl:h-4.5 xl:w-4.5 2xl:h-5 2xl:w-5 shrink-0" />
+                        <span className="truncate">{item.label}</span>
+                      </div>
+                      {item.badge !== undefined && (
+                        <span className="px-1.5 py-0.5 bg-rose-500 text-white text-[10px] font-bold rounded-full animate-pulse shadow-sm">
+                          {item.badge}
+                        </span>
+                      )}
                     </button>
                   );
                 })}

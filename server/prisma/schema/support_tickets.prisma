@@ -1,0 +1,66 @@
+enum support_ticket_category {
+  BUG
+  FEATURE
+  QUERY
+}
+
+enum support_ticket_priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum support_ticket_status {
+  PENDING
+  CHECKING
+  WORKING
+  TESTING
+  SOLVED
+  CLOSED
+}
+
+enum ticket_sender_type {
+  SUPER_ADMIN
+  TENANT_USER
+}
+
+model support_tickets {
+  id            Int                     @id @default(autoincrement())
+  ticket_no     String                  @unique @db.VarChar(50)
+  business_id   String                  @db.VarChar(100)
+  user_id       String                  @db.VarChar(100)
+  branch_id     String?                 @db.VarChar(100)
+  subject       String                  @db.VarChar(255)
+  message       String                  @db.Text
+  category      support_ticket_category @default(QUERY)
+  priority      support_ticket_priority @default(MEDIUM)
+  status        support_ticket_status   @default(PENDING)
+  attachments   Json?
+  is_admin_read Boolean                 @default(true)
+  created_at    DateTime                @default(now())
+  updated_at    DateTime                @default(now()) @updatedAt
+  replies       ticket_replies[]
+
+  @@index([business_id])
+  @@index([user_id])
+  @@index([status])
+  @@index([category])
+  @@index([priority])
+}
+
+model ticket_replies {
+  id          Int                @id @default(autoincrement())
+  ticket_id   Int
+  sender_id   String             @db.VarChar(100)
+  sender_type ticket_sender_type @default(TENANT_USER)
+  message     String             @db.Text
+  attachments Json?
+  is_read     Boolean            @default(false)
+  created_at  DateTime           @default(now())
+  ticket      support_tickets    @relation(fields: [ticket_id], references: [id], onDelete: Cascade)
+
+  @@index([ticket_id])
+  @@index([sender_id])
+  @@index([is_read])
+}

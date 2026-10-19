@@ -3,6 +3,7 @@ import Script from "next/script";
 import NextTopLoader from "nextjs-toploader";
 import "./globals.css";
 import { Providers } from "./providers";
+import { FloatingChatWidget } from "@/components/chat/FloatingChatWidget";
 import type { SiteSettings } from "@/context/SettingsContext";
 import { hexToRgb } from "@/lib/colorUtils";
 
@@ -158,6 +159,7 @@ export default async function RootLayout({
         />
         <Providers initialSettings={initialSettings}>
           {children}
+          <FloatingChatWidget />
         </Providers>
       </body>
     </html>

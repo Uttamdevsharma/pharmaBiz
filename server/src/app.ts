@@ -25,6 +25,9 @@ import { accountingRoutes } from "./modules/accounting/accounting.routes";
 import { attendanceRoutes } from "./modules/attendance/attendance.routes";
 import locationRoutes from "./modules/location/location.routes";
 import { PaymentController } from "./modules/payment/payment.controller";
+import { liveChatRoutes, superAdminLiveChatRoutes } from "./modules/live-chat/live-chat.routes";
+import { tenantSupportTicketRoutes, superAdminSupportTicketRoutes } from "./modules/support-ticket/support-ticket.routes";
+import { superAdminNoticeRoutes, tenantNoticeRoutes } from "./modules/notices/notices.routes";
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -87,6 +90,12 @@ app.use("/api/suppliers", supplierRoutes);
 app.use("/api/accounting", accountingRoutes);
 app.use("/api/attendance", attendanceRoutes);
 app.use("/api/locations", locationRoutes);
+app.use("/api/live-chat", liveChatRoutes);
+app.use("/api/super-admin/live-chat", superAdminLiveChatRoutes);
+app.use("/api/tenant/support-tickets", tenantSupportTicketRoutes);
+app.use("/api/super-admin/support-tickets", superAdminSupportTicketRoutes);
+app.use("/api/super-admin/notices", superAdminNoticeRoutes);
+app.use("/api/tenant/notices", tenantNoticeRoutes);
 
 // Fallback & direct gateway callbacks on root /payment/* (Supports both GET and POST)
 app.all("/payment/success", PaymentController.handleSuccess);

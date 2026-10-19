@@ -732,11 +732,18 @@ export class SuperAdminService {
       ...(dateRange ? { createdAt: dateRange } : {}),
     };
 
+    const now = new Date();
+    const fifteenDaysAhead = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000);
+
     const [
       newPharmacies,
       newSubscriptions,
       paymentsInRange,
       pendingReview,
+      awaitingPayment,
+      rejectedPharmacies,
+      totalActivePharmacies,
+      expiringSoonSubscriptions,
       allApprovedTenants,
       subscriptionsInRange,
       totalTenants,
@@ -753,9 +760,29 @@ export class SuperAdminService {
         where: paymentFilter,
         select: { amount: true, createdAt: true },
       }),
-      // 4. Pending Review: Current live status, independent of date filter
+      // Pending Review: Current live status, independent of date filter
       (prisma as any).tenant.count({
         where: { name: { not: "Platform HQ" }, verificationStatus: "PENDING_APPROVAL" },
+      }),
+      // Awaiting Payment: Approved by Admin, waiting for merchant subscription payment
+      (prisma as any).tenant.count({
+        where: { name: { not: "Platform HQ" }, verificationStatus: "APPROVED_PENDING_PAYMENT" },
+      }),
+      // Rejected: Ineligible/declined pharmacy applications
+      (prisma as any).tenant.count({
+        where: { name: { not: "Platform HQ" }, verificationStatus: "REJECTED" },
+      }),
+      // Total Active Pharmacies: Live operational verified tenants
+      (prisma as any).tenant.count({
+        where: { name: { not: "Platform HQ" }, verificationStatus: "ACTIVE", isActive: true },
+      }),
+      // Expiring Soon: Subscriptions active and ending within 15 days
+      (prisma as any).subscription.count({
+        where: {
+          tenant: { name: { not: "Platform HQ" } },
+          status: "ACTIVE",
+          endDate: { gte: now, lte: fifteenDaysAhead },
+        },
       }),
       // For Pharmacy Growth Line Graph
       (prisma as any).tenant.findMany({
@@ -863,11 +890,15 @@ export class SuperAdminService {
     }, 0);
 
     return {
-      // 4 Target Stat Cards
+      // Primary Stat Cards
       newPharmacies,
       newSubscriptions,
       subscriptionRevenue: Math.round(subscriptionRevenue * 100) / 100,
       pendingReview,
+      totalActivePharmacies: totalActivePharmacies ?? activeTenants,
+      awaitingPayment,
+      rejectedPharmacies,
+      expiringSoonSubscriptions,
 
       // 2 Target Charts
       pharmacyGrowth,
