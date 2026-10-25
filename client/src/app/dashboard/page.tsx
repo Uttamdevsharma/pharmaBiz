@@ -471,50 +471,54 @@ export default function RoleBasedDashboard() {
         </div>
       )}
 
-      {/* Header */}
-      <DashboardHeader
-        tenantName={tenantProfile?.name}
-        tier={effectiveTier}
-        onNavigate={handleNavigate}
-        onToggleMobileSidebar={() => setMobileSidebarOpen(!mobileSidebarOpen)}
-        isMobileSidebarOpen={mobileSidebarOpen}
-        isSidebarCollapsed={sidebarCollapsed}
-        onToggleDesktopSidebar={toggleSidebarCollapse}
-      />
+      {/* Full-window POS layout (when POS is active) or Standard Dashboard Layout */}
+      {(() => {
+        const isPosActive = displayedModule === "pos" || displayedModule === "pos_sale";
 
-      {/* Main Workspace Layout */}
-      <div className="flex-1 flex overflow-hidden min-h-0 relative">
-        {/* Role-Aware Sidebar */}
-        <DashboardSidebar
-          activeModule={activeModule}
-          userRole={user?.role}
-          mobileOpen={mobileSidebarOpen}
-          onCloseMobile={() => setMobileSidebarOpen(false)}
-          onModuleChange={handleNavigate}
-          collapsed={sidebarCollapsed}
-          onToggleCollapse={toggleSidebarCollapse}
-        />
-
-        {/* Content Area */}
-        {(() => {
-          const isPosActive = displayedModule === "pos" || displayedModule === "pos_sale";
+        if (isPosActive) {
           return (
-            <main className={`flex-1 h-full min-h-0 w-full min-w-0 ${
-              isPosActive
-                ? "p-1.5 sm:p-2.5 overflow-hidden"
-                : "p-3 sm:p-4 md:p-6 lg:p-7 xl:p-8 2xl:p-10 content-scrollbar"
-            }`}>
-              <div className={`w-full min-w-0 ${
-                isPosActive
-                  ? "h-full flex flex-col min-h-0"
-                  : "max-w-[1920px] 3xl:max-w-[2400px] 4xl:max-w-[3000px] mx-auto"
-              }`}>
-                {renderModuleContent()}
-              </div>
-            </main>
+            <div className="flex-1 w-full h-full min-h-0 overflow-hidden flex flex-col bg-slate-100 dark:bg-slate-950">
+              {renderModuleContent()}
+            </div>
           );
-        })()}
-      </div>
+        }
+
+        return (
+          <>
+            {/* Header */}
+            <DashboardHeader
+              tenantName={tenantProfile?.name}
+              tier={effectiveTier}
+              onNavigate={handleNavigate}
+              onToggleMobileSidebar={() => setMobileSidebarOpen(!mobileSidebarOpen)}
+              isMobileSidebarOpen={mobileSidebarOpen}
+              isSidebarCollapsed={sidebarCollapsed}
+              onToggleDesktopSidebar={toggleSidebarCollapse}
+            />
+
+            {/* Main Workspace Layout */}
+            <div className="flex-1 flex overflow-hidden min-h-0 relative">
+              {/* Role-Aware Sidebar */}
+              <DashboardSidebar
+                activeModule={activeModule}
+                userRole={user?.role}
+                mobileOpen={mobileSidebarOpen}
+                onCloseMobile={() => setMobileSidebarOpen(false)}
+                onModuleChange={handleNavigate}
+                collapsed={sidebarCollapsed}
+                onToggleCollapse={toggleSidebarCollapse}
+              />
+
+              {/* Content Area */}
+              <main className="flex-1 h-full min-h-0 w-full min-w-0 p-3 sm:p-4 md:p-6 lg:p-7 xl:p-8 2xl:p-10 content-scrollbar">
+                <div className="w-full min-w-0 max-w-[1920px] 3xl:max-w-[2400px] 4xl:max-w-[3000px] mx-auto">
+                  {renderModuleContent()}
+                </div>
+              </main>
+            </div>
+          </>
+        );
+      })()}
 
       {/* 🚀 Pharmacy Owner Expiry Popup Modal with 3 Plans */}
       {showOwnerExpiryModal && (
@@ -906,7 +910,7 @@ export default function RoleBasedDashboard() {
         if (!isOwner && !hasPermission("pos.manage")) {
           return <TenantAccessRestricted moduleName="Sales & POS" requiredPerm="pos.manage" />;
         }
-        return <PosModule />;
+        return <PosModule onNavigate={handleNavigate} onBack={() => handleNavigate("overview")} />;
 
       case "pos_history":
         if (!isOwner && !hasPermission("pos.history")) {

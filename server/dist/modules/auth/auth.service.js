@@ -335,15 +335,17 @@ class AuthService {
                 where: { isActive: true },
             });
         }
-        const basePrice = Number(plan?.price || 1500);
-        const planPrice = data.billingCycle === "YEARLY" ? Math.round(basePrice * 12 * 0.85) : basePrice;
-        const INITIAL_LICENSE_FEE = 5000;
-        const totalPayable = INITIAL_LICENSE_FEE + planPrice;
+        const isTrialPlan = plan?.tier === "TRIAL" || !!plan?.features?.isTrial || data.paymentMethod === "FREE_TRIAL";
+        const trialDays = plan?.features?.trialDays ? Number(plan.features.trialDays) : 7;
+        const basePrice = isTrialPlan ? 0 : Number(plan?.price || 1500);
+        const planPrice = isTrialPlan ? 0 : (data.billingCycle === "YEARLY" ? Math.round(basePrice * 12 * 0.85) : basePrice);
+        const INITIAL_LICENSE_FEE = isTrialPlan ? 0 : 5000;
+        const totalPayable = isTrialPlan ? 0 : (INITIAL_LICENSE_FEE + planPrice);
         // 4. Generate 6-digit OTP code with 15-minute expiration
         const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
         const otpExpiresAt = new Date(Date.now() + 15 * 60 * 1000);
         const passwordHash = await bcryptjs_1.default.hash(data.password, 10);
-        const durationDays = data.billingCycle === "YEARLY" ? 365 : 30;
+        const durationDays = isTrialPlan ? trialDays : (data.billingCycle === "YEARLY" ? 365 : 30);
         const startDate = new Date();
         const endDate = new Date(startDate.getTime() + durationDays * 24 * 60 * 60 * 1000);
         const result = await prisma_1.prisma.$transaction(async (tx) => {
@@ -351,7 +353,7 @@ class AuthService {
             const tenant = await tx.tenant.create({
                 data: {
                     name: data.companyName,
-                    tier: plan ? plan.tier : "STARTER",
+                    tier: isTrialPlan ? "TRIAL" : (plan ? plan.tier : "STARTER"),
                     email: normalizedEmail,
                     phone: data.phone,
                     address: data.address || "HQ Location",
@@ -380,11 +382,11 @@ class AuthService {
                     drugLicenseBackUrl: drugBackUpload?.secureUrl || null,
                     drugLicenseBackPublicId: drugBackUpload?.publicId || null,
                     // Payment details
-                    paymentMethod: data.paymentMethod || "MANUAL_BKASH",
-                    manualPaymentNumber: data.manualPaymentNumber || null,
-                    manualPaymentTrxId: data.manualPaymentTrxId || null,
-                    manualPaymentDocUrl: paymentUpload?.secureUrl || null,
-                    manualPaymentDocPublicId: paymentUpload?.publicId || null,
+                    paymentMethod: isTrialPlan ? "FREE_TRIAL" : (data.paymentMethod || "MANUAL_BKASH"),
+                    manualPaymentNumber: isTrialPlan ? null : (data.manualPaymentNumber || null),
+                    manualPaymentTrxId: isTrialPlan ? null : (data.manualPaymentTrxId || null),
+                    manualPaymentDocUrl: isTrialPlan ? null : (paymentUpload?.secureUrl || null),
+                    manualPaymentDocPublicId: isTrialPlan ? null : (paymentUpload?.publicId || null),
                     manualPaymentAmount: totalPayable,
                     // OTP
                     otpCode,

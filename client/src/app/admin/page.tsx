@@ -22,14 +22,21 @@ import { PharmacyVerificationTab } from "@/components/admin/PharmacyVerification
 import { SuperAdminLiveChatView } from "@/components/admin/SuperAdminLiveChatView";
 import { SuperAdminTicketsView } from "@/components/admin/SuperAdminTicketsView";
 import { SuperAdminNoticesView } from "@/components/admin/SuperAdminNoticesView";
+import { ManageQuotationsTab } from "@/components/admin/quotation/ManageQuotationsTab";
+import { QuotationForm } from "@/components/admin/quotation/quotation-form";
+import { SmsGatewaySettingsTab } from "@/components/admin/sms/SmsGatewaySettingsTab";
+import { SendSmsCampaignTab } from "@/components/admin/sms/SendSmsCampaignTab";
+import { SmsLogsTab } from "@/components/admin/sms/SmsLogsTab";
 import { Loader2, ShieldAlert } from "lucide-react";
 
 export default function AdminDashboardPage() {
   const router = useRouter();
   const { user, loading, isAuthenticated, isSuperAdmin, isPlatformStaff, hasPermission } = useAuth();
   const [activeTab, setActiveTab] = useState<AdminTab>("overview");
+  const [selectedQuotationId, setSelectedQuotationId] = useState<number | null>(null);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
+
 
   useEffect(() => {
     try {
@@ -184,10 +191,52 @@ export default function AdminDashboardPage() {
         }
         return <SettingsTab />;
 
+      case "quotations":
+        return (
+          <ManageQuotationsTab
+            onAddClick={() => setActiveTab("quotation-create" as AdminTab)}
+            onEditClick={(id) => {
+              setSelectedQuotationId(id);
+              setActiveTab("quotation-edit" as AdminTab);
+            }}
+            onPrintClick={(id) => {
+              window.open(`/admin/quotations/${id}/print`, "_blank");
+            }}
+          />
+        );
+
+      case "quotation-create":
+        return (
+          <QuotationForm
+            onSuccess={() => setActiveTab("quotations" as AdminTab)}
+            onCancel={() => setActiveTab("quotations" as AdminTab)}
+          />
+        );
+
+      case "quotation-edit":
+        return (
+          <QuotationForm
+            quotationId={selectedQuotationId}
+            isEdit={true}
+            onSuccess={() => setActiveTab("quotations" as AdminTab)}
+            onCancel={() => setActiveTab("quotations" as AdminTab)}
+          />
+        );
+
+      case "sms-send":
+        return <SendSmsCampaignTab />;
+
+      case "sms-settings":
+        return <SmsGatewaySettingsTab />;
+
+      case "sms-logs":
+        return <SmsLogsTab />;
+
       default:
         return <OverviewTab />;
     }
   };
+
 
   return (
     <div className="h-screen max-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col overflow-hidden">

@@ -97,6 +97,9 @@ app.use("/api/super-admin/support-tickets", superAdminSupportTicketRoutes);
 app.use("/api/super-admin/notices", superAdminNoticeRoutes);
 app.use("/api/tenant/notices", tenantNoticeRoutes);
 
+import { QuotationController } from "./modules/super-admin/quotation.controller";
+app.get("/api/public/quotations/:id", QuotationController.getById);
+
 // Fallback & direct gateway callbacks on root /payment/* (Supports both GET and POST)
 app.all("/payment/success", PaymentController.handleSuccess);
 app.all("/payment/fail", PaymentController.handleFail);

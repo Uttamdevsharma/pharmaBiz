@@ -1,0 +1,30 @@
+// ─── Platform Settings (SMS Gateway Configuration) ──────────────────────────
+model platform_settings {
+  id                  Int       @id @default(autoincrement())
+  sms_provider        String?   @default("GREENWEB") // GREENWEB, MIM_SMS, SSL_WIRELESS, CUSTOM
+  sms_gateway_url     String?
+  sms_api_key         String?
+  sms_sender_id       String?
+  sms_is_masking      Boolean   @default(false)
+  sms_masking_id      String?
+  sms_non_masking_id  String?
+  updated_at          DateTime  @default(now()) @updatedAt
+}
+
+// ─── Super Admin SMS Logs Table ─────────────────────────────────────────────
+model platform_sms_logs {
+  id                Int       @id @default(autoincrement())
+  tenant_id         String?
+  recipient_name    String?
+  recipient_number  String
+  channel           String    @default("SMS") // SMS, EMAIL, BOTH
+  message           String    @db.Text
+  sms_count         Int       @default(1)
+  status            String    @default("SENT") // SENT, FAILED, DELIVERED
+  response_data     String?   @db.Text
+  created_at        DateTime  @default(now())
+
+  @@index([recipient_number])
+  @@index([status])
+  @@index([created_at])
+}

@@ -1,0 +1,45 @@
+// ─── Super Admin Quotation System ──────────────────────────────────────────
+model platform_quotations {
+  id                      Int       @id @default(autoincrement())
+  ref_no                  String    @unique
+  quote_date              DateTime  @default(now())
+  client_name             String
+  organization_name       String?
+  address                 String?   @db.Text
+  phone                   String?
+  email                   String?
+  subject                 String
+  software_columns        Json?
+  software_rows           Json?
+  software_amount         Decimal?  @default(0.00) @db.Decimal(12, 2)
+  plan_name               String?   @default("Pharmacy Starter")
+  billing_cycle           String?   @default("MONTHLY")
+  license_fee_title       String?   @default("One-time Setup & Onboarding Fee")
+  license_fee_amount      Decimal?  @default(0.00) @db.Decimal(12, 2)
+  subscription_amount     Decimal?  @default(0.00) @db.Decimal(12, 2)
+  recurring_note          String?
+  has_hardware            Boolean   @default(false)
+  hardware_columns        Json?
+  hardware_rows           Json?
+  hardware_amount         Decimal?  @default(0.00) @db.Decimal(12, 2)
+  grand_total             Decimal   @default(0.00) @db.Decimal(12, 2)
+  in_words                String?
+  project_breakdown       String?   @db.Text
+  terms_conditions        String?   @db.Text
+  client_requirements     String?   @db.Text
+  deliverables            String?   @db.Text
+  additional_notes        String?   @db.Text
+  company_signatory_name  String?   @default("Md. Sorower Jahan")
+  company_signatory_title String?   @default("CEO, PharmaBiz / okobiz")
+  company_phone           String?   @default("+880 1973590937")
+  company_email           String?   @default("info@okobiz.com")
+  status                  String    @default("SENT") // DRAFT, SENT, ACCEPTED, REJECTED
+  email_sent_at           DateTime?
+  created_at              DateTime  @default(now())
+  updated_at              DateTime  @default(now()) @updatedAt
+
+  @@index([ref_no])
+  @@index([email])
+  @@index([status])
+  @@index([created_at])
+}

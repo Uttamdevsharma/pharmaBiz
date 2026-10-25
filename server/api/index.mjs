@@ -129,9 +129,18 @@ var SettingsService = class {
       where: { key: SETTINGS_KEY }
     });
     let config = setting ? setting.value : DEFAULT_SETTINGS;
-    const plans = await prisma.subscriptionPlan.findMany({
+    const rawPlans = await prisma.subscriptionPlan.findMany({
       where: { isActive: true },
       orderBy: { price: "asc" }
+    });
+    const plans = rawPlans.map((p) => {
+      const feat = typeof p.features === "object" && p.features !== null ? p.features : {};
+      return {
+        ...p,
+        maxStaffPerBranch: feat.maxStaffPerBranch ?? (p.tier === "STARTER" ? 1 : p.tier === "GROWTH" ? 3 : 5),
+        maxTotalStaff: feat.maxTotalStaff ?? p.maxBranches * (feat.maxStaffPerBranch ?? 1),
+        yearlyDiscountPercent: feat.yearlyDiscountPercent ?? 17
+      };
     });
     return {
       ...config,
@@ -254,6 +263,77 @@ var SettingsService = class {
     });
     return setting.value;
   }
+  /**
+   * Get payment gateway settings for Super Admin
+   */
+  static async getPaymentGatewaySettings() {
+    const key = "payment_gateway_settings";
+    const setting = await prisma.platformSetting.findUnique({ where: { key } });
+    if (!setting) {
+      return {
+        manualBkash: {
+          enabled: true,
+          accountNumber: "01750000000",
+          accountType: "Personal",
+          instructions: "\u0985\u09A8\u09C1\u0997\u09CD\u09B0\u09B9 \u0995\u09B0\u09C7 \u098F\u0987 \u09AA\u09BE\u09B0\u09CD\u09B8\u09CB\u09A8\u09BE\u09B2 \u09AC\u09BF\u0995\u09BE\u09B6 \u09A8\u09BE\u09AE\u09CD\u09AC\u09BE\u09B0\u09C7 Send Money \u0995\u09B0\u09C1\u09A8\u0964 \u09B0\u09C7\u09AB\u09BE\u09B0\u09C7\u09A8\u09CD\u09B8 \u09B9\u09BF\u09B8\u09C7\u09AC\u09C7 \u0986\u09AA\u09A8\u09BE\u09B0 \u09AB\u09BE\u09B0\u09CD\u09AE\u09C7\u09B8\u09BF\u09B0 \u09A8\u09BE\u09AE \u09AC\u09CD\u09AF\u09AC\u09B9\u09BE\u09B0 \u0995\u09B0\u09C1\u09A8\u0964 \u099F\u09BE\u0995\u09BE \u09AA\u09BE\u09A0\u09BE\u09A8\u09CB\u09B0 \u09AA\u09B0 \u09AA\u09CD\u09B0\u09C7\u09B0\u0995\u09C7\u09B0 \u09A8\u09AE\u09CD\u09AC\u09B0, TrxID \u098F\u09AC\u0982 \u09B8\u09CD\u0995\u09CD\u09B0\u09BF\u09A8\u09B6\u099F \u0986\u09AA\u09B2\u09CB\u09A1 \u0995\u09B0\u09C7 \u09B8\u09BE\u09AC\u09AE\u09BF\u099F \u0995\u09B0\u09C1\u09A8\u0964"
+        },
+        sslcommerz: {
+          enabled: false,
+          storeId: "",
+          storePassword: "",
+          isSandbox: true
+        }
+      };
+    }
+    return setting.value;
+  }
+  /**
+   * Get public payment gateway settings (hide store passwords)
+   */
+  static async getPublicPaymentGateways() {
+    const full = await this.getPaymentGatewaySettings();
+    return {
+      manualBkash: {
+        enabled: !!full.manualBkash?.enabled,
+        accountNumber: full.manualBkash?.accountNumber || "",
+        accountType: full.manualBkash?.accountType || "Personal",
+        instructions: full.manualBkash?.instructions || ""
+      },
+      sslcommerz: {
+        enabled: !!full.sslcommerz?.enabled,
+        storeId: full.sslcommerz?.storeId || "",
+        isSandbox: full.sslcommerz?.isSandbox ?? true
+      }
+    };
+  }
+  /**
+   * Update payment gateway settings from Super Admin
+   */
+  static async updatePaymentGatewaySettings(data) {
+    const key = "payment_gateway_settings";
+    const current = await this.getPaymentGatewaySettings();
+    const value = {
+      manualBkash: {
+        enabled: data.manualBkash?.enabled !== void 0 ? !!data.manualBkash.enabled : current.manualBkash?.enabled,
+        accountNumber: data.manualBkash?.accountNumber !== void 0 ? String(data.manualBkash.accountNumber).trim() : current.manualBkash?.accountNumber,
+        accountType: data.manualBkash?.accountType || current.manualBkash?.accountType || "Personal",
+        instructions: data.manualBkash?.instructions !== void 0 ? String(data.manualBkash.instructions).trim() : current.manualBkash?.instructions
+      },
+      sslcommerz: {
+        enabled: data.sslcommerz?.enabled !== void 0 ? !!data.sslcommerz.enabled : current.sslcommerz?.enabled,
+        storeId: data.sslcommerz?.storeId !== void 0 ? String(data.sslcommerz.storeId).trim() : current.sslcommerz?.storeId,
+        storePassword: data.sslcommerz?.storePassword !== void 0 ? String(data.sslcommerz.storePassword).trim() : current.sslcommerz?.storePassword,
+        isSandbox: data.sslcommerz?.isSandbox !== void 0 ? !!data.sslcommerz.isSandbox : current.sslcommerz?.isSandbox
+      },
+      updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    const setting = await prisma.platformSetting.upsert({
+      where: { key },
+      create: { key, value },
+      update: { value }
+    });
+    return setting.value;
+  }
 };
 
 // src/app/lib/planLimits.ts
@@ -261,13 +341,13 @@ var CENTRAL_PLAN_DEFINITIONS = {
   STARTER: {
     tier: "STARTER",
     name: "Plan 1 - Starter",
-    price: 500,
+    price: 999,
     billingCycle: "MONTHLY",
-    maxBranches: 2,
+    maxBranches: 1,
     maxStaffPerBranch: 1,
-    maxTotalStaff: 2,
+    maxTotalStaff: 1,
     features: {
-      branches: "Max 2 Branches (Main + 1)",
+      branches: "1 Branch Included (Main Branch)",
       staff: "1 Staff per Branch",
       inventoryTransfers: false,
       regionalAdmin: false,
@@ -280,13 +360,13 @@ var CENTRAL_PLAN_DEFINITIONS = {
   GROWTH: {
     tier: "GROWTH",
     name: "Plan 2 - Growth",
-    price: 1500,
+    price: 1999,
     billingCycle: "MONTHLY",
-    maxBranches: 3,
+    maxBranches: 2,
     maxStaffPerBranch: 3,
-    maxTotalStaff: 9,
+    maxTotalStaff: 6,
     features: {
-      branches: "Max 3 Branches",
+      branches: "Max 2 Branches",
       staff: "3 Staff per Branch",
       inventoryTransfers: true,
       regionalAdmin: true,
@@ -299,14 +379,14 @@ var CENTRAL_PLAN_DEFINITIONS = {
   ENTERPRISE: {
     tier: "ENTERPRISE",
     name: "Plan 3 - Enterprise",
-    price: 3e3,
+    price: 2999,
     billingCycle: "MONTHLY",
-    maxBranches: 999,
-    maxStaffPerBranch: 999,
-    maxTotalStaff: 999,
+    maxBranches: 5,
+    maxStaffPerBranch: 5,
+    maxTotalStaff: 25,
     features: {
-      branches: "Unlimited Branches",
-      staff: "Unlimited Staff",
+      branches: "Max 5 Branches",
+      staff: "5 Staff per Branch",
       inventoryTransfers: true,
       regionalAdmin: true,
       customAudit: true,
@@ -350,18 +430,31 @@ async function checkCanAddBranch(tenantId) {
   if (!tenant) {
     return { allowed: false, currentBranches: 0, maxBranches: 0, message: "Tenant not found" };
   }
-  const activeSub = tenant.subscriptions && tenant.subscriptions[0];
-  const tier = activeSub?.plan?.tier || tenant.tier || "TRIAL";
-  const planConfig = getPlanConfig(tier);
-  const planName = activeSub?.plan?.name || planConfig.name;
-  const maxBranches = activeSub?.plan?.maxBranches ?? planConfig.maxBranches;
+  let plan = tenant.subscriptions?.[0]?.plan;
+  if (!plan) {
+    const latestSub = await prisma.subscription.findFirst({
+      where: { tenantId },
+      include: { plan: true },
+      orderBy: { createdAt: "desc" }
+    });
+    plan = latestSub?.plan;
+  }
+  if (!plan && tenant.tier) {
+    plan = await prisma.subscriptionPlan.findUnique({
+      where: { tier: tenant.tier }
+    });
+  }
+  const tier = plan?.tier || tenant.tier || "STARTER";
+  const fallbackConfig = getPlanConfig(tier);
+  const planName = plan?.name || fallbackConfig.name;
+  const maxBranches = Number(plan?.maxBranches ?? fallbackConfig.maxBranches);
   const currentBranches = tenant.branches ? tenant.branches.length : 0;
   if (currentBranches >= maxBranches) {
     return {
       allowed: false,
       currentBranches,
       maxBranches,
-      message: `Branch limit reached (${currentBranches}/${maxBranches}). Your ${planName} allows at most ${maxBranches >= 999 ? "Unlimited" : maxBranches} branch(es). Please upgrade your subscription to add more branches.`
+      message: `Branch limit reached (${currentBranches}/${maxBranches}). Your ${planName} allows at most ${maxBranches >= 999 ? "Unlimited" : maxBranches} branch store(s) (including the main branch). Please upgrade your subscription to add more branches.`
     };
   }
   return { allowed: true, currentBranches, maxBranches };
@@ -382,16 +475,30 @@ async function checkCanAddStaff(tenantId, branchId) {
   if (!tenant) {
     return { allowed: false, currentStaff: 0, maxStaff: 0, message: "Tenant not found" };
   }
-  const activeSub = tenant.subscriptions && tenant.subscriptions[0];
-  const tier = activeSub?.plan?.tier || tenant.tier || "TRIAL";
-  const planConfig = getPlanConfig(tier);
-  const planName = activeSub?.plan?.name || planConfig.name;
-  const planFeatures = typeof activeSub?.plan?.features === "object" && activeSub?.plan?.features !== null ? activeSub.plan.features : {};
+  let plan = tenant.subscriptions?.[0]?.plan;
+  if (!plan) {
+    const latestSub = await prisma.subscription.findFirst({
+      where: { tenantId },
+      include: { plan: true },
+      orderBy: { createdAt: "desc" }
+    });
+    plan = latestSub?.plan;
+  }
+  if (!plan && tenant.tier) {
+    plan = await prisma.subscriptionPlan.findUnique({
+      where: { tier: tenant.tier }
+    });
+  }
+  const tier = plan?.tier || tenant.tier || "STARTER";
+  const fallbackConfig = getPlanConfig(tier);
+  const planName = plan?.name || fallbackConfig.name;
+  const planFeatures = typeof plan?.features === "object" && plan?.features !== null ? plan.features : {};
+  const maxBranches = Number(plan?.maxBranches ?? fallbackConfig.maxBranches);
   const maxStaffPerBranch = Number(
-    planFeatures.maxStaffPerBranch ?? activeSub?.plan?.maxStaffPerBranch ?? planConfig.maxStaffPerBranch ?? 1
+    planFeatures.maxStaffPerBranch ?? plan?.maxStaffPerBranch ?? fallbackConfig.maxStaffPerBranch ?? 1
   );
   const maxTotalStaff = Number(
-    planFeatures.maxTotalStaff ?? activeSub?.plan?.maxTotalStaff ?? planConfig.maxTotalStaff ?? (tier === "TRIAL" ? 1 : 999)
+    planFeatures.maxTotalStaff ?? plan?.maxTotalStaff ?? fallbackConfig.maxTotalStaff ?? maxBranches * maxStaffPerBranch
   );
   const nonOwnerUsers = (tenant.users || []).filter(
     (u) => u.role !== "COMPANY_OWNER" && u.role !== "SUPER_ADMIN" && !u.username?.startsWith("deleted_")
@@ -428,6 +535,22 @@ async function seedSuperAdmin() {
   try {
     const adminEmail = "admin@gmail.com";
     const adminPassword = "admin1234";
+    try {
+      await prisma.$executeRawUnsafe(`ALTER TABLE "Tenant" ADD COLUMN IF NOT EXISTS "paymentMethod" TEXT DEFAULT 'MANUAL_BKASH';`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE "Tenant" ADD COLUMN IF NOT EXISTS "manualPaymentNumber" TEXT;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE "Tenant" ADD COLUMN IF NOT EXISTS "manualPaymentTrxId" TEXT;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE "Tenant" ADD COLUMN IF NOT EXISTS "manualPaymentDocUrl" TEXT;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE "Tenant" ADD COLUMN IF NOT EXISTS "manualPaymentDocPublicId" TEXT;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE "Tenant" ADD COLUMN IF NOT EXISTS "manualPaymentAmount" DECIMAL(12, 2);`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "resetPasswordOtp" TEXT;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "resetPasswordOtpExpires" TIMESTAMP;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE "Payment" ADD COLUMN IF NOT EXISTS "senderNumber" TEXT;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE "Payment" ADD COLUMN IF NOT EXISTS "screenshotUrl" TEXT;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE "Payment" ADD COLUMN IF NOT EXISTS "type" TEXT DEFAULT 'SUBSCRIPTION';`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE "Payment" ADD COLUMN IF NOT EXISTS "notes" TEXT;`);
+    } catch (colErr) {
+      console.warn("[Seed] Column verification note:", colErr.message);
+    }
     const existingSettings = await prisma.platformSetting.findUnique({
       where: { key: "landing_page_config" }
     });
@@ -439,6 +562,31 @@ async function seedSuperAdmin() {
         }
       });
       console.log("[Seed] Platform Landing Page and Theme Settings seeded.");
+    }
+    const existingPaymentSettings = await prisma.platformSetting.findUnique({
+      where: { key: "payment_gateway_settings" }
+    });
+    if (!existingPaymentSettings) {
+      await prisma.platformSetting.create({
+        data: {
+          key: "payment_gateway_settings",
+          value: {
+            manualBkash: {
+              enabled: true,
+              accountNumber: "01750000000",
+              accountType: "Personal",
+              instructions: "\u0985\u09A8\u09C1\u0997\u09CD\u09B0\u09B9 \u0995\u09B0\u09C7 \u098F\u0987 \u09AA\u09BE\u09B0\u09CD\u09B8\u09CB\u09A8\u09BE\u09B2 \u09AC\u09BF\u0995\u09BE\u09B6 \u09A8\u09BE\u09AE\u09CD\u09AC\u09BE\u09B0\u09C7 Send Money \u0995\u09B0\u09C1\u09A8\u0964 \u09B0\u09C7\u09AB\u09BE\u09B0\u09C7\u09A8\u09CD\u09B8 \u09B9\u09BF\u09B8\u09C7\u09AC\u09C7 \u0986\u09AA\u09A8\u09BE\u09B0 \u09AB\u09BE\u09B0\u09CD\u09AE\u09C7\u09B8\u09BF\u09B0 \u09A8\u09BE\u09AE \u09AC\u09CD\u09AF\u09AC\u09B9\u09BE\u09B0 \u0995\u09B0\u09C1\u09A8\u0964 \u099F\u09BE\u0995\u09BE \u09AA\u09BE\u09A0\u09BE\u09A8\u09CB\u09B0 \u09AA\u09B0 \u09AA\u09CD\u09B0\u09C7\u09B0\u0995\u09C7\u09B0 \u09A8\u09AE\u09CD\u09AC\u09B0, TrxID \u098F\u09AC\u0982 \u09B8\u09CD\u0995\u09CD\u09B0\u09BF\u09A8\u09B6\u099F \u0986\u09AA\u09B2\u09CB\u09A1 \u0995\u09B0\u09C7 \u09B8\u09BE\u09AC\u09AE\u09BF\u099F \u0995\u09B0\u09C1\u09A8\u0964"
+            },
+            sslcommerz: {
+              enabled: false,
+              storeId: "",
+              storePassword: "",
+              isSandbox: true
+            }
+          }
+        }
+      });
+      console.log("[Seed] Payment Gateway Settings seeded.");
     }
     const existingAdmin = await prisma.user.findFirst({
       where: {
@@ -808,7 +956,13 @@ var registerOwnerSchema = z.object({
   drugLicenseBackDocument: z.string().optional(),
   drugLicenseDocument: z.string().optional(),
   planId: z.string().optional(),
-  billingCycle: z.enum(["MONTHLY", "YEARLY"]).optional().default("MONTHLY")
+  billingCycle: z.enum(["MONTHLY", "YEARLY"]).optional().default("MONTHLY"),
+  // Payment information
+  paymentMethod: z.string().optional().default("MANUAL_BKASH"),
+  manualPaymentNumber: z.string().optional(),
+  manualPaymentTrxId: z.string().optional(),
+  manualPaymentDocument: z.string().optional()
+  // base64 screenshot
 });
 var verifyOtpSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -817,6 +971,14 @@ var verifyOtpSchema = z.object({
 });
 var resendOtpSchema = z.object({
   email: z.string().email("Invalid email address")
+});
+var forgotPasswordSchema = z.object({
+  email: z.string().email("Please provide a valid registered email address")
+});
+var resetPasswordSchema = z.object({
+  email: z.string().email("Please provide a valid registered email address"),
+  otpCode: z.string().min(4, "OTP code is required"),
+  newPassword: z.string().min(6, "Password must be at least 6 characters")
 });
 
 // src/modules/auth/auth.service.ts
@@ -2101,6 +2263,8 @@ var EmailService = class {
       console.error(`\u274C [EMAIL SERVICE] Invalid recipient email address provided for approval: "${to}"`);
       return { success: false, error: "Invalid recipient email" };
     }
+    const clientUrl = process.env.CLIENT_URL || "http://localhost:3001";
+    const loginUrl = `${clientUrl}/login?email=${encodeURIComponent(recipientEmail)}&approved=true`;
     const html = `
       <!DOCTYPE html>
       <html>
@@ -2116,21 +2280,21 @@ var EmailService = class {
             .highlight-msg { font-size: 14px; font-weight: 600; line-height: 1.6; color: #0f172a; background: #f0fdf4; border-left: 4px solid #10b981; border-radius: 0 12px 12px 0; padding: 14px 18px; margin: 16px 0; }
             .cred-box { background: #f8fafc; border: 2px dashed #0284c7; border-radius: 14px; padding: 18px 20px; margin: 18px 0; }
             .plan-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 14px; padding: 18px 20px; margin: 18px 0; }
-            .btn { display: inline-block; background: #0284c7; color: #ffffff !important; font-size: 15px; font-weight: 700; text-decoration: none; padding: 14px 32px; border-radius: 12px; margin-top: 10px; box-shadow: 0 4px 10px -2px rgba(2, 132, 199, 0.3); }
+            .btn { display: inline-block; background: #059669; color: #ffffff !important; font-size: 15px; font-weight: 700; text-decoration: none; padding: 14px 32px; border-radius: 12px; margin-top: 10px; box-shadow: 0 4px 10px -2px rgba(5, 150, 105, 0.3); }
             .footer { padding: 24px; text-align: center; font-size: 11px; color: #64748b; background: #f8fafc; border-top: 1px solid #e2e8f0; }
           </style>
         </head>
         <body>
           <div class="card">
             <div class="header">
-              <h1>Pharmacy Registration Approved! \u{1F389}</h1>
+              <h1>Pharmacy Registration & Payment Approved! \u{1F389}</h1>
               <p>PharmaBiz Multi-Branch Pharmacy SaaS</p>
             </div>
             <div class="body">
               <p style="font-size: 15px; margin-top: 0;">Dear <strong>${name || "Pharmacy Owner"}</strong>,</p>
               
               <div class="highlight-msg">
-                Your pharmacy registration for <strong>${companyName}</strong> has been approved by our compliance team. Use your login credentials below or click the <strong>1-Click Login</strong> button to access your workspace and complete payment.
+                Congratulations! Your pharmacy registration and payment verification for <strong>${companyName}</strong> have been successfully verified and approved. Your workspace is now <strong>fully active</strong>!
               </div>
 
               <!-- Login Credentials Card -->
@@ -2143,34 +2307,34 @@ var EmailService = class {
                 </div>
                 ${password ? `
                 <div style="font-size: 14px; color: #334155; margin-bottom: 8px;">
-                  Account Password: <strong style="color: #0f172a; font-family: monospace; font-size: 15px; background: #e2e8f0; padding: 2px 8px; border-radius: 6px;">${password}</strong>
+                  Registered Password: <strong style="color: #0f172a; font-family: monospace; font-size: 15px; background: #e2e8f0; padding: 2px 8px; border-radius: 6px;">${password}</strong>
                 </div>
-                ` : ""}
+                ` : `
+                <div style="font-size: 13px; color: #64748b; margin-bottom: 8px;">
+                  Password: <em>(The secure password you chosen during registration)</em>
+                </div>
+                `}
                 <div style="font-size: 11px; color: #64748b; line-height: 1.4; margin-top: 8px;">
-                  \u26A1 <strong>1-Click Access:</strong> You can click the button below to log in directly without typing your password. Please save your password securely for future logins.
+                  \u{1F4A1} Forgot your password? You can reset it anytime from the login page using email OTP verification.
                 </div>
               </div>
 
               <div class="plan-box">
-                <div style="font-size: 11px; font-weight: 700; color: #166534; text-transform: uppercase; margin-bottom: 4px;">Approved Subscription Details</div>
+                <div style="font-size: 11px; font-weight: 700; color: #166534; text-transform: uppercase; margin-bottom: 4px;">Active Subscription Plan</div>
                 <div style="font-size: 18px; font-weight: 800; color: #0f172a;">${planName} (${planTier})</div>
                 <div style="font-size: 13px; color: #475569; margin-top: 6px;">
-                  Billing Cycle: <strong>${billingCycle}</strong> &bull; Plan Price: <strong>\u09F3${Math.max(0, price - 5e3).toLocaleString()}</strong> &bull; One-Time License Fee: <strong>\u09F35,000</strong>
-                </div>
-                <div style="font-size: 15px; color: #059669; font-weight: 800; margin-top: 8px;">
-                  Total Payable: \u09F3${price.toLocaleString()}
+                  Billing Cycle: <strong>${billingCycle}</strong> &bull; Status: <strong style="color: #059669;">ACTIVE</strong>
                 </div>
               </div>
 
               <div style="text-align: center; margin: 26px 0 16px 0;">
-                <a href="${paymentUrl}" class="btn" target="_blank">
-                  1-Click Login & Complete Payment (\u09F3${price.toLocaleString()}) &rarr;
+                <a href="${loginUrl}" class="btn" target="_blank">
+                  Go to Dashboard &rarr;
                 </a>
               </div>
 
-              <p style="font-size: 12px; color: #64748b; line-height: 1.5; margin-top: 24px;">
-                Direct 1-Click Access Link: <br />
-                <a href="${paymentUrl}" style="color: #0284c7; word-break: break-all;">${paymentUrl}</a>
+              <p style="font-size: 12px; color: #64748b; line-height: 1.5; margin-top: 24px; text-align: center;">
+                Login Portal: <a href="${loginUrl}" style="color: #059669; word-break: break-all;">${loginUrl}</a>
               </p>
             </div>
             <div class="footer">
@@ -2395,6 +2559,153 @@ var EmailService = class {
       return { success: true, messageId: `local_${Date.now()}` };
     } catch (err) {
       console.error(`\u274C [EMAIL SERVICE] Failed to send Expiry Reminder email to ${recipientEmail}:`, err.message);
+      return { success: false, error: err.message };
+    }
+  }
+  /**
+   * Send 6-digit Password Reset OTP Email
+   */
+  static async sendPasswordResetOtpEmail(payload) {
+    const { to, name, otpCode } = payload;
+    const recipientEmail = (to || "").trim().toLowerCase();
+    const senderEmail = getSenderAddress();
+    const subject = `[PharmaBiz] Password Reset Code: ${otpCode}`;
+    if (!recipientEmail || !recipientEmail.includes("@")) {
+      return { success: false, error: "Invalid recipient email" };
+    }
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px; color: #0f172a; }
+            .card { max-width: 520px; margin: 0 auto; background: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
+            .header { background: #0284c7; padding: 28px; text-align: center; color: #ffffff; }
+            .header h1 { margin: 0; font-size: 20px; font-weight: 700; }
+            .body { padding: 28px; text-align: center; }
+            .otp-box { background: #f0f9ff; border: 2px dashed #0284c7; border-radius: 12px; padding: 18px; margin: 24px 0; display: inline-block; min-width: 240px; }
+            .otp-code { font-family: monospace; font-size: 32px; font-weight: 800; letter-spacing: 6px; color: #0284c7; }
+            .footer { padding: 20px; text-align: center; font-size: 11px; color: #64748b; background: #f8fafc; border-top: 1px solid #e2e8f0; }
+          </style>
+        </head>
+        <body>
+          <div class="card">
+            <div class="header">
+              <h1>Password Reset Request</h1>
+            </div>
+            <div class="body">
+              <p style="font-size: 14px; margin-top: 0; color: #334155;">Hello <strong>${name || "User"}</strong>,</p>
+              <p style="font-size: 13px; color: #64748b; line-height: 1.5;">
+                We received a request to reset your password for your PharmaBiz account. Use the verification code below to set a new password:
+              </p>
+              <div class="otp-box">
+                <div class="otp-code">${otpCode}</div>
+                <div style="font-size: 11px; color: #64748b; margin-top: 8px;">Code expires in 15 minutes</div>
+              </div>
+              <p style="font-size: 12px; color: #94a3b8; line-height: 1.4;">
+                If you did not request a password reset, please safely ignore this email. Your password will remain unchanged.
+              </p>
+            </div>
+            <div class="footer">
+              &copy; ${(/* @__PURE__ */ new Date()).getFullYear()} PharmaBiz Security &bull; Automated Account Recovery
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+    try {
+      const transporter = getMailTransporter();
+      if (transporter) {
+        const info = await transporter.sendMail({
+          from: `"PharmaBiz Security" <${senderEmail}>`,
+          to: recipientEmail,
+          subject,
+          html
+        });
+        return { success: true, messageId: info.messageId };
+      }
+      return { success: true, messageId: `local_${Date.now()}` };
+    } catch (err) {
+      console.error(`\u274C [EMAIL SERVICE] Failed to send password reset OTP to ${recipientEmail}:`, err.message);
+      return { success: false, error: err.message };
+    }
+  }
+  /**
+   * Send Renewal / Upgrade Approval Email
+   */
+  static async sendRenewalApprovalEmail(payload) {
+    const { to, name, companyName, planName, planTier, billingCycle, price, endDate } = payload;
+    const recipientEmail = (to || "").trim().toLowerCase();
+    const senderEmail = getSenderAddress();
+    const formattedEnd = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(endDate);
+    const subject = `[PharmaBiz] Subscription Plan Upgraded/Renewed Successfully - ${companyName}`;
+    if (!recipientEmail || !recipientEmail.includes("@")) {
+      return { success: false, error: "Invalid recipient email" };
+    }
+    const clientUrl = process.env.CLIENT_URL || "http://localhost:3001";
+    const dashUrl = `${clientUrl}/dashboard`;
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px; color: #0f172a; }
+            .card { max-width: 540px; margin: 0 auto; background: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
+            .header { background: #059669; padding: 28px; text-align: center; color: #ffffff; }
+            .header h1 { margin: 0; font-size: 20px; font-weight: 700; }
+            .body { padding: 28px; }
+            .info-box { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px; padding: 16px; margin: 18px 0; }
+            .btn { display: inline-block; background: #059669; color: #ffffff !important; font-size: 14px; font-weight: 700; text-decoration: none; padding: 12px 28px; border-radius: 10px; margin-top: 10px; }
+            .footer { padding: 20px; text-align: center; font-size: 11px; color: #64748b; background: #f8fafc; border-top: 1px solid #e2e8f0; }
+          </style>
+        </head>
+        <body>
+          <div class="card">
+            <div class="header">
+              <h1>Subscription Plan Upgraded / Renewed \u{1F389}</h1>
+            </div>
+            <div class="body">
+              <p style="font-size: 14px; margin-top: 0; color: #334155;">Dear <strong>${name || "Pharmacy Owner"}</strong>,</p>
+              <p style="font-size: 13px; color: #475569; line-height: 1.5;">
+                Your subscription payment for <strong>${companyName}</strong> has been approved by the administration. Your plan has been successfully upgraded/renewed.
+              </p>
+              <div class="info-box">
+                <div style="font-size: 11px; font-weight: 700; color: #166534; text-transform: uppercase;">Active Plan</div>
+                <div style="font-size: 18px; font-weight: 800; color: #0f172a; margin-top: 2px;">${planName} (${planTier})</div>
+                <div style="font-size: 13px; color: #334155; margin-top: 6px;">
+                  Billing: <strong>${billingCycle}</strong> &bull; Amount: <strong>\u09F3${price.toLocaleString()}</strong>
+                </div>
+                <div style="font-size: 13px; color: #059669; font-weight: 700; margin-top: 6px;">
+                  Valid Until: ${formattedEnd}
+                </div>
+              </div>
+              <div style="text-align: center; margin: 20px 0 10px 0;">
+                <a href="${dashUrl}" class="btn">Go to Dashboard &rarr;</a>
+              </div>
+            </div>
+            <div class="footer">
+              &copy; ${(/* @__PURE__ */ new Date()).getFullYear()} PharmaBiz SaaS Platform &bull; Automated Subscription Management
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+    try {
+      const transporter = getMailTransporter();
+      if (transporter) {
+        const info = await transporter.sendMail({
+          from: `"PharmaBiz Subscriptions" <${senderEmail}>`,
+          to: recipientEmail,
+          subject,
+          html
+        });
+        return { success: true, messageId: info.messageId };
+      }
+      return { success: true, messageId: `local_${Date.now()}` };
+    } catch (err) {
+      console.error(`\u274C [EMAIL SERVICE] Failed to send Renewal Approval email to ${recipientEmail}:`, err.message);
       return { success: false, error: err.message };
     }
   }
@@ -2988,6 +3299,7 @@ var AuthService = class {
     let tradeBackUpload = null;
     let drugDocUpload = { secureUrl: "", publicId: "" };
     let drugBackUpload = null;
+    let paymentUpload = null;
     try {
       const uploadTasks = [
         UploadService.uploadImage(nidFront, "pharmacy_saas/documents/nid_front"),
@@ -2999,13 +3311,19 @@ var AuthService = class {
       else uploadTasks.push(Promise.resolve(null));
       if (drugBack) uploadTasks.push(UploadService.uploadImage(drugBack, "pharmacy_saas/documents/drug_back"));
       else uploadTasks.push(Promise.resolve(null));
-      const [nFront, nBack, tDoc, dDoc, tBack, dBack] = await Promise.all(uploadTasks);
+      if (data.manualPaymentDocument) {
+        uploadTasks.push(UploadService.uploadImage(data.manualPaymentDocument, "pharmacy_saas/documents/payments"));
+      } else {
+        uploadTasks.push(Promise.resolve(null));
+      }
+      const [nFront, nBack, tDoc, dDoc, tBack, dBack, pUpload] = await Promise.all(uploadTasks);
       nidFrontUpload = nFront;
       nidBackUpload = nBack;
       tradeDocUpload = tDoc;
       drugDocUpload = dDoc;
       tradeBackUpload = tBack;
       drugBackUpload = dBack;
+      paymentUpload = pUpload;
     } catch (uploadErr) {
       console.error("[registerOwner] Document upload failed:", uploadErr);
       throw new Error(`Document upload error: ${uploadErr.message || "Failed to upload regulatory documents."}`);
@@ -3023,17 +3341,23 @@ var AuthService = class {
         where: { isActive: true }
       });
     }
+    const isTrialPlan = plan?.tier === "TRIAL" || !!plan?.features?.isTrial || data.paymentMethod === "FREE_TRIAL";
+    const trialDays = plan?.features?.trialDays ? Number(plan.features.trialDays) : 7;
+    const basePrice = isTrialPlan ? 0 : Number(plan?.price || 1500);
+    const planPrice = isTrialPlan ? 0 : data.billingCycle === "YEARLY" ? Math.round(basePrice * 12 * 0.85) : basePrice;
+    const INITIAL_LICENSE_FEE = isTrialPlan ? 0 : 5e3;
+    const totalPayable = isTrialPlan ? 0 : INITIAL_LICENSE_FEE + planPrice;
     const otpCode = Math.floor(1e5 + Math.random() * 9e5).toString();
     const otpExpiresAt = new Date(Date.now() + 15 * 60 * 1e3);
     const passwordHash = await bcrypt2.hash(data.password, 10);
-    const durationDays = data.billingCycle === "YEARLY" ? 365 : 30;
+    const durationDays = isTrialPlan ? trialDays : data.billingCycle === "YEARLY" ? 365 : 30;
     const startDate = /* @__PURE__ */ new Date();
     const endDate = new Date(startDate.getTime() + durationDays * 24 * 60 * 60 * 1e3);
     const result = await prisma.$transaction(async (tx) => {
       const tenant = await tx.tenant.create({
         data: {
           name: data.companyName,
-          tier: plan ? plan.tier : "STARTER",
+          tier: isTrialPlan ? "TRIAL" : plan ? plan.tier : "STARTER",
           email: normalizedEmail,
           phone: data.phone,
           address: data.address || "HQ Location",
@@ -3062,6 +3386,13 @@ var AuthService = class {
           drugLicenseFrontPublicId: drugDocUpload.publicId,
           drugLicenseBackUrl: drugBackUpload?.secureUrl || null,
           drugLicenseBackPublicId: drugBackUpload?.publicId || null,
+          // Payment details
+          paymentMethod: isTrialPlan ? "FREE_TRIAL" : data.paymentMethod || "MANUAL_BKASH",
+          manualPaymentNumber: isTrialPlan ? null : data.manualPaymentNumber || null,
+          manualPaymentTrxId: isTrialPlan ? null : data.manualPaymentTrxId || null,
+          manualPaymentDocUrl: isTrialPlan ? null : paymentUpload?.secureUrl || null,
+          manualPaymentDocPublicId: isTrialPlan ? null : paymentUpload?.publicId || null,
+          manualPaymentAmount: totalPayable,
           // OTP
           otpCode,
           otpExpiresAt,
@@ -3106,6 +3437,32 @@ var AuthService = class {
           plan: true
         }
       });
+      if (data.manualPaymentTrxId || data.manualPaymentNumber || paymentUpload) {
+        await tx.payment.create({
+          data: {
+            tenantId: tenant.id,
+            subscriptionId: subscription.id,
+            amount: totalPayable,
+            currency: "BDT",
+            tranId: data.manualPaymentTrxId ? `BKASH-${data.manualPaymentTrxId.toUpperCase()}-${Date.now().toString().slice(-4)}` : `REG-${Date.now()}`,
+            status: "PENDING",
+            paymentMethod: data.paymentMethod || "MANUAL_BKASH",
+            senderNumber: data.manualPaymentNumber || null,
+            screenshotUrl: paymentUpload?.secureUrl || null,
+            type: "INITIAL_REGISTRATION",
+            bankTranId: data.manualPaymentNumber || null,
+            rawResponse: {
+              trxId: data.manualPaymentTrxId,
+              senderNumber: data.manualPaymentNumber,
+              screenshotUrl: paymentUpload?.secureUrl,
+              planTier: plan?.tier,
+              planName: plan?.name,
+              billingCycle: data.billingCycle || "MONTHLY",
+              totalPayable
+            }
+          }
+        });
+      }
       return { tenant, user, mainBranch, subscription };
     });
     ProductService.seedDefaultCatalogVariants(result.tenant.id).catch((err) => {
@@ -3320,7 +3677,96 @@ var AuthService = class {
       isActive,
       isRejected,
       isPendingApproval,
-      isPendingOtp
+      isPendingOtp,
+      // Manual Payment Info
+      paymentMethod: tenant.paymentMethod || "MANUAL_BKASH",
+      manualPaymentNumber: tenant.manualPaymentNumber,
+      manualPaymentTrxId: tenant.manualPaymentTrxId,
+      manualPaymentDocUrl: tenant.manualPaymentDocUrl,
+      manualPaymentAmount: tenant.manualPaymentAmount ? Number(tenant.manualPaymentAmount) : null
+    };
+  }
+  /**
+   * Request Password Reset OTP
+   */
+  static async forgotPassword(email) {
+    const normalizedEmail = email.trim().toLowerCase();
+    const user = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { email: { equals: normalizedEmail, mode: "insensitive" } },
+          { username: { equals: normalizedEmail, mode: "insensitive" } }
+        ]
+      },
+      include: { tenant: true }
+    });
+    if (!user) {
+      throw new Error("No registered account found with this email address.");
+    }
+    const otpCode = Math.floor(1e5 + Math.random() * 9e5).toString();
+    const otpExpires = new Date(Date.now() + 15 * 60 * 1e3);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        resetPasswordOtp: otpCode,
+        resetPasswordOtpExpires: otpExpires
+      }
+    });
+    await EmailService.sendPasswordResetOtpEmail({
+      to: user.email || normalizedEmail,
+      name: user.name || user.username,
+      otpCode
+    });
+    return {
+      success: true,
+      message: "A 6-digit password reset OTP has been sent to your registered email address."
+    };
+  }
+  /**
+   * Reset Password with OTP
+   */
+  static async resetPassword(email, otpCode, newPassword) {
+    const normalizedEmail = email.trim().toLowerCase();
+    const cleanOtp = otpCode.replace(/\D/g, "").trim();
+    const user = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { email: { equals: normalizedEmail, mode: "insensitive" } },
+          { username: { equals: normalizedEmail, mode: "insensitive" } }
+        ]
+      },
+      include: { tenant: true }
+    });
+    if (!user) {
+      throw new Error("No account found with this email address.");
+    }
+    if (!user.resetPasswordOtp || user.resetPasswordOtp !== cleanOtp) {
+      throw new Error("Invalid OTP code. Please check your email and enter the correct 6-digit code.");
+    }
+    if (user.resetPasswordOtpExpires && new Date(user.resetPasswordOtpExpires) < /* @__PURE__ */ new Date()) {
+      throw new Error("The OTP code has expired. Please request a new one.");
+    }
+    const passwordHash = await bcrypt2.hash(newPassword, 10);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash,
+        resetPasswordOtp: null,
+        resetPasswordOtpExpires: null
+      }
+    });
+    if (user.tenantId) {
+      try {
+        await prisma.tenant.update({
+          where: { id: user.tenantId },
+          data: { tempPassword: newPassword }
+        });
+      } catch (e) {
+      }
+    }
+    return {
+      success: true,
+      message: "Password reset successful! You can now log in with your new password."
     };
   }
 };
@@ -3473,6 +3919,54 @@ var AuthController = class {
       res.status(500).json({ success: false, message: error.message });
     }
   }
+  /**
+   * POST /api/auth/forgot-password
+   */
+  static async forgotPassword(req, res) {
+    try {
+      const parsedBody = forgotPasswordSchema.parse(req.body);
+      const result = await AuthService.forgotPassword(parsedBody.email);
+      res.status(200).json({ success: true, message: result.message });
+    } catch (error) {
+      if (error.name === "ZodError") {
+        res.status(400).json({
+          success: false,
+          message: error.errors[0]?.message || "Validation failed"
+        });
+        return;
+      }
+      res.status(400).json({
+        success: false,
+        message: error.message || "Failed to process forgot password request"
+      });
+    }
+  }
+  /**
+   * POST /api/auth/reset-password
+   */
+  static async resetPassword(req, res) {
+    try {
+      const parsedBody = resetPasswordSchema.parse(req.body);
+      const result = await AuthService.resetPassword(
+        parsedBody.email,
+        parsedBody.otpCode,
+        parsedBody.newPassword
+      );
+      res.status(200).json({ success: true, message: result.message });
+    } catch (error) {
+      if (error.name === "ZodError") {
+        res.status(400).json({
+          success: false,
+          message: error.errors[0]?.message || "Validation failed"
+        });
+        return;
+      }
+      res.status(400).json({
+        success: false,
+        message: error.message || "Failed to reset password"
+      });
+    }
+  }
 };
 
 // src/middleware/authenticate.ts
@@ -3513,6 +4007,8 @@ router.post("/login", AuthController.login);
 router.post("/register-owner", AuthController.registerOwner);
 router.post("/verify-otp", AuthController.verifyOtp);
 router.post("/resend-otp", AuthController.resendOtp);
+router.post("/forgot-password", AuthController.forgotPassword);
+router.post("/reset-password", AuthController.resetPassword);
 router.get("/verification-status", AuthController.getVerificationStatus);
 router.get("/me", authenticate, AuthController.getMe);
 
@@ -3582,18 +4078,24 @@ var SuperAdminService = class _SuperAdminService {
     if (existing) {
       throw new Error(`A subscription plan already exists for tier ${data.tier}. Please update the existing plan.`);
     }
+    const isTrial = data.isTrial || data.tier === "TRIAL";
+    const isCustom = data.isCustom || false;
     const feat = {
       ...data.features || {},
       ...data.maxStaffPerBranch !== void 0 && { maxStaffPerBranch: data.maxStaffPerBranch },
       ...data.maxTotalStaff !== void 0 && { maxTotalStaff: data.maxTotalStaff },
       ...data.trialDays !== void 0 && { trialDays: data.trialDays },
-      ...data.yearlyDiscountPercent !== void 0 && { yearlyDiscountPercent: data.yearlyDiscountPercent }
+      ...data.yearlyDiscountPercent !== void 0 && { yearlyDiscountPercent: data.yearlyDiscountPercent },
+      isTrial,
+      isCustom,
+      ...data.whatsappNumber !== void 0 && { whatsappNumber: data.whatsappNumber },
+      ...data.customMessage !== void 0 && { customMessage: data.customMessage }
     };
     return await prisma.subscriptionPlan.create({
       data: {
         name: data.name,
         tier: data.tier,
-        price: data.price,
+        price: isTrial ? 0 : data.price,
         billingCycle: data.billingCycle,
         maxBranches: data.maxBranches,
         features: feat,
@@ -3613,11 +4115,17 @@ var SuperAdminService = class _SuperAdminService {
     return plans.map((p) => {
       const feat = typeof p.features === "object" && p.features !== null ? p.features : {};
       const fallback = CENTRAL_PLAN_DEFINITIONS[p.tier] || CENTRAL_PLAN_DEFINITIONS.STARTER;
+      const isTrial = feat.isTrial ?? p.tier === "TRIAL";
+      const isCustom = feat.isCustom ?? false;
       return {
         ...p,
+        isTrial,
+        isCustom,
+        whatsappNumber: feat.whatsappNumber || "",
+        customMessage: feat.customMessage || "",
         maxStaffPerBranch: feat.maxStaffPerBranch ?? fallback.maxStaffPerBranch ?? 1,
         maxTotalStaff: feat.maxTotalStaff ?? fallback.maxTotalStaff ?? p.maxBranches * (feat.maxStaffPerBranch ?? 1),
-        trialDays: feat.trialDays ?? (p.tier === "TRIAL" ? 7 : 0),
+        trialDays: feat.trialDays ?? (isTrial ? 7 : 0),
         yearlyDiscountPercent: feat.yearlyDiscountPercent ?? 0
       };
     });
@@ -3642,11 +4150,17 @@ var SuperAdminService = class _SuperAdminService {
     }
     const feat = typeof plan.features === "object" && plan.features !== null ? plan.features : {};
     const fallback = CENTRAL_PLAN_DEFINITIONS[plan.tier] || CENTRAL_PLAN_DEFINITIONS.STARTER;
+    const isTrial = feat.isTrial ?? plan.tier === "TRIAL";
+    const isCustom = feat.isCustom ?? false;
     return {
       ...plan,
+      isTrial,
+      isCustom,
+      whatsappNumber: feat.whatsappNumber || "",
+      customMessage: feat.customMessage || "",
       maxStaffPerBranch: feat.maxStaffPerBranch ?? fallback.maxStaffPerBranch ?? 1,
       maxTotalStaff: feat.maxTotalStaff ?? fallback.maxTotalStaff ?? plan.maxBranches * (feat.maxStaffPerBranch ?? 1),
-      trialDays: feat.trialDays ?? (plan.tier === "TRIAL" ? 7 : 0),
+      trialDays: feat.trialDays ?? (isTrial ? 7 : 0),
       yearlyDiscountPercent: feat.yearlyDiscountPercent ?? 0
     };
   }
@@ -3656,19 +4170,25 @@ var SuperAdminService = class _SuperAdminService {
       throw new Error("Subscription plan not found");
     }
     const currentFeatures = typeof plan.features === "object" && plan.features !== null ? plan.features : {};
+    const isTrial = data.isTrial !== void 0 ? data.isTrial : plan.tier === "TRIAL" || !!currentFeatures.isTrial;
+    const isCustom = data.isCustom !== void 0 ? data.isCustom : currentFeatures.isCustom || false;
     const updatedFeatures = {
       ...currentFeatures,
       ...data.features || {},
       ...data.maxStaffPerBranch !== void 0 && { maxStaffPerBranch: data.maxStaffPerBranch },
       ...data.maxTotalStaff !== void 0 && { maxTotalStaff: data.maxTotalStaff },
       ...data.trialDays !== void 0 && { trialDays: data.trialDays },
-      ...data.yearlyDiscountPercent !== void 0 && { yearlyDiscountPercent: data.yearlyDiscountPercent }
+      ...data.yearlyDiscountPercent !== void 0 && { yearlyDiscountPercent: data.yearlyDiscountPercent },
+      ...data.isTrial !== void 0 && { isTrial: data.isTrial },
+      ...data.isCustom !== void 0 && { isCustom: data.isCustom },
+      ...data.whatsappNumber !== void 0 && { whatsappNumber: data.whatsappNumber },
+      ...data.customMessage !== void 0 && { customMessage: data.customMessage }
     };
     return await prisma.subscriptionPlan.update({
       where: { id },
       data: {
         ...data.name && { name: data.name },
-        ...data.price !== void 0 && { price: data.price },
+        ...data.price !== void 0 && { price: isTrial ? 0 : data.price },
         ...data.billingCycle && { billingCycle: data.billingCycle },
         ...data.maxBranches !== void 0 && { maxBranches: data.maxBranches },
         features: updatedFeatures,
@@ -4801,6 +5321,10 @@ var SuperAdminService = class _SuperAdminService {
             orderBy: { createdAt: "desc" },
             take: 1,
             include: { plan: true }
+          },
+          payments: {
+            orderBy: { createdAt: "desc" },
+            take: 1
           }
         }
       }),
@@ -4814,6 +5338,7 @@ var SuperAdminService = class _SuperAdminService {
     const formatted = tenants.map((t) => {
       const owner = t.users?.[0] || null;
       const latestSub = t.subscriptions?.[0] || null;
+      const latestPayment = t.payments?.[0] || null;
       return {
         id: t.id,
         name: t.name,
@@ -4844,6 +5369,12 @@ var SuperAdminService = class _SuperAdminService {
         rejectionReason: t.rejectionReason,
         pendingPlanId: t.pendingPlanId,
         pendingBillingCycle: t.pendingBillingCycle,
+        paymentMethod: t.paymentMethod || "MANUAL_BKASH",
+        manualPaymentNumber: t.manualPaymentNumber,
+        manualPaymentTrxId: t.manualPaymentTrxId,
+        manualPaymentDocUrl: t.manualPaymentDocUrl,
+        manualPaymentAmount: t.manualPaymentAmount ? Number(t.manualPaymentAmount) : null,
+        payment: latestPayment,
         createdAt: t.createdAt,
         owner,
         subscription: latestSub
@@ -4910,18 +5441,21 @@ var SuperAdminService = class _SuperAdminService {
     if (!plan) {
       plan = await prisma.subscriptionPlan.findFirst({ where: { tier: "STARTER" } }) || await prisma.subscriptionPlan.findFirst();
     }
+    const isTrialPlan = plan.tier === "TRIAL" || !!plan.features?.isTrial || tenant.paymentMethod === "FREE_TRIAL";
+    const trialDays = plan.features?.trialDays ? Number(plan.features.trialDays) : 7;
     const billingCycle = data?.billingCycle || tenant.pendingBillingCycle || "MONTHLY";
-    const durationDays = billingCycle === "YEARLY" ? 365 : 30;
+    const durationDays = isTrialPlan ? trialDays : billingCycle === "YEARLY" ? 365 : 30;
     const startDate = /* @__PURE__ */ new Date();
     const endDate = new Date(startDate.getTime() + durationDays * 24 * 60 * 60 * 1e3);
-    const basePrice = Number(plan.price);
-    const planAmount = billingCycle === "YEARLY" ? Math.round(basePrice * 12 * 0.85) : basePrice;
-    const INITIAL_LICENSE_FEE = 5e3;
+    const basePrice = isTrialPlan ? 0 : Number(plan.price);
+    const planAmount = isTrialPlan ? 0 : billingCycle === "YEARLY" ? Math.round(basePrice * 12 * 0.85) : basePrice;
+    const INITIAL_LICENSE_FEE = isTrialPlan ? 0 : 5e3;
     const amount = planAmount + INITIAL_LICENSE_FEE;
     const updatedTenant = await prisma.tenant.update({
       where: { id: tenant.id },
       data: {
-        verificationStatus: "APPROVED_PENDING_PAYMENT",
+        verificationStatus: "ACTIVE",
+        isActive: true,
         approvedAt: /* @__PURE__ */ new Date(),
         approvedBy: adminUserId,
         approvalNotes: data?.notes || "Approved by Super Admin",
@@ -4936,7 +5470,7 @@ var SuperAdminService = class _SuperAdminService {
         where: { id: subscription.id },
         data: {
           planId: plan.id,
-          status: "PENDING",
+          status: "ACTIVE",
           startDate,
           endDate
         },
@@ -4947,13 +5481,23 @@ var SuperAdminService = class _SuperAdminService {
         data: {
           tenantId: tenant.id,
           planId: plan.id,
-          status: "PENDING",
+          status: "ACTIVE",
           startDate,
           endDate
         },
         include: { plan: true }
       });
     }
+    await prisma.payment.updateMany({
+      where: {
+        tenantId: tenant.id,
+        status: "PENDING"
+      },
+      data: {
+        status: "VALIDATED",
+        subscriptionId: subscription.id
+      }
+    });
     let plainPassword = tenant.tempPassword;
     if (!plainPassword) {
       plainPassword = `Pharma@${Math.floor(1e3 + Math.random() * 9e3)}`;
@@ -4974,10 +5518,10 @@ var SuperAdminService = class _SuperAdminService {
       username: owner.username,
       name: owner.name,
       email: owner.email,
-      verificationStatus: "APPROVED_PENDING_PAYMENT"
+      verificationStatus: "ACTIVE"
     };
     const magicToken = jwt3.sign(magicPayload, secret, { expiresIn: "30d" });
-    const paymentUrl = `${clientUrl}/verification-status?tenantId=${tenant.id}&email=${encodeURIComponent(owner.email || tenant.email || "")}&token=${encodeURIComponent(magicToken)}`;
+    const loginUrl = `${clientUrl}/login?email=${encodeURIComponent(owner.email || tenant.email || "")}&approved=true`;
     const emailRecipient = owner.email || tenant.email;
     if (emailRecipient) {
       await EmailService.sendApprovalEmail({
@@ -4988,16 +5532,16 @@ var SuperAdminService = class _SuperAdminService {
         planTier: plan.tier,
         billingCycle,
         price: amount,
-        paymentUrl,
+        paymentUrl: loginUrl,
         password: plainPassword
       });
     }
     return {
       success: true,
-      message: `Pharmacy "${tenant.name}" application approved. Approval email with payment instructions dispatched to ${emailRecipient}.`,
+      message: `Pharmacy "${tenant.name}" application approved & activated. Approval email dispatched to ${emailRecipient}.`,
       tenant: updatedTenant,
       subscription,
-      paymentUrl
+      loginUrl
     };
   }
   /**
@@ -5040,6 +5584,188 @@ var SuperAdminService = class _SuperAdminService {
       success: true,
       message: `Pharmacy application rejected and notification sent to ${emailRecipient}.`,
       tenant: updatedTenant
+    };
+  }
+  /**
+   * Get pending subscription renewals & upgrades (Tab 2)
+   */
+  static async getPendingRenewals() {
+    const pendingPayments = await prisma.payment.findMany({
+      where: {
+        status: "PENDING",
+        type: { in: ["RENEWAL", "UPGRADE"] }
+      },
+      include: {
+        tenant: {
+          include: {
+            users: { where: { role: "COMPANY_OWNER" }, take: 1 },
+            subscriptions: {
+              orderBy: { createdAt: "desc" },
+              include: { plan: true },
+              take: 1
+            }
+          }
+        }
+      },
+      orderBy: { createdAt: "desc" }
+    });
+    return pendingPayments.map((p) => {
+      const raw = p.rawResponse || {};
+      const currentSub = p.tenant?.subscriptions?.[0] || null;
+      return {
+        id: p.id,
+        tenantId: p.tenantId,
+        pharmacyName: p.tenant?.name,
+        pharmacyEmail: p.tenant?.email,
+        pharmacyPhone: p.tenant?.phone,
+        ownerName: p.tenant?.users?.[0]?.name,
+        currentTier: p.tenant?.tier,
+        currentPlanName: currentSub?.plan?.name || p.tenant?.tier,
+        currentEndDate: currentSub?.endDate || null,
+        requestedPlanId: raw.planId || raw.targetPlanId,
+        requestedPlanTier: raw.planTier,
+        requestedPlanName: raw.planName,
+        requestedBillingCycle: raw.billingCycle || "MONTHLY",
+        amount: Number(p.amount),
+        senderNumber: p.senderNumber || p.bankTranId,
+        trxId: p.tranId?.replace(/^BKASH-/, "").replace(/-\d+$/, "") || raw.trxId,
+        screenshotUrl: p.screenshotUrl || raw.screenshotUrl,
+        paymentMethod: p.paymentMethod || "MANUAL_BKASH",
+        createdAt: p.createdAt
+      };
+    });
+  }
+  /**
+   * Approve subscription renewal or upgrade
+   */
+  static async approveRenewal(paymentId, adminUserId) {
+    const payment = await prisma.payment.findUnique({
+      where: { id: paymentId },
+      include: {
+        tenant: {
+          include: {
+            users: { where: { role: "COMPANY_OWNER" }, take: 1 },
+            subscriptions: {
+              orderBy: { createdAt: "desc" },
+              include: { plan: true },
+              take: 1
+            }
+          }
+        }
+      }
+    });
+    if (!payment || payment.status !== "PENDING") {
+      throw new Error("Pending renewal payment record not found.");
+    }
+    const raw = payment.rawResponse || {};
+    const targetPlanId = raw.planId || raw.targetPlanId;
+    let targetPlan = null;
+    if (targetPlanId) {
+      targetPlan = await prisma.subscriptionPlan.findUnique({
+        where: { id: targetPlanId }
+      });
+    }
+    if (!targetPlan && raw.planTier) {
+      targetPlan = await prisma.subscriptionPlan.findUnique({
+        where: { tier: raw.planTier }
+      });
+    }
+    if (!targetPlan) {
+      targetPlan = payment.tenant?.subscriptions?.[0]?.plan;
+    }
+    if (!targetPlan) {
+      throw new Error("Target subscription plan could not be resolved.");
+    }
+    const billingCycle = raw.billingCycle || "MONTHLY";
+    const durationDays = billingCycle === "YEARLY" ? 365 : 30;
+    const existingSub = payment.tenant?.subscriptions?.[0];
+    let startDate = /* @__PURE__ */ new Date();
+    let endDate;
+    if (existingSub && new Date(existingSub.endDate) > /* @__PURE__ */ new Date()) {
+      startDate = new Date(existingSub.startDate);
+      endDate = new Date(new Date(existingSub.endDate).getTime() + durationDays * 24 * 60 * 60 * 1e3);
+    } else {
+      startDate = /* @__PURE__ */ new Date();
+      endDate = new Date(startDate.getTime() + durationDays * 24 * 60 * 60 * 1e3);
+    }
+    await prisma.payment.update({
+      where: { id: payment.id },
+      data: {
+        status: "VALIDATED",
+        updatedAt: /* @__PURE__ */ new Date()
+      }
+    });
+    let updatedSub;
+    if (existingSub) {
+      updatedSub = await prisma.subscription.update({
+        where: { id: existingSub.id },
+        data: {
+          planId: targetPlan.id,
+          status: "ACTIVE",
+          startDate,
+          endDate
+        },
+        include: { plan: true }
+      });
+    } else {
+      updatedSub = await prisma.subscription.create({
+        data: {
+          tenantId: payment.tenantId,
+          planId: targetPlan.id,
+          status: "ACTIVE",
+          startDate,
+          endDate
+        },
+        include: { plan: true }
+      });
+    }
+    await prisma.tenant.update({
+      where: { id: payment.tenantId },
+      data: {
+        tier: targetPlan.tier,
+        isActive: true
+      }
+    });
+    const owner = payment.tenant?.users?.[0];
+    const emailRecipient = owner?.email || payment.tenant?.email;
+    if (emailRecipient) {
+      await EmailService.sendRenewalApprovalEmail({
+        to: emailRecipient,
+        name: owner?.name || payment.tenant?.name,
+        companyName: payment.tenant?.name,
+        planName: targetPlan.name,
+        planTier: targetPlan.tier,
+        billingCycle,
+        price: Number(payment.amount),
+        endDate
+      });
+    }
+    return {
+      success: true,
+      message: `Subscription for "${payment.tenant?.name}" successfully approved and active until ${endDate.toLocaleDateString()}.`,
+      subscription: updatedSub
+    };
+  }
+  /**
+   * Reject subscription renewal
+   */
+  static async rejectRenewal(paymentId, adminUserId, reason) {
+    const payment = await prisma.payment.findUnique({
+      where: { id: paymentId }
+    });
+    if (!payment) {
+      throw new Error("Renewal payment record not found.");
+    }
+    await prisma.payment.update({
+      where: { id: payment.id },
+      data: {
+        status: "CANCELLED",
+        notes: reason || "Rejected by Super Admin"
+      }
+    });
+    return {
+      success: true,
+      message: "Subscription renewal request rejected."
     };
   }
 };
@@ -5401,6 +6127,46 @@ var SuperAdminController = class {
       res.status(400).json({ success: false, message: error.message });
     }
   }
+  /**
+   * GET /api/super-admin/pending-renewals
+   */
+  static async getPendingRenewals(req, res) {
+    try {
+      const data = await SuperAdminService.getPendingRenewals();
+      res.status(200).json({
+        success: true,
+        data
+      });
+    } catch (error) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
+  /**
+   * POST /api/super-admin/renewals/:id/approve
+   */
+  static async approveRenewal(req, res) {
+    try {
+      const paymentId = req.params.id;
+      const adminUserId = req.user.id;
+      const result = await SuperAdminService.approveRenewal(paymentId, adminUserId);
+      res.status(200).json(result);
+    } catch (error) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  }
+  /**
+   * POST /api/super-admin/renewals/:id/reject
+   */
+  static async rejectRenewal(req, res) {
+    try {
+      const paymentId = req.params.id;
+      const adminUserId = req.user.id;
+      const result = await SuperAdminService.rejectRenewal(paymentId, adminUserId, req.body?.reason);
+      res.status(200).json(result);
+    } catch (error) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  }
 };
 
 // src/middleware/validate.ts
@@ -5456,13 +6222,17 @@ import { z as z2 } from "zod";
 var createPlanSchema = z2.object({
   name: z2.string().min(1, "Plan name must be at least 1 character"),
   tier: z2.enum(["TRIAL", "STARTER", "GROWTH", "ENTERPRISE"]),
-  price: z2.number().nonnegative("Price must be greater than or equal to 0"),
+  price: z2.number().nonnegative("Price must be greater than or equal to 0").default(0),
   billingCycle: z2.enum(["MONTHLY", "YEARLY"]).default("MONTHLY"),
   yearlyDiscountPercent: z2.number().min(0).max(100).optional(),
   maxBranches: z2.number().int().positive("Max branches must be at least 1"),
   maxStaffPerBranch: z2.number().int().positive().optional(),
   maxTotalStaff: z2.number().int().positive().optional(),
   trialDays: z2.number().int().min(0).optional(),
+  isTrial: z2.boolean().optional(),
+  isCustom: z2.boolean().optional(),
+  whatsappNumber: z2.string().optional(),
+  customMessage: z2.string().optional(),
   features: z2.record(z2.string(), z2.any()).optional(),
   isActive: z2.boolean().default(true)
 });
@@ -5475,6 +6245,10 @@ var updatePlanSchema = z2.object({
   maxStaffPerBranch: z2.number().int().positive().optional(),
   maxTotalStaff: z2.number().int().positive().optional(),
   trialDays: z2.number().int().min(0).optional(),
+  isTrial: z2.boolean().optional(),
+  isCustom: z2.boolean().optional(),
+  whatsappNumber: z2.string().optional(),
+  customMessage: z2.string().optional(),
   features: z2.record(z2.string(), z2.any()).optional(),
   isActive: z2.boolean().optional()
 });
@@ -5557,6 +6331,9 @@ router2.get("/verifications", requirePermission("pharmacies.manage"), SuperAdmin
 router2.get("/verifications/:id", requirePermission("pharmacies.manage"), SuperAdminController.getPharmacyVerification);
 router2.post("/verifications/:id/approve", requirePermission("pharmacies.manage"), SuperAdminController.approvePharmacyVerification);
 router2.post("/verifications/:id/reject", requirePermission("pharmacies.manage"), SuperAdminController.rejectPharmacyVerification);
+router2.get("/pending-renewals", requirePermission("subscriptions.manage"), SuperAdminController.getPendingRenewals);
+router2.post("/renewals/:id/approve", requirePermission("subscriptions.manage"), SuperAdminController.approveRenewal);
+router2.post("/renewals/:id/reject", requirePermission("subscriptions.manage"), SuperAdminController.rejectRenewal);
 router2.get("/subscriptions", requirePermission("subscriptions.manage"), SuperAdminController.listSubscriptions);
 router2.get("/payments", requirePermission("payments.view"), SuperAdminController.listPayments);
 router2.get("/analytics", requirePermission("reports.view"), SuperAdminController.getAnalytics);
@@ -5674,24 +6451,30 @@ var SubscriptionService = class {
     }
     const activeSub = (tenant.subscriptions || []).find((s) => s.status === "ACTIVE");
     const currentSub = activeSub || tenant.subscriptions && tenant.subscriptions[0];
-    const tier = currentSub?.plan?.tier || tenant.tier || "STARTER";
+    let dbPlan = currentSub?.plan;
+    const tier = dbPlan?.tier || tenant.tier || "STARTER";
+    if (!dbPlan && tier) {
+      dbPlan = await prisma.subscriptionPlan.findUnique({
+        where: { tier }
+      });
+    }
     const planConfig = getPlanConfig(tier);
     const isTrial = false;
     const isExpired = currentSub ? isSubscriptionExpired(currentSub) : true;
     const trialDaysRemaining = 0;
     const isTrialExpired = false;
-    const planFeatures = typeof currentSub?.plan?.features === "object" && currentSub?.plan?.features !== null ? currentSub.plan.features : {};
+    const planFeatures = typeof dbPlan?.features === "object" && dbPlan?.features !== null ? dbPlan.features : {};
     const branchCount = tenant.branches ? tenant.branches.length : 0;
-    const maxBranches = currentSub?.plan?.maxBranches ?? planConfig.maxBranches;
+    const maxBranches = Number(dbPlan?.maxBranches ?? planConfig.maxBranches);
     const nonOwnerStaff = (tenant.users || []).filter(
       (u) => u.role !== "COMPANY_OWNER" && u.role !== "SUPER_ADMIN" && !u.username?.startsWith("deleted_")
     );
     const staffCount = nonOwnerStaff.length;
     const maxStaffPerBranch = Number(
-      planFeatures.maxStaffPerBranch ?? currentSub?.plan?.maxStaffPerBranch ?? planConfig.maxStaffPerBranch ?? 1
+      planFeatures.maxStaffPerBranch ?? dbPlan?.maxStaffPerBranch ?? planConfig.maxStaffPerBranch ?? 1
     );
     const maxStaff = Number(
-      planFeatures.maxTotalStaff ?? currentSub?.plan?.maxTotalStaff ?? planConfig.maxTotalStaff ?? 999
+      planFeatures.maxTotalStaff ?? dbPlan?.maxTotalStaff ?? planConfig.maxTotalStaff ?? maxBranches * maxStaffPerBranch
     );
     return {
       tenantId: tenant.id,
@@ -5704,9 +6487,9 @@ var SubscriptionService = class {
       isExpired,
       planConfig: {
         ...planConfig,
-        name: currentSub?.plan?.name || planConfig.name,
-        price: currentSub?.plan ? Number(currentSub.plan.price) : planConfig.price,
-        billingCycle: currentSub?.plan?.billingCycle || planConfig.billingCycle,
+        name: dbPlan?.name || planConfig.name,
+        price: dbPlan ? Number(dbPlan.price) : planConfig.price,
+        billingCycle: dbPlan?.billingCycle || planConfig.billingCycle,
         maxBranches,
         maxStaffPerBranch,
         maxTotalStaff: maxStaff
@@ -5875,6 +6658,80 @@ var SubscriptionService = class {
       }
     });
     return updated;
+  }
+  /**
+   * Submit manual bKash renewal/upgrade request
+   */
+  static async submitManualRenewal(tenantId, data) {
+    if (!data.trxId || !data.trxId.trim()) {
+      throw new Error("Transaction ID (TrxID) is required.");
+    }
+    if (!data.senderNumber || !data.senderNumber.trim()) {
+      throw new Error("Sender bKash phone number is required.");
+    }
+    const plan = await prisma.subscriptionPlan.findUnique({
+      where: { id: data.planId }
+    });
+    if (!plan || !plan.isActive) {
+      throw new Error("Subscription plan not found or inactive.");
+    }
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      include: {
+        subscriptions: {
+          orderBy: { createdAt: "desc" },
+          take: 1
+        }
+      }
+    });
+    if (!tenant) {
+      throw new Error("Tenant not found.");
+    }
+    const billingCycle = data.billingCycle === "YEARLY" ? "YEARLY" : "MONTHLY";
+    const basePrice = Number(plan.price);
+    const planPrice = billingCycle === "YEARLY" ? Math.round(basePrice * 12 * 0.85) : basePrice;
+    let screenshotUrl = null;
+    if (data.screenshotDocument) {
+      try {
+        const upload2 = await UploadService.uploadImage(data.screenshotDocument, "pharmacy_saas/documents/payments");
+        screenshotUrl = upload2.secureUrl;
+      } catch (err) {
+        console.warn("[submitManualRenewal] Screenshot upload failed:", err.message);
+      }
+    }
+    const cleanTrx = data.trxId.trim().toUpperCase();
+    const cleanNumber = data.senderNumber.trim();
+    const currentSub = tenant.subscriptions?.[0] || null;
+    const payment = await prisma.payment.create({
+      data: {
+        tenantId,
+        subscriptionId: currentSub?.id || null,
+        amount: planPrice,
+        currency: "BDT",
+        tranId: `BKASH-${cleanTrx}-${Date.now().toString().slice(-4)}`,
+        status: "PENDING",
+        paymentMethod: "MANUAL_BKASH",
+        senderNumber: cleanNumber,
+        screenshotUrl,
+        type: "RENEWAL",
+        bankTranId: cleanNumber,
+        rawResponse: {
+          trxId: cleanTrx,
+          senderNumber: cleanNumber,
+          screenshotUrl,
+          planId: plan.id,
+          planName: plan.name,
+          planTier: plan.tier,
+          billingCycle,
+          planPrice
+        }
+      }
+    });
+    return {
+      success: true,
+      message: "Your subscription renewal request has been submitted and is pending Super Admin approval.",
+      payment
+    };
   }
 };
 
@@ -6088,6 +6945,15 @@ var SubscriptionController = class {
       res.status(500).json({ success: false, message: error.message });
     }
   }
+  static async submitManualRenewal(req, res) {
+    try {
+      const tenantId = req.user.tenantId;
+      const result = await SubscriptionService.submitManualRenewal(tenantId, req.body);
+      res.status(200).json(result);
+    } catch (error) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  }
 };
 
 // src/middleware/authorize.ts
@@ -6144,6 +7010,12 @@ router3.post(
   authenticate,
   authorize(["COMPANY_OWNER", "SUPER_ADMIN"]),
   SubscriptionController.renew
+);
+router3.post(
+  "/manual-renewal",
+  authenticate,
+  authorize(["COMPANY_OWNER", "SUPER_ADMIN"]),
+  SubscriptionController.submitManualRenewal
 );
 router3.post(
   "/cancel",
@@ -6807,12 +7679,22 @@ var TenantService = class {
     if (!tenant) {
       throw new Error("Tenant not found");
     }
-    const currentSub = tenant.subscriptions[0] || null;
-    const tier = currentSub?.plan?.tier || tenant.tier || "TRIAL";
+    const activeSub = (tenant.subscriptions || []).find((s) => s.status === "ACTIVE") || tenant.subscriptions[0] || null;
+    let plan = activeSub?.plan;
+    if (!plan && tenant.tier) {
+      plan = await prisma.subscriptionPlan.findUnique({
+        where: { tier: tenant.tier }
+      });
+    }
+    const tier = plan?.tier || tenant.tier || "STARTER";
     const planConfig = getPlanConfig(tier);
     const isTrial = tier === "TRIAL";
-    const isExpired = currentSub ? isSubscriptionExpired(currentSub) : true;
-    const trialDaysRemaining = isTrial && currentSub?.endDate ? getTrialRemainingDays(currentSub.endDate) : 0;
+    const isExpired = activeSub ? isSubscriptionExpired(activeSub) : true;
+    const trialDaysRemaining = isTrial && activeSub?.endDate ? getTrialRemainingDays(activeSub.endDate) : 0;
+    const planFeatures = typeof plan?.features === "object" && plan?.features !== null ? plan.features : {};
+    const maxBranches = Number(plan?.maxBranches ?? planConfig.maxBranches);
+    const maxStaffPerBranch = Number(planFeatures.maxStaffPerBranch ?? plan?.maxStaffPerBranch ?? planConfig.maxStaffPerBranch ?? 1);
+    const maxTotalStaff = Number(planFeatures.maxTotalStaff ?? plan?.maxTotalStaff ?? planConfig.maxTotalStaff ?? maxBranches * maxStaffPerBranch);
     return {
       id: tenant.id,
       name: tenant.name,
@@ -6827,13 +7709,30 @@ var TenantService = class {
       isTrial,
       trialDaysRemaining,
       isExpired,
-      planConfig,
+      maxBranches,
+      maxStaffPerBranch,
+      maxTotalStaff,
+      planConfig: {
+        ...planConfig,
+        name: plan?.name || planConfig.name,
+        price: plan ? Number(plan.price) : planConfig.price,
+        billingCycle: plan?.billingCycle || planConfig.billingCycle,
+        maxBranches,
+        maxStaffPerBranch,
+        maxTotalStaff,
+        features: {
+          ...planConfig.features,
+          ...planFeatures,
+          branches: `${maxBranches >= 999 ? "Unlimited" : maxBranches} Branch${maxBranches === 1 ? "" : "es"}`,
+          staff: `${maxStaffPerBranch >= 999 ? "Unlimited" : maxStaffPerBranch} Staff per Branch`
+        }
+      },
       stats: {
         activeBranches: tenant._count.branches,
         activeUsers: tenant._count.users,
         activeProducts: tenant._count.products
       },
-      currentSubscription: currentSub
+      currentSubscription: activeSub
     };
   }
   static async updateProfile(tenantId, data) {
@@ -16177,6 +17076,34 @@ var SettingsController = class {
       res.status(400).json({ success: false, message: error.message });
     }
   }
+  static async getPublicPaymentGateways(req, res) {
+    try {
+      const data = await SettingsService.getPublicPaymentGateways();
+      res.status(200).json({ success: true, data });
+    } catch (error) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
+  static async getAdminPaymentGateways(req, res) {
+    try {
+      const data = await SettingsService.getPaymentGatewaySettings();
+      res.status(200).json({ success: true, data });
+    } catch (error) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
+  static async updatePaymentGatewaySettings(req, res) {
+    try {
+      const updated = await SettingsService.updatePaymentGatewaySettings(req.body);
+      res.status(200).json({
+        success: true,
+        message: "Payment gateway configuration saved successfully",
+        data: updated
+      });
+    } catch (error) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  }
 };
 
 // src/modules/settings/settings.validation.ts
@@ -16246,6 +17173,19 @@ router16.put(
 );
 router16.get("/pharmacy", authenticate, SettingsController.getPharmacySettings);
 router16.put("/pharmacy", authenticate, SettingsController.updatePharmacySettings);
+router16.get("/payment-gateways", SettingsController.getPublicPaymentGateways);
+router16.get(
+  "/admin-payment-gateways",
+  authenticate,
+  authorize(["SUPER_ADMIN", "CTO", "PROJECT_MANAGER"]),
+  SettingsController.getAdminPaymentGateways
+);
+router16.put(
+  "/admin-payment-gateways",
+  authenticate,
+  authorize(["SUPER_ADMIN", "CTO", "PROJECT_MANAGER"]),
+  SettingsController.updatePaymentGatewaySettings
+);
 
 // src/modules/upload/upload.routes.ts
 import { Router as Router17 } from "express";

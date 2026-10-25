@@ -70,18 +70,24 @@ class SuperAdminService {
         if (existing) {
             throw new Error(`A subscription plan already exists for tier ${data.tier}. Please update the existing plan.`);
         }
+        const isTrial = data.isTrial || data.tier === "TRIAL";
+        const isCustom = data.isCustom || false;
         const feat = {
             ...(data.features || {}),
             ...(data.maxStaffPerBranch !== undefined && { maxStaffPerBranch: data.maxStaffPerBranch }),
             ...(data.maxTotalStaff !== undefined && { maxTotalStaff: data.maxTotalStaff }),
             ...(data.trialDays !== undefined && { trialDays: data.trialDays }),
             ...(data.yearlyDiscountPercent !== undefined && { yearlyDiscountPercent: data.yearlyDiscountPercent }),
+            isTrial,
+            isCustom,
+            ...(data.whatsappNumber !== undefined && { whatsappNumber: data.whatsappNumber }),
+            ...(data.customMessage !== undefined && { customMessage: data.customMessage }),
         };
         return await prisma_1.prisma.subscriptionPlan.create({
             data: {
                 name: data.name,
                 tier: data.tier,
-                price: data.price,
+                price: isTrial ? 0 : data.price,
                 billingCycle: data.billingCycle,
                 maxBranches: data.maxBranches,
                 features: feat,
@@ -101,11 +107,17 @@ class SuperAdminService {
         return plans.map((p) => {
             const feat = (typeof p.features === "object" && p.features !== null) ? p.features : {};
             const fallback = planLimits_1.CENTRAL_PLAN_DEFINITIONS[p.tier] || planLimits_1.CENTRAL_PLAN_DEFINITIONS.STARTER;
+            const isTrial = feat.isTrial ?? (p.tier === "TRIAL");
+            const isCustom = feat.isCustom ?? false;
             return {
                 ...p,
+                isTrial,
+                isCustom,
+                whatsappNumber: feat.whatsappNumber || "",
+                customMessage: feat.customMessage || "",
                 maxStaffPerBranch: feat.maxStaffPerBranch ?? fallback.maxStaffPerBranch ?? 1,
                 maxTotalStaff: feat.maxTotalStaff ?? fallback.maxTotalStaff ?? (p.maxBranches * (feat.maxStaffPerBranch ?? 1)),
-                trialDays: feat.trialDays ?? (p.tier === "TRIAL" ? 7 : 0),
+                trialDays: feat.trialDays ?? (isTrial ? 7 : 0),
                 yearlyDiscountPercent: feat.yearlyDiscountPercent ?? 0,
             };
         });
@@ -130,11 +142,17 @@ class SuperAdminService {
         }
         const feat = (typeof plan.features === "object" && plan.features !== null) ? plan.features : {};
         const fallback = planLimits_1.CENTRAL_PLAN_DEFINITIONS[plan.tier] || planLimits_1.CENTRAL_PLAN_DEFINITIONS.STARTER;
+        const isTrial = feat.isTrial ?? (plan.tier === "TRIAL");
+        const isCustom = feat.isCustom ?? false;
         return {
             ...plan,
+            isTrial,
+            isCustom,
+            whatsappNumber: feat.whatsappNumber || "",
+            customMessage: feat.customMessage || "",
             maxStaffPerBranch: feat.maxStaffPerBranch ?? fallback.maxStaffPerBranch ?? 1,
             maxTotalStaff: feat.maxTotalStaff ?? fallback.maxTotalStaff ?? (plan.maxBranches * (feat.maxStaffPerBranch ?? 1)),
-            trialDays: feat.trialDays ?? (plan.tier === "TRIAL" ? 7 : 0),
+            trialDays: feat.trialDays ?? (isTrial ? 7 : 0),
             yearlyDiscountPercent: feat.yearlyDiscountPercent ?? 0,
         };
     }
@@ -144,6 +162,8 @@ class SuperAdminService {
             throw new Error("Subscription plan not found");
         }
         const currentFeatures = (typeof plan.features === "object" && plan.features !== null) ? plan.features : {};
+        const isTrial = data.isTrial !== undefined ? data.isTrial : (plan.tier === "TRIAL" || !!currentFeatures.isTrial);
+        const isCustom = data.isCustom !== undefined ? data.isCustom : (currentFeatures.isCustom || false);
         const updatedFeatures = {
             ...currentFeatures,
             ...(data.features || {}),
@@ -151,12 +171,16 @@ class SuperAdminService {
             ...(data.maxTotalStaff !== undefined && { maxTotalStaff: data.maxTotalStaff }),
             ...(data.trialDays !== undefined && { trialDays: data.trialDays }),
             ...(data.yearlyDiscountPercent !== undefined && { yearlyDiscountPercent: data.yearlyDiscountPercent }),
+            ...(data.isTrial !== undefined && { isTrial: data.isTrial }),
+            ...(data.isCustom !== undefined && { isCustom: data.isCustom }),
+            ...(data.whatsappNumber !== undefined && { whatsappNumber: data.whatsappNumber }),
+            ...(data.customMessage !== undefined && { customMessage: data.customMessage }),
         };
         return await prisma_1.prisma.subscriptionPlan.update({
             where: { id },
             data: {
                 ...(data.name && { name: data.name }),
-                ...(data.price !== undefined && { price: data.price }),
+                ...(data.price !== undefined && { price: isTrial ? 0 : data.price }),
                 ...(data.billingCycle && { billingCycle: data.billingCycle }),
                 ...(data.maxBranches !== undefined && { maxBranches: data.maxBranches }),
                 features: updatedFeatures,
@@ -1428,13 +1452,15 @@ class SuperAdminService {
             plan = await prisma_1.prisma.subscriptionPlan.findFirst({ where: { tier: "STARTER" } }) ||
                 await prisma_1.prisma.subscriptionPlan.findFirst();
         }
+        const isTrialPlan = plan.tier === "TRIAL" || !!plan.features?.isTrial || tenant.paymentMethod === "FREE_TRIAL";
+        const trialDays = plan.features?.trialDays ? Number(plan.features.trialDays) : 7;
         const billingCycle = data?.billingCycle || tenant.pendingBillingCycle || "MONTHLY";
-        const durationDays = billingCycle === "YEARLY" ? 365 : 30;
+        const durationDays = isTrialPlan ? trialDays : (billingCycle === "YEARLY" ? 365 : 30);
         const startDate = new Date();
         const endDate = new Date(startDate.getTime() + durationDays * 24 * 60 * 60 * 1000);
-        const basePrice = Number(plan.price);
-        const planAmount = billingCycle === "YEARLY" ? Math.round(basePrice * 12 * 0.85) : basePrice;
-        const INITIAL_LICENSE_FEE = 5000;
+        const basePrice = isTrialPlan ? 0 : Number(plan.price);
+        const planAmount = isTrialPlan ? 0 : (billingCycle === "YEARLY" ? Math.round(basePrice * 12 * 0.85) : basePrice);
+        const INITIAL_LICENSE_FEE = isTrialPlan ? 0 : 5000;
         const amount = planAmount + INITIAL_LICENSE_FEE;
         // Update Tenant to ACTIVE directly
         const updatedTenant = await prisma_1.prisma.tenant.update({

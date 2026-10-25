@@ -95,15 +95,7 @@ export default async function RootLayout({
                     }
                   }
                 } catch (e) {}
-              })();
-            `,
-          }}
-        />
-        <script
-          id="strip-extension-attributes"
-          dangerouslySetInnerHTML={{
-            __html: `
-              (function() {
+
                 try {
                   var strip = function(el) {
                     if (el && el.removeAttribute) {

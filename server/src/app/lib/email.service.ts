@@ -660,4 +660,233 @@ export class EmailService {
       return { success: false, error: err.message };
     }
   }
+
+  /**
+   * Send Official Business Quotation Email to Client
+   */
+  static async sendQuotationEmail(payload: {
+    to: string;
+    clientName: string;
+    organizationName?: string | null;
+    refNo: string;
+    subject: string;
+    grandTotal: number | string;
+    inWords?: string | null;
+    attachmentBuffer?: Buffer | string;
+    viewOnlineUrl?: string;
+  }): Promise<{ success: boolean; messageId?: string; error?: string }> {
+    const {
+      to,
+      clientName,
+      organizationName,
+      refNo,
+      subject: quoteSubject,
+      grandTotal,
+      inWords,
+      attachmentBuffer,
+      viewOnlineUrl,
+    } = payload;
+
+    const recipientEmail = (to || "").trim().toLowerCase();
+    const senderEmail = getSenderAddress();
+    const formattedTotal =
+      typeof grandTotal === "number" ? grandTotal.toLocaleString("en-BD") : grandTotal;
+
+    const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f4f4f5; margin: 0; padding: 0; }
+        .container { max-width: 620px; margin: 30px auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08); border: 1px solid #e4e4e7; }
+        .header { background: #0f172a; padding: 32px 24px; text-align: center; color: #ffffff; }
+        .header h1 { margin: 0; font-size: 24px; font-weight: 900; letter-spacing: 1.5px; }
+        .header p { margin: 6px 0 0; font-size: 11px; text-transform: uppercase; letter-spacing: 2px; color: #94a3b8; }
+        .badge { display: inline-block; background-color: #0d9488; color: #ffffff; padding: 4px 14px; border-radius: 9999px; font-size: 12px; margin-top: 14px; font-weight: 700; letter-spacing: 0.5px; }
+        .content { padding: 32px 24px; color: #3f3f46; line-height: 1.6; }
+        .quote-card { background: #fafafa; border: 1.5px solid #e4e4e7; border-radius: 10px; padding: 20px; margin: 20px 0; }
+        .row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px dashed #e4e4e7; }
+        .row:last-child { border-bottom: none; }
+        .label { font-size: 13px; color: #71717a; font-weight: 600; }
+        .val { font-size: 13px; color: #18181b; font-weight: 700; text-align: right; }
+        .total-row { background: #f0fdf4; border: 1px solid #86efac; border-radius: 8px; padding: 12px 16px; margin-top: 16px; display: flex; justify-content: space-between; align-items: center; }
+        .total-label { font-size: 14px; font-weight: 800; color: #166534; }
+        .total-amount { font-size: 18px; font-weight: 900; color: #15803d; }
+        .btn { display: inline-block; background-color: #0d9488; color: #ffffff !important; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: 700; font-size: 14px; margin-top: 16px; text-align: center; }
+        .footer { background-color: #fafafa; border-top: 1px solid #f4f4f5; padding: 20px; text-align: center; font-size: 12px; color: #a1a1aa; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>PHARMABIZ</h1>
+          <p>ADVANCED PHARMACY MANAGEMENT &amp; SMART POS</p>
+          <div class="badge">Official Business Quotation</div>
+        </div>
+        <div class="content">
+          <p style="font-size: 15px; margin-top: 0;">
+            Dear <strong>${clientName}</strong> ${organizationName ? `(${organizationName})` : ""},
+          </p>
+          <p style="font-size: 14px;">
+            Thank you for your interest in <strong>PharmaBiz SaaS Platform</strong>. We are pleased to submit our formal quotation for <strong>${quoteSubject}</strong>.
+          </p>
+
+          <div class="quote-card">
+            <div class="row">
+              <span class="label">Reference No:</span>
+              <span class="val">${refNo}</span>
+            </div>
+            <div class="row">
+              <span class="label">Client:</span>
+              <span class="val">${clientName}</span>
+            </div>
+            ${organizationName ? `
+            <div class="row">
+              <span class="label">Organization / Pharmacy:</span>
+              <span class="val">${organizationName}</span>
+            </div>` : ""}
+            <div class="row">
+              <span class="label">Subject:</span>
+              <span class="val">${quoteSubject}</span>
+            </div>
+
+            <div class="total-row">
+              <span class="total-label">Grand Total Payable:</span>
+              <span class="total-amount">৳ ${formattedTotal}</span>
+            </div>
+            ${inWords ? `<div style="font-size: 12px; color: #64748b; margin-top: 6px; font-style: italic;">In Words: ${inWords}</div>` : ""}
+          </div>
+
+          <p style="font-size: 13px; color: #52525b;">
+            📄 <strong>Quotation Document:</strong> Please review the attached official document for full scope of work, technical specifications, and terms &amp; conditions.
+          </p>
+
+          ${viewOnlineUrl ? `
+          <div style="text-align: center; margin: 24px 0;">
+            <a href="${viewOnlineUrl}" class="btn" target="_blank">📄 View Official Quotation Sheet</a>
+          </div>
+          ` : ""}
+
+          <div style="border-top: 1px solid #e4e4e7; margin-top: 24px; padding-top: 16px; font-size: 13px; color: #71717a;">
+            <p style="margin: 0; font-weight: 700; color: #18181b;">Thanks &amp; Regards,</p>
+            <p style="margin: 4px 0 0; font-weight: 600;">Md. Sorower Jahan | CEO, PharmaBiz / okobiz</p>
+            <p style="margin: 2px 0 0;">Mobile: +880 1973590937 | Web: okobiz.com</p>
+          </div>
+        </div>
+        <div class="footer">
+          <p style="margin: 0;">&copy; ${new Date().getFullYear()} PharmaBiz SaaS Platform &bull; okobiz IT Solutions</p>
+          <p style="margin: 4px 0 0;">This is an automated quotation transmission.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+    `;
+
+    const attachments: any[] = [];
+    if (attachmentBuffer) {
+      attachments.push({
+        filename: `Quotation_${refNo.replace(/[^a-zA-Z0-9_-]/g, "_")}.pdf`,
+        content: attachmentBuffer,
+        contentType: "application/pdf",
+      });
+    }
+
+    try {
+      const transporter = getMailTransporter();
+      if (transporter) {
+        const info = await transporter.sendMail({
+          from: `"PharmaBiz Quotation Desk" <${senderEmail}>`,
+          to: recipientEmail,
+          subject: `📄 Quotation: ${quoteSubject} [Ref: ${refNo}] - PharmaBiz`,
+          html,
+          attachments: attachments.length > 0 ? attachments : undefined,
+        });
+        return { success: true, messageId: info.messageId };
+      }
+      return { success: true, messageId: `local_${Date.now()}` };
+    } catch (err: any) {
+      console.error(`❌ [EMAIL SERVICE] Failed to send Quotation email to ${recipientEmail}:`, err.message);
+      return { success: false, error: err.message };
+    }
+  }
+
+  /**
+   * Send broadcast campaign notice email to pharmacy owner
+   */
+  static async sendCampaignNoticeEmail(payload: {
+    to: string;
+    subject: string;
+    ownerName: string;
+    pharmacyName: string;
+    messageHtml: string;
+    portalUrl?: string;
+  }): Promise<{ success: boolean; messageId?: string; error?: string }> {
+    const { to, subject, ownerName, pharmacyName, messageHtml, portalUrl } = payload;
+    const recipientEmail = (to || "").trim().toLowerCase();
+    const senderEmail = getSenderAddress();
+    const loginUrl = portalUrl || process.env.CLIENT_URL || "http://localhost:3001/login";
+
+    const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f8fafc; margin: 0; padding: 0; }
+        .container { max-width: 600px; margin: 24px auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; }
+        .header { background: #0f172a; padding: 24px 20px; text-align: center; color: #ffffff; }
+        .header h1 { margin: 0; font-size: 20px; font-weight: 800; }
+        .header p { margin: 4px 0 0; font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; color: #94a3b8; }
+        .content { padding: 28px 24px; color: #334155; line-height: 1.6; font-size: 14px; }
+        .greeting { font-size: 15px; font-weight: 700; color: #0f172a; margin-bottom: 12px; }
+        .message-box { background: #f8fafc; border-left: 4px solid #0d9488; padding: 16px 18px; margin: 18px 0; border-radius: 6px; font-size: 14px; color: #1e293b; white-space: pre-wrap; line-height: 1.7; }
+        .btn { display: inline-block; background-color: #0d9488; color: #ffffff !important; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-weight: 700; font-size: 13px; margin-top: 16px; text-align: center; }
+        .footer { background-color: #f1f5f9; padding: 16px; text-align: center; font-size: 12px; color: #64748b; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>PharmaBiz Platform Notice</h1>
+          <p>Official Announcement &amp; Communication</p>
+        </div>
+        <div class="content">
+          <div class="greeting">Dear ${ownerName || "Valued Partner"} (${pharmacyName || "Pharmacy"}),</div>
+          <div class="message-box">${messageHtml.replace(/\n/g, "<br/>")}</div>
+          <div style="text-align: center; margin: 24px 0;">
+            <a href="${loginUrl}" class="btn" target="_blank">Access Your PharmaBiz Portal &rarr;</a>
+          </div>
+          <p style="font-size: 12px; color: #64748b; margin-top: 20px;">
+            If you have questions, reach us at <strong>info@okobiz.com</strong> or call <strong>+880 1973590937</strong>.
+          </p>
+        </div>
+        <div class="footer">
+          &copy; ${new Date().getFullYear()} PharmaBiz SaaS Platform &bull; okobiz IT Solutions
+        </div>
+      </div>
+    </body>
+    </html>
+    `;
+
+    try {
+      const transporter = getMailTransporter();
+      if (transporter) {
+        const info = await transporter.sendMail({
+          from: `"PharmaBiz Platform" <${senderEmail}>`,
+          to: recipientEmail,
+          subject,
+          html,
+        });
+        return { success: true, messageId: info.messageId };
+      }
+      return { success: true, messageId: `local_${Date.now()}` };
+    } catch (err: any) {
+      console.error(`❌ [EMAIL SERVICE] Failed to send Campaign email to ${recipientEmail}:`, err.message);
+      return { success: false, error: err.message };
+    }
+  }
 }
+
+

@@ -120,5 +120,5 @@ if (!process.env.VERCEL) {
         subscription_expiry_service_1.SubscriptionExpiryService.initAutomatedScheduler();
     });
 }
-// Trigger backend restart on free port 3000
+// Trigger backend reload with latest Prisma Client models
 exports.default = app;

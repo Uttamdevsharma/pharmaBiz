@@ -115,5 +115,19 @@ router.post(
   SuperAdminController.updatePlatformPermissions
 );
 
+// ==================== QUOTATION MANAGEMENT ====================
+import { QuotationController } from "./quotation.controller";
+router.get("/quotations", QuotationController.list);
+router.post("/quotations", QuotationController.create);
+router.get("/quotations/:id", QuotationController.getById);
+router.put("/quotations/:id", QuotationController.update);
+router.delete("/quotations/:id", QuotationController.delete);
+router.post("/quotations/:id/send-email", QuotationController.sendEmail);
+
+// ==================== SMS MANAGEMENT ====================
+import { smsRoutes } from "./sms.routes";
+router.use("/sms", smsRoutes);
+
 export { router as superAdminRoutes };
+
 

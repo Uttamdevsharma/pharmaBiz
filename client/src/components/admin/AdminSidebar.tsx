@@ -23,6 +23,10 @@ import {
   MessageSquare,
   LifeBuoy,
   Megaphone,
+  FileText,
+  Plus,
+  Smartphone,
+  Send,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { ThemeToggle } from "@/components/common/ThemeToggle";
@@ -46,7 +50,14 @@ export type AdminTab =
   | "payments"
   | "analytics"
   | "notifications"
-  | "settings";
+  | "settings"
+  | "quotations"
+  | "quotation-create"
+  | "quotation-edit"
+  | "sms-send"
+  | "sms-settings"
+  | "sms-logs";
+
 
 interface AdminSidebarProps {
   activeTab: AdminTab;
@@ -93,6 +104,24 @@ export function AdminSidebar({
   const [staffMenuOpen, setStaffMenuOpen] = useState(false);
   const [roleMenuOpen, setRoleMenuOpen] = useState(false);
 
+  const isQuotationTabActive =
+    activeTab === "quotations" ||
+    activeTab === "quotation-create" ||
+    activeTab === "quotation-edit";
+
+  const [quotationsMenuOpen, setQuotationsMenuOpen] = useState(
+    activeTab === "quotations" || activeTab === "quotation-create" || activeTab === "quotation-edit"
+  );
+
+  const isSmsTabActive =
+    activeTab === "sms-send" ||
+    activeTab === "sms-settings" ||
+    activeTab === "sms-logs";
+
+  const [smsMenuOpen, setSmsMenuOpen] = useState(
+    activeTab === "sms-send" || activeTab === "sms-settings" || activeTab === "sms-logs"
+  );
+
   useEffect(() => {
     if (isStaffTabActive) {
       setStaffMenuOpen(true);
@@ -100,7 +129,14 @@ export function AdminSidebar({
     if (isRoleTabActive) {
       setRoleMenuOpen(true);
     }
-  }, [isStaffTabActive, isRoleTabActive]);
+    if (isQuotationTabActive) {
+      setQuotationsMenuOpen(true);
+    }
+    if (isSmsTabActive) {
+      setSmsMenuOpen(true);
+    }
+  }, [isStaffTabActive, isRoleTabActive, isQuotationTabActive, isSmsTabActive]);
+
 
   // Permission checks
   const canViewTenants = isSuperAdmin || hasPermission("pharmacies.manage");
@@ -336,6 +372,45 @@ export function AdminSidebar({
                 </div>
               </div>
             )}
+
+            {/* Quotations */}
+            <div className="relative group w-full flex justify-center">
+              <button
+                type="button"
+                onClick={() => handleTabClick("quotations")}
+                className={`h-11 w-11 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
+                  isQuotationTabActive
+                    ? "bg-brand-primary text-white shadow-md shadow-brand-primary/20"
+                    : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
+                }`}
+                aria-label="Quotations"
+              >
+                <FileText className="h-5 w-5 shrink-0" />
+              </button>
+              <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 px-3 py-1.5 rounded-xl bg-slate-900 dark:bg-slate-800 text-white text-xs font-bold shadow-xl opacity-0 pointer-events-none group-hover:opacity-100 transition whitespace-nowrap z-50 border border-slate-700">
+                Quotations
+              </div>
+            </div>
+
+            {/* SMS Management (Collapsed) */}
+            <div className="relative group w-full flex justify-center">
+              <button
+                type="button"
+                onClick={() => handleTabClick("sms-send")}
+                className={`h-11 w-11 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
+                  isSmsTabActive
+                    ? "bg-brand-primary text-white shadow-md shadow-brand-primary/20"
+                    : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
+                }`}
+                aria-label="SMS Management"
+              >
+                <Smartphone className="h-5 w-5 shrink-0" />
+              </button>
+              <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 px-3 py-1.5 rounded-xl bg-slate-900 dark:bg-slate-800 text-white text-xs font-bold shadow-xl opacity-0 pointer-events-none group-hover:opacity-100 transition whitespace-nowrap z-50 border border-slate-700">
+                SMS Management
+              </div>
+            </div>
+
 
             {/* Settings */}
             {canViewSettings && (
@@ -595,6 +670,123 @@ export function AdminSidebar({
                 <span>Payments & Invoices</span>
               </button>
             )}
+
+            {/* Quotation Management Accordion */}
+            <div className="w-full">
+              <button
+                type="button"
+                onClick={() => setQuotationsMenuOpen(!quotationsMenuOpen)}
+                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-bold transition-all cursor-pointer ${
+                  activeTab === "quotations" || activeTab === "quotation-create" || activeTab === "quotation-edit"
+                    ? "text-teal-600 dark:text-teal-400 font-extrabold bg-teal-50/70 dark:bg-teal-950/40"
+                    : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <FileText className="h-5 w-5 shrink-0 text-teal-600" />
+                  <span>Quotations</span>
+                </div>
+                {quotationsMenuOpen ? (
+                  <ChevronDown className="h-4 w-4 text-slate-400" />
+                ) : (
+                  <ChevronRight className="h-4 w-4 text-slate-400" />
+                )}
+              </button>
+              {quotationsMenuOpen && (
+                <div className="pl-4 pr-1 pt-1 space-y-1 border-l-2 border-teal-500/30 ml-5 mt-1">
+                  <button
+                    type="button"
+                    onClick={() => handleTabClick("quotation-create" as AdminTab)}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                      activeTab === "quotation-create"
+                        ? "text-teal-600 font-bold bg-teal-50 dark:bg-teal-950/60"
+                        : "text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60"
+                    }`}
+                  >
+                    <Plus className="h-3.5 w-3.5 shrink-0" />
+                    <span>Add Quotation</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleTabClick("quotations" as AdminTab)}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                      activeTab === "quotations" || activeTab === "quotation-edit"
+                        ? "text-teal-600 font-bold bg-teal-50 dark:bg-teal-950/60"
+                        : "text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60"
+                    }`}
+                  >
+                    <FileText className="h-3.5 w-3.5 shrink-0" />
+                    <span>Manage Quotations</span>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* SMS Management Accordion */}
+            <div className="w-full">
+              <button
+                type="button"
+                onClick={() => setSmsMenuOpen(!smsMenuOpen)}
+                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-bold transition-all cursor-pointer ${
+                  activeTab === "sms-send" || activeTab === "sms-settings" || activeTab === "sms-logs"
+                    ? "text-teal-600 dark:text-teal-400 font-extrabold bg-teal-50/70 dark:bg-teal-950/40"
+                    : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <Smartphone className="h-5 w-5 shrink-0 text-teal-600" />
+                  <span>SMS Management</span>
+                </div>
+                {smsMenuOpen ? (
+                  <ChevronDown className="h-4 w-4 text-slate-400" />
+                ) : (
+                  <ChevronRight className="h-4 w-4 text-slate-400" />
+                )}
+              </button>
+              {smsMenuOpen && (
+                <div className="pl-4 pr-1 pt-1 space-y-1 border-l-2 border-teal-500/30 ml-5 mt-1">
+                  {/* 1. Send SMS */}
+                  <button
+                    type="button"
+                    onClick={() => handleTabClick("sms-send" as AdminTab)}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                      activeTab === "sms-send"
+                        ? "text-teal-600 font-bold bg-teal-50 dark:bg-teal-950/60"
+                        : "text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60"
+                    }`}
+                  >
+                    <Send className="h-3.5 w-3.5 shrink-0" />
+                    <span>Send SMS</span>
+                  </button>
+                  {/* 2. Gateway Settings */}
+                  <button
+                    type="button"
+                    onClick={() => handleTabClick("sms-settings" as AdminTab)}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                      activeTab === "sms-settings"
+                        ? "text-teal-600 font-bold bg-teal-50 dark:bg-teal-950/60"
+                        : "text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60"
+                    }`}
+                  >
+                    <Settings className="h-3.5 w-3.5 shrink-0" />
+                    <span>Gateway Settings</span>
+                  </button>
+                  {/* 3. SMS Logs */}
+                  <button
+                    type="button"
+                    onClick={() => handleTabClick("sms-logs" as AdminTab)}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                      activeTab === "sms-logs"
+                        ? "text-teal-600 font-bold bg-teal-50 dark:bg-teal-950/60"
+                        : "text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60"
+                    }`}
+                  >
+                    <FileText className="h-3.5 w-3.5 shrink-0" />
+                    <span>SMS Logs</span>
+                  </button>
+                </div>
+              )}
+            </div>
 
             {/* Settings */}
             {canViewSettings && (
