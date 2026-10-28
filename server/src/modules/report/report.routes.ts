@@ -13,10 +13,20 @@ router.use(authenticate, requireActiveSubscription);
 // Owner / Manager Dashboard Metrics
 router.get("/dashboard", ReportController.getDashboardMetrics);
 
-// Sales Reports
+// Branch Report Summary
+router.get("/branch-summary", ReportController.getBranchReportSummary);
+
+// Sales Reports & Summaries
 router.get("/sales/daily", validateRequest({ query: reportDateRangeSchema }), ReportController.getDailySales);
 router.get("/sales/weekly", validateRequest({ query: reportDateRangeSchema }), ReportController.getWeeklySales);
 router.get("/sales/monthly", validateRequest({ query: reportDateRangeSchema }), ReportController.getMonthlySales);
+router.get("/sales/monthly-summary", ReportController.getMonthlySalesSummary);
+
+// Procurement & Purchase Report
+router.get("/purchases", ReportController.getPurchaseReport);
+
+// Products & Stock Inventory Report
+router.get("/products", ReportController.getProductStockReport);
 
 router.get(
   "/sales/branch-wise",

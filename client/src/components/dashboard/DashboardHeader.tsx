@@ -18,7 +18,12 @@ import {
   Menu,
   PanelLeftClose,
   PanelLeftOpen,
+  Monitor,
+  ShoppingCart,
+  Boxes,
+  FileSpreadsheet,
 } from "lucide-react";
+import { showToast } from "@/lib/swal";
 import { getClientPlanConfig } from "@/lib/planLimits";
 import { useBranchContext } from "@/context/BranchContext";
 import { OwnerModule } from "./DashboardSidebar";
@@ -167,10 +172,66 @@ export function DashboardHeader({
             </div>
           </Link>
 
-          <span className="hidden md:inline-flex items-center gap-1.5 px-2.5 py-0.5 xl:px-3 xl:py-1 rounded-full text-[11px] xl:text-xs font-bold uppercase tracking-wider bg-brand-primary/10 text-brand-primary border border-brand-primary/20 shrink-0">
+          <span className="hidden lg:inline-flex items-center gap-1.5 px-2.5 py-0.5 xl:px-3 xl:py-1 rounded-full text-[11px] xl:text-xs font-bold uppercase tracking-wider bg-brand-primary/10 text-brand-primary border border-brand-primary/20 shrink-0">
             <Sparkles className="h-3 w-3 xl:h-3.5 xl:w-3.5" />
             {planConfig.name}
           </span>
+        </div>
+
+        {/* Quick Action Navigation Buttons (Always in Navbar: Full text on Tab/Laptop, Icon-only Stock List & Daily Report on Mobile) */}
+        <div className="flex items-center gap-1 sm:gap-1.5 lg:gap-2 shrink-0">
+          {/* 1. POS (Laptop & Tab only) */}
+          <button
+            type="button"
+            onClick={() => {
+              if (typeof document !== "undefined" && !document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(() => {});
+              }
+              onNavigate?.("pos");
+            }}
+            className="hidden md:inline-flex items-center gap-1.5 px-2.5 lg:px-3 py-1.5 rounded-lg bg-[#008080] hover:bg-[#006666] text-white font-bold text-xs lg:text-sm shadow-xs transition hover:brightness-105 active:scale-95 cursor-pointer whitespace-nowrap"
+            title="Launch POS Terminal"
+          >
+            <Monitor className="h-3.5 w-3.5 lg:h-4 lg:w-4 shrink-0" />
+            <span>POS</span>
+          </button>
+
+          {/* 2. Purchase / Add Stock (Laptop & Tab only) */}
+          <button
+            type="button"
+            onClick={() => onNavigate?.("stock_add_stock")}
+            className="hidden md:inline-flex items-center gap-1.5 px-2.5 lg:px-3 py-1.5 rounded-lg bg-[#ea580c] hover:bg-[#c2410c] text-white font-bold text-xs lg:text-sm shadow-xs transition hover:brightness-105 active:scale-95 cursor-pointer whitespace-nowrap"
+            title="Purchase (Add Stock)"
+          >
+            <ShoppingCart className="h-3.5 w-3.5 lg:h-4 lg:w-4 shrink-0" />
+            <span>Purchase</span>
+          </button>
+
+          {/* 3. Stock List (Mobile: icon only | Tab & Laptop: icon + text) */}
+          <button
+            type="button"
+            onClick={() => onNavigate?.("stock_stock_list")}
+            className="inline-flex items-center gap-1.5 p-1.5 md:px-2.5 lg:px-3 md:py-1.5 rounded-lg bg-[#7c3aed] hover:bg-[#6d28d9] text-white font-bold text-xs lg:text-sm shadow-xs transition hover:brightness-105 active:scale-95 cursor-pointer whitespace-nowrap"
+            title="Stock List"
+          >
+            <Boxes className="h-4 w-4 md:h-3.5 md:w-3.5 lg:h-4 lg:w-4 shrink-0" />
+            <span className="hidden md:inline">Stock List</span>
+          </button>
+
+          {/* 4. Daily Branch Report Summary (Mobile: icon only | Tab & Laptop: icon + text) */}
+          <button
+            type="button"
+            onClick={() => {
+              if (onNavigate) {
+                onNavigate("daily_branch_report" as any);
+              }
+            }}
+            className="inline-flex items-center gap-1.5 p-1.5 md:px-2.5 lg:px-3 md:py-1.5 rounded-lg bg-[#db2777] hover:bg-[#be185d] text-white font-bold text-xs lg:text-sm shadow-xs transition hover:brightness-105 active:scale-95 cursor-pointer whitespace-nowrap"
+            title="Daily Branch Report Summary"
+          >
+            <FileSpreadsheet className="h-4 w-4 md:h-3.5 md:w-3.5 lg:h-4 lg:w-4 shrink-0" />
+            <span className="hidden md:inline">Daily Branch Report</span>
+          </button>
         </div>
 
         <div className="flex items-center gap-2 sm:gap-4 shrink-0">

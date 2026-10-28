@@ -81,6 +81,7 @@ app.use("/api/inventory", inventoryRoutes);
 app.use("/api/transfers", transferRoutes);
 app.use("/api/sales", salesRoutes);
 app.use("/api/reports", reportRoutes);
+app.use("/api/report", reportRoutes);
 app.use("/api/audit", auditRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/sync", syncRoutes);

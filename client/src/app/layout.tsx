@@ -63,6 +63,53 @@ export default async function RootLayout({
             __html: `
               (function() {
                 try {
+                  var _err = console.error;
+                  var isSuppressed = function(args) {
+                    for (var i = 0; i < args.length; i++) {
+                      var a = args[i];
+                      if (!a) continue;
+                      if (typeof a === 'string') {
+                        if (a.indexOf('bis_skin_checked') !== -1) return true;
+                      } else if (typeof a === 'object') {
+                        try {
+                          var s = (a.message || '') + ' ' + (a.stack || '') + ' ' + (a.componentStack || '');
+                          if (s.indexOf('bis_skin_checked') !== -1) return true;
+                        } catch (e) {}
+                      }
+                    }
+                    return false;
+                  };
+                  Object.defineProperty(console, 'error', {
+                    configurable: true,
+                    enumerable: true,
+                    get: function() {
+                      return function() {
+                        if (isSuppressed(arguments)) return;
+                        if (typeof _err === 'function') {
+                          return _err.apply(console, arguments);
+                        }
+                      };
+                    },
+                    set: function(fn) {
+                      _err = fn;
+                    }
+                  });
+                } catch (e) {}
+
+                try {
+                  var origSetAttr = Element.prototype.setAttribute;
+                  Element.prototype.setAttribute = function(name, val) {
+                    if (name === 'bis_skin_checked') return;
+                    return origSetAttr.apply(this, arguments);
+                  };
+                  Object.defineProperty(Element.prototype, 'bis_skin_checked', {
+                    get: function() { return undefined; },
+                    set: function() {},
+                    configurable: true
+                  });
+                } catch (e) {}
+
+                try {
                   var stored = localStorage.getItem('pharmabiz-theme');
                   var isDark = stored === 'dark';
                   if (isDark) {
@@ -102,6 +149,16 @@ export default async function RootLayout({
                       el.removeAttribute('bis_skin_checked');
                     }
                   };
+                  var cleanAll = function() {
+                    try {
+                      var items = document.querySelectorAll('[bis_skin_checked]');
+                      for (var k = 0; k < items.length; k++) strip(items[k]);
+                    } catch (e) {}
+                  };
+                  cleanAll();
+                  if (typeof document !== 'undefined') {
+                    document.addEventListener('DOMContentLoaded', cleanAll);
+                  }
                   var observer = new MutationObserver(function(mutations) {
                     for (var i = 0; i < mutations.length; i++) {
                       var m = mutations[i];

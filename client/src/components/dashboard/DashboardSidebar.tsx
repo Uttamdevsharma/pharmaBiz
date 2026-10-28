@@ -16,6 +16,7 @@ import {
   Package,
   ShoppingCart,
   ShoppingBag,
+  TrendingUp,
   BarChart3,
   CreditCard,
   Sparkles,
@@ -62,6 +63,12 @@ import { ThemeToggle } from "@/components/common/ThemeToggle";
 export type OwnerModule =
   | "overview"
   | "notices"
+  | "daily_branch_report"
+  | "rep_branch_summary"
+  | "rep_daily_sales"
+  | "rep_monthly_sales"
+  | "rep_purchase"
+  | "rep_products"
   | "support_tickets"
   | "medicine_locator"
   | "pos"
@@ -181,6 +188,11 @@ export function DashboardSidebar({
   const isCollapsed = collapsed && !mobileOpen;
 
   const handleModuleSelect = (mod: OwnerModule) => {
+    if (mod === "pos" || mod === "pos_sale") {
+      if (typeof document !== "undefined" && !document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      }
+    }
     onModuleChange(mod);
     if (onCloseMobile) {
       onCloseMobile();
@@ -281,7 +293,15 @@ export function DashboardSidebar({
     activeModule === "pos" ||
     activeModule === "pos_sale" ||
     activeModule === "pos_history" ||
-    activeModule === "pos_vat" ||
+    activeModule === "pos_vat";
+
+  const isReportsActive =
+    activeModule === "rep_branch_summary" ||
+    activeModule === "rep_daily_sales" ||
+    activeModule === "rep_monthly_sales" ||
+    activeModule === "rep_purchase" ||
+    activeModule === "rep_products" ||
+    activeModule === "daily_branch_report" ||
     activeModule === "reports";
 
   const isAccountsActive =
@@ -337,6 +357,7 @@ export function DashboardSidebar({
     expenses_bills: isExpensesActive,
     employee_salary: isSalaryActive,
     subscription_mgmt: isSubscriptionActive,
+    reports_mgmt: isReportsActive,
   });
 
   const [openSubgroups, setOpenSubgroups] = useState<Record<string, boolean>>({
@@ -411,6 +432,9 @@ export function DashboardSidebar({
     if (isSubscriptionActive) {
       setOpenParents((prev) => ({ ...prev, subscription_mgmt: true }));
     }
+    if (isReportsActive) {
+      setOpenParents((prev) => ({ ...prev, reports_mgmt: true }));
+    }
 
     if (activeModule === "stock_stock_allocation" || activeModule === "stock_allocation_history") {
       setOpenSubgroups((prev) => ({ ...prev, allocate_product_group: true }));
@@ -439,6 +463,7 @@ export function DashboardSidebar({
     isExpensesActive,
     isSalaryActive,
     isSubscriptionActive,
+    isReportsActive,
   ]);
 
   const toggleParent = (parentId: string) => {
@@ -651,12 +676,6 @@ export function DashboardSidebar({
       visible: isOwner || hasPermission("pos.history"),
     },
     {
-      id: "reports" as OwnerModule,
-      label: "Sales Reports",
-      icon: BarChart3,
-      visible: isOwner || hasPermission("accounts.reports"),
-    },
-    {
       id: "pos_vat" as OwnerModule,
       label: "VAT Settings",
       icon: Percent,
@@ -826,6 +845,46 @@ export function DashboardSidebar({
     },
   ].filter((item) => item.visible);
 
+  // Reports & Analytics Section
+  const reportsChildren: SubMenuItem[] = [
+    {
+      id: "rep_branch_summary" as OwnerModule,
+      label: "Branch Report Summary",
+      icon: FileSpreadsheet,
+      visible: isOwner || hasPermission("reports.view") || hasPermission("dashboard.view"),
+    },
+    {
+      id: "rep_daily_sales" as OwnerModule,
+      label: "Daily Sales Report",
+      icon: TrendingUp,
+      visible: isOwner || hasPermission("reports.view") || hasPermission("accounts.reports"),
+    },
+    {
+      id: "rep_monthly_sales" as OwnerModule,
+      label: "Monthly Sales Report",
+      icon: CalendarDays,
+      visible: isOwner || hasPermission("reports.view") || hasPermission("accounts.reports"),
+    },
+    {
+      id: "rep_purchase" as OwnerModule,
+      label: "Purchase Report",
+      icon: ShoppingBag,
+      visible: isOwner || hasPermission("reports.view") || hasPermission("supplier.view"),
+    },
+    {
+      id: "rep_products" as OwnerModule,
+      label: "Products Report",
+      icon: Package,
+      visible: isOwner || hasPermission("reports.view") || hasPermission("inventory.product_list"),
+    },
+    {
+      id: "reports" as OwnerModule,
+      label: "Sales Reports",
+      icon: BarChart3,
+      visible: isOwner || hasPermission("accounts.reports"),
+    },
+  ].filter((item) => item.visible);
+
   // Collapsible domain groups list in exact workflow order
   const collapsibleSections: ParentMenuItem[] = [
     {
@@ -905,6 +964,13 @@ export function DashboardSidebar({
       icon: Wallet,
       visible: accountsChildren.length > 0,
       children: accountsChildren,
+    },
+    {
+      id: "reports_mgmt",
+      label: "Reports",
+      icon: BarChart3,
+      visible: reportsChildren.length > 0,
+      children: reportsChildren,
     },
     {
       id: "approvals",

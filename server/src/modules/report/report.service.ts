@@ -61,6 +61,17 @@ export class ReportService {
       where.paymentMethod = query.paymentMethod;
     }
 
+    if (query.categoryId || query.subcategoryId) {
+      where.items = {
+        some: {
+          product: {
+            ...(query.categoryId ? { categoryId: query.categoryId } : {}),
+            ...(query.subcategoryId ? { subcategoryId: query.subcategoryId } : {}),
+          },
+        },
+      };
+    }
+
     const [sales, tenant, targetBranch] = await Promise.all([
       (prisma as any).sale.findMany({
         where,
@@ -283,6 +294,10 @@ export class ReportService {
           unitPrice: Number(i.unitPrice),
           subTotal: Number(i.subTotal),
           batchNumber: i.batchNumber,
+          categoryId: i.product?.categoryId || i.product?.categoryRef?.id,
+          categoryName: i.product?.categoryRef?.name,
+          subcategoryId: i.product?.subcategoryId || i.product?.subcategoryRef?.id,
+          subcategoryName: i.product?.subcategoryRef?.name,
         })),
       };
     });
@@ -1392,5 +1407,550 @@ export class ReportService {
       },
     };
   }
-}
 
+
+  /**
+   * Branch Report Summary for a specific date:
+   * Attendance, Sales, Expenses, Profit, Stock units & Valuation
+   */
+  static async getBranchReportSummary(tenantId: string, branchId: string, dateStr: string) {
+    const formattedDate = dateStr ? dateStr.split("T")[0] : new Date().toISOString().split("T")[0];
+    const dayStart = this.parseBoundaryDate(formattedDate, false);
+    const dayEnd = this.parseBoundaryDate(formattedDate, true);
+
+    const [
+      branch,
+      tenant,
+      totalStaffCount,
+      presentStaffCount,
+      salesAgg,
+      expenseAgg,
+      inventories,
+    ] = await Promise.all([
+      (prisma as any).branch.findFirst({
+        where: { id: branchId, tenantId },
+        select: { id: true, name: true, location: true, phone: true },
+      }),
+      (prisma as any).tenant.findFirst({
+        where: { id: tenantId },
+        select: { id: true, name: true, phone: true, email: true, logoUrl: true, address: true },
+      }),
+      (prisma as any).user.count({
+        where: { tenantId, branchId, isActive: true },
+      }),
+      (prisma as any).employeeAttendance.count({
+        where: {
+          tenantId,
+          branchId,
+          date: formattedDate,
+          status: { in: ["PRESENT", "LATE"] },
+        },
+      }),
+      (prisma as any).sale.aggregate({
+        _sum: { totalAmount: true },
+        where: {
+          tenantId,
+          branchId,
+          status: "COMPLETED",
+          createdAt: { gte: dayStart, lte: dayEnd },
+        },
+      }),
+      (prisma as any).branchExpense.aggregate({
+        _sum: { amount: true },
+        where: {
+          tenantId,
+          branchId,
+          paymentDate: { gte: dayStart, lte: dayEnd },
+        },
+      }),
+      (prisma as any).inventory.findMany({
+        where: {
+          branchId,
+          quantity: { gt: 0 },
+        },
+        select: {
+          quantity: true,
+          purchasePrice: true,
+        },
+      }),
+    ]);
+
+    const totalSales = Number(Number(salesAgg._sum?.totalAmount || 0).toFixed(2));
+    const totalExpense = Number(Number(expenseAgg._sum?.amount || 0).toFixed(2));
+    const netProfit = Number((totalSales - totalExpense).toFixed(2));
+
+    let stockUnits = 0;
+    let stockValuation = 0;
+    for (const inv of inventories) {
+      const q = Number(inv.quantity || 0);
+      const p = Number(inv.purchasePrice || 0);
+      stockUnits += q;
+      stockValuation += q * p;
+    }
+
+    const attendanceRatio = `${presentStaffCount}/${totalStaffCount}`;
+    const attendancePercentage = totalStaffCount > 0 ? Math.round((presentStaffCount / totalStaffCount) * 100) : 0;
+
+    return {
+      date: dateStr,
+      tenant: {
+        name: tenant?.name || "Pharmacy Chain",
+        logoUrl: tenant?.logoUrl || null,
+        phone: tenant?.phone || null,
+        address: tenant?.address || null,
+      },
+      branch: {
+        id: branch?.id || branchId,
+        name: branch?.name || "Main Branch",
+        location: branch?.location || null,
+        phone: branch?.phone || tenant?.phone || null,
+      },
+      metrics: {
+        attendance: {
+          present: presentStaffCount,
+          total: totalStaffCount,
+          ratio: attendanceRatio,
+          percentage: attendancePercentage,
+        },
+        totalSales,
+        totalExpense,
+        netProfit,
+        stockUnits,
+        stockValuation: Number(stockValuation.toFixed(2)),
+      },
+    };
+  }
+  /**
+   * Monthly Sales Summary with Day-by-day aggregates & invoice list
+   */
+  static async getMonthlySalesSummary(
+    tenantId: string,
+    branchId?: string,
+    monthStr?: string,
+    filters: { categoryId?: string; subcategoryId?: string } = {}
+  ) {
+    const rawMonth = monthStr || new Date().toISOString().slice(0, 7);
+    const [yearStr, monthStrPart] = rawMonth.split("-");
+    const year = parseInt(yearStr, 10);
+    const monthIdx = parseInt(monthStrPart, 10) - 1;
+
+    const startOfMonth = new Date(year, monthIdx, 1, 0, 0, 0, 0);
+    const endOfMonth = new Date(year, monthIdx + 1, 0, 23, 59, 59, 999);
+    const daysInMonth = new Date(year, monthIdx + 1, 0).getDate();
+
+    const where: any = {
+      tenantId,
+      status: "COMPLETED",
+      createdAt: { gte: startOfMonth, lte: endOfMonth },
+    };
+    if (branchId) {
+      where.branchId = branchId;
+    }
+
+    const [sales, branch, tenant] = await Promise.all([
+      (prisma as any).sale.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        include: {
+          user: { select: { id: true, name: true, username: true } },
+          branch: { select: { id: true, name: true } },
+          items: {
+            include: {
+              product: {
+                select: {
+                  id: true,
+                  name: true,
+                  sku: true,
+                  unit: true,
+                  categoryId: true,
+                  subcategoryId: true,
+                  categoryRef: { select: { id: true, name: true } },
+                  subcategoryRef: { select: { id: true, name: true } },
+                },
+              },
+            },
+          },
+        },
+      }),
+      branchId
+        ? (prisma as any).branch.findUnique({
+            where: { id: branchId },
+            select: { id: true, name: true, location: true, phone: true },
+          })
+        : null,
+      (prisma as any).tenant.findUnique({
+        where: { id: tenantId },
+        select: { id: true, name: true, phone: true, logoUrl: true },
+      }),
+    ]);
+
+    // Build day-by-day map
+    const dayMap: Record<string, { date: string; dayName: string; invoicesCount: number; totalSales: number; totalPaid: number; totalDue: number }> = {};
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dayDate = new Date(year, monthIdx, d);
+      const dateKey = `${year}-${String(monthIdx + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+      const dayName = dayDate.toLocaleDateString("en-US", { weekday: "short" });
+      dayMap[dateKey] = {
+        date: dateKey,
+        dayName,
+        invoicesCount: 0,
+        totalSales: 0,
+        totalPaid: 0,
+        totalDue: 0,
+      };
+    }
+
+    let grandSales = 0;
+    let grandPaid = 0;
+    let grandDue = 0;
+
+    for (const s of sales) {
+      const sTotal = Number(s.totalAmount || 0);
+      const sPaid = Number(s.paidAmount || 0);
+      const sDue = Number(s.dueAmount || 0);
+
+      grandSales += sTotal;
+      grandPaid += sPaid;
+      grandDue += sDue;
+
+      const dateKey = new Date(s.createdAt).toISOString().split("T")[0];
+      if (dayMap[dateKey]) {
+        dayMap[dateKey].invoicesCount += 1;
+        dayMap[dateKey].totalSales += sTotal;
+        dayMap[dateKey].totalPaid += sPaid;
+        dayMap[dateKey].totalDue += sDue;
+      }
+    }
+
+    const daysSummary = Object.values(dayMap)
+      .filter((d) => d.invoicesCount > 0 || d.totalSales > 0)
+      .map((d) => ({
+        ...d,
+        totalSales: Number(d.totalSales.toFixed(2)),
+        totalPaid: Number(d.totalPaid.toFixed(2)),
+        totalDue: Number(d.totalDue.toFixed(2)),
+      }))
+      .sort((a, b) => b.date.localeCompare(a.date));
+
+    const transactions = sales.map((s: any) => ({
+      id: s.id,
+      receiptNo: s.receiptNo,
+      createdAt: s.createdAt,
+      customerName: s.customerName || "Walk-in Customer",
+      customerPhone: s.customerPhone || null,
+      paymentMethod: s.paymentMethod,
+      totalAmount: Number(Number(s.totalAmount || 0).toFixed(2)),
+      paidAmount: Number(Number(s.paidAmount || 0).toFixed(2)),
+      dueAmount: Number(Number(s.dueAmount || 0).toFixed(2)),
+      status: s.status,
+      prescriptionRef: s.prescriptionRef || null,
+      itemsCount: (s.items || []).length,
+      cashier: s.user?.name || s.user?.username || "—",
+      items: (s.items || []).map((i: any) => ({
+        name: i.product?.name || "Medicine",
+        quantity: i.quantity,
+        unitType: i.unitType || i.product?.unit || "Piece",
+        unitPrice: Number(i.unitPrice || 0),
+        subTotal: Number(i.subTotal || 0),
+        batchNumber: i.batchNumber,
+        categoryId: i.product?.categoryId || i.product?.categoryRef?.id,
+        categoryName: i.product?.categoryRef?.name,
+        subcategoryId: i.product?.subcategoryId || i.product?.subcategoryRef?.id,
+        subcategoryName: i.product?.subcategoryRef?.name,
+      })),
+    }));
+
+    const monthLabel = startOfMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+
+    return {
+      month: rawMonth,
+      monthLabel,
+      branch: branch || { id: branchId, name: "All Branches" },
+      tenant: tenant || { name: "Pharmacy Chain" },
+      totals: {
+        totalInvoices: sales.length,
+        totalSales: Number(grandSales.toFixed(2)),
+        totalPaid: Number(grandPaid.toFixed(2)),
+        totalDue: Number(grandDue.toFixed(2)),
+      },
+      daysSummary,
+      transactions,
+    };
+  }
+
+  /**
+   * Procurement & Purchase Report
+   */
+  static async getPurchaseReport(
+    tenantId: string,
+    branchId?: string,
+    filters: {
+      startDate?: string;
+      endDate?: string;
+      supplierId?: string;
+      paymentStatus?: string;
+      search?: string;
+      categoryId?: string;
+      subcategoryId?: string;
+    } = {}
+  ) {
+    const where: any = {
+      tenantId,
+    };
+    if (branchId) {
+      where.branchId = branchId;
+    }
+    if (filters.supplierId && filters.supplierId !== "ALL") {
+      where.supplierId = filters.supplierId;
+    }
+    if (filters.paymentStatus && filters.paymentStatus !== "ALL") {
+      where.paymentStatus = filters.paymentStatus;
+    }
+    if (filters.startDate || filters.endDate) {
+      where.purchaseDate = {};
+      if (filters.startDate) {
+        where.purchaseDate.gte = new Date(`${filters.startDate}T00:00:00.000Z`);
+      }
+      if (filters.endDate) {
+        where.purchaseDate.lte = new Date(`${filters.endDate}T23:59:59.999Z`);
+      }
+    }
+    if (filters.search) {
+      const s = filters.search.trim();
+      where.OR = [
+        { invoiceNo: { contains: s, mode: "insensitive" } },
+        { notes: { contains: s, mode: "insensitive" } },
+        { supplier: { name: { contains: s, mode: "insensitive" } } },
+      ];
+    }
+
+    const [purchases, branch, tenant] = await Promise.all([
+      (prisma as any).purchase.findMany({
+        where,
+        orderBy: { purchaseDate: "desc" },
+        include: {
+          supplier: { select: { id: true, name: true, phone: true, email: true } },
+          branch: { select: { id: true, name: true } },
+          items: {
+            include: {
+              product: {
+                select: {
+                  id: true,
+                  name: true,
+                  sku: true,
+                  genericName: true,
+                  unit: true,
+                  categoryId: true,
+                  subcategoryId: true,
+                  categoryRef: { select: { id: true, name: true } },
+                  subcategoryRef: { select: { id: true, name: true } },
+                },
+              },
+            },
+          },
+        },
+      }),
+      branchId
+        ? (prisma as any).branch.findUnique({
+            where: { id: branchId },
+            select: { id: true, name: true, location: true, phone: true },
+          })
+        : null,
+      (prisma as any).tenant.findUnique({
+        where: { id: tenantId },
+        select: { id: true, name: true, phone: true, logoUrl: true },
+      }),
+    ]);
+
+    let grandTotal = 0;
+    let grandPaid = 0;
+    let grandDue = 0;
+
+    const list = purchases.map((p: any) => {
+      const t = Number(p.totalAmount || 0);
+      const pd = Number(p.paidAmount || 0);
+      const d = Number(p.dueAmount || 0);
+
+      grandTotal += t;
+      grandPaid += pd;
+      grandDue += d;
+
+      return {
+        id: p.id,
+        invoiceNo: p.invoiceNo || "—",
+        purchaseDate: p.purchaseDate,
+        supplierName: p.supplier?.name || "Unknown Supplier",
+        supplierPhone: p.supplier?.phone || null,
+        totalAmount: Number(t.toFixed(2)),
+        paidAmount: Number(pd.toFixed(2)),
+        dueAmount: Number(d.toFixed(2)),
+        paymentStatus: p.paymentStatus,
+        paymentMethod: p.paymentMethod || "CASH",
+        notes: p.notes,
+        itemsCount: (p.items || []).length,
+        items: (p.items || []).map((i: any) => ({
+          id: i.id,
+          name: i.product?.name || "Medicine",
+          genericName: i.product?.genericName || null,
+          batchNumber: i.batchNumber || "—",
+          expiryDate: i.expiryDate ? new Date(i.expiryDate).toISOString().split("T")[0] : "—",
+          boxQuantity: i.boxQuantity || 0,
+          stripsPerBox: i.stripsPerBox || 0,
+          quantity: i.quantity || 0,
+          unitPurchasePrice: Number(i.unitPurchasePrice || 0),
+          totalAmount: Number(i.totalAmount || 0),
+        })),
+      };
+    });
+
+    return {
+      branch: branch || { id: branchId, name: "All Branches" },
+      tenant: tenant || { name: "Pharmacy Chain" },
+      totals: {
+        totalBills: purchases.length,
+        totalAmount: Number(grandTotal.toFixed(2)),
+        totalPaid: Number(grandPaid.toFixed(2)),
+        totalDue: Number(grandDue.toFixed(2)),
+      },
+      purchases: list,
+    };
+  }
+  /**
+   * Product / Medicine Stock Valuation & Inventory Report
+   */
+  static async getProductStockReport(
+    tenantId: string,
+    branchId?: string,
+    filters: {
+      categoryId?: string;
+      subcategoryId?: string;
+      brandId?: string;
+      search?: string;
+    } = {}
+  ) {
+    const where: any = {
+      tenantId,
+      isActive: true,
+    };
+
+    if (filters.categoryId && filters.categoryId !== "ALL") {
+      where.categoryId = filters.categoryId;
+    }
+    if (filters.subcategoryId && filters.subcategoryId !== "ALL") {
+      where.subcategoryId = filters.subcategoryId;
+    }
+    if (filters.brandId && filters.brandId !== "ALL") {
+      where.brandId = filters.brandId;
+    }
+    if (filters.search) {
+      const s = filters.search.trim();
+      where.OR = [
+        { name: { contains: s, mode: "insensitive" } },
+        { genericName: { contains: s, mode: "insensitive" } },
+        { sku: { contains: s, mode: "insensitive" } },
+        { barcode: { contains: s, mode: "insensitive" } },
+      ];
+    }
+
+    const inventoryWhere: any = { quantity: { gt: 0 } };
+    if (branchId) {
+      inventoryWhere.branchId = branchId;
+    }
+
+    const [products, branch, tenant] = await Promise.all([
+      (prisma as any).product.findMany({
+        where,
+        orderBy: { name: "asc" },
+        include: {
+          categoryRef: { select: { id: true, name: true } },
+          subcategoryRef: { select: { id: true, name: true } },
+          brandRef: { select: { id: true, name: true } },
+          unitRef: { select: { id: true, name: true, symbol: true } },
+          inventories: {
+            where: inventoryWhere,
+            select: {
+              quantity: true,
+              sellingPrice: true,
+              boxSellingPrice: true,
+              purchasePrice: true,
+              expiryDate: true,
+              batchNumber: true,
+            },
+          },
+          branchOverrides: branchId
+            ? {
+                where: { branchId },
+                select: { price: true },
+              }
+            : false,
+        },
+      }),
+      branchId
+        ? (prisma as any).branch.findUnique({
+            where: { id: branchId },
+            select: { id: true, name: true, location: true, phone: true },
+          })
+        : null,
+      (prisma as any).tenant.findUnique({
+        where: { id: tenantId },
+        select: { id: true, name: true, phone: true, logoUrl: true },
+      }),
+    ]);
+
+    let grandStockQty = 0;
+    let grandStockValuation = 0;
+
+    const list = products.map((p: any) => {
+      const invs = p.inventories || [];
+      const stockQty = invs.reduce((sum: number, inv: any) => sum + Number(inv.quantity || 0), 0);
+      const override = p.branchOverrides && p.branchOverrides[0];
+      const latestBatch = invs.length > 0 ? invs[0] : null;
+      const batchPrice = latestBatch ? Number(latestBatch.sellingPrice || latestBatch.boxSellingPrice || 0) : 0;
+      const sellingPrice = override
+        ? Number(override.price)
+        : Number(p.basePrice) > 0
+        ? Number(p.basePrice)
+        : batchPrice;
+
+      const unitCost = latestBatch ? Number(latestBatch.purchasePrice || 0) : 0;
+      const valuation = invs.reduce((sum: number, inv: any) => {
+        const q = Number(inv.quantity || 0);
+        const cost = Number(inv.purchasePrice || unitCost || 0);
+        return sum + q * cost;
+      }, 0);
+
+      grandStockQty += stockQty;
+      grandStockValuation += valuation;
+
+      return {
+        id: p.id,
+        name: p.name,
+        genericName: p.genericName || null,
+        sku: p.sku || "—",
+        barcode: p.barcode || null,
+        imageUrl: p.imageUrl || null,
+        brand: p.brandRef?.name || p.brandName || p.manufacturer || "—",
+        category: p.categoryRef?.name || p.category || "General",
+        subcategory: p.subcategoryRef?.name || p.subcategory || null,
+        unit: p.unit || p.unitRef?.symbol || "pcs",
+        variant: p.size ? `${p.size} (${p.defaultPackType || "Piece"})` : p.defaultPackType || "Standard",
+        stockQty,
+        sellingPrice: Number(sellingPrice.toFixed(2)),
+        unitCost: Number(unitCost.toFixed(2)),
+        totalValuation: Number(valuation.toFixed(2)),
+        batchesCount: invs.length,
+      };
+    });
+
+    return {
+      branch: branch || { id: branchId, name: "All Branches" },
+      tenant: tenant || { name: "Pharmacy Chain" },
+      totals: {
+        totalProducts: products.length,
+        totalStockQty: grandStockQty,
+        totalValuation: Number(grandStockValuation.toFixed(2)),
+      },
+      products: list,
+    };
+  }
+}

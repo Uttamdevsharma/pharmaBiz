@@ -5,6 +5,7 @@ import { fetchApi } from "@/lib/api";
 import { Supplier, SupplierContact } from "@/types";
 import { useAuth } from "@/context/AuthContext";
 import { showAlert } from "@/lib/swal";
+import { PurchaseBillDetailModal, PurchaseBillData } from "@/components/common/PurchaseBillDetailModal";
 import {
   Building,
   ArrowLeft,
@@ -121,6 +122,82 @@ export function SupplierDetailsView({ supplierId, onBack, onNavigate }: Supplier
 
   // Selected Invoice Modal
   const [selectedInvoice, setSelectedInvoice] = useState<any | null>(null);
+
+  // Normalize selected supplier purchase into formal PurchaseBillData structure
+  const normalizedSupplierPurchaseBill: PurchaseBillData | null = React.useMemo(() => {
+    if (!selectedInvoice) return null;
+    const invNo =
+      selectedInvoice.invoiceNo ||
+      selectedInvoice.invoiceNumber ||
+      `PUR-${selectedInvoice.id?.slice(-6)}`;
+    const pDate =
+      selectedInvoice.purchaseDate ||
+      selectedInvoice.createdAt ||
+      new Date().toISOString();
+    const supName =
+      selectedInvoice.supplier?.name ||
+      supplier?.name ||
+      "Supplier";
+    const supPhone =
+      selectedInvoice.supplier?.phone ||
+      supplier?.phone ||
+      selectedInvoice.contactPerson?.phone ||
+      null;
+    const branchName =
+      selectedInvoice.branch?.name ||
+      "Main Branch";
+
+    const items = (selectedInvoice.items || []).map((it: any, idx: number) => {
+      const name = it.product?.name || it.name || "Medicine Item";
+      const genericName = it.product?.genericName || it.genericName || null;
+      const batchNumber = it.batchNumber || "—";
+      let expiryDate = "—";
+      if (it.expiryDate) {
+        const expD = new Date(it.expiryDate);
+        expiryDate = !isNaN(expD.getTime())
+          ? expD.toISOString().split("T")[0]
+          : String(it.expiryDate);
+      }
+      const quantity = Number(it.quantity || 0);
+      const unitPurchasePrice = Number(
+        it.unitPurchasePrice ??
+        it.purchasePrice ??
+        (it.totalAmount && quantity ? it.totalAmount / quantity : 0)
+      );
+      const totalAmount = Number(
+        it.totalAmount ??
+        it.totalPrice ??
+        unitPurchasePrice * quantity
+      );
+
+      return {
+        id: it.id || String(idx),
+        name,
+        genericName,
+        batchNumber,
+        expiryDate,
+        quantity,
+        unitPurchasePrice,
+        totalAmount,
+      };
+    });
+
+    return {
+      id: selectedInvoice.id,
+      invoiceNo: invNo,
+      purchaseDate: pDate,
+      supplierName: supName,
+      supplierPhone: supPhone,
+      totalAmount: Number(selectedInvoice.totalAmount || 0),
+      paidAmount: Number(selectedInvoice.paidAmount || 0),
+      paymentStatus: selectedInvoice.paymentStatus,
+      paymentMethod: selectedInvoice.paymentMethod || "CASH",
+      notes: selectedInvoice.notes,
+      branchName,
+      itemsCount: items.length,
+      items,
+    };
+  }, [selectedInvoice, supplier]);
 
   // Purchase History Pagination
   const [purchasePage, setPurchasePage] = useState(1);
@@ -994,7 +1071,7 @@ export function SupplierDetailsView({ supplierId, onBack, onNavigate }: Supplier
                     <th className="py-4 px-4 text-right">Paid</th>
                     <th className="py-4 px-4 text-right">Due</th>
                     <th className="py-4 px-4 text-center">Status</th>
-                    <th className="py-4 px-4 text-right">Action</th>
+                    <th className="py-4 px-4 text-right">Invoice / Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium text-slate-700 dark:text-slate-300 text-xs sm:text-sm">
@@ -1063,10 +1140,13 @@ export function SupplierDetailsView({ supplierId, onBack, onNavigate }: Supplier
 
                         <td className="py-4 px-4 text-right">
                           <button
+                            type="button"
                             onClick={() => setSelectedInvoice(p)}
-                            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold transition cursor-pointer"
+                            className="h-8 px-2.5 bg-blue-50 hover:bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 dark:text-blue-300 border border-blue-200 dark:border-blue-800 rounded-lg text-xs font-bold transition inline-flex items-center gap-1.5 ml-auto active:scale-95 shadow-2xs cursor-pointer"
+                            title="View Formal Invoice & Print"
                           >
-                            Details
+                            <FileText className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                            <span>Invoice / Print</span>
                           </button>
                         </td>
                       </tr>
@@ -1446,93 +1526,16 @@ export function SupplierDetailsView({ supplierId, onBack, onNavigate }: Supplier
         </div>
       )}
 
-      {/* INVOICE DETAILS MODAL */}
-      {selectedInvoice && (
-        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-xl shadow-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
-                <FileText className="h-5 w-5 text-brand-primary" />
-                Purchase Invoice #{selectedInvoice.invoiceNo}
-              </h3>
-              <button onClick={() => setSelectedInvoice(null)} className="p-1 text-slate-400">
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 text-xs">
-              <div>
-                <span className="text-slate-400">Date: </span>
-                <span className="font-bold font-mono text-slate-800 dark:text-white">
-                  {new Date(selectedInvoice.purchaseDate || selectedInvoice.createdAt).toLocaleDateString()}
-                </span>
-              </div>
-              <div className="text-right">
-                <span className="text-slate-400">Branch: </span>
-                <span className="font-bold text-slate-800 dark:text-white">
-                  {selectedInvoice.branch?.name || "Main Branch"}
-                </span>
-              </div>
-              <div>
-                <span className="text-slate-400">Contact Person: </span>
-                <span className="font-bold text-slate-800 dark:text-white">
-                  {selectedInvoice.contactPerson?.name || selectedInvoice.contactPersonName || supplier.contactPerson || "—"}
-                </span>
-              </div>
-              <div className="text-right">
-                <span className="text-slate-400">Payment Status: </span>
-                <span className="font-bold text-brand-primary">{selectedInvoice.paymentStatus}</span>
-              </div>
-            </div>
-
-            {selectedInvoice.items && selectedInvoice.items.length > 0 && (
-              <div className="table-responsive-container border border-slate-100 dark:border-slate-800 rounded-2xl overflow-hidden">
-                <table className="w-full min-w-[500px] text-left text-xs">
-                  <thead className="bg-slate-50 dark:bg-slate-800/50 text-[10px] uppercase font-bold text-slate-400">
-                    <tr>
-                      <th className="py-2.5 px-3">Product</th>
-                      <th className="py-2.5 px-3">Batch</th>
-                      <th className="py-2.5 px-3 text-center">Qty</th>
-                      <th className="py-2.5 px-3 text-right">Cost Price</th>
-                      <th className="py-2.5 px-3 text-right">Total</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                    {selectedInvoice.items.map((item: any, i: number) => (
-                      <tr key={i}>
-                        <td className="py-2.5 px-3 font-bold text-slate-900 dark:text-white">
-                          {item.product?.name || "Product"}
-                        </td>
-                        <td className="py-2.5 px-3 font-mono text-[11px] text-slate-500">
-                          {item.batchNumber || "—"}
-                        </td>
-                        <td className="py-2.5 px-3 text-center font-mono font-bold">
-                          {item.quantity}
-                        </td>
-                        <td className="py-2.5 px-3 text-right font-mono">
-                          ৳{Number(item.unitPurchasePrice).toFixed(2)}
-                        </td>
-                        <td className="py-2.5 px-3 text-right font-mono font-black text-slate-900 dark:text-white">
-                          ৳{Number(item.totalAmount).toFixed(2)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            <div className="p-3.5 bg-slate-50 dark:bg-slate-800/50 rounded-2xl flex items-center justify-between text-xs font-bold">
-              <div>
-                Total: <span className="font-mono">৳{Number(selectedInvoice.totalAmount).toFixed(2)}</span> • Paid:{" "}
-                <span className="font-mono text-emerald-600">৳{Number(selectedInvoice.paidAmount).toFixed(2)}</span>
-              </div>
-              <div className="text-rose-600 font-mono">
-                Due: ৳{Number(selectedInvoice.dueAmount).toFixed(2)}
-              </div>
-            </div>
-          </div>
-        </div>
+      {/* Formal Purchase Bill / Chalan Invoice Modal (Matching Daily Branch & Purchase Report) */}
+      {selectedInvoice && normalizedSupplierPurchaseBill && (
+        <PurchaseBillDetailModal
+          purchase={normalizedSupplierPurchaseBill}
+          pharmacyName={user?.tenant?.name || "Shapla Pharmacy"}
+          branchName={normalizedSupplierPurchaseBill.branchName || "Main Branch"}
+          receiverName={user?.name || "Store Manager"}
+          logoUrl={user?.tenant?.logoUrl}
+          onClose={() => setSelectedInvoice(null)}
+        />
       )}
     </div>
   );

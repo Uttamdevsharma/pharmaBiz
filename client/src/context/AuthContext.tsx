@@ -27,6 +27,7 @@ export interface TenantInfo {
   email?: string | null;
   phone?: string | null;
   address?: string | null;
+  website?: string | null;
 }
 
 export interface User {
@@ -236,6 +237,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         email: branding.email !== undefined ? branding.email : (prev.tenant?.email || null),
         phone: branding.phone !== undefined ? branding.phone : (prev.tenant?.phone || null),
         address: branding.address !== undefined ? branding.address : (prev.tenant?.address || null),
+        website: branding.website !== undefined ? branding.website : (prev.tenant?.website || null),
       };
       const updatedUser = { ...prev, tenant: updatedTenant };
       localStorage.setItem("user", JSON.stringify(updatedUser));

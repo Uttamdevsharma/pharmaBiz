@@ -9,7 +9,10 @@ import { ArrowRight, Sparkles, CheckCircle2 } from "lucide-react";
 
 export default function Home() {
   return (
-    <div className="flex min-h-screen flex-col bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
+    <div
+      suppressHydrationWarning
+      className="flex min-h-screen flex-col bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100"
+    >
       {/* Dynamic 3-Item Navbar */}
       <Navbar />
 

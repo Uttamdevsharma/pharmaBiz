@@ -7,6 +7,7 @@ import { BranchProvider } from "@/context/BranchContext";
 import { SettingsProvider, SiteSettings } from "@/context/SettingsContext";
 import { ToastProvider } from "@/context/ToastContext";
 
+
 export function Providers({
   children,
   initialSettings,

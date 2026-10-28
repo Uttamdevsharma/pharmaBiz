@@ -96,6 +96,12 @@ export const MODULE_TO_PATH: Record<OwnerModule, string> = {
 
   // Reports, Profile & System Settings
   reports: "/dashboard/reports",
+  daily_branch_report: "/dashboard/reports/daily-branch",
+  rep_branch_summary: "/dashboard/reports/branch-summary",
+  rep_daily_sales: "/dashboard/reports/daily-sales",
+  rep_monthly_sales: "/dashboard/reports/monthly-sales",
+  rep_purchase: "/dashboard/reports/purchase",
+  rep_products: "/dashboard/reports/products",
   profile: "/dashboard/profile",
   subscription: "/dashboard/subscription",
   subscription_plans: "/dashboard/subscription/plans",
@@ -136,6 +142,16 @@ PATH_TO_MODULE_MAP["/dashboard/locations/create"] = "loc_create_group";
 PATH_TO_MODULE_MAP["/dashboard/approvals"] = "approvals_fund_transfer";
 PATH_TO_MODULE_MAP["/dashboard/approvals/fund-transfer"] = "approvals_fund_transfer";
 PATH_TO_MODULE_MAP["/dashboard/support-tickets"] = "support_tickets";
+PATH_TO_MODULE_MAP["/reports/branch-summary"] = "rep_branch_summary";
+PATH_TO_MODULE_MAP["/dashboard/reports/branch-summary"] = "rep_branch_summary";
+PATH_TO_MODULE_MAP["/reports/daily-sales"] = "rep_daily_sales";
+PATH_TO_MODULE_MAP["/dashboard/reports/daily-sales"] = "rep_daily_sales";
+PATH_TO_MODULE_MAP["/reports/monthly-sales"] = "rep_monthly_sales";
+PATH_TO_MODULE_MAP["/dashboard/reports/monthly-sales"] = "rep_monthly_sales";
+PATH_TO_MODULE_MAP["/reports/purchase"] = "rep_purchase";
+PATH_TO_MODULE_MAP["/dashboard/reports/purchase"] = "rep_purchase";
+PATH_TO_MODULE_MAP["/reports/products"] = "rep_products";
+PATH_TO_MODULE_MAP["/dashboard/reports/products"] = "rep_products";
 PATH_TO_MODULE_MAP["/dashboard/notices"] = "notices";
 
 /**

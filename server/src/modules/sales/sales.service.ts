@@ -117,24 +117,11 @@ export class SalesService {
 
         if (item.inventoryLocationId) {
           targetLocation = (targetBatch.locations || []).find((l: any) => l.id === item.inventoryLocationId);
-          if (!targetLocation || targetLocation.quantity < totalBaseUnitsNeeded) {
-            throw new Error(
-              `Selected physical location for "${prod.name}" has insufficient stock (${targetLocation?.quantity || 0} available, ${totalBaseUnitsNeeded} needed).`
-            );
-          }
-        } else {
-          // Find first location with enough stock (FEFO within batch)
-          const sortedLocations = (targetBatch.locations || []).sort((a: any, b: any) => a.quantity - b.quantity);
-          targetLocation = sortedLocations.find((l: any) => l.quantity >= totalBaseUnitsNeeded);
-          if (!targetLocation && (targetBatch.locations || []).length > 0) {
-            // Try to combine from locations
-            targetLocation = (targetBatch.locations || [])[0];
-            if (targetLocation && targetLocation.quantity < totalBaseUnitsNeeded) {
-              throw new Error(
-                `No single physical location has enough stock for "${prod.name}". Please select a specific location with sufficient quantity.`
-              );
-            }
-          }
+        }
+        if (!targetLocation && (targetBatch.locations || []).length > 0) {
+          // Find location with highest stock in this batch
+          const sortedLocations = (targetBatch.locations || []).sort((a: any, b: any) => b.quantity - a.quantity);
+          targetLocation = sortedLocations.find((l: any) => l.quantity >= totalBaseUnitsNeeded) || sortedLocations[0];
         }
       } else {
         // Apply FEFO allocation across batches
@@ -196,17 +183,6 @@ export class SalesService {
       });
     }
 
-    // Validate all locations have enough stock before proceeding
-    for (const deduction of stockDeductions) {
-      if (deduction.inventoryLocationId && deduction.inventoryLocationData) {
-        const loc = deduction.inventoryLocationData;
-        if (loc.quantity < deduction.quantityToDeduct) {
-          throw new Error(
-            `Insufficient stock at physical location for this sale. Location has ${loc.quantity}, need ${deduction.quantityToDeduct}.`
-          );
-        }
-      }
-    }
 
     // 6. Discount & Tax calculations (Auto-rounded to integer)
     let discountAmount = 0;
@@ -292,10 +268,13 @@ export class SalesService {
         });
 
         if (deduction.inventoryLocationId && locData) {
-          await tx.inventoryLocation.update({
-            where: { id: deduction.inventoryLocationId },
-            data: { quantity: { decrement: deduction.quantityToDeduct } },
-          });
+          const locDeduct = Math.min(Number(locData.quantity) || 0, deduction.quantityToDeduct);
+          if (locDeduct > 0) {
+            await tx.inventoryLocation.update({
+              where: { id: deduction.inventoryLocationId },
+              data: { quantity: { decrement: locDeduct } },
+            });
+          }
         }
 
         await tx.stockMovement.create({

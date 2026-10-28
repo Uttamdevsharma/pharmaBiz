@@ -914,9 +914,9 @@ export function SalesHistoryView({ selectedBranchId: propBranchId, onNavigate }:
               {/* Invoice Totals */}
               <div className="pt-3 border-t-2 border-slate-900 dark:border-slate-100 print:border-black space-y-1.5 text-xs sm:text-sm print:text-sm font-medium">
                 <div className="flex justify-between text-slate-600 print:text-black">
-                  <span>Subtotal:</span>
+                  <span>Product Total (Subtotal):</span>
                   <span className="font-mono font-bold">
-                    ৳{Number((selectedSale.items || []).reduce((acc: number, it: any) => acc + Number(it.subTotal || 0), 0) || selectedSale.totalAmount || 0).toFixed(2)}
+                    ৳{Number((selectedSale as any).subTotal || (selectedSale.items || []).reduce((acc: number, it: any) => acc + Number(it.subTotal || 0), 0) || selectedSale.totalAmount || 0).toFixed(2)}
                   </span>
                 </div>
                 {Number(selectedSale.discount || 0) > 0 && (
@@ -925,14 +925,18 @@ export function SalesHistoryView({ selectedBranchId: propBranchId, onNavigate }:
                     <span className="font-mono">-৳{Number(selectedSale.discount).toFixed(2)}</span>
                   </div>
                 )}
-                {Number(selectedSale.tax || 0) > 0 && (
-                  <div className="flex justify-between text-slate-600 print:text-black">
-                    <span>VAT / Tax:</span>
-                    <span className="font-mono font-bold">+৳{Number(selectedSale.tax).toFixed(2)}</span>
-                  </div>
-                )}
+                {Number(selectedSale.tax || 0) > 0 && (() => {
+                  const base = Math.max(1, Number((selectedSale as any).subTotal || selectedSale.totalAmount) - Number(selectedSale.discount || 0));
+                  const vatPct = Math.round((Number(selectedSale.tax) / base) * 100);
+                  return (
+                    <div className="flex justify-between text-slate-600 print:text-black">
+                      <span>VAT {vatPct > 0 ? `(${vatPct}%)` : ""}:</span>
+                      <span className="font-mono font-bold">+৳{Number(selectedSale.tax).toFixed(2)}</span>
+                    </div>
+                  );
+                })()}
                 <div className="flex justify-between font-black text-base sm:text-lg print:text-xl text-slate-900 dark:text-white print:text-black pt-2 border-t border-slate-300 print:border-black">
-                  <span>Grand Total:</span>
+                  <span>Grand Total (Total Payable):</span>
                   <span className="font-mono">৳{Number(selectedSale.totalAmount || 0).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-slate-600 dark:text-slate-400 print:text-black">

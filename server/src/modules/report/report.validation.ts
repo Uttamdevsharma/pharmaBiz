@@ -6,6 +6,8 @@ export const reportDateRangeSchema = z.object({
   paymentMethod: z.enum(["CASH", "CARD", "MOBILE", "ALL"]).optional().transform(v => (v === "ALL" ? undefined : v)),
   startDate: z.string().optional(),
   endDate: z.string().optional(),
+  categoryId: z.string().optional().transform(v => (v === "" || v === "null" || v === "undefined" || v === "all" || v === "ALL" ? undefined : v)),
+  subcategoryId: z.string().optional().transform(v => (v === "" || v === "null" || v === "undefined" || v === "all" || v === "ALL" ? undefined : v)),
 });
 
 export const vatMisReportSchema = z.object({

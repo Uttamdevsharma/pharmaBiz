@@ -100,7 +100,7 @@ export function AnnouncementBanner({ onNavigate }: AnnouncementBannerProps) {
 
   return (
     <>
-      <div className="relative z-30 w-full bg-red-600 dark:bg-red-700 text-white flex items-center h-9 px-2 sm:px-3 text-xs shadow-xs border-b border-red-700/60 overflow-hidden select-none">
+      <div className="print:hidden relative z-30 w-full bg-red-600 dark:bg-red-700 text-white flex items-center h-9 px-2 sm:px-3 text-xs shadow-xs border-b border-red-700/60 overflow-hidden select-none">
         {/* Left Fixed Badge: NOTICE + Pulsing Megaphone */}
         <div className="flex items-center gap-1.5 bg-red-800/90 hover:bg-red-800 text-white font-black px-2.5 py-0.5 rounded shadow-xs shrink-0 z-10 uppercase tracking-wider text-[11px] ring-1 ring-white/10 cursor-default">
           <Megaphone className="w-3.5 h-3.5 text-yellow-300 animate-pulse shrink-0" />

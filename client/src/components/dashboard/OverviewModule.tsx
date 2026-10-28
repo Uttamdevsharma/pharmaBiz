@@ -7,7 +7,6 @@ import { OwnerModule } from "./DashboardSidebar";
 import { StockByCategoryDonutChart } from "./StockByCategoryDonutChart";
 import {
   DollarSign,
-  ShoppingCart,
   TrendingUp,
   AlertTriangle,
   Package,
@@ -363,37 +362,18 @@ export function OverviewModule({ onNavigate, selectedBranchId: propBranchId }: O
             </span>
           </div>
 
-          {/* Quick Action Buttons (Matching image style: Purchase, Sale, Today's Profit) */}
+          {/* Today's Profit & Refresh Actions */}
           <div className="flex items-center gap-2 flex-wrap">
-            {/* 1. PURCHASE BUTTON */}
-            <button
-              onClick={() => onNavigate("stock_add_stock")}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-semibold rounded-none transition cursor-pointer shadow-xs active:scale-95"
-              title="Add New Stock / Purchase"
-            >
-              <PlusCircle className="h-4 w-4" />
-              <span>PURCHASE</span>
-            </button>
 
-            {/* 2. SALE BUTTON */}
-            <button
-              onClick={() => onNavigate("pos")}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-semibold rounded-none transition cursor-pointer shadow-xs active:scale-95"
-              title="Launch POS Counter / Make Sale"
-            >
-              <ShoppingCart className="h-4 w-4" />
-              <span>SALE</span>
-            </button>
-
-            {/* 3. TODAY'S PROFIT BUTTON */}
+            {/* 5. TODAY'S PROFIT BUTTON */}
             <button
               onClick={() => setShowTodayProfitModal(true)}
-              className="inline-flex items-center gap-2 px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white text-xs sm:text-sm font-semibold rounded-none transition cursor-pointer shadow-xs active:scale-95"
+              className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-700 hover:bg-slate-800 text-white text-xs sm:text-sm font-semibold rounded-lg transition cursor-pointer shadow-xs active:scale-95"
               title="View Today's Live Profit"
             >
-              <TrendingUp className="h-4 w-4" />
+              <TrendingUp className="h-4 w-4 text-emerald-400" />
               <span>Today&apos;s profit</span>
-              <span className="ml-1 px-2 py-0.5 bg-teal-900/90 font-mono text-[11px] font-bold">
+              <span className="ml-1 px-2 py-0.5 bg-slate-900/90 font-mono text-[11px] font-bold text-emerald-400">
                 ৳{Math.round(todayProfitValue).toLocaleString("en-BD")}
               </span>
             </button>
@@ -405,7 +385,7 @@ export function OverviewModule({ onNavigate, selectedBranchId: propBranchId }: O
                 if (compareMode) loadComparison();
               }}
               disabled={refreshing || loadingComparison}
-              className="p-1.5 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition rounded-none disabled:opacity-50"
+              className="p-1.5 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition rounded-lg disabled:opacity-50"
               title="Refresh Analytics"
             >
               <RefreshCw className={`h-4 w-4 ${refreshing || loadingComparison ? "animate-spin text-brand-primary" : ""}`} />

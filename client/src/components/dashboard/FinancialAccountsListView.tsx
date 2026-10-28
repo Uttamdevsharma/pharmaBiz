@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useRef } from "react";
 import { fetchApi } from "@/lib/api";
+import { showAlert } from "@/lib/swal";
 import { OwnerModule } from "./DashboardSidebar";
 import {
   Wallet,
@@ -18,6 +19,10 @@ import {
   ChevronsLeft,
   ChevronsRight,
   CheckCircle2,
+  Edit2,
+  X,
+  Check,
+  AlertCircle,
 } from "lucide-react";
 
 interface FinancialAccount {
@@ -61,6 +66,8 @@ function TableSkeleton() {
           <div key={i} className="h-11 bg-slate-50 dark:bg-slate-800/60 rounded-none" />
         ))}
       </div>
+
+      
     </div>
   );
 }
@@ -75,6 +82,70 @@ export function FinancialAccountsListView({ onNavigate }: FinancialAccountsListV
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+
+  // Rename Account Modal state
+  const [renameModalOpen, setRenameModalOpen] = useState(false);
+  const [accountToRename, setAccountToRename] = useState<FinancialAccount | null>(null);
+  const [renamedName, setRenamedName] = useState("");
+  const [renamedDescription, setRenamedDescription] = useState("");
+  const [savingRename, setSavingRename] = useState(false);
+  const [renameError, setRenameError] = useState<string | null>(null);
+  const renameInputRef = useRef<HTMLInputElement>(null);
+
+  const handleOpenRename = (acc: FinancialAccount) => {
+    setAccountToRename(acc);
+    setRenamedName(acc.name);
+    setRenamedDescription(acc.description || "");
+    setRenameError(null);
+    setRenameModalOpen(true);
+    setTimeout(() => {
+      renameInputRef.current?.focus();
+      renameInputRef.current?.select();
+    }, 60);
+  };
+
+  const handleSaveRename = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!accountToRename) return;
+    const trimmed = renamedName.trim();
+    if (trimmed.length < 2) {
+      setRenameError("Account name must be at least 2 characters");
+      return;
+    }
+
+    try {
+      setSavingRename(true);
+      setRenameError(null);
+
+      const res = await fetchApi<any>(`/accounting/accounts/${accountToRename.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          name: trimmed,
+          description: renamedDescription.trim() || null,
+        }),
+      });
+
+      if (!res.success) {
+        throw new Error(res.message || "Failed to rename account");
+      }
+
+      setAccounts((prev) =>
+        prev.map((acc) =>
+          acc.id === accountToRename.id
+            ? { ...acc, name: trimmed, description: renamedDescription.trim() || null }
+            : acc
+        )
+      );
+
+      showAlert.toast(`Account renamed to "${trimmed}" successfully!`, "success");
+      setRenameModalOpen(false);
+      setAccountToRename(null);
+    } catch (err: any) {
+      setRenameError(err.message || "Failed to update account name");
+    } finally {
+      setSavingRename(false);
+    }
+  };
 
   const loadAccounts = async (isManual = false) => {
     try {
@@ -288,6 +359,7 @@ export function FinancialAccountsListView({ onNavigate }: FinancialAccountsListV
                   <th className="py-3 px-4">Account / Bank Details</th>
                   <th className="py-3 px-4 text-right">Current Balance</th>
                   <th className="py-3 px-4 text-center w-24">Status</th>
+                  <th className="py-3 px-4 text-center w-28">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-sm font-medium text-slate-700 dark:text-slate-300">
@@ -359,6 +431,18 @@ export function FinancialAccountsListView({ onNavigate }: FinancialAccountsListV
                           <CheckCircle2 className="h-3.5 w-3.5" />
                           Active
                         </span>
+                      </td>
+
+                      <td className="py-3 px-4 text-center whitespace-nowrap">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenRename(acc)}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold text-slate-700 dark:text-slate-200 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-none transition cursor-pointer shadow-2xs hover:border-emerald-500 hover:text-emerald-600 dark:hover:text-emerald-400"
+                          title="Rename Account Name"
+                        >
+                          <Edit2 className="h-3.5 w-3.5 text-emerald-600" />
+                          <span>Rename</span>
+                        </button>
                       </td>
                     </tr>
                   );
@@ -433,6 +517,95 @@ export function FinancialAccountsListView({ onNavigate }: FinancialAccountsListV
           </div>
         </div>
       </div>
+      {/* Rename Financial Account Modal */}
+      {renameModalOpen && accountToRename && (
+        <div className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150 select-none">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-none w-full max-w-[440px] shadow-2xl p-6 text-slate-800 dark:text-slate-100 flex flex-col space-y-4 relative">
+            <button
+              type="button"
+              onClick={() => setRenameModalOpen(false)}
+              className="absolute top-5 right-5 text-slate-400 hover:text-slate-700 dark:hover:text-white p-1.5 transition cursor-pointer"
+            >
+              <X className="h-5 w-5" />
+            </button>
+
+            <div>
+              <h3 className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
+                <Edit2 className="h-5 w-5 text-emerald-600" />
+                Rename Financial Account
+              </h3>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Type: <strong className="font-mono text-emerald-600 uppercase">{accountToRename.type}</strong>
+                {accountToRename.accountNumber ? ` • A/C: ${accountToRename.accountNumber}` : ""}
+              </p>
+            </div>
+
+            {renameError && (
+              <div className="p-2.5 bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs flex items-center gap-2 font-bold">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span>{renameError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveRename} className="space-y-3.5">
+              <div>
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                  Account Name *
+                </label>
+                <input
+                  ref={renameInputRef}
+                  type="text"
+                  required
+                  placeholder="e.g. Main Cash Drawer, bKash Merchant..."
+                  value={renamedName}
+                  onChange={(e) => setRenamedName(e.target.value)}
+                  className="w-full h-10 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 focus:border-emerald-500 rounded-none text-sm font-semibold text-slate-900 dark:text-white outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                  Note / Description (Optional)
+                </label>
+                <input
+                  type="text"
+                  placeholder="Brief description for this account..."
+                  value={renamedDescription}
+                  onChange={(e) => setRenamedDescription(e.target.value)}
+                  className="w-full h-9 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 focus:border-emerald-500 rounded-none text-xs text-slate-900 dark:text-white outline-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setRenameModalOpen(false)}
+                  className="px-3.5 py-2 text-xs font-bold text-slate-600 dark:text-slate-300 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 rounded-none transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingRename || !renamedName.trim()}
+                  className="px-4 py-2 text-xs font-black text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 rounded-none transition cursor-pointer flex items-center gap-1.5"
+                >
+                  {savingRename ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="h-3.5 w-3.5" />
+                      <span>Save Changes</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

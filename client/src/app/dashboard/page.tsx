@@ -24,6 +24,11 @@ import { CreateRoleView } from "@/components/dashboard/CreateRoleView";
 import { PermissionAssignmentView } from "@/components/dashboard/PermissionAssignmentView";
 import { PosModule } from "@/components/dashboard/PosModule";
 import { ReportsModule } from "@/components/dashboard/ReportsModule";
+import { BranchReportSummaryView } from "@/components/dashboard/BranchReportSummaryView";
+import { DailySalesReportView } from "@/components/dashboard/DailySalesReportView";
+import { MonthlySalesReportView } from "@/components/dashboard/MonthlySalesReportView";
+import { PurchaseReportView } from "@/components/dashboard/PurchaseReportView";
+import { ProductsReportView } from "@/components/dashboard/ProductsReportView";
 import { SubscriptionModule } from "@/components/dashboard/SubscriptionModule";
 import { SubscriptionHistoryView } from "@/components/dashboard/SubscriptionHistoryView";
 import { SettingsModule } from "@/components/dashboard/SettingsModule";
@@ -104,6 +109,7 @@ import {
   Check,
   AlertCircle,
   ShieldCheck,
+  FileSpreadsheet,
 } from "lucide-react";
 
 // Persistent in-memory cache across dashboard transitions to prevent full-screen loaders
@@ -214,6 +220,17 @@ export default function RoleBasedDashboard() {
     // Immediately reflect active menu in sidebar
     setActiveModule(mod);
     const targetPath = getPathFromModule(mod);
+
+    // Automatically enter full window (fullscreen) when opening POS, exit when leaving
+    if (mod === "pos" || mod === "pos_sale") {
+      if (typeof document !== "undefined" && !document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      }
+    } else {
+      if (typeof document !== "undefined" && document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      }
+    }
 
     // Keep previous page visible while top loader crawls, then mount destination cleanly
     if (navTimerRef.current) clearTimeout(navTimerRef.current);
@@ -1456,6 +1473,47 @@ export default function RoleBasedDashboard() {
           return <TenantAccessRestricted moduleName="Permission Assignment" requiredPerm="roles.manage" />;
         }
         return <PermissionAssignmentView />;
+
+      case "rep_branch_summary":
+      case "daily_branch_report":
+        return (
+          <BranchReportSummaryView
+            selectedBranchId={selectedBranchId}
+            onNavigate={handleNavigate}
+          />
+        );
+
+      case "rep_daily_sales":
+        return (
+          <DailySalesReportView
+            selectedBranchId={selectedBranchId}
+            onNavigate={handleNavigate}
+          />
+        );
+
+      case "rep_monthly_sales":
+        return (
+          <MonthlySalesReportView
+            selectedBranchId={selectedBranchId}
+            onNavigate={handleNavigate}
+          />
+        );
+
+      case "rep_purchase":
+        return (
+          <PurchaseReportView
+            selectedBranchId={selectedBranchId}
+            onNavigate={handleNavigate}
+          />
+        );
+
+      case "rep_products":
+        return (
+          <ProductsReportView
+            selectedBranchId={selectedBranchId}
+            onNavigate={handleNavigate}
+          />
+        );
 
       case "reports":
         if (!isOwner && !hasPermission("accounts.reports")) {

@@ -23,6 +23,7 @@ import {
   ExternalLink,
   Sliders,
   CalendarX2,
+  Globe,
 } from "lucide-react";
 import { SalaryDeductionRules } from "./SalaryDeductionRules";
 import { OffDaySettingsTab } from "./OffDaySettingsTab";
@@ -34,6 +35,7 @@ interface TenantProfile {
   email: string | null;
   phone: string | null;
   address: string | null;
+  website: string | null;
   logoUrl: string | null;
   logoPublicId: string | null;
 }
@@ -130,6 +132,7 @@ function CompanyProfileTab() {
     email: "",
     phone: "",
     address: "",
+    website: "",
     logoUrl: null,
     logoPublicId: null,
   });
@@ -140,6 +143,7 @@ function CompanyProfileTab() {
     email: "",
     phone: "",
     address: "",
+    website: "",
     logoUrl: null,
     logoPublicId: null,
   });
@@ -164,6 +168,7 @@ function CompanyProfileTab() {
           email: d.email || "",
           phone: d.phone || "",
           address: d.address || "",
+          website: d.website || "",
           logoUrl: d.logoUrl || null,
           logoPublicId: d.logoPublicId || null,
         };
@@ -177,6 +182,7 @@ function CompanyProfileTab() {
           email: d.email || null,
           phone: d.phone || null,
           address: d.address || null,
+          website: d.website || null,
         });
       }
     } catch (e: any) {
@@ -270,6 +276,7 @@ function CompanyProfileTab() {
           email: editForm.email?.trim() || undefined,
           phone: editForm.phone?.trim() || undefined,
           address: editForm.address?.trim() || undefined,
+          website: editForm.website?.trim() || "",
           logoUrl: editForm.logoUrl || "",
           logoPublicId: editForm.logoPublicId || "",
         }),
@@ -283,6 +290,7 @@ function CompanyProfileTab() {
         email: editForm.email?.trim() || null,
         phone: editForm.phone?.trim() || null,
         address: editForm.address?.trim() || null,
+        website: editForm.website?.trim() || null,
         logoUrl: editForm.logoUrl || null,
         logoPublicId: editForm.logoPublicId || null,
       };
@@ -293,6 +301,7 @@ function CompanyProfileTab() {
         email: updated.email,
         phone: updated.phone,
         address: updated.address,
+        website: updated.website,
         logoUrl: updated.logoUrl,
         logoPublicId: updated.logoPublicId,
       });
@@ -426,7 +435,7 @@ function CompanyProfileTab() {
                   </h2>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
                   {/* Phone */}
                   <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60 space-y-1">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
@@ -447,8 +456,18 @@ function CompanyProfileTab() {
                     </strong>
                   </div>
 
+                  {/* Website */}
+                  <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60 space-y-1">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                      <Globe className="h-3 w-3 text-slate-400" /> Website
+                    </span>
+                    <strong className="font-bold text-brand-primary block truncate">
+                      {savedProfile.website || "Not configured"}
+                    </strong>
+                  </div>
+
                   {/* Address */}
-                  <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60 space-y-1 sm:col-span-2 lg:col-span-1">
+                  <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60 space-y-1">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
                       <MapPin className="h-3 w-3 text-slate-400" /> Store Address
                     </span>
@@ -601,8 +620,8 @@ function CompanyProfileTab() {
                 />
               </div>
 
-              {/* Phone & Email */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Phone, Email & Website */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1">
                     <Phone className="h-3 w-3 text-slate-400" /> Phone Number
@@ -624,6 +643,18 @@ function CompanyProfileTab() {
                     value={editForm.email || ""}
                     onChange={(e) => setEditForm((p) => ({ ...p, email: e.target.value }))}
                     placeholder="e.g. info@shaplapharma.com"
+                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-primary/30"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1">
+                    <Globe className="h-3 w-3 text-slate-400" /> Website (Print Invoice)
+                  </label>
+                  <input
+                    type="text"
+                    value={editForm.website || ""}
+                    onChange={(e) => setEditForm((p) => ({ ...p, website: e.target.value }))}
+                    placeholder="e.g. www.petvet-bd.com"
                     className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-primary/30"
                   />
                 </div>

@@ -23,6 +23,7 @@ model Tenant {
   address       String?
   logoUrl       String?
   logoPublicId  String?
+  website       String?
   
   // Regulatory Verification & Compliance (Separate Front & Back sides)
   verificationStatus        VerificationStatus @default(PENDING_OTP)

@@ -24,9 +24,12 @@ import {
   ChevronsRight,
   Download,
   Loader2,
+  Printer,
 } from "lucide-react";
 import { useBranchContext } from "@/context/BranchContext";
+import { useAuth } from "@/context/AuthContext";
 import { showAlert } from "@/lib/swal";
+import { PurchaseBillDetailModal, PurchaseBillData } from "@/components/common/PurchaseBillDetailModal";
 
 type DateFilterPreset = "today" | "yesterday" | "this_month" | "this_year" | "custom";
 
@@ -39,6 +42,7 @@ interface PurchaseHistoryViewProps {
 let cachedPurchases: any[] = [];
 
 export function PurchaseHistoryView({ onNavigate, selectedBranchId: propBranchId }: PurchaseHistoryViewProps) {
+  const { user } = useAuth();
   const {
     selectedBranchId: contextBranchId,
     currentBranch,
@@ -63,6 +67,83 @@ export function PurchaseHistoryView({ onNavigate, selectedBranchId: propBranchId
   // Modal for Invoice Breakdown
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [selectedPurchase, setSelectedPurchase] = useState<any>(null);
+
+  // Normalize selected purchase into formal PurchaseBillData structure
+  const normalizedPurchaseBill: PurchaseBillData | null = useMemo(() => {
+    if (!selectedPurchase) return null;
+    const invNo =
+      selectedPurchase.invoiceNo ||
+      selectedPurchase.invoiceNumber ||
+      `PUR-${selectedPurchase.id?.slice(-6)}`;
+    const pDate =
+      selectedPurchase.purchaseDate ||
+      selectedPurchase.createdAt ||
+      new Date().toISOString();
+    const supName =
+      selectedPurchase.supplier?.name ||
+      selectedPurchase.supplierName ||
+      "Supplier";
+    const supPhone =
+      selectedPurchase.supplier?.phone ||
+      selectedPurchase.contactPerson?.phone ||
+      selectedPurchase.supplierPhone ||
+      null;
+    const branchName =
+      selectedPurchase.branch?.name ||
+      currentBranch?.name ||
+      "Main Branch";
+
+    const items = (selectedPurchase.items || []).map((it: any, idx: number) => {
+      const name = it.product?.name || it.name || "Medicine Item";
+      const genericName = it.product?.genericName || it.genericName || null;
+      const batchNumber = it.batchNumber || "—";
+      let expiryDate = "—";
+      if (it.expiryDate) {
+        const expD = new Date(it.expiryDate);
+        expiryDate = !isNaN(expD.getTime())
+          ? expD.toISOString().split("T")[0]
+          : String(it.expiryDate);
+      }
+      const quantity = Number(it.quantity || 0);
+      const unitPurchasePrice = Number(
+        it.purchasePrice ??
+        it.unitPurchasePrice ??
+        (it.totalPrice && quantity ? it.totalPrice / quantity : 0)
+      );
+      const totalAmount = Number(
+        it.totalPrice ??
+        it.totalAmount ??
+        unitPurchasePrice * quantity
+      );
+
+      return {
+        id: it.id || String(idx),
+        name,
+        genericName,
+        batchNumber,
+        expiryDate,
+        quantity,
+        unitPurchasePrice,
+        totalAmount,
+      };
+    });
+
+    return {
+      id: selectedPurchase.id,
+      invoiceNo: invNo,
+      purchaseDate: pDate,
+      supplierName: supName,
+      supplierPhone: supPhone,
+      totalAmount: Number(selectedPurchase.totalAmount || 0),
+      paidAmount: Number(selectedPurchase.paidAmount || 0),
+      paymentStatus: selectedPurchase.paymentStatus,
+      paymentMethod: selectedPurchase.paymentMethod || "CASH",
+      notes: selectedPurchase.notes,
+      branchName,
+      itemsCount: items.length,
+      items,
+    };
+  }, [selectedPurchase, currentBranch]);
 
   // Load suppliers for dropdown filter
   useEffect(() => {
@@ -498,7 +579,7 @@ export function PurchaseHistoryView({ onNavigate, selectedBranchId: propBranchId
                     <th className="py-4 px-4">Total</th>
                     <th className="py-4 px-4">Paid</th>
                     <th className="py-4 px-4">Due</th>
-                    <th className="py-4 px-4 text-right">Action</th>
+                    <th className="py-4 px-4 text-right">Invoice / Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-semibold text-slate-700 dark:text-slate-300">
@@ -583,14 +664,16 @@ export function PurchaseHistoryView({ onNavigate, selectedBranchId: propBranchId
                         {/* Action */}
                         <td className="py-4 px-4 text-right" onClick={(e) => e.stopPropagation()}>
                           <button
+                            type="button"
                             onClick={() => {
                               setSelectedPurchase(p);
                               setDetailModalOpen(true);
                             }}
-                            className="h-9 px-3.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ml-auto active:scale-95"
+                            className="h-8.5 px-3 bg-blue-50 hover:bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 dark:text-blue-300 border border-blue-200 dark:border-blue-800 rounded-lg text-xs font-bold transition inline-flex items-center gap-1.5 ml-auto active:scale-95 shadow-2xs cursor-pointer"
+                            title="View Formal Invoice & Print"
                           >
-                            <Eye className="h-3.5 w-3.5" />
-                            View
+                            <FileText className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                            <span>Invoice / Print</span>
                           </button>
                         </td>
                       </tr>
@@ -684,117 +767,19 @@ export function PurchaseHistoryView({ onNavigate, selectedBranchId: propBranchId
         )}
       </div>
 
-      {/* Purchase Details Breakdown Modal */}
-      {detailModalOpen && selectedPurchase && (
-        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-lg shadow-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <div>
-                <h3 className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
-                  <FileText className="h-6 w-6 text-brand-primary" />
-                  Purchase Invoice Breakdown
-                </h3>
-                <div className="text-xs text-slate-500 font-mono font-bold mt-1">
-                  Invoice: {selectedPurchase.invoiceNumber || selectedPurchase.id}
-                </div>
-              </div>
-              <button
-                onClick={() => setDetailModalOpen(false)}
-                className="p-2 text-slate-400 hover:text-slate-600 rounded-xl"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 text-sm bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl">
-              <div>
-                <span className="text-slate-400">Date: </span>
-                <span className="font-bold text-slate-800 dark:text-slate-200">
-                  {new Date(selectedPurchase.purchaseDate || selectedPurchase.createdAt).toLocaleDateString()}
-                </span>
-              </div>
-              <div className="text-right">
-                <span className="text-slate-400">Branch: </span>
-                <span className="font-bold text-slate-800 dark:text-slate-200">
-                  {selectedPurchase.branch?.name || "Main Branch"}
-                </span>
-              </div>
-              <div>
-                <span className="text-slate-400">Supplier: </span>
-                <span className="font-bold text-slate-800 dark:text-slate-200">
-                  {selectedPurchase.supplier?.name}
-                </span>
-              </div>
-              <div className="text-right">
-                <span className="text-slate-400">Contact: </span>
-                <span className="font-bold text-slate-800 dark:text-slate-200">
-                  {selectedPurchase.contactPerson?.name ||
-                    selectedPurchase.contactPersonName ||
-                    selectedPurchase.supplier?.contactPerson ||
-                    "—"}
-                </span>
-              </div>
-            </div>
-
-            {/* Itemized Table */}
-            {selectedPurchase.items && selectedPurchase.items.length > 0 ? (
-              <div className="table-responsive-container border border-slate-100 dark:border-slate-800 rounded-2xl overflow-hidden">
-                <table className="w-full min-w-[450px] text-left text-sm">
-                  <thead className="bg-slate-50 dark:bg-slate-800/50 text-xs uppercase font-black text-slate-500">
-                    <tr>
-                      <th className="py-3 px-3.5">Product</th>
-                      <th className="py-3 px-3.5 text-center">Batch</th>
-                      <th className="py-3 px-3.5 text-center">Qty</th>
-                      <th className="py-3 px-3.5 text-right">Cost</th>
-                      <th className="py-3 px-3.5 text-right">Total</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-semibold">
-                    {selectedPurchase.items.map((item: any, i: number) => (
-                      <tr key={i}>
-                        <td className="py-3 px-3.5 font-bold text-slate-900 dark:text-white">
-                          {item.product?.name || "Medicine Item"}
-                        </td>
-                        <td className="py-3 px-3.5 text-center font-mono text-xs text-slate-500">
-                          {item.batchNumber || "—"}
-                        </td>
-                        <td className="py-3 px-3.5 text-center font-mono font-bold">
-                          {item.quantity}
-                        </td>
-                        <td className="py-3 px-3.5 text-right font-mono text-slate-600 dark:text-slate-400">
-                          ৳{Number(item.purchasePrice).toFixed(2)}
-                        </td>
-                        <td className="py-3 px-3.5 text-right font-bold font-mono text-slate-900 dark:text-white">
-                          ৳{Number(item.totalPrice).toFixed(2)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="p-4 text-center text-sm text-slate-400 border border-dashed rounded-xl">
-                No individual item rows recorded for this invoice.
-              </div>
-            )}
-
-            {/* Financial Summary */}
-            <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl flex items-center justify-between text-sm font-bold">
-              <div className="space-x-3">
-                <span>Total: <span className="font-mono text-slate-900 dark:text-white">৳{Number(selectedPurchase.totalAmount).toFixed(2)}</span></span>
-                <span className="text-slate-300 dark:text-slate-600">•</span>
-                <span className="text-emerald-600 font-mono">Paid: ৳{Number(selectedPurchase.paidAmount).toFixed(2)}</span>
-              </div>
-              <div className="font-mono font-bold">
-                {Number(selectedPurchase.dueAmount) > 0 ? (
-                  <span className="text-rose-600">Due: ৳{Number(selectedPurchase.dueAmount).toFixed(2)}</span>
-                ) : (
-                  <span className="text-emerald-600">Fully Paid</span>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
+      {/* Formal Purchase Bill / Chalan Invoice Modal (Matching Daily Branch & Purchase Report) */}
+      {detailModalOpen && normalizedPurchaseBill && (
+        <PurchaseBillDetailModal
+          purchase={normalizedPurchaseBill}
+          pharmacyName={user?.tenant?.name || "Shapla Pharmacy"}
+          branchName={normalizedPurchaseBill.branchName || currentBranch?.name || "Main Branch"}
+          receiverName={user?.name || "Store Manager"}
+          logoUrl={user?.tenant?.logoUrl}
+          onClose={() => {
+            setDetailModalOpen(false);
+            setSelectedPurchase(null);
+          }}
+        />
       )}
     </div>
   );
