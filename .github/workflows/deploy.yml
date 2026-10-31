@@ -33,6 +33,9 @@ jobs:
               . "/root/.nvm/nvm.sh"
             fi
 
+            # Memory allocation to prevent OOM
+            export NODE_OPTIONS="--max-old-space-size=4096"
+
             # Target directory
             TARGET_DIR="/var/www/bizpharma"
             mkdir -p "$TARGET_DIR"
@@ -52,7 +55,10 @@ jobs:
 
             echo "📥 Fetching and syncing latest code from GitHub..."
             git fetch origin main
-            git checkout -B main origin/main || git reset --hard origin/main
+            # Hard reset and clean untracked changes to avoid checkout aborts
+            git reset --hard origin/main
+            git clean -fd
+            git checkout -B main origin/main
             git remote set-url origin "https://github.com/${{ github.repository }}.git"
 
             # Ensure executable permissions on deploy script and binary wrappers
@@ -61,4 +67,3 @@ jobs:
             chmod -R +x client/node_modules/.bin 2>/dev/null || true
 
             ./deploy.sh "$TARGET_DIR"
-

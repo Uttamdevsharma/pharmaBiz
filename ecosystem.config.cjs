@@ -11,6 +11,7 @@ module.exports = {
       autorestart: true,
       watch: false,
       max_memory_restart: "1G",
+      node_args: "--max-old-space-size=2048",
       env: {
         NODE_ENV: "production",
         PORT: 3000,
@@ -34,6 +35,7 @@ module.exports = {
       autorestart: true,
       watch: false,
       max_memory_restart: "1G",
+      node_args: "--max-old-space-size=2048",
       env: {
         NODE_ENV: "production",
         PORT: 3001,
@@ -49,4 +51,3 @@ module.exports = {
     },
   ],
 };
-

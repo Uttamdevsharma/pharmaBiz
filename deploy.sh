@@ -27,7 +27,24 @@ elif [ -s "/root/.nvm/nvm.sh" ]; then
     . "/root/.nvm/nvm.sh"
 fi
 
-# 2. Target Directory
+# Set maximum memory allocation for Node.js (Prevents Out-Of-Memory heap crashes during Next.js/TypeScript builds)
+export NODE_OPTIONS="--max-old-space-size=4096"
+
+# 2. Check and configure Linux SWAP if missing (Protects low-RAM VPS from OOM crashes)
+if command -v swapon >/dev/null 2>&1 && [ "$(id -u)" -eq 0 ]; then
+    TOTAL_SWAP=$(free -m | awk '/^Swap:/ {print $2}')
+    if [ "${TOTAL_SWAP:-0}" -lt 512 ]; then
+        echo -e "${YELLOW}ℹ️  Low/no swap detected (${TOTAL_SWAP:-0}MB). Setting up 2GB swapfile for build safety...${NC}"
+        if [ ! -f /swapfile ]; then
+            fallocate -l 2G /swapfile 2>/dev/null || dd if=/dev/zero of=/swapfile bs=1M count=2048
+            chmod 600 /swapfile
+            mkswap /swapfile
+        fi
+        swapon /swapfile 2>/dev/null || true
+    fi
+fi
+
+# 3. Target Directory
 PROJECT_DIR="${1:-/var/www/bizpharma}"
 if [ ! -d "$PROJECT_DIR" ]; then
     echo -e "${YELLOW}📁 Creating project directory at ${PROJECT_DIR}...${NC}"
@@ -37,12 +54,12 @@ fi
 cd "$PROJECT_DIR"
 echo -e "${GREEN}📂 Current working directory: $(pwd)${NC}"
 
-# 3. Create required runtime directories
+# 4. Create required runtime directories
 mkdir -p "$PROJECT_DIR/logs"
 mkdir -p "$PROJECT_DIR/server/public/uploads"
 mkdir -p /var/www/certbot
 
-# 4. Check for environment files
+# 5. Check for environment files
 if [ ! -f "$PROJECT_DIR/server/.env" ]; then
     echo -e "${RED}⚠️  WARNING: $PROJECT_DIR/server/.env not found!${NC}"
     if [ -f "$PROJECT_DIR/server/.env.example" ]; then
@@ -56,11 +73,11 @@ if [ ! -f "$PROJECT_DIR/client/.env" ]; then
     if [ -f "$PROJECT_DIR/client/.env.example" ]; then
         cp "$PROJECT_DIR/client/.env.example" "$PROJECT_DIR/client/.env"
     else
-        echo "NEXT_PUBLIC_API_URL=/api" > "$PROJECT_DIR/client/.env"
+        echo "NEXT_PUBLIC_API_URL=https://bizpos-api.okobiz.com/api" > "$PROJECT_DIR/client/.env"
     fi
 fi
 
-# 5. Build and Configure Server (Express + Prisma)
+# 6. Build and Configure Server (Express + Prisma)
 echo -e "\n${BLUE}======================================================${NC}"
 echo -e "${BLUE} [1/3] Setting up Backend Server (Express + Prisma)   ${NC}"
 echo -e "${BLUE}======================================================${NC}"
@@ -72,7 +89,7 @@ if [ -d "$PROJECT_DIR/server/node_modules/.bin" ]; then
 fi
 
 echo -e "${GREEN}📦 Installing server dependencies...${NC}"
-npm install --unsafe-perm=true
+npm install --ignore-scripts || npm install
 
 # Ensure execute permissions after install
 if [ -d "$PROJECT_DIR/server/node_modules/.bin" ]; then
@@ -88,7 +105,7 @@ node node_modules/prisma/build/index.js migrate deploy || npx prisma migrate dep
 echo -e "${GREEN}🏗️  Compiling TypeScript backend...${NC}"
 npm run build
 
-# 6. Build and Configure Client (Next.js)
+# 7. Build and Configure Client (Next.js)
 echo -e "\n${BLUE}======================================================${NC}"
 echo -e "${BLUE} [2/3] Setting up Frontend Client (Next.js)           ${NC}"
 echo -e "${BLUE}======================================================${NC}"
@@ -100,16 +117,16 @@ if [ -d "$PROJECT_DIR/client/node_modules/.bin" ]; then
 fi
 
 echo -e "${GREEN}📦 Installing client dependencies...${NC}"
-npm install --unsafe-perm=true
+npm install
 
 if [ -d "$PROJECT_DIR/client/node_modules/.bin" ]; then
     chmod -R +x "$PROJECT_DIR/client/node_modules/.bin" 2>/dev/null || true
 fi
 
-echo -e "${GREEN}🏗️  Building Next.js production bundle...${NC}"
+echo -e "${GREEN}🏗️  Building Next.js production bundle (with max-memory optimization)...${NC}"
 npm run build
 
-# 7. Start / Reload PM2 Processes
+# 8. Start / Reload PM2 Processes
 echo -e "\n${BLUE}======================================================${NC}"
 echo -e "${BLUE} [3/3] Reloading PM2 Services                         ${NC}"
 echo -e "${BLUE}======================================================${NC}"
@@ -126,7 +143,7 @@ else
     pm2 save
 fi
 
-# 8. Post-deployment Health Check
+# 9. Post-deployment Health Check
 echo -e "\n${BLUE}======================================================${NC}"
 echo -e "${BLUE} 🩺 Running Post-Deployment Health Checks             ${NC}"
 echo -e "${BLUE}======================================================${NC}"
@@ -153,4 +170,3 @@ fi
 echo -e "\n${GREEN}======================================================${NC}"
 echo -e "${GREEN}       🎉 BizPharma Deployment Completed!             ${NC}"
 echo -e "${GREEN}======================================================${NC}"
-
