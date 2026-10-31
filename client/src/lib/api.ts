@@ -1,6 +1,6 @@
 import { loadingProgress } from "./loadingProgress";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000/api";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://bizpharma-api.okobiz.com/api";
 
 export interface ApiResponse<T = any> {
   success: boolean;

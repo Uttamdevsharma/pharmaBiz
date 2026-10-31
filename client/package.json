@@ -7,10 +7,10 @@
     "clean:dev": "node -e \"const fs=require('fs'); try{fs.rmSync('.next_dev', {recursive: true, force: true})}catch(e){}\"",
     "clean:build": "node -e \"const fs=require('fs'); try{fs.rmSync('.next', {recursive: true, force: true})}catch(e){}\"",
     "predev": "npm run clean:dev",
-    "dev": "next dev -p 3001",
+    "dev": "next dev -p 4000",
     "prebuild": "npm run clean:build",
     "build": "next build",
-    "start": "next start -p 3001",
+    "start": "next start -p 4000",
     "lint": "next lint"
   },
   "dependencies": {
