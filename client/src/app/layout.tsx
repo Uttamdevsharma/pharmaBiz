@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 
 async function getInitialSettings(): Promise<SiteSettings | null> {
   try {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000/api";
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://bizpharma-api.okobiz.com/api";
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 2500);
     const res = await fetch(`${apiUrl}/settings/public`, {

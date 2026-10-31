@@ -132,7 +132,7 @@ export function FloatingChatWidget() {
   const fetchFullSession = async (token: string) => {
     try {
       setLoading(true);
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000/api";
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://bizpharma-api.okobiz.com/api";
       const res = await fetch(`${apiUrl}/live-chat/session?sessionToken=${encodeURIComponent(token)}`);
       const data = await res.json();
       if (data.success && data.data) {
@@ -157,7 +157,7 @@ export function FloatingChatWidget() {
 
     const interval = setInterval(async () => {
       try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000/api";
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://bizpharma-api.okobiz.com/api";
         const afterId = lastMessageIdRef.current;
         const res = await fetch(
           `${apiUrl}/live-chat/messages?sessionToken=${encodeURIComponent(session.token)}&afterId=${afterId}`
@@ -196,7 +196,7 @@ export function FloatingChatWidget() {
     try {
       setSubmitting(true);
       const fullPhone = `${countryCode} ${phoneNumber.trim()}`;
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000/api";
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://bizpharma-api.okobiz.com/api";
       const res = await fetch(`${apiUrl}/live-chat/session`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -263,7 +263,7 @@ export function FloatingChatWidget() {
     setMessages((prev) => [...prev, optimisticMsg]);
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000/api";
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://bizpharma-api.okobiz.com/api";
       const res = await fetch(`${apiUrl}/live-chat/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
