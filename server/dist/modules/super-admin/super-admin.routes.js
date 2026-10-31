@@ -51,3 +51,14 @@ router.delete("/staff/:id", (0, requirePermission_1.requirePermission)("staff.ma
 // Platform Permissions Metadata & Hierarchy
 router.get("/staff/permissions", super_admin_controller_1.SuperAdminController.getPlatformPermissions);
 router.post("/staff/permissions", (0, requirePermission_1.requirePermission)("roles.manage"), (0, validate_1.validateRequest)({ body: super_admin_validation_1.updatePlatformRolePermissionsSchema }), super_admin_controller_1.SuperAdminController.updatePlatformPermissions);
+// ==================== QUOTATION MANAGEMENT ====================
+const quotation_controller_1 = require("./quotation.controller");
+router.get("/quotations", quotation_controller_1.QuotationController.list);
+router.post("/quotations", quotation_controller_1.QuotationController.create);
+router.get("/quotations/:id", quotation_controller_1.QuotationController.getById);
+router.put("/quotations/:id", quotation_controller_1.QuotationController.update);
+router.delete("/quotations/:id", quotation_controller_1.QuotationController.delete);
+router.post("/quotations/:id/send-email", quotation_controller_1.QuotationController.sendEmail);
+// ==================== SMS MANAGEMENT ====================
+const sms_routes_1 = require("./sms.routes");
+router.use("/sms", sms_routes_1.smsRoutes);

@@ -1,0 +1,61 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy via SSH
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy via SSH to Ubuntu VPS
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          debug: true
+          script_stop: true
+          script: |
+            # Safe PATH loading for Node.js, NVM, and PM2
+            export PATH="$PATH:/usr/local/bin:/usr/bin:/bin:~/.npm-global/bin"
+            if [ -s "$HOME/.nvm/nvm.sh" ]; then
+              . "$HOME/.nvm/nvm.sh"
+            elif [ -s "/root/.nvm/nvm.sh" ]; then
+              . "/root/.nvm/nvm.sh"
+            fi
+
+            # Target directory
+            TARGET_DIR="/var/www/bizpharma"
+            mkdir -p "$TARGET_DIR"
+            cd "$TARGET_DIR"
+            echo "🚀 Working in $(pwd)"
+
+            REPO_URL="https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
+
+            # Initialize git repository if not already cloned
+            if [ ! -d ".git" ]; then
+              echo "📥 Initializing git repository in $TARGET_DIR..."
+              git init
+              git branch -M main
+            fi
+
+            git remote set-url origin "$REPO_URL" 2>/dev/null || git remote add origin "$REPO_URL"
+
+            echo "📥 Fetching and syncing latest code from GitHub..."
+            git fetch origin main
+            git checkout -B main origin/main || git reset --hard origin/main
+            git remote set-url origin "https://github.com/${{ github.repository }}.git"
+
+            # Execute deployment script
+            chmod +x deploy.sh
+            ./deploy.sh "$TARGET_DIR"
+

@@ -77,6 +77,7 @@ app.use("/api/inventory", inventory_routes_1.inventoryRoutes);
 app.use("/api/transfers", transfer_routes_1.transferRoutes);
 app.use("/api/sales", sales_routes_1.salesRoutes);
 app.use("/api/reports", report_routes_1.reportRoutes);
+app.use("/api/report", report_routes_1.reportRoutes);
 app.use("/api/audit", audit_routes_1.auditRoutes);
 app.use("/api/notifications", notification_routes_1.notificationRoutes);
 app.use("/api/sync", sync_routes_1.syncRoutes);
@@ -92,6 +93,8 @@ app.use("/api/tenant/support-tickets", support_ticket_routes_1.tenantSupportTick
 app.use("/api/super-admin/support-tickets", support_ticket_routes_1.superAdminSupportTicketRoutes);
 app.use("/api/super-admin/notices", notices_routes_1.superAdminNoticeRoutes);
 app.use("/api/tenant/notices", notices_routes_1.tenantNoticeRoutes);
+const quotation_controller_1 = require("./modules/super-admin/quotation.controller");
+app.get("/api/public/quotations/:id", quotation_controller_1.QuotationController.getById);
 // Fallback & direct gateway callbacks on root /payment/* (Supports both GET and POST)
 app.all("/payment/success", payment_controller_1.PaymentController.handleSuccess);
 app.all("/payment/fail", payment_controller_1.PaymentController.handleFail);
