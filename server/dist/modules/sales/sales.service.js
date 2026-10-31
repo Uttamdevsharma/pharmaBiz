@@ -259,12 +259,12 @@ class SalesService {
                     if (!financialAccount) {
                         throw new Error("Selected financial account is invalid or inactive.");
                     }
-                    if (financialAccount.type === "CASH" && financialAccount.branchId && financialAccount.branchId !== data.branchId) {
-                        throw new Error("Selected cash account does not belong to the active branch.");
+                    if (financialAccount.branchId && financialAccount.branchId !== data.branchId) {
+                        throw new Error("Selected financial account does not belong to the active branch.");
                     }
                 }
                 else {
-                    // 2. If not explicitly passed, resolve matching account for this specific branch or central
+                    // 2. If not explicitly passed, resolve matching account for this specific branch
                     const pMethod = String(data.paymentMethod).toUpperCase();
                     const notesLower = (data.notes || "").toLowerCase();
                     if (pMethod === "BKASH" || (pMethod === "MOBILE" && notesLower.includes("bkash"))) {
@@ -279,20 +279,6 @@ class SalesService {
                                 ],
                             },
                         });
-                        // Fallback to central/owner bKash account
-                        if (!financialAccount) {
-                            financialAccount = await tx.financialAccount.findFirst({
-                                where: {
-                                    tenantId,
-                                    isActive: true,
-                                    OR: [
-                                        { type: "BKASH" },
-                                        { name: { contains: "bkash", mode: "insensitive" } },
-                                    ],
-                                },
-                                orderBy: { isDefault: "desc" },
-                            });
-                        }
                     }
                     else if (pMethod === "NAGAD" || (pMethod === "MOBILE" && notesLower.includes("nagad"))) {
                         financialAccount = await tx.financialAccount.findFirst({
@@ -306,20 +292,6 @@ class SalesService {
                                 ],
                             },
                         });
-                        // Fallback to central/owner Nagad account
-                        if (!financialAccount) {
-                            financialAccount = await tx.financialAccount.findFirst({
-                                where: {
-                                    tenantId,
-                                    isActive: true,
-                                    OR: [
-                                        { type: "NAGAD" },
-                                        { name: { contains: "nagad", mode: "insensitive" } },
-                                    ],
-                                },
-                                orderBy: { isDefault: "desc" },
-                            });
-                        }
                     }
                     else if (pMethod === "BANK" || pMethod === "CARD") {
                         if (data.bankName) {
@@ -341,17 +313,6 @@ class SalesService {
                                 where: {
                                     tenantId,
                                     branchId: data.branchId,
-                                    type: "BANK",
-                                    isActive: true,
-                                },
-                                orderBy: { isDefault: "desc" },
-                            });
-                        }
-                        // Fallback to central/owner Bank account
-                        if (!financialAccount) {
-                            financialAccount = await tx.financialAccount.findFirst({
-                                where: {
-                                    tenantId,
                                     type: "BANK",
                                     isActive: true,
                                 },

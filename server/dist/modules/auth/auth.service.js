@@ -259,7 +259,69 @@ class AuthService {
                 throw new Error("An account or pending application already exists for this email address. Please login instead.");
             }
         }
-        // 2. Resolve selected subscription plan
+        // 2. Upload regulatory documents to Cloudinary / storage
+        // NID requires both Front and Back sides
+        const nidFront = data.nidFrontDocument || data.nidDocument;
+        const nidBack = data.nidBackDocument;
+        // Trade License and Drug License are uploaded as a single complete document (PDF/JPG/PNG)
+        const tradeDoc = data.tradeLicenseDocument || data.tradeLicenseFrontDocument;
+        const tradeBack = data.tradeLicenseBackDocument;
+        const drugDoc = data.drugLicenseDocument || data.drugLicenseFrontDocument;
+        const drugBack = data.drugLicenseBackDocument;
+        if (!nidFront) {
+            throw new Error("NID Front document is required.");
+        }
+        if (!nidBack) {
+            throw new Error("NID Back document is required.");
+        }
+        if (!tradeDoc) {
+            throw new Error("Trade License document is required (PDF, JPG, or PNG).");
+        }
+        if (!drugDoc) {
+            throw new Error("DGDA Drug License document is required (PDF, JPG, or PNG).");
+        }
+        let nidFrontUpload = { secureUrl: "", publicId: "" };
+        let nidBackUpload = null;
+        let tradeDocUpload = { secureUrl: "", publicId: "" };
+        let tradeBackUpload = null;
+        let drugDocUpload = { secureUrl: "", publicId: "" };
+        let drugBackUpload = null;
+        let paymentUpload = null;
+        try {
+            const uploadTasks = [
+                upload_service_1.UploadService.uploadImage(nidFront, "pharmacy_saas/documents/nid_front"),
+                upload_service_1.UploadService.uploadImage(nidBack, "pharmacy_saas/documents/nid_back"),
+                tradeDoc ? upload_service_1.UploadService.uploadImage(tradeDoc, "pharmacy_saas/documents/trade") : Promise.resolve({ secureUrl: "", publicId: "" }),
+                drugDoc ? upload_service_1.UploadService.uploadImage(drugDoc, "pharmacy_saas/documents/drug") : Promise.resolve({ secureUrl: "", publicId: "" }),
+            ];
+            if (tradeBack)
+                uploadTasks.push(upload_service_1.UploadService.uploadImage(tradeBack, "pharmacy_saas/documents/trade_back"));
+            else
+                uploadTasks.push(Promise.resolve(null));
+            if (drugBack)
+                uploadTasks.push(upload_service_1.UploadService.uploadImage(drugBack, "pharmacy_saas/documents/drug_back"));
+            else
+                uploadTasks.push(Promise.resolve(null));
+            if (data.manualPaymentDocument) {
+                uploadTasks.push(upload_service_1.UploadService.uploadImage(data.manualPaymentDocument, "pharmacy_saas/documents/payments"));
+            }
+            else {
+                uploadTasks.push(Promise.resolve(null));
+            }
+            const [nFront, nBack, tDoc, dDoc, tBack, dBack, pUpload] = await Promise.all(uploadTasks);
+            nidFrontUpload = nFront;
+            nidBackUpload = nBack;
+            tradeDocUpload = tDoc;
+            drugDocUpload = dDoc;
+            tradeBackUpload = tBack;
+            drugBackUpload = dBack;
+            paymentUpload = pUpload;
+        }
+        catch (uploadErr) {
+            console.error("[registerOwner] Document upload failed:", uploadErr);
+            throw new Error(`Document upload error: ${uploadErr.message || "Failed to upload regulatory documents."}`);
+        }
+        // 3. Resolve selected subscription plan
         let plan = null;
         if (data.planId) {
             plan = await prisma_1.prisma.subscriptionPlan.findUnique({
@@ -273,80 +335,8 @@ class AuthService {
                 where: { isActive: true },
             });
         }
-        const feat = (plan && typeof plan.features === "object" && plan.features !== null) ? plan.features : {};
-        const isTrialPlan = Boolean(data.isDemo ||
-            data.paymentMethod === "FREE_TRIAL" ||
-            plan?.tier === "TRIAL" ||
-            plan?.isTrial ||
-            feat?.isTrial ||
-            Number(plan?.trialDays || feat?.trialDays || 0) > 0);
-        // 3. Upload regulatory documents to Cloudinary / storage (bypassed for Free Demo)
-        const nidFront = data.nidFrontDocument || data.nidDocument;
-        const nidBack = data.nidBackDocument;
-        const tradeDoc = data.tradeLicenseDocument || data.tradeLicenseFrontDocument;
-        const tradeBack = data.tradeLicenseBackDocument;
-        const drugDoc = data.drugLicenseDocument || data.drugLicenseFrontDocument;
-        const drugBack = data.drugLicenseBackDocument;
-        if (!isTrialPlan) {
-            if (!nidFront) {
-                throw new Error("NID Front document is required.");
-            }
-            if (!nidBack) {
-                throw new Error("NID Back document is required.");
-            }
-            if (!tradeDoc) {
-                throw new Error("Trade License document is required (PDF, JPG, or PNG).");
-            }
-            if (!drugDoc) {
-                throw new Error("DGDA Drug License document is required (PDF, JPG, or PNG).");
-            }
-        }
-        let nidFrontUpload = { secureUrl: "", publicId: "" };
-        let nidBackUpload = null;
-        let tradeDocUpload = { secureUrl: "", publicId: "" };
-        let tradeBackUpload = null;
-        let drugDocUpload = { secureUrl: "", publicId: "" };
-        let drugBackUpload = null;
-        let paymentUpload = null;
-        if (nidFront || nidBack || tradeDoc || drugDoc || data.manualPaymentDocument) {
-            try {
-                const uploadTasks = [
-                    nidFront ? upload_service_1.UploadService.uploadImage(nidFront, "pharmacy_saas/documents/nid_front") : Promise.resolve({ secureUrl: "", publicId: "" }),
-                    nidBack ? upload_service_1.UploadService.uploadImage(nidBack, "pharmacy_saas/documents/nid_back") : Promise.resolve(null),
-                    tradeDoc ? upload_service_1.UploadService.uploadImage(tradeDoc, "pharmacy_saas/documents/trade") : Promise.resolve({ secureUrl: "", publicId: "" }),
-                    drugDoc ? upload_service_1.UploadService.uploadImage(drugDoc, "pharmacy_saas/documents/drug") : Promise.resolve({ secureUrl: "", publicId: "" }),
-                ];
-                if (tradeBack)
-                    uploadTasks.push(upload_service_1.UploadService.uploadImage(tradeBack, "pharmacy_saas/documents/trade_back"));
-                else
-                    uploadTasks.push(Promise.resolve(null));
-                if (drugBack)
-                    uploadTasks.push(upload_service_1.UploadService.uploadImage(drugBack, "pharmacy_saas/documents/drug_back"));
-                else
-                    uploadTasks.push(Promise.resolve(null));
-                if (data.manualPaymentDocument) {
-                    uploadTasks.push(upload_service_1.UploadService.uploadImage(data.manualPaymentDocument, "pharmacy_saas/documents/payments"));
-                }
-                else {
-                    uploadTasks.push(Promise.resolve(null));
-                }
-                const [nFront, nBack, tDoc, dDoc, tBack, dBack, pUpload] = await Promise.all(uploadTasks);
-                nidFrontUpload = nFront;
-                nidBackUpload = nBack;
-                tradeDocUpload = tDoc;
-                drugDocUpload = dDoc;
-                tradeBackUpload = tBack;
-                drugBackUpload = dBack;
-                paymentUpload = pUpload;
-            }
-            catch (uploadErr) {
-                console.error("[registerOwner] Document upload failed:", uploadErr);
-                if (!isTrialPlan) {
-                    throw new Error(`Document upload error: ${uploadErr.message || "Failed to upload regulatory documents."}`);
-                }
-            }
-        }
-        const trialDays = Number(plan?.trialDays || feat?.trialDays || 7);
+        const isTrialPlan = plan?.tier === "TRIAL" || !!plan?.features?.isTrial || data.paymentMethod === "FREE_TRIAL";
+        const trialDays = plan?.features?.trialDays ? Number(plan.features.trialDays) : 7;
         const basePrice = isTrialPlan ? 0 : Number(plan?.price || 1500);
         const planPrice = isTrialPlan ? 0 : (data.billingCycle === "YEARLY" ? Math.round(basePrice * 12 * 0.85) : basePrice);
         const INITIAL_LICENSE_FEE = isTrialPlan ? 0 : 5000;
@@ -368,7 +358,6 @@ class AuthService {
                     phone: data.phone,
                     address: data.address || "HQ Location",
                     isActive: false, // Inactive until approved and paid
-                    isDemo: isTrialPlan,
                     // Verification & Regulatory Documents
                     verificationStatus: "PENDING_OTP",
                     nidNumber: data.nidNumber,

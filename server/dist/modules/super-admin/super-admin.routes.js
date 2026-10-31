@@ -62,9 +62,3 @@ router.post("/quotations/:id/send-email", quotation_controller_1.QuotationContro
 // ==================== SMS MANAGEMENT ====================
 const sms_routes_1 = require("./sms.routes");
 router.use("/sms", sms_routes_1.smsRoutes);
-// ==================== PAYMENT GATEWAYS & PLATFORM SETTINGS ====================
-const settings_controller_1 = require("../settings/settings.controller");
-router.get("/settings/gateways", settings_controller_1.SettingsController.getAdminPaymentGateways);
-router.put("/settings/gateways", settings_controller_1.SettingsController.updatePaymentGatewaySettings);
-router.get("/settings", settings_controller_1.SettingsController.getAdminPaymentGateways);
-router.put("/settings", settings_controller_1.SettingsController.updatePaymentGatewaySettings);

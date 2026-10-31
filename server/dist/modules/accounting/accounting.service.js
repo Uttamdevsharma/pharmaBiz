@@ -12,11 +12,7 @@ class AccountingService {
     static async listAccounts(tenantId, branchId) {
         const where = { tenantId, isActive: true };
         if (branchId) {
-            // Cash is strictly branch-specific: return cash of this branch, plus any non-cash (Bank, bKash, Nagad, etc.)
-            where.OR = [
-                { branchId, type: "CASH" },
-                { type: { not: "CASH" } },
-            ];
+            where.branchId = branchId;
         }
         const accounts = await prisma_1.prisma.financialAccount.findMany({
             where,
@@ -233,27 +229,9 @@ class AccountingService {
                     userId,
                 },
                 include: {
-                    sourceAccount: {
-                        select: {
-                            id: true,
-                            name: true,
-                            type: true,
-                            branchId: true,
-                            branch: { select: { id: true, name: true } },
-                        },
-                    },
-                    destinationAccount: {
-                        select: {
-                            id: true,
-                            name: true,
-                            type: true,
-                            branchId: true,
-                            branch: { select: { id: true, name: true } },
-                        },
-                    },
-                    user: { select: { id: true, name: true, username: true, role: true } },
-                    branch: { select: { id: true, name: true } },
-                    tenant: { select: { id: true, name: true, address: true, phone: true } },
+                    sourceAccount: { select: { id: true, name: true, type: true } },
+                    destinationAccount: { select: { id: true, name: true, type: true } },
+                    user: { select: { id: true, name: true, username: true } },
                 },
             });
             return {
@@ -637,27 +615,10 @@ class AccountingService {
                 take: limit,
                 orderBy: { createdAt: "desc" },
                 include: {
-                    sourceAccount: {
-                        select: {
-                            id: true,
-                            name: true,
-                            type: true,
-                            branchId: true,
-                            branch: { select: { id: true, name: true } },
-                        },
-                    },
-                    destinationAccount: {
-                        select: {
-                            id: true,
-                            name: true,
-                            type: true,
-                            branchId: true,
-                            branch: { select: { id: true, name: true } },
-                        },
-                    },
-                    user: { select: { id: true, name: true, username: true, role: true } },
+                    sourceAccount: { select: { id: true, name: true, type: true } },
+                    destinationAccount: { select: { id: true, name: true, type: true } },
+                    user: { select: { id: true, name: true, username: true } },
                     branch: { select: { id: true, name: true } },
-                    tenant: { select: { id: true, name: true, address: true, phone: true } },
                 },
             }),
         ]);

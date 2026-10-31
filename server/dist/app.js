@@ -94,10 +94,7 @@ app.use("/api/super-admin/support-tickets", support_ticket_routes_1.superAdminSu
 app.use("/api/super-admin/notices", notices_routes_1.superAdminNoticeRoutes);
 app.use("/api/tenant/notices", notices_routes_1.tenantNoticeRoutes);
 const quotation_controller_1 = require("./modules/super-admin/quotation.controller");
-const settings_controller_1 = require("./modules/settings/settings.controller");
 app.get("/api/public/quotations/:id", quotation_controller_1.QuotationController.getById);
-app.get("/api/public/platform-settings", settings_controller_1.SettingsController.getPublicPaymentGateways);
-app.get("/api/public/payment-gateways", settings_controller_1.SettingsController.getPublicPaymentGateways);
 // Fallback & direct gateway callbacks on root /payment/* (Supports both GET and POST)
 app.all("/payment/success", payment_controller_1.PaymentController.handleSuccess);
 app.all("/payment/fail", payment_controller_1.PaymentController.handleFail);
