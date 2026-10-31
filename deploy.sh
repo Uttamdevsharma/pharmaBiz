@@ -66,14 +66,24 @@ echo -e "${BLUE} [1/3] Setting up Backend Server (Express + Prisma)   ${NC}"
 echo -e "${BLUE}======================================================${NC}"
 cd "$PROJECT_DIR/server"
 
+# Ensure execute permissions on binary wrappers from git checkout
+if [ -d "$PROJECT_DIR/server/node_modules/.bin" ]; then
+    chmod -R +x "$PROJECT_DIR/server/node_modules/.bin" 2>/dev/null || true
+fi
+
 echo -e "${GREEN}📦 Installing server dependencies...${NC}"
-npm install
+npm install --unsafe-perm=true
+
+# Ensure execute permissions after install
+if [ -d "$PROJECT_DIR/server/node_modules/.bin" ]; then
+    chmod -R +x "$PROJECT_DIR/server/node_modules/.bin" 2>/dev/null || true
+fi
 
 echo -e "${GREEN}🗄️  Generating Prisma client...${NC}"
-npx prisma generate
+node node_modules/prisma/build/index.js generate || npx prisma generate
 
 echo -e "${GREEN}🔄 Applying database migrations...${NC}"
-npx prisma migrate deploy || echo -e "${YELLOW}⚠️ Prisma migration deploy skipped or failed, continuing...${NC}"
+node node_modules/prisma/build/index.js migrate deploy || npx prisma migrate deploy || echo -e "${YELLOW}⚠️ Prisma migration deploy skipped or failed, continuing...${NC}"
 
 echo -e "${GREEN}🏗️  Compiling TypeScript backend...${NC}"
 npm run build
@@ -84,8 +94,17 @@ echo -e "${BLUE} [2/3] Setting up Frontend Client (Next.js)           ${NC}"
 echo -e "${BLUE}======================================================${NC}"
 cd "$PROJECT_DIR/client"
 
+# Ensure execute permissions on client binaries
+if [ -d "$PROJECT_DIR/client/node_modules/.bin" ]; then
+    chmod -R +x "$PROJECT_DIR/client/node_modules/.bin" 2>/dev/null || true
+fi
+
 echo -e "${GREEN}📦 Installing client dependencies...${NC}"
-npm install
+npm install --unsafe-perm=true
+
+if [ -d "$PROJECT_DIR/client/node_modules/.bin" ]; then
+    chmod -R +x "$PROJECT_DIR/client/node_modules/.bin" 2>/dev/null || true
+fi
 
 echo -e "${GREEN}🏗️  Building Next.js production bundle...${NC}"
 npm run build

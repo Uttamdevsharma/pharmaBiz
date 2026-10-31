@@ -55,7 +55,10 @@ jobs:
             git checkout -B main origin/main || git reset --hard origin/main
             git remote set-url origin "https://github.com/${{ github.repository }}.git"
 
-            # Execute deployment script
+            # Ensure executable permissions on deploy script and binary wrappers
             chmod +x deploy.sh
+            chmod -R +x server/node_modules/.bin 2>/dev/null || true
+            chmod -R +x client/node_modules/.bin 2>/dev/null || true
+
             ./deploy.sh "$TARGET_DIR"
 
