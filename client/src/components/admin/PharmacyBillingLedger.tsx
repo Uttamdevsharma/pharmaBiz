@@ -438,16 +438,16 @@ export function PharmacyBillingLedger({
       {/* ===================================================================== */}
       {/* BILLING LEDGER TABLE & FILTER TOOLBAR                                  */}
       {/* ===================================================================== */}
-      <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-xs">
+      <div className="bg-white dark:bg-slate-900 rounded-none border border-slate-200 dark:border-slate-800 overflow-hidden shadow-xs">
         <div className="p-5 sm:p-6 border-b border-slate-100 dark:border-slate-800 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-2.5">
-              <div className="p-2 rounded-xl bg-brand-primary/10 text-brand-primary">
+              <div className="p-2 rounded-none bg-brand-primary/10 text-brand-primary">
                 <FileText className="h-4 w-4" />
               </div>
               <div>
                 <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
-                  Subscription & Billing Ledger (1-Year Auto Schedule)
+                  Subscription & Billing Ledger
                 </h2>
                 <p className="text-xs text-slate-400">
                   Showing {filteredRows.length} of {ledgerRows.length} billing cycles
@@ -459,7 +459,7 @@ export function PharmacyBillingLedger({
               <button
                 type="button"
                 onClick={() => setShowPrintModal(true)}
-                className="px-4 py-2 rounded-xl bg-brand-primary hover:bg-brand-primary/95 text-white font-bold text-xs sm:text-sm transition flex items-center gap-2 shadow-xs cursor-pointer active:scale-95"
+                className="px-4 py-2 rounded-none bg-brand-primary hover:bg-brand-primary/95 text-white font-bold text-xs sm:text-sm transition flex items-center gap-2 shadow-xs cursor-pointer active:scale-95"
               >
                 <Printer className="h-4 w-4" />
                 <span>Print Billing Ledger</span>
@@ -488,7 +488,7 @@ export function PharmacyBillingLedger({
                   key={preset.key}
                   type="button"
                   onClick={() => setFilter(preset.key as LedgerFilterType)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  className={`px-3 py-1.5 rounded-none text-xs font-bold transition-all cursor-pointer ${
                     isActive
                       ? "bg-brand-primary text-white shadow-xs"
                       : "bg-slate-100 hover:bg-slate-200/80 text-slate-600 dark:bg-slate-800 dark:hover:bg-slate-750 dark:text-slate-300"
@@ -511,7 +511,7 @@ export function PharmacyBillingLedger({
                   type="date"
                   value={customStart}
                   onChange={(e) => setCustomStart(e.target.value)}
-                  className="px-3 py-1.5 text-xs font-medium bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                  className="px-3 py-1.5 text-xs font-medium bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-none text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-primary"
                 />
               </div>
               <div className="flex items-center gap-2">
@@ -522,7 +522,7 @@ export function PharmacyBillingLedger({
                   type="date"
                   value={customEnd}
                   onChange={(e) => setCustomEnd(e.target.value)}
-                  className="px-3 py-1.5 text-xs font-medium bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                  className="px-3 py-1.5 text-xs font-medium bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-none text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-primary"
                 />
               </div>
               {(customStart || customEnd) && (
@@ -556,7 +556,7 @@ export function PharmacyBillingLedger({
                 setCustomStart("");
                 setCustomEnd("");
               }}
-              className="px-4 py-2 text-xs font-bold rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition cursor-pointer"
+              className="px-4 py-2 text-xs font-bold rounded-none bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition cursor-pointer"
             >
               Reset to 1-Year Ledger
             </button>
@@ -597,7 +597,7 @@ export function PharmacyBillingLedger({
                           {row.planName}
                         </span>
                         <div className="flex items-center gap-1.5 mt-0.5">
-                          <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                          <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded-none bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
                             {row.tier}
                           </span>
                           <span className="text-[11px] text-slate-400">Monthly</span>
@@ -671,7 +671,7 @@ export function PharmacyBillingLedger({
                       <td className="py-4 px-5 whitespace-nowrap">
                         <div className="flex flex-col items-start gap-1">
                           <span
-                            className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${row.statusBadgeColor}`}
+                            className={`px-2.5 py-0.5 rounded-none text-[11px] font-bold border ${row.statusBadgeColor}`}
                           >
                             {row.statusLabel}
                           </span>
@@ -708,7 +708,7 @@ export function PharmacyBillingLedger({
                 <span className="hidden sm:inline text-slate-300 dark:text-slate-700">•</span>
 
                 {/* Show per page dropdown */}
-                <div className="flex items-center gap-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-1.5 rounded-xl shadow-2xs">
+                <div className="flex items-center gap-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-1.5 rounded-none shadow-2xs">
                   <span className="font-bold text-slate-600 dark:text-slate-300">Show:</span>
                   <select
                     value={pageSize}
@@ -734,7 +734,7 @@ export function PharmacyBillingLedger({
                     type="button"
                     onClick={() => setPage((p) => Math.max(1, p - 1))}
                     disabled={page <= 1}
-                    className="px-3 py-1.5 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition flex items-center gap-1 cursor-pointer"
+                    className="px-3 py-1.5 rounded-none text-xs font-bold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition flex items-center gap-1 cursor-pointer"
                   >
                     <ChevronLeft className="h-3.5 w-3.5" />
                     <span>Previous</span>
@@ -764,7 +764,7 @@ export function PharmacyBillingLedger({
                           key={p}
                           type="button"
                           onClick={() => setPage(p)}
-                          className={`min-w-8 h-8 rounded-xl text-xs font-bold font-mono transition cursor-pointer ${
+                          className={`min-w-8 h-8 rounded-none text-xs font-bold font-mono transition cursor-pointer ${
                             isCur
                               ? "bg-brand-primary text-white shadow-xs"
                               : "border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
@@ -780,7 +780,7 @@ export function PharmacyBillingLedger({
                     type="button"
                     onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                     disabled={page >= totalPages}
-                    className="px-3 py-1.5 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition flex items-center gap-1 cursor-pointer"
+                    className="px-3 py-1.5 rounded-none text-xs font-bold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition flex items-center gap-1 cursor-pointer"
                   >
                     <span>Next</span>
                     <ChevronRight className="h-3.5 w-3.5" />
@@ -798,7 +798,7 @@ export function PharmacyBillingLedger({
       {/* ===================================================================== */}
       {showPrintModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md animate-in fade-in duration-200 overflow-y-auto">
-          <div className="relative w-full max-w-4xl bg-white text-slate-900 rounded-3xl shadow-2xl flex flex-col overflow-hidden max-h-[95vh] my-auto">
+          <div className="relative w-full max-w-4xl bg-white text-slate-900 rounded-none shadow-2xl flex flex-col overflow-hidden max-h-[95vh] my-auto">
             {/* Modal Controls Bar (Hidden during actual print) */}
             <div className="no-print flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50">
               <div className="flex items-center gap-2">
@@ -811,7 +811,7 @@ export function PharmacyBillingLedger({
                 <button
                   type="button"
                   onClick={handlePrint}
-                  className="px-4 py-2 rounded-xl bg-brand-primary hover:bg-brand-primary/95 text-white font-bold text-xs sm:text-sm flex items-center gap-1.5 shadow-xs cursor-pointer"
+                  className="px-4 py-2 rounded-none bg-brand-primary hover:bg-brand-primary/95 text-white font-bold text-xs sm:text-sm flex items-center gap-1.5 shadow-xs cursor-pointer"
                 >
                   <Printer className="h-4 w-4" />
                   <span>Print Now</span>
@@ -819,7 +819,7 @@ export function PharmacyBillingLedger({
                 <button
                   type="button"
                   onClick={() => setShowPrintModal(false)}
-                  className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition cursor-pointer"
+                  className="p-2 rounded-none text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition cursor-pointer"
                 >
                   <X className="h-5 w-5" />
                 </button>
@@ -832,7 +832,7 @@ export function PharmacyBillingLedger({
               <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 border-b-2 border-slate-800 pb-5">
                 <div>
                   <div className="flex items-center gap-2.5">
-                    <div className="h-9 w-9 rounded-xl bg-brand-primary text-white flex items-center justify-center font-black text-xl">
+                    <div className="h-9 w-9 rounded-none bg-brand-primary text-white flex items-center justify-center font-black text-xl">
                       P
                     </div>
                     <div>
@@ -851,7 +851,7 @@ export function PharmacyBillingLedger({
                 </div>
 
                 <div className="text-left sm:text-right space-y-1">
-                  <div className="inline-block px-3 py-1 bg-slate-100 rounded-lg text-xs font-black uppercase tracking-wider text-slate-700 border border-slate-200">
+                  <div className="inline-block px-3 py-1 bg-slate-100 rounded-none text-xs font-black uppercase tracking-wider text-slate-700 border border-slate-200">
                     Billing Ledger Statement
                   </div>
                   <div className="text-xs font-mono font-bold text-slate-800">
@@ -864,7 +864,7 @@ export function PharmacyBillingLedger({
               </div>
 
               {/* Pharmacy Details Box */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 p-4 rounded-none bg-slate-50 border border-slate-200 text-xs">
                 <div>
                   <span className="text-[10px] font-bold uppercase text-slate-400 block">
                     Pharmacy Client
@@ -907,7 +907,7 @@ export function PharmacyBillingLedger({
               </div>
 
               {/* Clean Printable Table (1. Plan & Tier, 2. Duration, etc.) */}
-              <div className="border border-slate-200 rounded-xl overflow-hidden">
+              <div className="border border-slate-200 rounded-none overflow-hidden">
                 <table className="w-full text-left text-xs">
                   <thead className="bg-slate-100 border-b border-slate-200 text-[10px] font-black uppercase text-slate-700">
                     <tr>
@@ -953,7 +953,7 @@ export function PharmacyBillingLedger({
                         </td>
                         <td className="py-2 px-3 whitespace-nowrap">
                           <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                            className={`px-2 py-0.5 rounded-none text-[10px] font-bold ${
                               row.status === "PAID"
                                 ? "bg-emerald-100 text-emerald-800"
                                 : row.status === "OVERDUE_PENALTY"

@@ -1,133 +1,243 @@
 "use client";
 
-import React from "react";
+import React, { useRef, type PointerEvent as ReactPointerEvent } from "react";
 import Link from "next/link";
-import { useSettings } from "@/context/SettingsContext";
-import { ArrowRight, Sparkles, Wifi, ShieldCheck, Store, CheckCircle2 } from "lucide-react";
+import { useLanguage } from "@/context/LanguageContext";
+import { Icon } from "./LandingIcons";
 
-export function Hero() {
-  const { settings } = useSettings();
-  const hero = settings.hero || {};
+function DashboardScene() {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const sceneRef = useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    const updateScale = () => {
+      if (!wrapRef.current) return;
+      const availableWidth = wrapRef.current.offsetWidth;
+      if (availableWidth < 710) {
+        const padding = availableWidth < 400 ? 8 : 16;
+        const newScale = Math.min(1, Math.max(0.40, (availableWidth - padding) / 700));
+        wrapRef.current.style.setProperty("--scene-scale", newScale.toFixed(3));
+      } else {
+        wrapRef.current.style.removeProperty("--scene-scale");
+      }
+    };
+    updateScale();
+    window.addEventListener("resize", updateScale);
+    return () => window.removeEventListener("resize", updateScale);
+  }, []);
+
+  const handleSceneMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (typeof window !== "undefined" && window.innerWidth <= 800) return;
+    const scene = sceneRef.current;
+    if (!scene) return;
+    const rect = scene.getBoundingClientRect();
+    const x = (event.clientX - rect.left) / rect.width - 0.5;
+    const y = (event.clientY - rect.top) / rect.height - 0.5;
+    scene.style.setProperty("--scene-x", `${x * 18}px`);
+    scene.style.setProperty("--scene-y", `${y * 14}px`);
+    scene.style.setProperty("--scene-x-neg", `${x * -18}px`);
+    scene.style.setProperty("--scene-y-neg", `${y * -14}px`);
+    scene.style.setProperty("--scene-rx", `${y * -2.5}deg`);
+    scene.style.setProperty("--scene-ry", `${x * 3.5}deg`);
+  };
+
+  const resetScene = () => {
+    const scene = sceneRef.current;
+    if (!scene) return;
+    scene.style.setProperty("--scene-x", "0px");
+    scene.style.setProperty("--scene-y", "0px");
+    scene.style.setProperty("--scene-x-neg", "0px");
+    scene.style.setProperty("--scene-y-neg", "0px");
+    scene.style.setProperty("--scene-rx", "0deg");
+    scene.style.setProperty("--scene-ry", "0deg");
+  };
 
   return (
-    <section
-      id="hero"
-      className="relative pt-28 pb-12 sm:pt-32 sm:pb-14 md:pt-36 md:pb-16 lg:pt-38 lg:pb-16 xl:pt-40 xl:pb-20 overflow-hidden flex flex-col justify-center min-h-[calc(100vh-5rem)] lg:min-h-[700px]"
-    >
-      {/* Background Decorative Gradients */}
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[550px] sm:w-[750px] h-[550px] sm:h-[750px] rounded-full brand-glow -z-10 opacity-25 blur-3xl pointer-events-none" />
-      <div className="absolute top-16 right-0 w-96 h-96 rounded-full bg-teal-500/10 -z-10 blur-3xl pointer-events-none" />
+    <div className="scene-wrapper" ref={wrapRef}>
+      <div
+        className="scene"
+        ref={sceneRef}
+        onPointerMove={handleSceneMove}
+        onPointerLeave={resetScene}
+        aria-label="Interactive BizPharma analytics dashboard preview"
+      >
+        <div className="scene-glow" />
+        <div className="orbit orbit-one" />
+        <div className="orbit orbit-two" />
+        <div className="orbit-dot orbit-dot-one"><span /></div>
+        <div className="orbit-dot orbit-dot-two"><span /></div>
 
-      <div className="w-full max-w-[1720px] mx-auto px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 2xl:px-16">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-10 xl:gap-14 2xl:gap-16 items-center">
-          {/* Left Column: Content & CTAs */}
-          <div className="lg:col-span-7 xl:col-span-7 2xl:col-span-7 flex flex-col items-start text-left space-y-6 sm:space-y-8 2xl:space-y-10">
-            {/* SaaS Badge */}
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border brand-subtle-border brand-subtle-bg text-brand-primary text-xs sm:text-sm font-semibold tracking-wide shadow-sm">
-              <Sparkles className="h-4 w-4 shrink-0" />
-              <span>{hero.badge || "Next-Gen Multi-Tenant Pharmacy Platform"}</span>
+        <div className="medicine-bottle" aria-hidden="true">
+          <div className="bottle-cap"><i /><i /><i /><i /></div>
+          <div className="bottle-neck" />
+          <div className="bottle-body">
+            <div className="bottle-label">
+              <strong>NAPA</strong>
+              <small>Paracetamol</small>
+              <span className="bottle-dose">Syrup 60 ml</span>
             </div>
-
-            {/* Main Headline (50-68px on desktop) */}
-            <h1 className="text-3xl sm:text-5xl lg:text-[50px] xl:text-[60px] 2xl:text-[68px] font-extrabold tracking-tight text-slate-900 dark:text-white leading-[1.12] lg:leading-[1.08] max-w-3xl 2xl:max-w-4xl">
-              {hero.title ? (
-                hero.title
-              ) : (
-                <>
-                  Empower Your Pharmacy Chain With Smart{" "}
-                  <span className="text-brand-primary">Offline-First SaaS</span>
-                </>
-              )}
-            </h1>
-
-            {/* Subtitle */}
-            <p className="text-base sm:text-lg lg:text-xl 2xl:text-2xl text-slate-600 dark:text-slate-300 max-w-2xl 2xl:max-w-3xl leading-relaxed">
-              {hero.subtitle ||
-                "Centralized pricing, real-time inventory management, multi-branch control, automated POS, and zero downtime even when the internet is disconnected."}
-            </p>
-
-            {/* Action CTAs */}
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 w-full sm:w-auto pt-1">
-              <Link
-                href="/register"
-                className="inline-flex items-center justify-center gap-2.5 px-8 py-4 rounded-xl bg-brand-primary text-white text-base sm:text-lg font-bold shadow-lg shadow-emerald-600/20 hover:opacity-95 hover:shadow-xl hover:-translate-y-0.5 transition-all active:scale-95 text-center"
-              >
-                {hero.ctaPrimaryText || "Get Started Now"}
-                <ArrowRight className="h-5 w-5 shrink-0" />
-              </Link>
-
-              <Link
-                href="/pricing"
-                className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 text-base sm:text-lg font-semibold hover:bg-slate-50 dark:hover:bg-slate-700/80 transition-all shadow-sm hover:-translate-y-0.5 text-center"
-              >
-                {hero.ctaSecondaryText || "View Pricing Plans"}
-              </Link>
-            </div>
-
-            {/* Key Value Highlights */}
-            <div className="pt-2 flex flex-wrap items-center gap-y-3 gap-x-6 text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300">
-              <div className="flex items-center gap-2">
-                <div className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                  <Wifi className="h-4 w-4" />
-                </div>
-                <span>100% Offline POS Resilience</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="p-1.5 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400">
-                  <Store className="h-4 w-4" />
-                </div>
-                <span>Multi-Branch Sync</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="p-1.5 rounded-lg brand-subtle-bg text-brand-primary">
-                  <ShieldCheck className="h-4 w-4" />
-                </div>
-                <span>Role-Based Controlled Drugs</span>
-              </div>
-            </div>
+            <div className="bottle-shine" />
           </div>
+          <div className="bottle-shadow" />
+        </div>
 
-          {/* Right Column: Hero Image Showcase (fluid up to 680px on 22-32 inch screens) */}
-          <div className="lg:col-span-5 xl:col-span-5 2xl:col-span-5 w-full flex justify-center lg:justify-end">
-            <div className="relative w-full max-w-[480px] sm:max-w-[520px] lg:max-w-[520px] xl:max-w-[600px] 2xl:max-w-[680px]">
-              {/* Subtle background glow */}
-              <div className="absolute -inset-2 bg-gradient-to-tr from-emerald-500/30 to-teal-500/30 rounded-3xl blur-2xl opacity-70 -z-10" />
+        <div className="capsule capsule-one" aria-hidden="true"><i /><b /></div>
+        <div className="capsule capsule-two" aria-hidden="true"><i /><b /></div>
 
-              {/* Main Image Card Frame */}
-              <div className="relative rounded-2xl sm:rounded-3xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 sm:p-3.5 shadow-2xl backdrop-blur-sm overflow-hidden transition-transform duration-300 hover:scale-[1.01]">
-                <img
-                  src="/hero-right.jpg"
-                  alt="PharmaBiz Intelligent Pharmacy Operating System"
-                  className="w-full h-auto object-cover rounded-xl sm:rounded-2xl"
-                  loading="eager"
-                />
+        <div className="blister-pack" aria-hidden="true">
+          <div className="blister-grid">
+            {Array.from({ length: 8 }, (_, index) => (
+              <span key={index}><i /></span>
+            ))}
+          </div>
+          <div className="blister-shine" />
+        </div>
 
-                {/* Floating Status Badge - Top Right */}
-                <div className="absolute top-4 right-4 sm:top-5 sm:right-5 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-900/85 backdrop-blur-md border border-slate-700/80 text-white text-xs font-semibold shadow-lg">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
-                  <span>Cloud Sync Active</span>
-                </div>
-
-                {/* Floating Metrics Pill - Bottom Left */}
-                <div className="absolute bottom-4 left-4 right-4 sm:bottom-5 sm:left-5 sm:right-auto bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200/80 dark:border-slate-800 rounded-xl p-3 sm:p-3.5 shadow-xl flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-lg bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
-                    <Wifi className="h-5 w-5" />
-                  </div>
+        <div className="dashboard-card">
+          <div className="dash-sidebar">
+            <div className="mini-logo"><span /></div>
+            {["grid", "line", "bag", "user"].map((item, index) => (
+              <span className={`side-icon ${index === 0 ? "active" : ""}`} key={item}>
+                {index === 0 ? (
+                  <Icon name="chart" size={15} />
+                ) : index === 1 ? (
+                  <Icon name="report" size={15} />
+                ) : index === 2 ? (
+                  <Icon name="box" size={15} />
+                ) : (
+                  <Icon name="people" size={15} />
+                )}
+              </span>
+            ))}
+          </div>
+          <div className="dash-main">
+            <div className="dash-top">
+              <div>
+                <small>Overview</small>
+                <strong>Live Monitor</strong>
+              </div>
+              <div className="dash-avatar">AR</div>
+            </div>
+            <div className="metric-row">
+              <div className="metric">
+                <span>Today’s sales</span>
+                <strong>৳ 84,250</strong>
+                <small className="up">↗ 12.4%</small>
+              </div>
+              <div className="metric">
+                <span>Orders</span>
+                <strong>148</strong>
+                <small>Completed today</small>
+              </div>
+              <div className="metric">
+                <span>Low stock</span>
+                <strong>16</strong>
+                <small className="warn">Needs attention</small>
+              </div>
+            </div>
+            <div className="dash-grid">
+              <div className="chart-panel">
+                <div className="panel-title">
                   <div>
-                    <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                      <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                      Offline-First Engine
-                    </div>
-                    <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                      Zero downtime even during outages
+                    <small>Sales analytics</small>
+                    <strong>৳ 3,48,650</strong>
+                  </div>
+                  <span>7 days</span>
+                </div>
+                <svg className="sales-chart" viewBox="0 0 360 126" preserveAspectRatio="none">
+                  <defs>
+                    <linearGradient id="chartFill" x1="0" x2="0" y1="0" y2="1">
+                      <stop offset="0%" stopColor="#18a474" stopOpacity=".35" />
+                      <stop offset="100%" stopColor="#18a474" stopOpacity="0" />
+                    </linearGradient>
+                  </defs>
+                  <path className="gridline" d="M0 25H360M0 62H360M0 99H360" />
+                  <path
+                    className="area"
+                    d="M0 96C28 88 36 48 68 58s38 31 70 15 44-53 75-42 39 57 72 43 40-50 75-60v112H0Z"
+                  />
+                  <path
+                    className="line"
+                    d="M0 96C28 88 36 48 68 58s38 31 70 15 44-53 75-42 39 57 72 43 40-50 75-60"
+                  />
+                </svg>
+                <div className="chart-labels">
+                  <span>Sat</span><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span>
+                </div>
+              </div>
+              <div className="stock-panel">
+                <div className="panel-title">
+                  <div>
+                    <small>Stock health</small>
+                    <strong>2,840 items</strong>
+                  </div>
+                </div>
+                <div className="donut-wrap">
+                  <div className="donut">
+                    <div>
+                      <strong>86%</strong>
+                      <small>Healthy</small>
                     </div>
                   </div>
+                </div>
+                <div className="legend">
+                  <span><i className="green" /> In stock</span>
+                  <span><i className="amber" /> Low stock</span>
                 </div>
               </div>
             </div>
           </div>
         </div>
+
+        <div className="float-card float-sale">
+          <span className="float-icon"><Icon name="chart" size={18} /></span>
+          <div><small>Today’s profit</small><strong>৳ 18,420</strong></div>
+          <span className="float-up">+14%</span>
+        </div>
+        <div className="float-card float-alert">
+          <span className="float-icon amber-icon"><Icon name="clock" size={18} /></span>
+          <div><small>Expiry alert</small><strong>8 items this week</strong></div>
+        </div>
+        <div className="float-pill"><span><Icon name="shield" size={15} /></span> Cloud secured</div>
+        <div className="scene-live"><i /> Live dashboard</div>
+        <div className="scene-hint"><span>Move to explore</span><i /></div>
       </div>
+    </div>
+  );
+}
+
+export function Hero() {
+  const { lang, t } = useLanguage();
+
+  return (
+    <section className="hero">
+      <div className="hero-grid-bg" />
+      <div className="container hero-content">
+        <div className="hero-copy">
+          <h1 className="reveal hero-title">
+            <span className={`hero-title-main ${lang === "bn" ? "hero-title-bn" : ""}`}>{t("heroTitle1")}</span>
+            <em className={`hero-title-sub ${lang === "bn" ? "hero-title-sub-bn" : ""}`}>{t("heroTitle2")}</em>
+          </h1>
+          <p className="hero-lead reveal delay-1">
+            {t("heroLead")}
+          </p>
+          <div className="hero-actions reveal delay-2">
+            <Link className="button button-primary button-large" href="/register">
+              {t("heroRegister")} <Icon name="arrow" size={15} />
+            </Link>
+            <a className="watch-link" href="#how-it-works">
+              <span><Icon name="play" size={18} /></span> {t("heroSeeHow")}
+            </a>
+          </div>
+          <div className="hero-note reveal delay-3">
+            <span><Icon name="check" size={15} /> {t("heroNoCard")}</span>
+            <span><Icon name="check" size={15} /> {t("heroFastSetup")}</span>
+            <span><Icon name="check" size={15} /> {t("heroCancelAnytime")}</span>
+          </div>
+        </div>
+        <DashboardScene />
+      </div>
+      <div className="hero-bottom-fade" />
     </section>
   );
 }

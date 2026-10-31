@@ -15,6 +15,11 @@ import {
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
+  Printer,
+  X,
+  Building2,
+  Store,
+  CheckCircle2,
 } from "lucide-react";
 
 interface FinancialTransaction {
@@ -24,20 +29,35 @@ interface FinancialTransaction {
   reference?: string | null;
   note?: string | null;
   createdAt: string;
+  branch?: {
+    id: string;
+    name: string;
+  } | null;
+  tenant?: {
+    id?: string;
+    name?: string;
+    address?: string;
+    phone?: string;
+  } | null;
   sourceAccount?: {
     id: string;
     name: string;
     type: string;
+    branchId?: string | null;
+    branch?: { name: string } | null;
   } | null;
   destinationAccount?: {
     id: string;
     name: string;
     type: string;
+    branchId?: string | null;
+    branch?: { name: string } | null;
   } | null;
   user?: {
     id: string;
     name?: string | null;
     username?: string | null;
+    role?: string | null;
   } | null;
 }
 
@@ -47,10 +67,36 @@ interface FundTransferHistoryViewProps {
 
 type DatePreset = "ALL" | "TODAY" | "YESTERDAY" | "THIS_MONTH" | "THIS_YEAR" | "CUSTOM";
 
+function numberToWordsBDT(num: number): string {
+  const a = [
+    "", "One ", "Two ", "Three ", "Four ", "Five ", "Six ", "Seven ", "Eight ", "Nine ", "Ten ",
+    "Eleven ", "Twelve ", "Thirteen ", "Fourteen ", "Fifteen ", "Sixteen ", "Seventeen ", "Eighteen ", "Nineteen ",
+  ];
+  const b = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
+
+  const n = Math.floor(Math.abs(num));
+  if (n === 0) return "Zero Taka Only";
+
+  const numStr = ("000000000" + n).substr(-9);
+  const crore = parseInt(numStr.substr(0, 2), 10);
+  const lakh = parseInt(numStr.substr(2, 2), 10);
+  const thousand = parseInt(numStr.substr(4, 2), 10);
+  const hundred = parseInt(numStr.substr(6, 1), 10);
+  const rest = parseInt(numStr.substr(7, 2), 10);
+
+  let str = "";
+  if (crore > 0) str += (crore < 20 ? a[crore] : b[Math.floor(crore / 10)] + " " + a[crore % 10]) + "Crore ";
+  if (lakh > 0) str += (lakh < 20 ? a[lakh] : b[Math.floor(lakh / 10)] + " " + a[lakh % 10]) + "Lakh ";
+  if (thousand > 0) str += (thousand < 20 ? a[thousand] : b[Math.floor(thousand / 10)] + " " + a[thousand % 10]) + "Thousand ";
+  if (hundred > 0) str += a[hundred] + "Hundred ";
+  if (rest > 0) str += (rest < 20 ? a[rest] : b[Math.floor(rest / 10)] + " " + a[rest % 10]);
+
+  return `${str.trim()} Taka Only`;
+}
+
 function HistorySkeleton() {
   return (
     <div className="space-y-4 w-full animate-pulse">
-      {/* Header Skeleton */}
       <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
         <div className="h-7 w-48 bg-slate-200 dark:bg-slate-800 rounded-none" />
         <div className="flex gap-2">
@@ -58,11 +104,7 @@ function HistorySkeleton() {
           <div className="h-8 w-24 bg-slate-200 dark:bg-slate-800 rounded-none" />
         </div>
       </div>
-
-      {/* Filter Bar Skeleton */}
       <div className="h-12 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-none" />
-
-      {/* Table Skeleton */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-none space-y-2">
         <div className="h-8 bg-slate-100 dark:bg-slate-800 rounded-none" />
         {[...Array(6)].map((_, i) => (
@@ -88,6 +130,9 @@ export function FundTransferHistoryView({ onNavigate }: FundTransferHistoryViewP
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
   const [totalCount, setTotalCount] = useState(0);
+
+  // Voucher Print Modal State
+  const [voucherModalTrx, setVoucherModalTrx] = useState<FinancialTransaction | null>(null);
 
   // Compute actual date strings based on preset
   const computeDateRange = useCallback((preset: DatePreset) => {
@@ -161,152 +206,135 @@ export function FundTransferHistoryView({ onNavigate }: FundTransferHistoryViewP
     loadTransactions();
   }, [loadTransactions]);
 
-  // Client-side search filtering
+  const handlePresetClick = (preset: DatePreset) => {
+    setDatePreset(preset);
+    setPage(1);
+    if (preset !== "CUSTOM") {
+      setStartDate("");
+      setEndDate("");
+    }
+  };
+
+  // Client-side text search
   const filteredList = useMemo(() => {
     if (!search.trim()) return transactions;
     const q = search.toLowerCase();
     return transactions.filter((t) => {
-      const source = t.sourceAccount?.name?.toLowerCase() || "";
-      const dest = t.destinationAccount?.name?.toLowerCase() || "";
-      const ref = t.reference?.toLowerCase() || "";
-      return source.includes(q) || dest.includes(q) || ref.includes(q);
+      const src = (t.sourceAccount?.name || "").toLowerCase();
+      const dst = (t.destinationAccount?.name || "").toLowerCase();
+      const ref = (t.reference || "").toLowerCase();
+      const note = (t.note || "").toLowerCase();
+      const user = (t.user?.name || t.user?.username || "").toLowerCase();
+      return src.includes(q) || dst.includes(q) || ref.includes(q) || note.includes(q) || user.includes(q);
     });
   }, [transactions, search]);
 
   const totalPages = Math.max(1, Math.ceil(totalCount / limit));
 
-  if (loading && transactions.length === 0) {
-    return <HistorySkeleton />;
-  }
+  const handlePrint = () => {
+    window.print();
+  };
 
   return (
     <div className="space-y-4 w-full mx-auto">
-      {/* Header - Clean, Compact & No Large Banners */}
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
         <h1 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-          <History className="h-5 w-5 text-brand-primary" />
-          Transfer History
+          <History className="h-5 w-5 text-emerald-600" />
+          Fund Transfer History
         </h1>
 
         <div className="flex items-center gap-2">
           {onNavigate && (
             <button
+              type="button"
               onClick={() => onNavigate("acc_fund_transfer")}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-brand-primary bg-brand-primary text-white text-xs sm:text-sm font-semibold hover:opacity-90 transition rounded-none"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-bold transition rounded-none cursor-pointer"
             >
               <ArrowLeftRight className="h-3.5 w-3.5" />
-              New Fund Transfer
-            </button>
-          )}
-
-          {onNavigate && (
-            <button
-              onClick={() => onNavigate("acc_financial_accounts")}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs sm:text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-700 transition rounded-none"
-            >
-              <Wallet className="h-3.5 w-3.5 text-brand-primary" />
-              Account List
+              New Transfer
             </button>
           )}
 
           <button
+            type="button"
             onClick={() => loadTransactions(true)}
             disabled={refreshing}
-            className="p-1.5 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition rounded-none disabled:opacity-50"
-            title="Refresh Ledger"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs sm:text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-700 transition rounded-none cursor-pointer disabled:opacity-50"
           >
-            <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
+            <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin text-emerald-600" : ""}`} />
+            Refresh
           </button>
         </div>
       </div>
 
-      {/* Filter Bar - Clean, Compact, Product List Style */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 sm:p-4 rounded-none space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2.5">
-          {/* Search Input */}
-          <div className="relative flex-1 min-w-[240px] max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Enter account name or slip to search..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full h-9 pl-9 pr-3 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-none text-xs sm:text-sm outline-none focus:border-brand-primary dark:text-white"
-            />
-          </div>
-
-          {/* Date Range Presets */}
-          <div className="flex flex-wrap items-center gap-1">
-            <span className="text-xs text-slate-400 mr-1 flex items-center gap-1">
-              <Calendar className="h-3 w-3" />
-              Period:
-            </span>
-            {(
-              [
-                { id: "TODAY", label: "Today" },
-                { id: "YESTERDAY", label: "Yesterday" },
-                { id: "THIS_MONTH", label: "This Month" },
-                { id: "THIS_YEAR", label: "This Year" },
-                { id: "ALL", label: "All" },
-                { id: "CUSTOM", label: "Custom" },
-              ] as const
-            ).map((p) => (
+      {/* Filter Bar */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 rounded-none flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {(["ALL", "TODAY", "YESTERDAY", "THIS_MONTH", "THIS_YEAR", "CUSTOM"] as DatePreset[]).map((p) => {
+            const active = datePreset === p;
+            return (
               <button
-                key={p.id}
+                key={p}
                 type="button"
-                onClick={() => {
-                  setDatePreset(p.id);
-                  setPage(1);
-                }}
-                className={`px-2.5 py-1 text-xs font-medium rounded-none border transition ${
-                  datePreset === p.id
-                    ? "bg-brand-primary text-white border-brand-primary"
+                onClick={() => handlePresetClick(p)}
+                className={`px-2.5 py-1 text-xs font-semibold rounded-none border transition cursor-pointer ${
+                  active
+                    ? "bg-emerald-600 text-white border-emerald-600"
                     : "bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700"
                 }`}
               >
-                {p.label}
+                {p === "THIS_MONTH" ? "This Month" : p === "THIS_YEAR" ? "This Year" : p.charAt(0) + p.slice(1).toLowerCase()}
               </button>
-            ))}
-          </div>
+            );
+          })}
         </div>
 
-        {/* Custom Date Pickers */}
         {datePreset === "CUSTOM" && (
-          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-400">
-            <span>From:</span>
+          <div className="flex items-center gap-2">
             <input
               type="date"
               value={startDate}
-              onChange={(e) => {
-                setStartDate(e.target.value);
-                setPage(1);
-              }}
-              className="h-8 px-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-none text-xs outline-none focus:border-brand-primary dark:text-white"
+              onChange={(e) => setStartDate(e.target.value)}
+              className="px-2 py-1 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs rounded-none outline-none text-slate-900 dark:text-white"
             />
-            <span>To:</span>
+            <span className="text-xs text-slate-400">to</span>
             <input
               type="date"
               value={endDate}
-              onChange={(e) => {
-                setEndDate(e.target.value);
-                setPage(1);
-              }}
-              className="h-8 px-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-none text-xs outline-none focus:border-brand-primary dark:text-white"
+              onChange={(e) => setEndDate(e.target.value)}
+              className="px-2 py-1 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs rounded-none outline-none text-slate-900 dark:text-white"
             />
+            <button
+              type="button"
+              onClick={() => {
+                setPage(1);
+                loadTransactions();
+              }}
+              className="px-2.5 py-1 bg-emerald-600 text-white text-xs font-bold rounded-none hover:bg-emerald-700 transition"
+            >
+              Apply
+            </button>
           </div>
         )}
 
-        {/* Count Note */}
-        <div className="text-xs text-slate-500 dark:text-slate-400 pt-1">
-          Total No. of transfers: <span className="font-semibold text-slate-800 dark:text-slate-200">{filteredList.length}</span>
+        <div className="relative min-w-[200px]">
+          <Search className="h-3.5 w-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search transfer..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-8 pr-3 py-1 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs rounded-none outline-none text-slate-900 dark:text-white focus:border-emerald-600"
+          />
         </div>
       </div>
 
-      {/* Main Table - Exact Product List Font Size & Balanced Spacing */}
+      {/* Main Table */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-none overflow-hidden">
         {loading ? (
           <div className="p-10 text-center text-slate-400 text-xs sm:text-sm">
-            <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2 text-brand-primary" />
+            <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2 text-emerald-600" />
             Loading transfer records...
           </div>
         ) : filteredList.length === 0 ? (
@@ -320,14 +348,19 @@ export function FundTransferHistoryView({ onNavigate }: FundTransferHistoryViewP
                 <tr>
                   <th className="py-3 px-4 w-12 text-center">SL</th>
                   <th className="py-3 px-4">Date & Time</th>
-                  <th className="py-3 px-4">From Account</th>
-                  <th className="py-3 px-4">To Account</th>
+                  <th className="py-3 px-4">From (Source)</th>
+                  <th className="py-3 px-4">To (Destination)</th>
+                  <th className="py-3 px-4">Transferred By</th>
                   <th className="py-3 px-4 text-right">Amount</th>
+                  <th className="py-3 px-4 text-center w-28">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-sm font-medium text-slate-700 dark:text-slate-300">
                 {filteredList.map((trx, index) => {
                   const sl = (page - 1) * limit + index + 1;
+                  const srcBranch = trx.sourceAccount?.branch?.name || (trx.sourceAccount?.type === "CASH" ? "Branch Cash" : "Central");
+                  const dstBranch = trx.destinationAccount?.branch?.name || (trx.destinationAccount?.type === "CASH" ? "Branch Cash" : "Central");
+
                   return (
                     <tr
                       key={trx.id}
@@ -347,16 +380,43 @@ export function FundTransferHistoryView({ onNavigate }: FundTransferHistoryViewP
                         })}
                       </td>
 
-                      <td className="py-3 px-4 font-medium text-slate-800 dark:text-slate-200">
-                        {trx.sourceAccount?.name || "Source Account"}
+                      <td className="py-3 px-4">
+                        <div className="font-semibold text-slate-800 dark:text-slate-200">
+                          {trx.sourceAccount?.name || "Source Account"}
+                        </div>
+                        <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
+                          {srcBranch}
+                        </div>
                       </td>
 
-                      <td className="py-3 px-4 font-medium text-slate-800 dark:text-slate-200">
-                        {trx.destinationAccount?.name || "Destination Account"}
+                      <td className="py-3 px-4">
+                        <div className="font-semibold text-slate-800 dark:text-slate-200">
+                          {trx.destinationAccount?.name || "Destination Account"}
+                        </div>
+                        <div className="text-[10px] text-blue-600 dark:text-blue-400 font-medium">
+                          {dstBranch}
+                        </div>
+                      </td>
+
+                      <td className="py-3 px-4 text-xs text-slate-600 dark:text-slate-300">
+                        <div className="font-semibold">{trx.user?.name || trx.user?.username || "Staff"}</div>
+                        <div className="text-[10px] text-slate-400 uppercase">{trx.user?.role?.replace("_", " ") || "USER"}</div>
                       </td>
 
                       <td className="py-3 px-4 text-right font-bold font-mono text-slate-900 dark:text-white whitespace-nowrap">
                         ৳{Number(trx.amount).toLocaleString("en-BD", { minimumFractionDigits: 2 })}
+                      </td>
+
+                      <td className="py-3 px-4 text-center whitespace-nowrap">
+                        <button
+                          type="button"
+                          onClick={() => setVoucherModalTrx(trx)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold border border-slate-300 dark:border-slate-700 transition rounded-none cursor-pointer shadow-2xs"
+                          title="Print Transfer Receipt Voucher"
+                        >
+                          <Printer className="h-3.5 w-3.5 text-emerald-600" />
+                          <span>Voucher</span>
+                        </button>
                       </td>
                     </tr>
                   );
@@ -366,7 +426,7 @@ export function FundTransferHistoryView({ onNavigate }: FundTransferHistoryViewP
           </div>
         )}
 
-        {/* Table Pagination Footer - Exactly Matching Product List Style */}
+        {/* Table Pagination Footer */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 bg-slate-50/75 dark:bg-slate-800/60 border-t border-slate-200 dark:border-slate-800 text-xs sm:text-sm">
           <div className="text-slate-500">
             Page <span className="font-semibold text-slate-800 dark:text-slate-200">{page}</span> of{" "}
@@ -395,7 +455,7 @@ export function FundTransferHistoryView({ onNavigate }: FundTransferHistoryViewP
                 type="button"
                 onClick={() => setPage(1)}
                 disabled={page <= 1}
-                className="p-1 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-30 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-none"
+                className="p-1 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-30 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-none cursor-pointer"
                 title="First Page"
               >
                 <ChevronsLeft className="h-3.5 w-3.5" />
@@ -404,7 +464,7 @@ export function FundTransferHistoryView({ onNavigate }: FundTransferHistoryViewP
                 type="button"
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page <= 1}
-                className="p-1 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-30 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-none"
+                className="p-1 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-30 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-none cursor-pointer"
                 title="Previous Page"
               >
                 <ChevronLeft className="h-3.5 w-3.5" />
@@ -413,7 +473,7 @@ export function FundTransferHistoryView({ onNavigate }: FundTransferHistoryViewP
                 type="button"
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={page >= totalPages}
-                className="p-1 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-30 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-none"
+                className="p-1 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-30 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-none cursor-pointer"
                 title="Next Page"
               >
                 <ChevronRight className="h-3.5 w-3.5" />
@@ -422,7 +482,7 @@ export function FundTransferHistoryView({ onNavigate }: FundTransferHistoryViewP
                 type="button"
                 onClick={() => setPage(totalPages)}
                 disabled={page >= totalPages}
-                className="p-1 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-30 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-none"
+                className="p-1 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-30 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-none cursor-pointer"
                 title="Last Page"
               >
                 <ChevronsRight className="h-3.5 w-3.5" />
@@ -431,6 +491,195 @@ export function FundTransferHistoryView({ onNavigate }: FundTransferHistoryViewP
           </div>
         </div>
       </div>
+
+      {/* ========================================================================= */}
+      {/* MONEY TRANSFER RECEIPT / VOUCHER PRINT MODAL                              */}
+      {/* ========================================================================= */}
+      {voucherModalTrx && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-none w-full max-w-2xl shadow-2xl overflow-hidden my-auto">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/80">
+              <div className="flex items-center gap-2">
+                <Printer className="h-4 w-4 text-emerald-600" />
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                  Money Transfer Voucher Preview
+                </h3>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handlePrint}
+                  className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-none cursor-pointer shadow-xs"
+                >
+                  <Printer className="h-3.5 w-3.5" />
+                  Print Receipt
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setVoucherModalTrx(null)}
+                  className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-white rounded-none cursor-pointer"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Printable Document Sheet Container */}
+            <div className="p-6 bg-slate-100 dark:bg-slate-950 overflow-y-auto max-h-[75vh]">
+              <div
+                id="printable-voucher-sheet"
+                className="bg-white text-black p-8 border border-slate-300 shadow-sm max-w-xl mx-auto space-y-6 text-sm"
+              >
+                {/* Store Header */}
+                <div className="text-center pb-4 border-b-2 border-black/80 space-y-1">
+                  <h2 className="text-xl font-black uppercase tracking-wide">
+                    {voucherModalTrx.tenant?.name || "PHARMACY MANAGEMENT"}
+                  </h2>
+                  <div className="text-xs text-slate-600">
+                    {voucherModalTrx.tenant?.address || "Main Branch & Pharmacy Outlets"}
+                  </div>
+                  {voucherModalTrx.tenant?.phone && (
+                    <div className="text-xs text-slate-600 font-mono">
+                      Phone: {voucherModalTrx.tenant.phone}
+                    </div>
+                  )}
+                  <div className="pt-2">
+                    <span className="inline-block px-3 py-1 bg-slate-900 text-white text-xs font-black uppercase tracking-widest">
+                      Debit / Credit Fund Transfer Voucher
+                    </span>
+                  </div>
+                </div>
+
+                {/* Voucher Meta Info */}
+                <div className="grid grid-cols-2 gap-4 text-xs">
+                  <div>
+                    <span className="font-bold text-slate-500 block">Voucher No:</span>
+                    <span className="font-mono font-bold text-sm">
+                      {voucherModalTrx.reference || voucherModalTrx.id.slice(0, 12).toUpperCase()}
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <span className="font-bold text-slate-500 block">Date & Time:</span>
+                    <span className="font-mono font-bold">
+                      {new Date(voucherModalTrx.createdAt).toLocaleString("en-GB", {
+                        day: "2-digit",
+                        month: "short",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Transfer Details Table */}
+                <div className="border border-black">
+                  <table className="w-full text-xs text-left border-collapse">
+                    <tbody>
+                      <tr className="border-b border-black bg-slate-50">
+                        <td className="p-2.5 font-bold w-1/3 border-r border-black">From Account (উৎস):</td>
+                        <td className="p-2.5 font-semibold">
+                          <div>{voucherModalTrx.sourceAccount?.name || "Source Account"}</div>
+                          <div className="text-[11px] text-slate-600 font-mono">
+                            Branch: {voucherModalTrx.sourceAccount?.branch?.name || voucherModalTrx.branch?.name || "Central / Main"}
+                          </div>
+                        </td>
+                      </tr>
+                      <tr className="border-b border-black">
+                        <td className="p-2.5 font-bold border-r border-black">To Account (গন্তব্য):</td>
+                        <td className="p-2.5 font-semibold">
+                          <div>{voucherModalTrx.destinationAccount?.name || "Destination Account"}</div>
+                          <div className="text-[11px] text-slate-600 font-mono">
+                            Branch: {voucherModalTrx.destinationAccount?.branch?.name || "Central / Owner Account"}
+                          </div>
+                        </td>
+                      </tr>
+                      <tr className="border-b border-black bg-slate-50">
+                        <td className="p-2.5 font-bold border-r border-black">Transfer Amount (টাকা):</td>
+                        <td className="p-2.5 font-mono font-black text-base">
+                          ৳{Number(voucherModalTrx.amount).toLocaleString("en-BD", { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                      <tr className="border-b border-black">
+                        <td className="p-2.5 font-bold border-r border-black">Amount in Words:</td>
+                        <td className="p-2.5 font-semibold italic text-slate-800">
+                          {numberToWordsBDT(Number(voucherModalTrx.amount))}
+                        </td>
+                      </tr>
+                      {voucherModalTrx.note && (
+                        <tr>
+                          <td className="p-2.5 font-bold border-r border-black">Note / Purpose:</td>
+                          <td className="p-2.5 text-slate-700">
+                            {voucherModalTrx.note}
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Side-by-Side Signatures */}
+                <div className="pt-12 grid grid-cols-2 gap-8 text-xs">
+                  {/* Left: Sender Signature */}
+                  <div className="text-center">
+                    <div className="border-t border-black pt-1.5 font-bold">
+                      {voucherModalTrx.user?.name || voucherModalTrx.user?.username || "Staff / Branch Manager"}
+                    </div>
+                    <div className="text-[10px] text-slate-600 uppercase font-mono">
+                      Role: {voucherModalTrx.user?.role?.replace("_", " ") || "Branch Manager"}
+                    </div>
+                    <div className="text-[10px] text-slate-400 font-mono">
+                      (Transferred / Handed Over By)
+                    </div>
+                  </div>
+
+                  {/* Right: Owner / Authorized Signature */}
+                  <div className="text-center">
+                    <div className="border-t border-black pt-1.5 font-bold">
+                      Pharmacy Owner / Authorized
+                    </div>
+                    <div className="text-[10px] text-slate-600 uppercase font-mono">
+                      Approved & Received
+                    </div>
+                    <div className="text-[10px] text-slate-400 font-mono">
+                      (Signature & Official Stamp)
+                    </div>
+                  </div>
+                </div>
+
+                {/* Footer Notice */}
+                <div className="pt-4 text-center text-[10px] text-slate-400 border-t border-dashed border-slate-300">
+                  This is a system generated money transfer voucher from PharmaBiz ERP.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Global Print Styles for Voucher */}
+      <style jsx global>{`
+        @media print {
+          body * {
+            visibility: hidden;
+          }
+          #printable-voucher-sheet,
+          #printable-voucher-sheet * {
+            visibility: visible;
+          }
+          #printable-voucher-sheet {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            margin: 0;
+            padding: 24px;
+            box-shadow: none;
+            border: 1px solid #000;
+          }
+        }
+      `}</style>
     </div>
   );
 }

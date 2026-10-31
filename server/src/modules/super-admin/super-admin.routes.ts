@@ -128,6 +128,13 @@ router.post("/quotations/:id/send-email", QuotationController.sendEmail);
 import { smsRoutes } from "./sms.routes";
 router.use("/sms", smsRoutes);
 
+// ==================== PAYMENT GATEWAYS & PLATFORM SETTINGS ====================
+import { SettingsController } from "../settings/settings.controller";
+router.get("/settings/gateways", SettingsController.getAdminPaymentGateways);
+router.put("/settings/gateways", SettingsController.updatePaymentGatewaySettings);
+router.get("/settings", SettingsController.getAdminPaymentGateways);
+router.put("/settings", SettingsController.updatePaymentGatewaySettings);
+
 export { router as superAdminRoutes };
 
 

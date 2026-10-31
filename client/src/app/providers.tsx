@@ -6,7 +6,7 @@ import { AuthProvider } from "@/context/AuthContext";
 import { BranchProvider } from "@/context/BranchContext";
 import { SettingsProvider, SiteSettings } from "@/context/SettingsContext";
 import { ToastProvider } from "@/context/ToastContext";
-
+import { LanguageProvider } from "@/context/LanguageContext";
 
 export function Providers({
   children,
@@ -23,15 +23,17 @@ export function Providers({
 
   return (
     <ThemeProvider>
-      <ToastProvider>
-        <AuthProvider>
-          <BranchProvider>
-            <SettingsProvider initialSettings={initialSettings}>
-              {children}
-            </SettingsProvider>
-          </BranchProvider>
-        </AuthProvider>
-      </ToastProvider>
+      <LanguageProvider>
+        <ToastProvider>
+          <AuthProvider>
+            <BranchProvider>
+              <SettingsProvider initialSettings={initialSettings}>
+                {children}
+              </SettingsProvider>
+            </BranchProvider>
+          </AuthProvider>
+        </ToastProvider>
+      </LanguageProvider>
     </ThemeProvider>
   );
 }

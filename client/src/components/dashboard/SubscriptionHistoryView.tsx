@@ -22,7 +22,7 @@ export const formatPaymentGateway = (rawMethod?: string | null) => {
       title: "SSLCOMMERZ",
       subtitle: "Online Gateway",
       badgeClass:
-        "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700",
+        "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-none",
       dotClass: "bg-slate-400",
       fullName: "SSLCOMMERZ Payment Gateway",
     };
@@ -36,7 +36,7 @@ export const formatPaymentGateway = (rawMethod?: string | null) => {
       title: "bKash",
       subtitle: "via SSLCOMMERZ",
       badgeClass:
-        "bg-pink-50 dark:bg-pink-950/40 text-pink-700 dark:text-pink-300 border border-pink-200 dark:border-pink-800/60",
+        "bg-pink-50 dark:bg-pink-950/40 text-pink-700 dark:text-pink-300 border border-pink-200 dark:border-pink-800/60 rounded-none",
       dotClass: "bg-pink-500",
       fullName: "bKash (SSLCOMMERZ Gateway)",
     };
@@ -47,7 +47,7 @@ export const formatPaymentGateway = (rawMethod?: string | null) => {
       title: "Nagad",
       subtitle: "via SSLCOMMERZ",
       badgeClass:
-        "bg-orange-50 dark:bg-orange-950/40 text-orange-700 dark:text-orange-300 border border-orange-200 dark:border-orange-800/60",
+        "bg-orange-50 dark:bg-orange-950/40 text-orange-700 dark:text-orange-300 border border-orange-200 dark:border-orange-800/60 rounded-none",
       dotClass: "bg-orange-500",
       fullName: "Nagad (SSLCOMMERZ Gateway)",
     };
@@ -57,7 +57,7 @@ export const formatPaymentGateway = (rawMethod?: string | null) => {
     title: rawMethod,
     subtitle: "Online Payment",
     badgeClass:
-      "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700",
+      "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-none",
     dotClass: "bg-slate-400",
     fullName: `${raw} (SSLCOMMERZ Gateway)`,
   };
@@ -99,9 +99,9 @@ export function SubscriptionHistoryView({ onNavigate }: SubscriptionHistoryViewP
   if (loading && !tenant) {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-slate-500 gap-3">
-        <Loader2 className="h-10 w-10 animate-spin text-brand-primary" />
-        <span className="text-base font-bold text-slate-700 dark:text-slate-300">
-          Loading subscription &amp; billing ledger...
+        <Loader2 className="h-8 w-8 animate-spin text-brand-primary" />
+        <span className="text-sm font-bold text-slate-700 dark:text-slate-300">
+          Loading billing ledger...
         </span>
       </div>
     );
@@ -109,16 +109,16 @@ export function SubscriptionHistoryView({ onNavigate }: SubscriptionHistoryViewP
 
   if (error && !tenant) {
     return (
-      <div className="p-8 max-w-xl mx-auto my-12 text-center bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 rounded-3xl space-y-4">
-        <AlertCircle className="h-10 w-10 text-rose-500 mx-auto" />
-        <h3 className="text-lg font-bold text-rose-800 dark:text-rose-200">
+      <div className="p-6 max-w-xl mx-auto my-12 text-center bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 rounded-none space-y-4">
+        <AlertCircle className="h-8 w-8 text-rose-500 mx-auto" />
+        <h3 className="text-base font-bold text-rose-800 dark:text-rose-200">
           Unable to Load Billing Ledger
         </h3>
-        <p className="text-sm text-rose-600 dark:text-rose-300">{error}</p>
+        <p className="text-xs text-rose-600 dark:text-rose-300">{error}</p>
         <button
           type="button"
           onClick={() => loadLedgerData()}
-          className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-sm rounded-xl transition cursor-pointer"
+          className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-none transition cursor-pointer"
         >
           Try Again
         </button>
@@ -128,27 +128,24 @@ export function SubscriptionHistoryView({ onNavigate }: SubscriptionHistoryViewP
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto px-2 sm:px-4 py-2 animate-in fade-in duration-150">
-      {/* Top Header Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200 dark:border-slate-800">
+      {/* Top Header Bar (Clean & Sharp) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-slate-200 dark:border-slate-800">
         <div>
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold bg-brand-primary/10 text-brand-primary mb-1.5">
+          <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-none text-xs font-bold bg-brand-primary/10 text-brand-primary mb-1">
             <Receipt className="h-3.5 w-3.5" />
             <span>Pharmacy Subscriptions &amp; Billing</span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
+          <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
             Subscription &amp; Billing Ledger
           </h1>
-          <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mt-0.5">
-            1-Year scheduled billing cycles, transaction history and official printable receipts
-          </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => loadLedgerData(true)}
             disabled={refreshing}
-            className="p-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition shadow-xs disabled:opacity-50 cursor-pointer"
+            className="p-2.5 rounded-none border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition shadow-2xs disabled:opacity-50 cursor-pointer"
             title="Refresh records"
           >
             <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
@@ -158,7 +155,7 @@ export function SubscriptionHistoryView({ onNavigate }: SubscriptionHistoryViewP
             <button
               type="button"
               onClick={() => onNavigate("subscription_plans")}
-              className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-brand-primary text-white text-sm font-bold shadow-md hover:opacity-90 transition active:scale-95 cursor-pointer"
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-none bg-brand-primary text-white text-xs sm:text-sm font-bold shadow-2xs hover:opacity-90 transition active:scale-95 cursor-pointer"
             >
               <Sparkles className="h-4 w-4" />
               <span>Subscription Plans</span>
@@ -167,7 +164,7 @@ export function SubscriptionHistoryView({ onNavigate }: SubscriptionHistoryViewP
         </div>
       </div>
 
-      {/* The EXACT SAME Billing Ledger Component as in Super Admin */}
+      {/* Billing Ledger Component */}
       {tenant && (
         <PharmacyBillingLedger
           tenant={tenant}

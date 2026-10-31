@@ -1,4 +1,5 @@
 @import "sweetalert2/dist/sweetalert2.min.css";
+@import "./pharmora-landing.css";
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -482,6 +483,71 @@
 
 .notice-marquee-track:hover {
   animation-play-state: paused;
+}
+
+/* SaaS Device & Badge Floating Animations */
+@keyframes floatDevice3D {
+  0%, 100% {
+    transform: perspective(1200px) rotateY(-15deg) rotateX(8deg) rotateZ(-4deg) translateY(0px);
+  }
+  50% {
+    transform: perspective(1200px) rotateY(-12deg) rotateX(6deg) rotateZ(-3deg) translateY(-14px);
+  }
+}
+
+@keyframes floatBadge1 {
+  0%, 100% {
+    transform: translateY(0px) translateX(0px);
+  }
+  50% {
+    transform: translateY(-10px) translateX(-4px);
+  }
+}
+
+@keyframes floatBadge2 {
+  0%, 100% {
+    transform: translateY(0px) translateX(0px);
+  }
+  50% {
+    transform: translateY(10px) translateX(4px);
+  }
+}
+
+@keyframes pulseRadar {
+  0% {
+    transform: scale(0.95);
+    opacity: 0.15;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 0.35;
+  }
+  100% {
+    transform: scale(0.95);
+    opacity: 0.15;
+  }
+}
+
+.animate-float-device {
+  transform: perspective(1200px) rotateY(-15deg) rotateX(8deg) rotateZ(-4deg);
+  animation: floatDevice3D 6s ease-in-out infinite;
+  will-change: transform;
+  transform-style: preserve-3d;
+}
+
+.animate-float-badge-1 {
+  animation: floatBadge1 4.5s ease-in-out infinite;
+  will-change: transform;
+}
+
+.animate-float-badge-2 {
+  animation: floatBadge2 5.5s ease-in-out infinite;
+  will-change: transform;
+}
+
+.animate-pulse-radar {
+  animation: pulseRadar 8s ease-in-out infinite;
+  will-change: transform, opacity;
 }
 
 

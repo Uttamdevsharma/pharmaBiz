@@ -72,6 +72,9 @@ interface VerificationApplication {
   manualPaymentTrxId?: string;
   manualPaymentDocUrl?: string;
   manualPaymentAmount?: number;
+  isDemo?: boolean;
+  demoApprovedAt?: string;
+  demoExpiresAt?: string;
   payment?: any;
   createdAt: string;
   owner?: {
@@ -90,6 +93,7 @@ interface VerificationApplication {
       tier: string;
       price: number;
       maxBranches: number;
+      trialDays?: number;
     };
   };
 }
@@ -117,8 +121,8 @@ export function PharmacyVerificationTab() {
   const [customStartDate, setCustomStartDate] = useState("");
   const [customEndDate, setCustomEndDate] = useState("");
 
-  // Main Tab: "registrations" (Tab 1: New Pharmacies) vs "renewals" (Tab 2: Plan Upgrades & Renewals)
-  const [mainTab, setMainTab] = useState<"registrations" | "renewals">("registrations");
+  // Main Tab: "registrations" (All Registrations) vs "demo_requests" (Free Demo Requests) vs "renewals" (Plan Upgrades & Renewals)
+  const [mainTab, setMainTab] = useState<"registrations" | "demo_requests" | "renewals">("registrations");
 
   // Renewals State
   const [renewals, setRenewals] = useState<any[]>([]);
@@ -523,58 +527,99 @@ export function PharmacyVerificationTab() {
         </button>
       </div>
 
-      {/* 2-Tab Navigation Switcher */}
-      <div className="flex items-center gap-2 p-1.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs">
-        <button
-          type="button"
-          onClick={() => setMainTab("registrations")}
-          className={`flex-1 py-3 px-4 rounded-xl font-bold text-xs sm:text-sm transition flex items-center justify-center gap-2.5 cursor-pointer ${
-            mainTab === "registrations"
-              ? "bg-brand-primary text-white shadow-md shadow-brand-primary/20"
-              : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800"
-          }`}
-        >
-          <Building2 className="h-4 w-4" />
-          <span>Tab 1: New Pharmacy Registrations (নতুন রেজিস্ট্রেশন)</span>
-          {metrics.pendingReview > 0 && (
-            <span
-              className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+      {/* 3-Tab Navigation Switcher */}
+      {(() => {
+        const isDemoApp = (a: VerificationApplication) =>
+          Boolean(a.isDemo || a.paymentMethod === "FREE_TRIAL" || a.tier === "TRIAL" || a.subscription?.plan?.tier === "TRIAL");
+        const demoRequestsCount = applications.filter(isDemoApp).length;
+
+        return (
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 p-1.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs">
+            <button
+              type="button"
+              onClick={() => {
+                setMainTab("registrations");
+                setCurrentPage(1);
+              }}
+              className={`flex-1 py-3 px-4 rounded-xl font-bold text-xs sm:text-sm transition flex items-center justify-center gap-2 cursor-pointer ${
                 mainTab === "registrations"
-                  ? "bg-white/20 text-white"
-                  : "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30"
+                  ? "bg-brand-primary text-white shadow-md shadow-brand-primary/20"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800"
               }`}
             >
-              {metrics.pendingReview}
-            </span>
-          )}
-        </button>
+              <Building2 className="h-4 w-4" />
+              <span>All Registrations</span>
+              {applications.length > 0 && (
+                <span
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                    mainTab === "registrations"
+                      ? "bg-white/20 text-white"
+                      : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700"
+                  }`}
+                >
+                  {applications.length}
+                </span>
+              )}
+            </button>
 
-        <button
-          type="button"
-          onClick={() => setMainTab("renewals")}
-          className={`flex-1 py-3 px-4 rounded-xl font-bold text-xs sm:text-sm transition flex items-center justify-center gap-2.5 cursor-pointer ${
-            mainTab === "renewals"
-              ? "bg-brand-primary text-white shadow-md shadow-brand-primary/20"
-              : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800"
-          }`}
-        >
-          <CreditCard className="h-4 w-4" />
-          <span>Tab 2: Plan Upgrades & Renewals (প্ল্যান রিনিউয়াল ও আপগ্রেড)</span>
-          {renewals.length > 0 && (
-            <span
-              className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+            <button
+              type="button"
+              onClick={() => {
+                setMainTab("demo_requests");
+                setCurrentPage(1);
+              }}
+              className={`flex-1 py-3 px-4 rounded-xl font-bold text-xs sm:text-sm transition flex items-center justify-center gap-2 cursor-pointer ${
+                mainTab === "demo_requests"
+                  ? "bg-purple-600 text-white shadow-md shadow-purple-600/25"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800"
+              }`}
+            >
+              <Sparkles className="h-4 w-4 text-purple-400" />
+              <span>Free Demo Requests</span>
+              {demoRequestsCount > 0 && (
+                <span
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                    mainTab === "demo_requests"
+                      ? "bg-white/25 text-white"
+                      : "bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/30"
+                  }`}
+                >
+                  {demoRequestsCount}
+                </span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setMainTab("renewals");
+                setCurrentPage(1);
+              }}
+              className={`flex-1 py-3 px-4 rounded-xl font-bold text-xs sm:text-sm transition flex items-center justify-center gap-2 cursor-pointer ${
                 mainTab === "renewals"
-                  ? "bg-white/20 text-white"
-                  : "bg-pink-500/15 text-pink-600 dark:text-pink-400 border border-pink-500/30"
+                  ? "bg-brand-primary text-white shadow-md shadow-brand-primary/20"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800"
               }`}
             >
-              {renewals.length}
-            </span>
-          )}
-        </button>
-      </div>
+              <CreditCard className="h-4 w-4" />
+              <span>Plan Upgrades / Renewals</span>
+              {renewals.length > 0 && (
+                <span
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                    mainTab === "renewals"
+                      ? "bg-white/20 text-white"
+                      : "bg-pink-500/15 text-pink-600 dark:text-pink-400 border border-pink-500/30"
+                  }`}
+                >
+                  {renewals.length}
+                </span>
+              )}
+            </button>
+          </div>
+        );
+      })()}
 
-      {mainTab === "registrations" ? (
+      {mainTab !== "renewals" ? (
         <>
           {/* Clickable Status KPI Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
@@ -777,37 +822,64 @@ export function PharmacyVerificationTab() {
       )}
 
       {/* Main Table Content */}
-      {loading ? (
-        <div className="py-20 text-center space-y-3 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800">
-          <Loader2 className="h-8 w-8 animate-spin text-brand-primary mx-auto" />
-          <p className="text-xs font-bold text-slate-500">Loading pharmacy applications...</p>
-        </div>
-      ) : applications.length === 0 ? (
-        <div className="py-20 text-center space-y-3 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 text-slate-500 p-6">
-          <ShieldCheck className="h-12 w-12 mx-auto text-slate-300 dark:text-slate-700" />
-          <h3 className="font-bold text-sm text-slate-700 dark:text-slate-300">
-            {selectedStatus === "PENDING_APPROVAL" ? "No Pending Verifications" : "No Applications Found"}
-          </h3>
-          <p className="text-xs max-w-sm mx-auto text-slate-400">
-            {selectedStatus === "PENDING_APPROVAL"
-              ? "All pharmacy compliance submissions have been reviewed."
-              : "No records found matching this filter."}
-          </p>
-          {selectedStatus !== "ALL" && (
-            <button
-              type="button"
-              onClick={() => setSelectedStatus("ALL")}
-              className="px-3.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 font-bold text-xs transition cursor-pointer"
-            >
-              View All Applications
-            </button>
-          )}
-        </div>
-      ) : (
-        /* ========================================================= */
-        /* CLEAN, MINIMAL & PROFESSIONAL DATA TABLE                  */
-        /* ========================================================= */
-        <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-xs flex flex-col">
+      {(() => {
+        const isDemoApp = (a: VerificationApplication) =>
+          Boolean(a.isDemo || a.paymentMethod === "FREE_TRIAL" || a.tier === "TRIAL" || a.subscription?.plan?.tier === "TRIAL");
+        const currentList = mainTab === "demo_requests"
+          ? applications.filter(isDemoApp)
+          : applications;
+
+        return (
+          <>
+            {mainTab === "demo_requests" && (
+              <div className="p-3.5 rounded-2xl bg-purple-500/10 border border-purple-500/25 text-purple-700 dark:text-purple-300 text-xs font-semibold flex items-center justify-between shadow-xs">
+                <div className="flex items-center gap-2.5">
+                  <Sparkles className="h-4 w-4 shrink-0 text-purple-500" />
+                  <span>Showing Free Demo registrations. When approved, access is calculated dynamically: <code>demo_expires_at = now + trial_days</code> based on plan settings.</span>
+                </div>
+                <span className="font-bold font-mono bg-purple-500/20 px-2.5 py-0.5 rounded-full text-[11px] shrink-0">
+                  {currentList.length} Demo {currentList.length === 1 ? "Request" : "Requests"}
+                </span>
+              </div>
+            )}
+
+            {loading ? (
+              <div className="py-20 text-center space-y-3 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800">
+                <Loader2 className="h-8 w-8 animate-spin text-brand-primary mx-auto" />
+                <p className="text-xs font-bold text-slate-500">Loading pharmacy applications...</p>
+              </div>
+            ) : currentList.length === 0 ? (
+              <div className="py-20 text-center space-y-3 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 text-slate-500 p-6">
+                <ShieldCheck className="h-12 w-12 mx-auto text-slate-300 dark:text-slate-700" />
+                <h3 className="font-bold text-sm text-slate-700 dark:text-slate-300">
+                  {mainTab === "demo_requests"
+                    ? "No Free Demo Requests"
+                    : selectedStatus === "PENDING_APPROVAL"
+                    ? "No Pending Verifications"
+                    : "No Applications Found"}
+                </h3>
+                <p className="text-xs max-w-sm mx-auto text-slate-400">
+                  {mainTab === "demo_requests"
+                    ? "There are currently no free trial / demo registration requests in this view."
+                    : selectedStatus === "PENDING_APPROVAL"
+                    ? "All pharmacy compliance submissions have been reviewed."
+                    : "No records found matching this filter."}
+                </p>
+                {selectedStatus !== "ALL" && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedStatus("ALL")}
+                    className="px-3.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 font-bold text-xs transition cursor-pointer"
+                  >
+                    View All Statuses
+                  </button>
+                )}
+              </div>
+            ) : (
+              /* ========================================================= */
+              /* CLEAN, MINIMAL & PROFESSIONAL DATA TABLE                  */
+              /* ========================================================= */
+              <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-xs flex flex-col">
           <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead className="bg-slate-50 dark:bg-slate-850/80 border-b border-slate-200 dark:border-slate-800 text-xs font-black uppercase tracking-wider text-slate-500 select-none">
@@ -822,7 +894,7 @@ export function PharmacyVerificationTab() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
-                {applications
+                {currentList
                   .slice((currentPage - 1) * pageSize, currentPage * pageSize)
                   .map((app) => {
                     const plan = app.subscription?.plan;
@@ -1016,71 +1088,74 @@ export function PharmacyVerificationTab() {
             </table>
           </div>
 
-          {/* Table Pagination Footer */}
-          <div className="p-3.5 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-850/50 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
-            <div className="text-slate-500 font-medium">
-              Showing{" "}
-              <strong className="text-slate-800 dark:text-slate-200">
-                {applications.length === 0 ? 0 : (currentPage - 1) * pageSize + 1}
-              </strong>{" "}
-              to{" "}
-              <strong className="text-slate-800 dark:text-slate-200">
-                {Math.min(currentPage * pageSize, applications.length)}
-              </strong>{" "}
-              of{" "}
-              <strong className="text-slate-800 dark:text-slate-200">
-                {applications.length}
-              </strong>{" "}
-              pharmacies
-            </div>
+                {/* Table Pagination Footer */}
+                <div className="p-3.5 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-850/50 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+                  <div className="text-slate-500 font-medium">
+                    Showing{" "}
+                    <strong className="text-slate-800 dark:text-slate-200">
+                      {currentList.length === 0 ? 0 : (currentPage - 1) * pageSize + 1}
+                    </strong>{" "}
+                    to{" "}
+                    <strong className="text-slate-800 dark:text-slate-200">
+                      {Math.min(currentPage * pageSize, currentList.length)}
+                    </strong>{" "}
+                    of{" "}
+                    <strong className="text-slate-800 dark:text-slate-200">
+                      {currentList.length}
+                    </strong>{" "}
+                    pharmacies
+                  </div>
 
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1 mr-2 text-slate-400">
-                <span>Rows:</span>
-                <select
-                  value={pageSize}
-                  onChange={(e) => {
-                    setPageSize(Number(e.target.value));
-                    setCurrentPage(1);
-                  }}
-                  className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300"
-                >
-                  <option value={10}>10</option>
-                  <option value={15}>15</option>
-                  <option value={25}>25</option>
-                  <option value={50}>50</option>
-                </select>
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1 mr-2 text-slate-400">
+                      <span>Rows:</span>
+                      <select
+                        value={pageSize}
+                        onChange={(e) => {
+                          setPageSize(Number(e.target.value));
+                          setCurrentPage(1);
+                        }}
+                        className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300"
+                      >
+                        <option value={10}>10</option>
+                        <option value={15}>15</option>
+                        <option value={25}>25</option>
+                        <option value={50}>50</option>
+                      </select>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
+                      disabled={currentPage <= 1}
+                      className="px-3 py-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                    >
+                      Previous
+                    </button>
+
+                    <span className="px-2 font-mono font-bold text-slate-600 dark:text-slate-400">
+                      {currentPage} / {Math.max(1, Math.ceil(currentList.length / pageSize))}
+                    </span>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setCurrentPage((p) =>
+                          Math.min(p + 1, Math.ceil(currentList.length / pageSize))
+                        )
+                      }
+                      disabled={currentPage >= Math.ceil(currentList.length / pageSize)}
+                      className="px-3 py-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
               </div>
-
-              <button
-                type="button"
-                onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
-                disabled={currentPage <= 1}
-                className="px-3 py-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
-              >
-                Previous
-              </button>
-
-              <span className="px-2 font-mono font-bold text-slate-600 dark:text-slate-400">
-                {currentPage} / {Math.max(1, Math.ceil(applications.length / pageSize))}
-              </span>
-
-              <button
-                type="button"
-                onClick={() =>
-                  setCurrentPage((p) =>
-                    Math.min(p + 1, Math.ceil(applications.length / pageSize))
-                  )
-                }
-                disabled={currentPage >= Math.ceil(applications.length / pageSize)}
-                className="px-3 py-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
-              >
-                Next
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+            )}
+          </>
+        );
+      })()}
         </>
       ) : (
         /* ========================================================= */
@@ -1953,9 +2028,41 @@ export function PharmacyVerificationTab() {
                 />
               </div>
 
-              <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-800 dark:text-emerald-300 text-[11px] leading-relaxed">
-                <strong>Direct Activation Flow:</strong> Upon approval, this pharmacy and its subscription are immediately <strong>ACTIVATED</strong>, and the payment proof is verified. An official congratulations email will be sent to <strong>{targetAppToApprove.email}</strong> with their login email reminder, password instructions, and direct portal link.
-              </div>
+              {(() => {
+                const isDemo = Boolean(
+                  targetAppToApprove.isDemo ||
+                  targetAppToApprove.paymentMethod === "FREE_TRIAL" ||
+                  targetAppToApprove.tier === "TRIAL"
+                );
+                const selectedPlan = plans.find((p) => p.id === approvePlanId) || targetAppToApprove.subscription?.plan;
+                const trialDays = selectedPlan?.trialDays || (selectedPlan as any)?.features?.trialDays || 7;
+                const calculatedExpiry = new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000).toLocaleDateString("en-US", {
+                  weekday: "short",
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                });
+
+                return isDemo ? (
+                  <div className="p-3.5 rounded-2xl bg-purple-500/10 border border-purple-500/30 text-purple-800 dark:text-purple-300 text-[11px] leading-relaxed space-y-1.5 shadow-xs">
+                    <div className="font-extrabold flex items-center gap-1.5 text-purple-700 dark:text-purple-300">
+                      <Sparkles className="h-4 w-4 text-purple-500 shrink-0" />
+                      <span>Free Demo Approval & Dynamic Expiry Calculation</span>
+                    </div>
+                    <p>
+                      This applicant requested a <strong>Free Demo Tier</strong>. Trial duration set for this plan:{" "}
+                      <strong className="underline underline-offset-2">{trialDays} Days</strong>.
+                    </p>
+                    <div className="p-2 rounded-xl bg-purple-500/15 border border-purple-500/20 font-mono text-[11px] text-purple-900 dark:text-purple-200">
+                      ⚡ <strong>demo_expires_at:</strong> {calculatedExpiry} (strictly calculated as <code>now + {trialDays} days</code>)
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-800 dark:text-emerald-300 text-[11px] leading-relaxed">
+                    <strong>Direct Activation Flow:</strong> Upon approval, this pharmacy and its subscription are immediately <strong>ACTIVATED</strong>, and the payment proof is verified. An official congratulations email will be sent to <strong>{targetAppToApprove.email}</strong> with their login email reminder, password instructions, and direct portal link.
+                  </div>
+                );
+              })()}
             </div>
 
             <div className="flex items-center justify-end gap-3 pt-2">

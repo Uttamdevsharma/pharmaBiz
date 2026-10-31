@@ -25,20 +25,21 @@ export const registerOwnerSchema = z.object({
     .max(12, "Phone number cannot exceed 12 digits"),
   password: z.string().min(6, "Password must be at least 6 characters"),
   address: z.string().optional(),
+  isDemo: z.boolean().optional(),
   
-  // Regulatory document & license numbers
-  nidNumber: z.string().min(4, "NID number is required"),
-  nidFrontDocument: z.string().min(1, "NID front document is required").optional(),
-  nidBackDocument: z.string().min(1, "NID back document is required").optional(),
+  // Regulatory document & license numbers (Optional for Free Demo)
+  nidNumber: z.string().optional(),
+  nidFrontDocument: z.string().optional(),
+  nidBackDocument: z.string().optional(),
   nidDocument: z.string().optional(), // Fallback / single doc support
 
-  tradeLicenseNumber: z.string().min(4, "Trade license number is required"),
-  tradeLicenseFrontDocument: z.string().min(1, "Trade license front document is required").optional(),
+  tradeLicenseNumber: z.string().optional(),
+  tradeLicenseFrontDocument: z.string().optional(),
   tradeLicenseBackDocument: z.string().optional(),
   tradeLicenseDocument: z.string().optional(),
 
-  drugLicenseNumber: z.string().min(4, "Drug license number is required"),
-  drugLicenseFrontDocument: z.string().min(1, "Drug license front document is required").optional(),
+  drugLicenseNumber: z.string().optional(),
+  drugLicenseFrontDocument: z.string().optional(),
   drugLicenseBackDocument: z.string().optional(),
   drugLicenseDocument: z.string().optional(),
 

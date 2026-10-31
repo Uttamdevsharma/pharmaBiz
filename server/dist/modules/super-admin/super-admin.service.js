@@ -72,14 +72,38 @@ class SuperAdminService {
         }
         const isTrial = data.isTrial || data.tier === "TRIAL";
         const isCustom = data.isCustom || false;
+        const isPopular = data.isPopular !== undefined ? Boolean(data.isPopular) : (data.features?.isPopular ? true : false);
+        const trialDays = isTrial ? Number(data.trialDays || 7) : 0;
+        // If marked as popular, unset popular on all other existing plans
+        if (isPopular) {
+            try {
+                const otherPlans = await prisma_1.prisma.subscriptionPlan.findMany();
+                for (const op of otherPlans) {
+                    const opFeat = (typeof op.features === "object" && op.features !== null) ? op.features : {};
+                    if (opFeat.isPopular) {
+                        await prisma_1.prisma.subscriptionPlan.update({
+                            where: { id: op.id },
+                            data: {
+                                features: { ...opFeat, isPopular: false },
+                            },
+                        });
+                    }
+                }
+            }
+            catch (err) {
+                console.warn("Error unsetting popular flag on other plans during create:", err);
+            }
+        }
         const feat = {
             ...(data.features || {}),
+            ...(data.featureList !== undefined && { featureList: data.featureList }),
             ...(data.maxStaffPerBranch !== undefined && { maxStaffPerBranch: data.maxStaffPerBranch }),
             ...(data.maxTotalStaff !== undefined && { maxTotalStaff: data.maxTotalStaff }),
-            ...(data.trialDays !== undefined && { trialDays: data.trialDays }),
+            trialDays,
             ...(data.yearlyDiscountPercent !== undefined && { yearlyDiscountPercent: data.yearlyDiscountPercent }),
             isTrial,
             isCustom,
+            isPopular,
             ...(data.whatsappNumber !== undefined && { whatsappNumber: data.whatsappNumber }),
             ...(data.customMessage !== undefined && { customMessage: data.customMessage }),
         };
@@ -90,8 +114,9 @@ class SuperAdminService {
                 price: isTrial ? 0 : data.price,
                 billingCycle: data.billingCycle,
                 maxBranches: data.maxBranches,
+                trialDays,
                 features: feat,
-                isActive: data.isActive,
+                isActive: data.isActive !== undefined ? data.isActive : true,
             },
         });
     }
@@ -109,15 +134,20 @@ class SuperAdminService {
             const fallback = planLimits_1.CENTRAL_PLAN_DEFINITIONS[p.tier] || planLimits_1.CENTRAL_PLAN_DEFINITIONS.STARTER;
             const isTrial = feat.isTrial ?? (p.tier === "TRIAL");
             const isCustom = feat.isCustom ?? false;
+            const isPopular = Boolean(feat.isPopular ?? p.isPopular ?? false);
+            const featureList = Array.isArray(feat.featureList) ? feat.featureList : [];
+            const trialDays = Number(p.trialDays ?? feat.trialDays ?? (isTrial ? 7 : 0));
             return {
                 ...p,
                 isTrial,
                 isCustom,
+                isPopular,
+                trialDays,
+                featureList,
                 whatsappNumber: feat.whatsappNumber || "",
                 customMessage: feat.customMessage || "",
                 maxStaffPerBranch: feat.maxStaffPerBranch ?? fallback.maxStaffPerBranch ?? 1,
                 maxTotalStaff: feat.maxTotalStaff ?? fallback.maxTotalStaff ?? (p.maxBranches * (feat.maxStaffPerBranch ?? 1)),
-                trialDays: feat.trialDays ?? (isTrial ? 7 : 0),
                 yearlyDiscountPercent: feat.yearlyDiscountPercent ?? 0,
             };
         });
@@ -144,15 +174,20 @@ class SuperAdminService {
         const fallback = planLimits_1.CENTRAL_PLAN_DEFINITIONS[plan.tier] || planLimits_1.CENTRAL_PLAN_DEFINITIONS.STARTER;
         const isTrial = feat.isTrial ?? (plan.tier === "TRIAL");
         const isCustom = feat.isCustom ?? false;
+        const isPopular = Boolean(feat.isPopular ?? plan.isPopular ?? false);
+        const featureList = Array.isArray(feat.featureList) ? feat.featureList : [];
+        const trialDays = Number(plan.trialDays ?? feat.trialDays ?? (isTrial ? 7 : 0));
         return {
             ...plan,
             isTrial,
             isCustom,
+            isPopular,
+            trialDays,
+            featureList,
             whatsappNumber: feat.whatsappNumber || "",
             customMessage: feat.customMessage || "",
             maxStaffPerBranch: feat.maxStaffPerBranch ?? fallback.maxStaffPerBranch ?? 1,
             maxTotalStaff: feat.maxTotalStaff ?? fallback.maxTotalStaff ?? (plan.maxBranches * (feat.maxStaffPerBranch ?? 1)),
-            trialDays: feat.trialDays ?? (isTrial ? 7 : 0),
             yearlyDiscountPercent: feat.yearlyDiscountPercent ?? 0,
         };
     }
@@ -164,15 +199,43 @@ class SuperAdminService {
         const currentFeatures = (typeof plan.features === "object" && plan.features !== null) ? plan.features : {};
         const isTrial = data.isTrial !== undefined ? data.isTrial : (plan.tier === "TRIAL" || !!currentFeatures.isTrial);
         const isCustom = data.isCustom !== undefined ? data.isCustom : (currentFeatures.isCustom || false);
+        const trialDays = isTrial ? (data.trialDays !== undefined ? Number(data.trialDays) : Number(plan.trialDays ?? currentFeatures.trialDays ?? 7)) : 0;
+        const isPopular = data.isPopular !== undefined
+            ? Boolean(data.isPopular)
+            : (data.features?.isPopular !== undefined ? Boolean(data.features.isPopular) : Boolean(currentFeatures.isPopular ?? false));
+        // If setting to popular, unset popular on all other plans
+        if (data.isPopular === true || (data.features && data.features.isPopular === true)) {
+            try {
+                const otherPlans = await prisma_1.prisma.subscriptionPlan.findMany({
+                    where: { id: { not: id } },
+                });
+                for (const op of otherPlans) {
+                    const opFeat = (typeof op.features === "object" && op.features !== null) ? op.features : {};
+                    if (opFeat.isPopular) {
+                        await prisma_1.prisma.subscriptionPlan.update({
+                            where: { id: op.id },
+                            data: {
+                                features: { ...opFeat, isPopular: false },
+                            },
+                        });
+                    }
+                }
+            }
+            catch (err) {
+                console.warn("Error unsetting popular flag on other plans during update:", err);
+            }
+        }
         const updatedFeatures = {
             ...currentFeatures,
             ...(data.features || {}),
+            ...(data.featureList !== undefined && { featureList: data.featureList }),
             ...(data.maxStaffPerBranch !== undefined && { maxStaffPerBranch: data.maxStaffPerBranch }),
             ...(data.maxTotalStaff !== undefined && { maxTotalStaff: data.maxTotalStaff }),
-            ...(data.trialDays !== undefined && { trialDays: data.trialDays }),
+            trialDays,
             ...(data.yearlyDiscountPercent !== undefined && { yearlyDiscountPercent: data.yearlyDiscountPercent }),
-            ...(data.isTrial !== undefined && { isTrial: data.isTrial }),
-            ...(data.isCustom !== undefined && { isCustom: data.isCustom }),
+            isTrial,
+            isCustom,
+            isPopular,
             ...(data.whatsappNumber !== undefined && { whatsappNumber: data.whatsappNumber }),
             ...(data.customMessage !== undefined && { customMessage: data.customMessage }),
         };
@@ -183,6 +246,7 @@ class SuperAdminService {
                 ...(data.price !== undefined && { price: isTrial ? 0 : data.price }),
                 ...(data.billingCycle && { billingCycle: data.billingCycle }),
                 ...(data.maxBranches !== undefined && { maxBranches: data.maxBranches }),
+                trialDays,
                 features: updatedFeatures,
                 ...(data.isActive !== undefined && { isActive: data.isActive }),
             },
@@ -1384,6 +1448,9 @@ class SuperAdminService {
                 manualPaymentDocUrl: t.manualPaymentDocUrl,
                 manualPaymentAmount: t.manualPaymentAmount ? Number(t.manualPaymentAmount) : null,
                 payment: latestPayment,
+                isDemo: Boolean(t.isDemo || t.paymentMethod === "FREE_TRIAL"),
+                demoApprovedAt: t.demoApprovedAt,
+                demoExpiresAt: t.demoExpiresAt,
                 createdAt: t.createdAt,
                 owner,
                 subscription: latestSub,
@@ -1452,8 +1519,10 @@ class SuperAdminService {
             plan = await prisma_1.prisma.subscriptionPlan.findFirst({ where: { tier: "STARTER" } }) ||
                 await prisma_1.prisma.subscriptionPlan.findFirst();
         }
-        const isTrialPlan = plan.tier === "TRIAL" || !!plan.features?.isTrial || tenant.paymentMethod === "FREE_TRIAL";
-        const trialDays = plan.features?.trialDays ? Number(plan.features.trialDays) : 7;
+        const feat = (typeof plan.features === "object" && plan.features !== null) ? plan.features : {};
+        const isTrialPlan = Boolean(tenant.isDemo || tenant.paymentMethod === "FREE_TRIAL" || plan.tier === "TRIAL" || feat.isTrial);
+        // Calculate trial days strictly from the configured plan
+        const trialDays = Number(plan.trialDays ?? feat.trialDays ?? (isTrialPlan ? 7 : 0));
         const billingCycle = data?.billingCycle || tenant.pendingBillingCycle || "MONTHLY";
         const durationDays = isTrialPlan ? trialDays : (billingCycle === "YEARLY" ? 365 : 30);
         const startDate = new Date();
@@ -1474,6 +1543,9 @@ class SuperAdminService {
                 pendingPlanId: plan.id,
                 pendingBillingCycle: billingCycle,
                 tier: plan.tier,
+                isDemo: isTrialPlan,
+                demoApprovedAt: isTrialPlan ? new Date() : null,
+                demoExpiresAt: isTrialPlan ? endDate : null,
             },
         });
         // Update or create active subscription

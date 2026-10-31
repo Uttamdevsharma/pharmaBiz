@@ -11,6 +11,7 @@ export interface PlanItem {
   billingCycle: string;
   maxBranches: number;
   features?: any;
+  isPopular?: boolean;
   isActive: boolean;
 }
 

@@ -1,5 +1,6 @@
 import { prisma } from "../../app/lib/prisma";
 import { UpdatePlatformSettingsInput } from "./settings.validation";
+import { encryptSecret, decryptSecret, maskSecret, isMasked } from "../../app/lib/payment-security";
 
 const SETTINGS_KEY = "landing_page_config";
 
@@ -108,8 +109,20 @@ export class SettingsService {
 
     const plans = rawPlans.map((p: any) => {
       const feat = (typeof p.features === "object" && p.features !== null) ? p.features : {};
+      const isTrial = Boolean(feat.isTrial || p.tier === "TRIAL");
+      const isCustom = Boolean(feat.isCustom);
+      const isPopular = Boolean(feat.isPopular ?? p.isPopular ?? false);
+      const trialDays = Number(p.trialDays ?? feat.trialDays ?? (isTrial ? 7 : 0));
+      const featureList = Array.isArray(feat.featureList) ? feat.featureList : [];
       return {
         ...p,
+        isTrial,
+        isCustom,
+        isPopular,
+        trialDays,
+        featureList,
+        whatsappNumber: feat.whatsappNumber || "",
+        customMessage: feat.customMessage || "",
         maxStaffPerBranch: feat.maxStaffPerBranch ?? (p.tier === "STARTER" ? 1 : p.tier === "GROWTH" ? 3 : 5),
         maxTotalStaff: feat.maxTotalStaff ?? (p.maxBranches * (feat.maxStaffPerBranch ?? 1)),
         yearlyDiscountPercent: feat.yearlyDiscountPercent ?? 17,
@@ -261,80 +274,228 @@ export class SettingsService {
   }
 
   /**
-   * Get payment gateway settings for Super Admin
+   * Get payment gateway settings for Super Admin (Masked secrets)
    */
   static async getPaymentGatewaySettings() {
-    const key = "payment_gateway_settings";
-    const setting = await (prisma as any).platformSetting.findUnique({ where: { key } });
-    if (!setting) {
-      return {
-        manualBkash: {
-          enabled: true,
-          accountNumber: "01750000000",
-          accountType: "Personal",
-          instructions: "অনুগ্রহ করে এই পার্সোনাল বিকাশ নাম্বারে Send Money করুন। রেফারেন্স হিসেবে আপনার ফার্মেসির নাম ব্যবহার করুন। টাকা পাঠানোর পর প্রেরকের নম্বর, TrxID এবং স্ক্রিনশট আপলোড করে সাবমিট করুন।",
-        },
-        sslcommerz: {
-          enabled: false,
-          storeId: "",
-          storePassword: "",
-          isSandbox: true,
-        },
-      };
-    }
-    return setting.value;
-  }
-
-  /**
-   * Get public payment gateway settings (hide store passwords)
-   */
-  static async getPublicPaymentGateways() {
-    const full = await this.getPaymentGatewaySettings();
-    return {
-      manualBkash: {
-        enabled: !!full.manualBkash?.enabled,
-        accountNumber: full.manualBkash?.accountNumber || "",
-        accountType: full.manualBkash?.accountType || "Personal",
-        instructions: full.manualBkash?.instructions || "",
-      },
-      sslcommerz: {
-        enabled: !!full.sslcommerz?.enabled,
-        storeId: full.sslcommerz?.storeId || "",
-        isSandbox: full.sslcommerz?.isSandbox ?? true,
-      },
-    };
-  }
-
-  /**
-   * Update payment gateway settings from Super Admin
-   */
-  static async updatePaymentGatewaySettings(data: any) {
-    const key = "payment_gateway_settings";
-    const current = await this.getPaymentGatewaySettings();
-
-    const value = {
-      manualBkash: {
-        enabled: data.manualBkash?.enabled !== undefined ? !!data.manualBkash.enabled : current.manualBkash?.enabled,
-        accountNumber: data.manualBkash?.accountNumber !== undefined ? String(data.manualBkash.accountNumber).trim() : current.manualBkash?.accountNumber,
-        accountType: data.manualBkash?.accountType || current.manualBkash?.accountType || "Personal",
-        instructions: data.manualBkash?.instructions !== undefined ? String(data.manualBkash.instructions).trim() : current.manualBkash?.instructions,
-      },
-      sslcommerz: {
-        enabled: data.sslcommerz?.enabled !== undefined ? !!data.sslcommerz.enabled : current.sslcommerz?.enabled,
-        storeId: data.sslcommerz?.storeId !== undefined ? String(data.sslcommerz.storeId).trim() : current.sslcommerz?.storeId,
-        storePassword: data.sslcommerz?.storePassword !== undefined ? String(data.sslcommerz.storePassword).trim() : current.sslcommerz?.storePassword,
-        isSandbox: data.sslcommerz?.isSandbox !== undefined ? !!data.sslcommerz.isSandbox : current.sslcommerz?.isSandbox,
-      },
-      updatedAt: new Date().toISOString(),
-    };
-
-    const setting = await (prisma as any).platformSetting.upsert({
-      where: { key },
-      create: { key, value },
-      update: { value },
+    let settings = await (prisma as any).platform_settings.findFirst({
+      orderBy: { id: "asc" },
     });
 
-    return setting.value;
+    if (!settings) {
+      settings = await (prisma as any).platform_settings.create({
+        data: {
+          bkash_merchant_enabled: false,
+          bkash_is_live: false,
+          nagad_merchant_enabled: false,
+          nagad_is_live: false,
+          eps_merchant_enabled: false,
+          eps_is_live: false,
+          manual_payment_active: true,
+          bkash_number: "01750000000",
+          nagad_number: "01850000000",
+        },
+      });
+    }
+
+    return {
+      // bKash Merchant Configuration
+      bkash_merchant_enabled: Boolean(settings.bkash_merchant_enabled),
+      bkash_is_live: Boolean(settings.bkash_is_live),
+      bkash_app_key: settings.bkash_app_key || "",
+      bkash_app_secret: maskSecret(settings.bkash_app_secret),
+      bkash_username: settings.bkash_username || "",
+      bkash_password: maskSecret(settings.bkash_password),
+
+      // Nagad Merchant Configuration
+      nagad_merchant_enabled: Boolean(settings.nagad_merchant_enabled),
+      nagad_is_live: Boolean(settings.nagad_is_live),
+      nagad_merchant_id: settings.nagad_merchant_id || "",
+      nagad_merchant_phone: settings.nagad_merchant_phone || "",
+      nagad_public_key: settings.nagad_public_key || "",
+      nagad_private_key: maskSecret(settings.nagad_private_key),
+
+      // EPS Configuration
+      eps_merchant_enabled: Boolean(settings.eps_merchant_enabled),
+      eps_is_live: Boolean(settings.eps_is_live),
+      eps_merchant_id: settings.eps_merchant_id || "",
+      eps_store_id: settings.eps_store_id || "",
+      eps_username: settings.eps_username || "",
+      eps_password: maskSecret(settings.eps_password),
+      eps_hash_key: maskSecret(settings.eps_hash_key),
+
+      // Manual MFS Configuration
+      manual_payment_active: Boolean(settings.manual_payment_active),
+      bkash_number: settings.bkash_number || "",
+      nagad_number: settings.nagad_number || "",
+
+      // Legacy structures for backward compatibility
+      manualBkash: {
+        enabled: Boolean(settings.manual_payment_active),
+        number: settings.bkash_number || "01750000000",
+        accountNumber: settings.bkash_number || "01750000000",
+        accountType: "Personal",
+        instructions: "অনুগ্রহ করে এই বিকাশ নাম্বারে Send Money করুন এবং ট্রানজেকশন আইডি দিন।",
+      },
+      sslcommerz: {
+        enabled: false,
+        storeId: "",
+        storePassword: "",
+        isSandbox: true,
+      },
+    };
+  }
+
+  /**
+   * Get public payment gateway settings (Safe booleans only, no secrets)
+   */
+  static async getPublicPaymentGateways() {
+    let settings = await (prisma as any).platform_settings.findFirst({
+      orderBy: { id: "asc" },
+    });
+
+    const bkash_merchant_active = Boolean(settings?.bkash_merchant_enabled);
+    const nagad_merchant_active = Boolean(settings?.nagad_merchant_enabled);
+    const eps_merchant_active = Boolean(settings?.eps_merchant_enabled);
+    const manual_payment_active = settings ? Boolean(settings.manual_payment_active) : true;
+    const bkash_number = settings?.bkash_number || "01750000000";
+    const nagad_number = settings?.nagad_number || "01850000000";
+
+    return {
+      // BizPOS Format
+      bkash_merchant_active,
+      nagad_merchant_active,
+      eps_merchant_active,
+      manual_payment_active,
+      bkash_number,
+      nagad_number,
+
+      // Legacy Object format
+      manualBkash: {
+        enabled: manual_payment_active,
+        number: bkash_number,
+        accountNumber: bkash_number,
+        accountType: "Personal",
+        instructions: "অনুগ্রহ করে এই পার্সোনাল বিকাশ নাম্বারে Send Money করুন। রেফারেন্স হিসেবে আপনার ফার্মেসির নাম ব্যবহার করুন। টাকা পাঠানোর পর প্রেরকের নম্বর, TrxID এবং স্ক্রিনশট আপলোড করে সাবমিট করুন।",
+      },
+      sslcommerz: {
+        enabled: false,
+      },
+    };
+  }
+
+  /**
+   * Update payment gateway settings from Super Admin (Encrypts secrets before save)
+   */
+  static async updatePaymentGatewaySettings(data: any) {
+    let current = await (prisma as any).platform_settings.findFirst({
+      orderBy: { id: "asc" },
+    });
+
+    if (!current) {
+      current = await (prisma as any).platform_settings.create({
+        data: {},
+      });
+    }
+
+    const updateData: any = {};
+
+    // bKash Merchant
+    if (data.bkash_merchant_enabled !== undefined) {
+      updateData.bkash_merchant_enabled = Boolean(data.bkash_merchant_enabled);
+    }
+    if (data.bkash_is_live !== undefined) {
+      updateData.bkash_is_live = Boolean(data.bkash_is_live);
+    }
+    if (data.bkash_app_key !== undefined) {
+      updateData.bkash_app_key = String(data.bkash_app_key).trim();
+    }
+    if (data.bkash_app_secret !== undefined && !isMasked(data.bkash_app_secret)) {
+      updateData.bkash_app_secret = encryptSecret(String(data.bkash_app_secret).trim());
+    }
+    if (data.bkash_username !== undefined) {
+      updateData.bkash_username = String(data.bkash_username).trim();
+    }
+    if (data.bkash_password !== undefined && !isMasked(data.bkash_password)) {
+      updateData.bkash_password = encryptSecret(String(data.bkash_password).trim());
+    }
+
+    // Nagad Merchant
+    if (data.nagad_merchant_enabled !== undefined) {
+      updateData.nagad_merchant_enabled = Boolean(data.nagad_merchant_enabled);
+    }
+    if (data.nagad_is_live !== undefined) {
+      updateData.nagad_is_live = Boolean(data.nagad_is_live);
+    }
+    if (data.nagad_merchant_id !== undefined) {
+      updateData.nagad_merchant_id = String(data.nagad_merchant_id).trim();
+    }
+    if (data.nagad_merchant_phone !== undefined) {
+      updateData.nagad_merchant_phone = String(data.nagad_merchant_phone).trim();
+    }
+    if (data.nagad_public_key !== undefined) {
+      updateData.nagad_public_key = String(data.nagad_public_key).trim();
+    }
+    if (data.nagad_private_key !== undefined && !isMasked(data.nagad_private_key)) {
+      updateData.nagad_private_key = encryptSecret(String(data.nagad_private_key).trim());
+    }
+
+    // EPS Gateway
+    if (data.eps_merchant_enabled !== undefined) {
+      updateData.eps_merchant_enabled = Boolean(data.eps_merchant_enabled);
+    }
+    if (data.eps_is_live !== undefined) {
+      updateData.eps_is_live = Boolean(data.eps_is_live);
+    }
+    if (data.eps_merchant_id !== undefined) {
+      updateData.eps_merchant_id = String(data.eps_merchant_id).trim();
+    }
+    if (data.eps_store_id !== undefined) {
+      updateData.eps_store_id = String(data.eps_store_id).trim();
+    }
+    if (data.eps_username !== undefined) {
+      updateData.eps_username = String(data.eps_username).trim();
+    }
+    if (data.eps_password !== undefined && !isMasked(data.eps_password)) {
+      updateData.eps_password = encryptSecret(String(data.eps_password).trim());
+    }
+    if (data.eps_hash_key !== undefined && !isMasked(data.eps_hash_key)) {
+      updateData.eps_hash_key = encryptSecret(String(data.eps_hash_key).trim());
+    }
+
+    // Manual MFS
+    if (data.manual_payment_active !== undefined) {
+      updateData.manual_payment_active = Boolean(data.manual_payment_active);
+    } else if (data.manualBkash?.enabled !== undefined) {
+      updateData.manual_payment_active = Boolean(data.manualBkash.enabled);
+    }
+
+    if (data.bkash_number !== undefined) {
+      updateData.bkash_number = String(data.bkash_number).trim();
+    } else if (data.manualBkash?.number !== undefined || data.manualBkash?.accountNumber !== undefined) {
+      updateData.bkash_number = String(data.manualBkash.number || data.manualBkash.accountNumber).trim();
+    }
+
+    if (data.nagad_number !== undefined) {
+      updateData.nagad_number = String(data.nagad_number).trim();
+    }
+
+    updateData.updated_at = new Date();
+
+    const saved = await (prisma as any).platform_settings.update({
+      where: { id: current.id },
+      data: updateData,
+    });
+
+    // Also sync to PlatformSetting json key for redundancy
+    try {
+      await (prisma as any).platformSetting.upsert({
+        where: { key: "payment_gateway_settings" },
+        create: { key: "payment_gateway_settings", value: updateData },
+        update: { value: updateData },
+      });
+    } catch {}
+
+    return this.getPaymentGatewaySettings();
   }
 }
 

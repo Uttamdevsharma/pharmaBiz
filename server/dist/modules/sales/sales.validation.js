@@ -18,7 +18,24 @@ exports.createSaleSchema = zod_1.z.object({
     customerName: zod_1.z.string().optional().nullable(),
     customerPhone: zod_1.z.string().optional().nullable(),
     customerEmail: zod_1.z.string().optional().nullable(),
-    paymentMethod: zod_1.z.enum(["CASH", "BKASH", "NAGAD", "BANK", "CARD", "MOBILE", "OTHER"]).default("CASH"),
+    paymentMethod: zod_1.z.preprocess((val) => {
+        if (!val || typeof val !== "string")
+            return "CASH";
+        const upper = val.toUpperCase();
+        if (upper.includes("BKASH"))
+            return "BKASH";
+        if (upper.includes("NAGAD"))
+            return "NAGAD";
+        if (upper.includes("CARD"))
+            return "CARD";
+        if (upper.includes("BANK"))
+            return "BANK";
+        if (upper.includes("MOBILE"))
+            return "MOBILE";
+        if (["CASH", "BKASH", "NAGAD", "BANK", "CARD", "MOBILE", "OTHER"].includes(upper))
+            return upper;
+        return "OTHER";
+    }, zod_1.z.enum(["CASH", "BKASH", "NAGAD", "BANK", "CARD", "MOBILE", "OTHER"]).default("CASH")),
     financialAccountId: zod_1.z.string().optional().nullable(),
     bankName: zod_1.z.string().optional().nullable(),
     transactionRef: zod_1.z.string().optional().nullable(),

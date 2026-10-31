@@ -9,4 +9,5 @@ exports.updateTenantProfileSchema = zod_1.z.object({
     address: zod_1.z.string().optional(),
     logoUrl: zod_1.z.string().url().optional().or(zod_1.z.literal("")),
     logoPublicId: zod_1.z.string().optional(),
+    website: zod_1.z.string().optional().nullable().or(zod_1.z.literal("")),
 });

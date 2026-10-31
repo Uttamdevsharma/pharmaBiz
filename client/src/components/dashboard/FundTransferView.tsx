@@ -178,65 +178,57 @@ export function FundTransferView({ onNavigate }: FundTransferViewProps) {
       setError(null);
       setSuccessMsg(null);
 
-      if (isOwner) {
-        // Owner performs direct transfer
-        const res = await fetchApi<any>("/accounting/transfer", {
-          method: "POST",
-          body: JSON.stringify({
-            sourceAccountId,
-            destinationAccountId,
-            amount: transferNum,
-            reference: reference.trim() || undefined,
-            note: note.trim() || undefined,
-          }),
-        });
+      // Always submit transfer request for Owner Approval (Maker-Checker workflow)
+      const res = await fetchApi<any>("/accounting/transfer-requests", {
+        method: "POST",
+        body: JSON.stringify({
+          sourceAccountId,
+          destinationAccountId,
+          amount: transferNum,
+          reference: reference.trim() || undefined,
+          note: note.trim() || undefined,
+        }),
+      });
 
-        if (!res.success) throw new Error(res.message || "Fund transfer failed");
+      if (!res.success) throw new Error(res.message || "Failed to submit transfer request");
 
-        Swal.fire({
-          icon: "success",
-          title: "Transfer Completed",
-          text: `৳${transferNum.toLocaleString("en-BD", { minimumFractionDigits: 2 })} directly transferred from "${sourceAccount?.name}" to "${destinationAccount?.name}".`,
-          confirmButtonColor: "#10b981",
-          customClass: {
-            popup: "rounded-none",
-            confirmButton: "rounded-none",
-          },
-        });
+      const swalRes = await Swal.fire({
+        icon: "info",
+        title: "Transfer Request Submitted (Pending Approval)",
+        html: `
+          <div class="text-left text-xs sm:text-sm space-y-2 text-slate-700 dark:text-slate-300">
+            <p>Your fund transfer request has been recorded and is currently <strong>Pending Owner Approval</strong>.</p>
+            <div class="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 text-amber-900 dark:text-amber-200 space-y-1">
+              <div><strong>Amount:</strong> ৳${transferNum.toLocaleString("en-BD", { minimumFractionDigits: 2 })}</div>
+              <div><strong>From Account:</strong> ${sourceAccount?.name}</div>
+              <div><strong>To Account:</strong> ${destinationAccount?.name}</div>
+              ${reference.trim() ? `<div><strong>Ref:</strong> ${reference.trim()}</div>` : ""}
+            </div>
+            <p class="text-xs text-slate-500 pt-1">
+              💡 The funds will be transferred to the destination account once the Shop Owner accepts it from <strong>Sidebar &gt; Approvals &gt; Fund Transfer Approval</strong>.
+            </p>
+          </div>
+        `,
+        confirmButtonText: isOwner ? "Go to Approvals to Accept" : "Done",
+        showCancelButton: Boolean(isOwner && onNavigate),
+        cancelButtonText: "Stay on Transfer Page",
+        confirmButtonColor: "#059669",
+        cancelButtonColor: "#64748b",
+        customClass: {
+          popup: "rounded-none",
+          confirmButton: "rounded-none",
+          cancelButton: "rounded-none",
+        },
+      });
 
-        setSuccessMsg(
-          `Successfully transferred ৳${transferNum.toLocaleString("en-BD", { minimumFractionDigits: 2 })} from "${sourceAccount?.name}" to "${destinationAccount?.name}".`
-        );
-      } else {
-        // Staff/Accounts submits transfer request for Owner Approval
-        const res = await fetchApi<any>("/accounting/transfer-requests", {
-          method: "POST",
-          body: JSON.stringify({
-            sourceAccountId,
-            destinationAccountId,
-            amount: transferNum,
-            reference: reference.trim() || undefined,
-            note: note.trim() || undefined,
-          }),
-        });
-
-        if (!res.success) throw new Error(res.message || "Failed to submit transfer request");
-
-        Swal.fire({
-          icon: "success",
-          title: "Submitted for Approval",
-          text: `Transfer request for ৳${transferNum.toLocaleString("en-BD", { minimumFractionDigits: 2 })} has been submitted for Pharmacy Owner approval. Ledger will be updated once approved.`,
-          confirmButtonColor: "#059669",
-          customClass: {
-            popup: "rounded-none",
-            confirmButton: "rounded-none",
-          },
-        });
-
-        setSuccessMsg(
-          `Transfer request for ৳${transferNum.toLocaleString("en-BD", { minimumFractionDigits: 2 })} submitted for Owner Approval.`
-        );
+      if (swalRes.isConfirmed && isOwner && onNavigate) {
+        onNavigate("approvals_fund_transfer");
+        return;
       }
+
+      setSuccessMsg(
+        `Transfer request for ৳${transferNum.toLocaleString("en-BD", { minimumFractionDigits: 2 })} submitted for Shop Owner approval.`
+      );
 
       setAmount("");
       setReference("");
@@ -363,11 +355,15 @@ export function FundTransferView({ onNavigate }: FundTransferViewProps) {
                   className="w-full h-9 sm:h-10 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-none text-xs sm:text-sm font-medium text-slate-900 dark:text-white outline-none focus:border-brand-primary"
                   required
                 >
-                  {accounts.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name} ({getAccountBadge(a.type)}) — ৳{Number(a.balance).toLocaleString("en-BD", { minimumFractionDigits: 2 })}
-                    </option>
-                  ))}
+                  {accounts.map((a: any) => {
+                    const branchName = a.branch?.name || a.branchName || "";
+                    const prefix = a.type === "CASH" ? (branchName ? `[${branchName} Cash]` : "[Cash Drawer]") : "[Central/All]";
+                    return (
+                      <option key={a.id} value={a.id}>
+                        {prefix} {a.name} — ৳{Number(a.balance).toLocaleString("en-BD", { minimumFractionDigits: 2 })}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
 
@@ -376,7 +372,7 @@ export function FundTransferView({ onNavigate }: FundTransferViewProps) {
                 <button
                   type="button"
                   onClick={handleSwap}
-                  className="p-2 border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition rounded-none"
+                  className="p-2 border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition rounded-none cursor-pointer"
                   title="Swap Source and Destination"
                 >
                   <ArrowLeftRight className="h-4 w-4" />
@@ -394,11 +390,15 @@ export function FundTransferView({ onNavigate }: FundTransferViewProps) {
                   className="w-full h-9 sm:h-10 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-none text-xs sm:text-sm font-medium text-slate-900 dark:text-white outline-none focus:border-brand-primary"
                   required
                 >
-                  {accounts.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name} ({getAccountBadge(a.type)}) — ৳{Number(a.balance).toLocaleString("en-BD", { minimumFractionDigits: 2 })}
-                    </option>
-                  ))}
+                  {accounts.map((a: any) => {
+                    const branchName = a.branch?.name || a.branchName || "";
+                    const prefix = a.type === "CASH" ? (branchName ? `[${branchName} Cash]` : "[Cash Drawer]") : "[Central/All]";
+                    return (
+                      <option key={a.id} value={a.id}>
+                        {prefix} {a.name} — ৳{Number(a.balance).toLocaleString("en-BD", { minimumFractionDigits: 2 })}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
             </div>
@@ -462,15 +462,13 @@ export function FundTransferView({ onNavigate }: FundTransferViewProps) {
               </div>
             </div>
 
-            {/* Maker-Checker Notice for Non-Owner Staff */}
-            {!isOwner && (
-              <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 text-xs text-amber-800 dark:text-amber-300 font-medium rounded-none flex items-start gap-2">
-                <Clock className="h-4 w-4 shrink-0 mt-0.5 text-amber-600" />
-                <span>
-                  <strong>Approval Required:</strong> As a staff/accounts user, this transfer will be submitted as a pending request. Once the Pharmacy Owner verifies and approves it, the balances will be transferred.
-                </span>
-              </div>
-            )}
+            {/* Two-Step Approval Protocol Notice */}
+            <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 text-xs text-amber-800 dark:text-amber-300 font-medium rounded-none flex items-start gap-2">
+              <ShieldCheck className="h-4 w-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+              <span>
+                <strong>Approval Protocol:</strong> All fund transfers are submitted as pending requests. The Shop Owner must review and accept the transfer from <strong>Approvals → Fund Transfer Approval</strong> before ledger balances will be updated.
+              </span>
+            </div>
 
             {/* Submit CTA */}
             <div className="pt-2">
@@ -482,12 +480,7 @@ export function FundTransferView({ onNavigate }: FundTransferViewProps) {
                 {transferring ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    {isOwner ? "Executing Transfer..." : "Submitting Request..."}
-                  </>
-                ) : isOwner ? (
-                  <>
-                    <ArrowLeftRight className="h-4 w-4" />
-                    Execute Direct Transfer
+                    Submitting Transfer Request...
                   </>
                 ) : (
                   <>
@@ -524,7 +517,7 @@ export function FundTransferView({ onNavigate }: FundTransferViewProps) {
             </div>
             {transferNum > 0 && (
               <div className="flex items-center justify-between text-xs text-rose-600 font-bold pt-1.5 border-t border-slate-200 dark:border-slate-700">
-                <span>After Transfer:</span>
+                <span>After Transfer (Upon Approval):</span>
                 <span className="font-mono">
                   ৳{Math.max(0, sourceBalance - transferNum).toLocaleString("en-BD", { minimumFractionDigits: 2 })}
                 </span>
@@ -550,7 +543,7 @@ export function FundTransferView({ onNavigate }: FundTransferViewProps) {
             </div>
             {transferNum > 0 && (
               <div className="flex items-center justify-between text-xs text-emerald-600 font-bold pt-1.5 border-t border-slate-200 dark:border-slate-700">
-                <span>After Transfer:</span>
+                <span>After Transfer (Upon Approval):</span>
                 <span className="font-mono">
                   ৳{(destBalance + transferNum).toLocaleString("en-BD", { minimumFractionDigits: 2 })}
                 </span>
@@ -590,6 +583,7 @@ export function FundTransferView({ onNavigate }: FundTransferViewProps) {
                   <th className="py-2.5 px-3 text-right">Amount</th>
                   <th className="py-2.5 px-3">Requested By</th>
                   <th className="py-2.5 px-3 text-center">Status</th>
+                  <th className="py-2.5 px-3 text-center">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -637,6 +631,19 @@ export function FundTransferView({ onNavigate }: FundTransferViewProps) {
                           <X className="h-3 w-3" />
                           Rejected
                         </span>
+                      )}
+                    </td>
+                    <td className="py-2 px-3 text-center whitespace-nowrap">
+                      {req.status === "PENDING" && isOwner && onNavigate ? (
+                        <button
+                          onClick={() => onNavigate("approvals_fund_transfer")}
+                          className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-bold bg-amber-600 hover:bg-amber-700 text-white rounded-none transition"
+                        >
+                          <ShieldCheck className="h-3 w-3" />
+                          Review / Accept
+                        </button>
+                      ) : (
+                        <span className="text-slate-400 text-[11px]">—</span>
                       )}
                     </td>
                   </tr>

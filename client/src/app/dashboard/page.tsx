@@ -111,6 +111,7 @@ import {
   ShieldCheck,
   FileSpreadsheet,
 } from "lucide-react";
+import { DemoStatusBannerModal } from "@/components/dashboard/DemoStatusBannerModal";
 
 // Persistent in-memory cache across dashboard transitions to prevent full-screen loaders
 let cachedTenantProfile: any = null;
@@ -426,8 +427,20 @@ export default function RoleBasedDashboard() {
 
   return (
     <div className="h-screen max-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col text-slate-900 dark:text-slate-100 overflow-hidden">
-      {/* Subscription Expired Warning Banner */}
-      {isExpired && (
+      {/* Dedicated Free Demo Status Banner & Expiry Locking Modal */}
+      <DemoStatusBannerModal
+        currentSub={currentSub}
+        tenantProfile={tenantProfile}
+        availablePlans={availablePlans}
+        userRole={user?.role}
+        onInitiateUpgrade={(planId, billing) => {
+          handleInitiateUpgrade(planId);
+        }}
+        initiatingPay={initiatingPay}
+      />
+
+      {/* Subscription Expired Warning Banner (For Paid Subscriptions) */}
+      {!Boolean(currentSub?.isDemo || tenantProfile?.isDemo || currentSub?.tier === "TRIAL") && isExpired && (
         <div className="shrink-0 bg-gradient-to-r from-red-600 via-amber-600 to-red-700 text-white px-4 sm:px-6 py-2.5 flex flex-col sm:flex-row items-center justify-between gap-2 shadow-md z-50 text-xs font-semibold">
           <div className="flex items-center gap-2.5">
             <span className="relative flex h-2.5 w-2.5">

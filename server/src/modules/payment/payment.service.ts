@@ -2,6 +2,9 @@ import { prisma } from "../../app/lib/prisma";
 import { SSLCommerzService } from "../../app/lib/sslcommerz";
 import { AuditService } from "../../app/lib/audit";
 import { InitiatePaymentInput, SSLCommerzCallbackInput } from "./payment.validation";
+import { createBkashPayment, executeBkashPayment } from "../../app/lib/bkash";
+import { createNagadPayment, verifyNagadPayment } from "../../app/lib/nagad";
+import { createEpsPayment, verifyEpsPayment } from "../../app/lib/eps";
 
 export class PaymentService {
   /**
@@ -427,6 +430,594 @@ export class PaymentService {
       success: false,
       status: payment.status,
       message: "Payment could not be validated yet",
+    };
+  }
+
+  /**
+   * ================= BKASH TOKENIZED CHECKOUT =================
+   */
+  static async initiateBkashCheckout(data: {
+    pharmacyId?: string;
+    tenantId?: string;
+    planId: string;
+    billingCycle?: string;
+    isUpgrade?: boolean;
+    payerReference?: string;
+  }) {
+    const tenantIdentifier = data.tenantId || data.pharmacyId;
+    if (!tenantIdentifier) {
+      throw new Error("Pharmacy ID or Tenant ID is required");
+    }
+
+    const tenant = await (prisma as any).tenant.findUnique({
+      where: { id: tenantIdentifier },
+    });
+
+    if (!tenant) {
+      throw new Error("Pharmacy record not found");
+    }
+
+    const plan = await (prisma as any).subscriptionPlan.findUnique({
+      where: { id: data.planId },
+    });
+
+    if (!plan) {
+      throw new Error("Subscription plan not found");
+    }
+
+    const isAnnual = data.billingCycle === "ANNUAL" || data.billingCycle === "YEARLY";
+    const basePrice = Number(plan.price);
+    const planPrice = isAnnual ? Math.round(basePrice * 12 * 0.85) : basePrice;
+    const isTrial = plan.tier === "TRIAL" || !!plan.features?.isTrial;
+    const initialLicenseFee = data.isUpgrade || isTrial ? 0 : 5000;
+    const totalAmount = isTrial ? 0 : planPrice + initialLicenseFee;
+
+    const host = process.env.APP_URL || `http://localhost:${process.env.PORT || 3000}`;
+    const invoiceNumber = `PHARM-${tenant.id.slice(0, 8)}-P${plan.id.slice(0, 6)}-${Date.now().toString().slice(-6)}`;
+    const callbackURL = `${host}/api/payments/bkash/callback?pharmacy_id=${tenant.id}&plan_id=${plan.id}${data.isUpgrade ? "&is_upgrade=true" : ""}&cycle=${data.billingCycle || "MONTHLY"}`;
+
+    const bkashRes = await createBkashPayment({
+      amount: totalAmount,
+      invoiceNumber,
+      callbackURL,
+      payerReference: data.payerReference || tenant.phone || "01700000000",
+    });
+
+    if (bkashRes && bkashRes.bkashURL) {
+      await (prisma as any).payment.create({
+        data: {
+          tenantId: tenant.id,
+          amount: totalAmount,
+          currency: "BDT",
+          tranId: bkashRes.paymentID || invoiceNumber,
+          status: "PENDING",
+          paymentMethod: "BKASH_DIRECT",
+          type: data.isUpgrade ? "UPGRADE" : "INITIAL_REGISTRATION",
+        },
+      });
+
+      return {
+        success: true,
+        bkashURL: bkashRes.bkashURL,
+        paymentID: bkashRes.paymentID,
+      };
+    }
+
+    throw new Error(bkashRes?.statusMessage || "Could not initiate bKash payment");
+  }
+
+  static async handleBkashCallback(params: {
+    paymentID?: string;
+    status?: string;
+    pharmacy_id?: string;
+    plan_id?: string;
+    is_upgrade?: string;
+    cycle?: string;
+  }) {
+    const host = process.env.CLIENT_URL || "http://localhost:3001";
+    const { paymentID, status, pharmacy_id, plan_id, is_upgrade, cycle } = params;
+    const isUpgrade = is_upgrade === "true";
+
+    if (status === "cancel" || status === "failure") {
+      const returnUrl = isUpgrade
+        ? `${host}/dashboard?payment=cancelled`
+        : `${host}/register?error=Payment+cancelled`;
+      return { redirectUrl: returnUrl };
+    }
+
+    if (!paymentID || status !== "success") {
+      throw new Error("Invalid payment status from bKash");
+    }
+
+    const execRes = await executeBkashPayment(paymentID);
+    if (execRes?.statusCode !== "0000" && execRes?.transactionStatus !== "Completed") {
+      throw new Error(execRes?.statusMessage || "bKash verification failed");
+    }
+
+    const trxId = execRes.trxID || paymentID;
+    const amount = parseFloat(execRes.amount || "0");
+    const durationDays = cycle === "ANNUAL" || cycle === "YEARLY" ? 365 : 30;
+
+    if (isUpgrade && pharmacy_id && plan_id) {
+      const now = new Date();
+      const endDate = new Date(now.getTime() + durationDays * 24 * 60 * 60 * 1000);
+
+      const plan = await (prisma as any).subscriptionPlan.findUnique({
+        where: { id: plan_id },
+      });
+
+      await (prisma as any).subscription.updateMany({
+        where: {
+          tenantId: pharmacy_id,
+          status: "ACTIVE",
+        },
+        data: { status: "EXPIRED" },
+      });
+
+      const newSub = await (prisma as any).subscription.create({
+        data: {
+          tenantId: pharmacy_id,
+          planId: plan_id,
+          status: "ACTIVE",
+          startDate: now,
+          endDate: endDate,
+        },
+      });
+
+      await (prisma as any).tenant.update({
+        where: { id: pharmacy_id },
+        data: {
+          tier: plan ? plan.tier : "STARTER",
+          verificationStatus: "ACTIVE",
+          isActive: true,
+        },
+      });
+
+      await (prisma as any).payment.upsert({
+        where: { tranId: paymentID },
+        create: {
+          tenantId: pharmacy_id,
+          subscriptionId: newSub.id,
+          amount,
+          currency: "BDT",
+          tranId: trxId,
+          status: "VALIDATED",
+          paymentMethod: "BKASH_DIRECT",
+          type: "UPGRADE",
+        },
+        update: {
+          status: "VALIDATED",
+          subscriptionId: newSub.id,
+          tranId: trxId,
+          paymentMethod: "BKASH_DIRECT",
+          rawResponse: execRes,
+        },
+      });
+
+      return {
+        redirectUrl: `${host}/payment/success?tran_id=${encodeURIComponent(trxId)}`,
+      };
+    } else if (pharmacy_id) {
+      await (prisma as any).tenant.update({
+        where: { id: pharmacy_id },
+        data: {
+          verificationStatus: "PENDING_APPROVAL",
+          paymentMethod: "BKASH_DIRECT",
+          manualPaymentTrxId: trxId,
+          manualPaymentAmount: amount,
+        },
+      });
+
+      await (prisma as any).payment.upsert({
+        where: { tranId: paymentID },
+        create: {
+          tenantId: pharmacy_id,
+          amount,
+          currency: "BDT",
+          tranId: trxId,
+          status: "VALIDATED",
+          paymentMethod: "BKASH_DIRECT",
+          type: "INITIAL_REGISTRATION",
+        },
+        update: {
+          status: "VALIDATED",
+          tranId: trxId,
+          paymentMethod: "BKASH_DIRECT",
+          rawResponse: execRes,
+        },
+      });
+
+      return {
+        redirectUrl: `${host}/register?success=true&trxId=${encodeURIComponent(trxId)}&tenantId=${pharmacy_id}`,
+      };
+    }
+
+    return {
+      redirectUrl: `${host}/payment/success?tran_id=${encodeURIComponent(trxId)}`,
+    };
+  }
+
+  /**
+   * ================= NAGAD MERCHANT CHECKOUT =================
+   */
+  static async initiateNagadCheckout(data: {
+    pharmacyId?: string;
+    tenantId?: string;
+    planId: string;
+    billingCycle?: string;
+    isUpgrade?: boolean;
+    clientIp?: string;
+  }) {
+    const tenantIdentifier = data.tenantId || data.pharmacyId;
+    if (!tenantIdentifier) {
+      throw new Error("Pharmacy ID or Tenant ID is required");
+    }
+
+    const tenant = await (prisma as any).tenant.findUnique({
+      where: { id: tenantIdentifier },
+    });
+
+    if (!tenant) throw new Error("Pharmacy record not found");
+
+    const plan = await (prisma as any).subscriptionPlan.findUnique({
+      where: { id: data.planId },
+    });
+
+    if (!plan) throw new Error("Subscription plan not found");
+
+    const isAnnual = data.billingCycle === "ANNUAL" || data.billingCycle === "YEARLY";
+    const basePrice = Number(plan.price);
+    const planPrice = isAnnual ? Math.round(basePrice * 12 * 0.85) : basePrice;
+    const isTrial = plan.tier === "TRIAL" || !!plan.features?.isTrial;
+    const initialLicenseFee = data.isUpgrade || isTrial ? 0 : 5000;
+    const totalAmount = isTrial ? 0 : planPrice + initialLicenseFee;
+
+    const host = process.env.APP_URL || `http://localhost:${process.env.PORT || 3000}`;
+    const orderId = `NGD_${tenant.id.slice(0, 6)}_${Date.now().toString().slice(-6)}`;
+    const callbackURL = `${host}/api/payments/nagad/callback?pharmacy_id=${tenant.id}&plan_id=${plan.id}${data.isUpgrade ? "&is_upgrade=true" : ""}&cycle=${data.billingCycle || "MONTHLY"}`;
+
+    const nagadRes = await createNagadPayment({
+      amount: totalAmount,
+      orderId,
+      callbackURL,
+      clientIp: data.clientIp,
+    });
+
+    if (nagadRes && nagadRes.nagadURL) {
+      await (prisma as any).payment.create({
+        data: {
+          tenantId: tenant.id,
+          amount: totalAmount,
+          currency: "BDT",
+          tranId: nagadRes.paymentReferenceId || orderId,
+          status: "PENDING",
+          paymentMethod: "NAGAD_DIRECT",
+          type: data.isUpgrade ? "UPGRADE" : "INITIAL_REGISTRATION",
+        },
+      });
+
+      return {
+        success: true,
+        nagadURL: nagadRes.nagadURL,
+        paymentReferenceId: nagadRes.paymentReferenceId,
+      };
+    }
+
+    throw new Error("Failed to initialize Nagad checkout session");
+  }
+
+  static async handleNagadCallback(params: {
+    payment_ref_id?: string;
+    status?: string;
+    pharmacy_id?: string;
+    plan_id?: string;
+    is_upgrade?: string;
+    cycle?: string;
+  }) {
+    const host = process.env.CLIENT_URL || "http://localhost:3001";
+    const { payment_ref_id, status, pharmacy_id, plan_id, is_upgrade, cycle } = params;
+    const isUpgrade = is_upgrade === "true";
+
+    if (status === "cancel" || status === "failure") {
+      const returnUrl = isUpgrade
+        ? `${host}/dashboard?payment=cancelled`
+        : `${host}/register?error=Payment+cancelled`;
+      return { redirectUrl: returnUrl };
+    }
+
+    if (!payment_ref_id) {
+      throw new Error("Nagad payment reference is missing");
+    }
+
+    const verifyRes = await verifyNagadPayment(payment_ref_id);
+    if (!verifyRes.success) {
+      throw new Error("Nagad payment verification failed");
+    }
+
+    const trxId = verifyRes.trxId || payment_ref_id;
+    const amount = verifyRes.amount || 0;
+    const durationDays = cycle === "ANNUAL" || cycle === "YEARLY" ? 365 : 30;
+
+    if (isUpgrade && pharmacy_id && plan_id) {
+      const now = new Date();
+      const endDate = new Date(now.getTime() + durationDays * 24 * 60 * 60 * 1000);
+      const plan = await (prisma as any).subscriptionPlan.findUnique({ where: { id: plan_id } });
+
+      await (prisma as any).subscription.updateMany({
+        where: { tenantId: pharmacy_id, status: "ACTIVE" },
+        data: { status: "EXPIRED" },
+      });
+
+      const newSub = await (prisma as any).subscription.create({
+        data: {
+          tenantId: pharmacy_id,
+          planId: plan_id,
+          status: "ACTIVE",
+          startDate: now,
+          endDate: endDate,
+        },
+      });
+
+      await (prisma as any).tenant.update({
+        where: { id: pharmacy_id },
+        data: {
+          tier: plan ? plan.tier : "STARTER",
+          verificationStatus: "ACTIVE",
+          isActive: true,
+        },
+      });
+
+      await (prisma as any).payment.upsert({
+        where: { tranId: payment_ref_id },
+        create: {
+          tenantId: pharmacy_id,
+          subscriptionId: newSub.id,
+          amount,
+          currency: "BDT",
+          tranId: trxId,
+          status: "VALIDATED",
+          paymentMethod: "NAGAD_DIRECT",
+          type: "UPGRADE",
+        },
+        update: {
+          status: "VALIDATED",
+          subscriptionId: newSub.id,
+          tranId: trxId,
+          paymentMethod: "NAGAD_DIRECT",
+          rawResponse: verifyRes.raw,
+        },
+      });
+
+      return {
+        redirectUrl: `${host}/payment/success?tran_id=${encodeURIComponent(trxId)}`,
+      };
+    } else if (pharmacy_id) {
+      await (prisma as any).tenant.update({
+        where: { id: pharmacy_id },
+        data: {
+          verificationStatus: "PENDING_APPROVAL",
+          paymentMethod: "NAGAD_DIRECT",
+          manualPaymentTrxId: trxId,
+          manualPaymentAmount: amount,
+        },
+      });
+
+      await (prisma as any).payment.upsert({
+        where: { tranId: payment_ref_id },
+        create: {
+          tenantId: pharmacy_id,
+          amount,
+          currency: "BDT",
+          tranId: trxId,
+          status: "VALIDATED",
+          paymentMethod: "NAGAD_DIRECT",
+          type: "INITIAL_REGISTRATION",
+        },
+        update: {
+          status: "VALIDATED",
+          tranId: trxId,
+          paymentMethod: "NAGAD_DIRECT",
+          rawResponse: verifyRes.raw,
+        },
+      });
+
+      return {
+        redirectUrl: `${host}/register?success=true&trxId=${encodeURIComponent(trxId)}&tenantId=${pharmacy_id}`,
+      };
+    }
+
+    return {
+      redirectUrl: `${host}/payment/success?tran_id=${encodeURIComponent(trxId)}`,
+    };
+  }
+
+  /**
+   * ================= EPS GATEWAY CHECKOUT =================
+   */
+  static async initiateEpsCheckout(data: {
+    pharmacyId?: string;
+    tenantId?: string;
+    planId: string;
+    billingCycle?: string;
+    isUpgrade?: boolean;
+    customerName?: string;
+    customerEmail?: string;
+    customerPhone?: string;
+  }) {
+    const tenantIdentifier = data.tenantId || data.pharmacyId;
+    if (!tenantIdentifier) throw new Error("Pharmacy ID or Tenant ID is required");
+
+    const tenant = await (prisma as any).tenant.findUnique({
+      where: { id: tenantIdentifier },
+    });
+    if (!tenant) throw new Error("Pharmacy record not found");
+
+    const plan = await (prisma as any).subscriptionPlan.findUnique({
+      where: { id: data.planId },
+    });
+    if (!plan) throw new Error("Subscription plan not found");
+
+    const isAnnual = data.billingCycle === "ANNUAL" || data.billingCycle === "YEARLY";
+    const basePrice = Number(plan.price);
+    const planPrice = isAnnual ? Math.round(basePrice * 12 * 0.85) : basePrice;
+    const isTrial = plan.tier === "TRIAL" || !!plan.features?.isTrial;
+    const initialLicenseFee = data.isUpgrade || isTrial ? 0 : 5000;
+    const totalAmount = isTrial ? 0 : planPrice + initialLicenseFee;
+
+    const host = process.env.APP_URL || `http://localhost:${process.env.PORT || 3000}`;
+    const invoiceNumber = `EPS-${tenant.id.slice(0, 8)}-${Date.now().toString().slice(-6)}`;
+    const callbackURL = `${host}/api/payments/eps/callback?pharmacy_id=${tenant.id}&plan_id=${plan.id}${data.isUpgrade ? "&is_upgrade=true" : ""}&cycle=${data.billingCycle || "MONTHLY"}`;
+
+    const epsRes = await createEpsPayment({
+      amount: totalAmount,
+      invoiceNumber,
+      callbackURL,
+      customerName: data.customerName || tenant.name,
+      customerEmail: data.customerEmail || tenant.email,
+      customerPhone: data.customerPhone || tenant.phone,
+    });
+
+    if (epsRes && epsRes.epsURL) {
+      await (prisma as any).payment.create({
+        data: {
+          tenantId: tenant.id,
+          amount: totalAmount,
+          currency: "BDT",
+          tranId: epsRes.paymentID || invoiceNumber,
+          status: "PENDING",
+          paymentMethod: "EPS",
+          type: data.isUpgrade ? "UPGRADE" : "INITIAL_REGISTRATION",
+        },
+      });
+
+      return {
+        success: true,
+        epsURL: epsRes.epsURL,
+        paymentID: epsRes.paymentID,
+      };
+    }
+
+    throw new Error("Failed to initialize EPS checkout session");
+  }
+
+  static async handleEpsCallback(params: {
+    paymentID?: string;
+    status?: string;
+    pharmacy_id?: string;
+    plan_id?: string;
+    is_upgrade?: string;
+    cycle?: string;
+  }) {
+    const host = process.env.CLIENT_URL || "http://localhost:3001";
+    const { paymentID, status, pharmacy_id, plan_id, is_upgrade, cycle } = params;
+    const isUpgrade = is_upgrade === "true";
+
+    if (status === "cancel" || status === "failure") {
+      const returnUrl = isUpgrade
+        ? `${host}/dashboard?payment=cancelled`
+        : `${host}/register?error=Payment+cancelled`;
+      return { redirectUrl: returnUrl };
+    }
+
+    if (!paymentID) throw new Error("EPS payment ID is missing");
+
+    const verifyRes = await verifyEpsPayment(paymentID);
+    if (!verifyRes.success) throw new Error("EPS verification failed");
+
+    const trxId = verifyRes.trxId || paymentID;
+    const amount = verifyRes.amount || 0;
+    const durationDays = cycle === "ANNUAL" || cycle === "YEARLY" ? 365 : 30;
+
+    if (isUpgrade && pharmacy_id && plan_id) {
+      const now = new Date();
+      const endDate = new Date(now.getTime() + durationDays * 24 * 60 * 60 * 1000);
+      const plan = await (prisma as any).subscriptionPlan.findUnique({ where: { id: plan_id } });
+
+      await (prisma as any).subscription.updateMany({
+        where: { tenantId: pharmacy_id, status: "ACTIVE" },
+        data: { status: "EXPIRED" },
+      });
+
+      const newSub = await (prisma as any).subscription.create({
+        data: {
+          tenantId: pharmacy_id,
+          planId: plan_id,
+          status: "ACTIVE",
+          startDate: now,
+          endDate: endDate,
+        },
+      });
+
+      await (prisma as any).tenant.update({
+        where: { id: pharmacy_id },
+        data: {
+          tier: plan ? plan.tier : "STARTER",
+          verificationStatus: "ACTIVE",
+          isActive: true,
+        },
+      });
+
+      await (prisma as any).payment.upsert({
+        where: { tranId: paymentID },
+        create: {
+          tenantId: pharmacy_id,
+          subscriptionId: newSub.id,
+          amount,
+          currency: "BDT",
+          tranId: trxId,
+          status: "VALIDATED",
+          paymentMethod: "EPS",
+          type: "UPGRADE",
+        },
+        update: {
+          status: "VALIDATED",
+          subscriptionId: newSub.id,
+          tranId: trxId,
+          paymentMethod: "EPS",
+          rawResponse: verifyRes.raw,
+        },
+      });
+
+      return {
+        redirectUrl: `${host}/payment/success?tran_id=${encodeURIComponent(trxId)}`,
+      };
+    } else if (pharmacy_id) {
+      await (prisma as any).tenant.update({
+        where: { id: pharmacy_id },
+        data: {
+          verificationStatus: "PENDING_APPROVAL",
+          paymentMethod: "EPS",
+          manualPaymentTrxId: trxId,
+          manualPaymentAmount: amount,
+        },
+      });
+
+      await (prisma as any).payment.upsert({
+        where: { tranId: paymentID },
+        create: {
+          tenantId: pharmacy_id,
+          amount,
+          currency: "BDT",
+          tranId: trxId,
+          status: "VALIDATED",
+          paymentMethod: "EPS",
+          type: "INITIAL_REGISTRATION",
+        },
+        update: {
+          status: "VALIDATED",
+          tranId: trxId,
+          paymentMethod: "EPS",
+          rawResponse: verifyRes.raw,
+        },
+      });
+
+      return {
+        redirectUrl: `${host}/register?success=true&trxId=${encodeURIComponent(trxId)}&tenantId=${pharmacy_id}`,
+      };
+    }
+
+    return {
+      redirectUrl: `${host}/payment/success?tran_id=${encodeURIComponent(trxId)}`,
     };
   }
 }

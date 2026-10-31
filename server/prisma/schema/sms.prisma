@@ -1,4 +1,4 @@
-// ─── Platform Settings (SMS Gateway Configuration) ──────────────────────────
+// ─── Platform Settings (SMS & Payment Gateway Configuration) ──────────────────
 model platform_settings {
   id                  Int       @id @default(autoincrement())
   sms_provider        String?   @default("GREENWEB") // GREENWEB, MIM_SMS, SSL_WIRELESS, CUSTOM
@@ -8,6 +8,37 @@ model platform_settings {
   sms_is_masking      Boolean   @default(false)
   sms_masking_id      String?
   sms_non_masking_id  String?
+
+  // bKash Merchant Configuration
+  bkash_merchant_enabled  Boolean  @default(false)
+  bkash_is_live           Boolean  @default(false)
+  bkash_app_key           String?  @db.VarChar(255)
+  bkash_app_secret        String?  @db.Text
+  bkash_username          String?  @db.VarChar(100)
+  bkash_password          String?  @db.Text
+  
+  // Nagad Merchant Configuration
+  nagad_merchant_enabled  Boolean  @default(false)
+  nagad_is_live           Boolean  @default(false)
+  nagad_merchant_id       String?  @db.VarChar(100)
+  nagad_merchant_phone    String?  @db.VarChar(50)
+  nagad_public_key        String?  @db.Text
+  nagad_private_key       String?  @db.Text
+
+  // EPS Configuration
+  eps_merchant_enabled    Boolean  @default(false)
+  eps_is_live             Boolean  @default(false)
+  eps_merchant_id         String?  @db.VarChar(255)
+  eps_store_id            String?  @db.VarChar(255)
+  eps_username            String?  @db.VarChar(255)
+  eps_password            String?  @db.Text
+  eps_hash_key            String?  @db.Text
+
+  // Fallback Manual MFS
+  manual_payment_active   Boolean  @default(true)
+  bkash_number            String?  @db.VarChar(50)
+  nagad_number            String?  @db.VarChar(50)
+
   updated_at          DateTime  @default(now()) @updatedAt
 }
 

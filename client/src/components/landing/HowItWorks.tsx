@@ -1,52 +1,104 @@
 "use client";
 
 import React from "react";
-import { useSettings } from "@/context/SettingsContext";
-import { CheckCircle2 } from "lucide-react";
+import Link from "next/link";
+import { useLanguage } from "@/context/LanguageContext";
+import { Icon, Logo } from "./LandingIcons";
 
 export function HowItWorks() {
-  const { settings } = useSettings();
-  const steps = settings.howItWorks || [];
+  const { lang, t } = useLanguage();
 
   return (
-    <section id="how-it-works" className="py-24 relative overflow-hidden">
-      <div className="w-full max-w-[1720px] mx-auto px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 2xl:px-16">
-        <div className="text-center max-w-3xl 2xl:max-w-4xl mx-auto space-y-4 mb-16">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider brand-subtle-bg text-brand-primary border brand-subtle-border">
-            Fast Onboarding
-          </div>
-          <h2 className="text-3xl sm:text-4xl 2xl:text-5xl font-extrabold text-slate-900 dark:text-white tracking-tight">
-            How PharmaBiz Works
-          </h2>
-          <p className="text-base sm:text-lg 2xl:text-xl text-slate-600 dark:text-slate-400">
-            Set up your pharmacy in minutes and operate offline without complicated IT infrastructure.
+    <section className="section workflow-section" id="how-it-works">
+      <div className="container workflow-grid">
+        <div className="workflow-copy">
+          <div className="kicker light">{t("howKicker")}</div>
+          <h2>{t("howHeading")}</h2>
+          <p>
+            {t("howSubtitle")}
           </p>
+          <div className="steps">
+            {[
+              ["01", t("howStep1Title"), t("howStep1Desc")],
+              ["02", t("howStep2Title"), t("howStep2Desc")],
+              ["03", t("howStep3Title"), t("howStep3Desc")],
+            ].map(([number, title, text]) => (
+              <div className="step" key={number}>
+                <span>{number}</span>
+                <div>
+                  <strong>{title}</strong>
+                  <p>{text}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+          <Link className="button button-white" href="/register">
+            {t("getStarted")} <Icon name="arrow" />
+          </Link>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8 2xl:gap-10 relative">
-          {steps.map((item, idx) => (
-            <div
-              key={idx}
-              className="relative p-7 sm:p-8 2xl:p-10 rounded-2xl 2xl:rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-lg transition-all space-y-5"
-            >
-              {/* Step Number Pill */}
-              <div className="flex items-center justify-between">
-                <span className="h-10 w-10 rounded-xl bg-brand-primary text-white font-bold text-lg flex items-center justify-center shadow-md">
-                  {item.step || idx + 1}
-                </span>
-                <CheckCircle2 className="h-5 w-5 text-brand-primary opacity-60" />
-              </div>
-
-              <div className="space-y-2">
-                <h3 className="text-xl font-bold text-slate-900 dark:text-white">
-                  {item.title}
-                </h3>
-                <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
-                  {item.description}
-                </p>
-              </div>
+        <div className="workflow-visual">
+          <div className="phone-card">
+            <div className="phone-top">
+              <Logo light />
+              <span className="avatar-small">BP</span>
             </div>
-          ))}
+            <div className="phone-welcome">
+              <small>{lang === "bn" ? "স্বাগতম" : "Welcome back"}</small>
+            </div>
+            <div className="phone-total">
+              <span>{lang === "bn" ? "আজকের বিক্রি" : "Today’s sales"}</span>
+              <strong>৳ 84,250</strong>
+              <i>+12.4%</i>
+            </div>
+            <div className="phone-quick">
+              <span>
+                <i><Icon name="barcode" /></i>
+                {lang === "bn" ? "নতুন বিক্রি" : "New sale"}
+              </span>
+              <span>
+                <i><Icon name="box" /></i>
+                {lang === "bn" ? "ইনভেন্টরি" : "Inventory"}
+              </span>
+              <span>
+                <i><Icon name="report" /></i>
+                {lang === "bn" ? "রিপোর্ট" : "Reports"}
+              </span>
+            </div>
+            <div className="phone-list">
+              <div>
+                <strong>{lang === "bn" ? "সাম্প্রতিক বিক্রি" : "Recent sales"}</strong>
+                <small>{lang === "bn" ? "সব দেখুন" : "View all"}</small>
+              </div>
+              {["Invoice #1842", "Invoice #1841", "Invoice #1840"].map((item, i) => (
+                <div key={item}>
+                  <span className="receipt">
+                    <Icon name="report" size={14} />
+                  </span>
+                  <p>
+                    <strong>{lang === "bn" ? item.replace("Invoice", "চালান") : item}</strong>
+                    <small>{i + 2} {lang === "bn" ? "টি আইটেম · এইমাত্র" : "items · just now"}</small>
+                  </p>
+                  <b>৳ {["1,850", "980", "2,240"][i]}</b>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="scan-beam" />
+          <div className="workflow-float wf-one">
+            <span><Icon name="check" size={16} /></span>
+            <div>
+              <strong>{lang === "bn" ? "ইনভেন্টরি যুক্ত হয়েছে" : "Inventory imported"}</strong>
+              <small>{lang === "bn" ? "২,৮৪০টি পণ্য যুক্ত হয়েছে" : "2,840 products added"}</small>
+            </div>
+          </div>
+          <div className="workflow-float wf-two">
+            <span><Icon name="cloud" size={16} /></span>
+            <div>
+              <strong>{lang === "bn" ? "ডেটা সিঙ্ক হয়েছে" : "Data synced"}</strong>
+              <small>{lang === "bn" ? "এইমাত্র" : "Just now"}</small>
+            </div>
+          </div>
         </div>
       </div>
     </section>

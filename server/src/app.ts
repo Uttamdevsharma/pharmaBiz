@@ -99,7 +99,10 @@ app.use("/api/super-admin/notices", superAdminNoticeRoutes);
 app.use("/api/tenant/notices", tenantNoticeRoutes);
 
 import { QuotationController } from "./modules/super-admin/quotation.controller";
+import { SettingsController } from "./modules/settings/settings.controller";
 app.get("/api/public/quotations/:id", QuotationController.getById);
+app.get("/api/public/platform-settings", SettingsController.getPublicPaymentGateways);
+app.get("/api/public/payment-gateways", SettingsController.getPublicPaymentGateways);
 
 // Fallback & direct gateway callbacks on root /payment/* (Supports both GET and POST)
 app.all("/payment/success", PaymentController.handleSuccess);

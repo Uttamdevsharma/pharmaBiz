@@ -95,20 +95,33 @@ export function SettingsTab() {
 
   const [features, setFeatures] = useState(settings.features || []);
 
-  // Payment Gateway Settings Form State
+  // Payment Gateway Settings Form State (bKash, Nagad, EPS, Manual MFS)
   const [gatewaySettings, setGatewaySettings] = useState<any>({
-    manualBkash: {
-      enabled: true,
-      number: "01700000000",
-      type: "PERSONAL",
-      instructions: "bKash Send Money করুন এই নম্বরে এবং ট্রানজেকশন আইডি দিন।",
-    },
-    sslcommerz: {
-      enabled: false,
-      storeId: "",
-      storePassword: "",
-      isSandbox: true,
-    },
+    bkash_merchant_enabled: false,
+    bkash_is_live: false,
+    bkash_app_key: "",
+    bkash_app_secret: "",
+    bkash_username: "",
+    bkash_password: "",
+
+    nagad_merchant_enabled: false,
+    nagad_is_live: false,
+    nagad_merchant_id: "",
+    nagad_merchant_phone: "",
+    nagad_public_key: "",
+    nagad_private_key: "",
+
+    eps_merchant_enabled: false,
+    eps_is_live: false,
+    eps_merchant_id: "",
+    eps_store_id: "",
+    eps_username: "",
+    eps_password: "",
+    eps_hash_key: "",
+
+    manual_payment_active: true,
+    bkash_number: "01750000000",
+    nagad_number: "01850000000",
   });
   const [loadingGateways, setLoadingGateways] = useState(false);
   const [savingGateways, setSavingGateways] = useState(false);
@@ -1262,22 +1275,487 @@ export function SettingsTab() {
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {/* Gateway 1: Manual bKash Send Money */}
-                  <div className={`p-5 border transition-all ${
-                    gatewaySettings.manualBkash?.enabled
-                      ? "border-pink-500/40 bg-pink-50/20 dark:bg-pink-950/10 shadow-xs"
+                  {/* GATEWAY 1: bKash Tokenized Checkout */}
+                  <div className={`p-5 rounded-2xl border transition-all ${
+                    gatewaySettings.bkash_merchant_enabled
+                      ? "border-[#E2136E]/40 bg-pink-50/20 dark:bg-pink-950/10 shadow-sm"
                       : "border-slate-200 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-850/40 opacity-80"
                   }`}>
                     <div className="flex items-center justify-between pb-3 border-b border-pink-500/10 dark:border-slate-800 mb-4">
                       <div className="flex items-center gap-2.5">
-                        <div className="h-8 w-8 rounded-lg bg-pink-600 text-white flex items-center justify-center font-black text-sm">
+                        <div className="h-9 w-9 rounded-xl bg-[#E2136E] text-white flex items-center justify-center font-black text-sm shadow-sm shadow-[#E2136E]/20">
                           ৳
                         </div>
                         <div>
-                          <h3 className="font-bold text-sm text-slate-900 dark:text-white">
-                            bKash Send Money Gateway
-                          </h3>
-                          <span className="text-[10px] text-pink-600 dark:text-pink-400 font-bold">
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-bold text-sm text-slate-900 dark:text-white">
+                              bKash Tokenized Checkout
+                            </h3>
+                            <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full ${
+                              gatewaySettings.bkash_is_live
+                                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+                                : "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
+                            }`}>
+                              {gatewaySettings.bkash_is_live ? "Live" : "Sandbox"}
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-[#E2136E] font-semibold">
+                            Official Merchant API (Token Grant & PIN Portal)
+                          </span>
+                        </div>
+                      </div>
+
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(gatewaySettings.bkash_merchant_enabled)}
+                          onChange={(e) =>
+                            setGatewaySettings((prev: any) => ({
+                              ...prev,
+                              bkash_merchant_enabled: e.target.checked,
+                            }))
+                          }
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-slate-200 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#E2136E]"></div>
+                      </label>
+                    </div>
+
+                    <div className="space-y-3.5">
+                      <div className="flex items-center justify-between p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                        <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Environment Mode</span>
+                        <div className="flex items-center gap-2">
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(gatewaySettings.bkash_is_live)}
+                              onChange={(e) =>
+                                setGatewaySettings((prev: any) => ({
+                                  ...prev,
+                                  bkash_is_live: e.target.checked,
+                                }))
+                              }
+                              className="sr-only peer"
+                            />
+                            <div className="w-9 h-5 bg-slate-300 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                          </label>
+                          <span className="text-xs font-bold font-mono">
+                            {gatewaySettings.bkash_is_live ? "Production (Live)" : "Sandbox (Test)"}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                            App Key *
+                          </label>
+                          <input
+                            type="text"
+                            value={gatewaySettings.bkash_app_key || ""}
+                            onChange={(e) =>
+                              setGatewaySettings((prev: any) => ({
+                                ...prev,
+                                bkash_app_key: e.target.value,
+                              }))
+                            }
+                            placeholder="bKash Merchant App Key"
+                            className="w-full h-9 px-3 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-mono focus:outline-none focus:border-[#E2136E]"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                            App Secret *
+                          </label>
+                          <input
+                            type="password"
+                            value={gatewaySettings.bkash_app_secret || ""}
+                            onChange={(e) =>
+                              setGatewaySettings((prev: any) => ({
+                                ...prev,
+                                bkash_app_secret: e.target.value,
+                              }))
+                            }
+                            placeholder="••••••••••••••••"
+                            className="w-full h-9 px-3 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-mono focus:outline-none focus:border-[#E2136E]"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                            Username *
+                          </label>
+                          <input
+                            type="text"
+                            value={gatewaySettings.bkash_username || ""}
+                            onChange={(e) =>
+                              setGatewaySettings((prev: any) => ({
+                                ...prev,
+                                bkash_username: e.target.value,
+                              }))
+                            }
+                            placeholder="bKash API Username"
+                            className="w-full h-9 px-3 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-mono focus:outline-none focus:border-[#E2136E]"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                            Password *
+                          </label>
+                          <input
+                            type="password"
+                            value={gatewaySettings.bkash_password || ""}
+                            onChange={(e) =>
+                              setGatewaySettings((prev: any) => ({
+                                ...prev,
+                                bkash_password: e.target.value,
+                              }))
+                            }
+                            placeholder="••••••••••••••••"
+                            className="w-full h-9 px-3 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-mono focus:outline-none focus:border-[#E2136E]"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="text-[10px] text-slate-400 font-mono bg-white/60 dark:bg-slate-900/60 p-2 rounded-lg border border-slate-200/60 dark:border-slate-800">
+                        Endpoint: {gatewaySettings.bkash_is_live ? "https://tokenized.pay.bka.sh/v1.2.0-beta" : "https://tokenized.sandbox.bka.sh/v1.2.0-beta"}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* GATEWAY 2: Nagad Merchant Gateway */}
+                  <div className={`p-5 rounded-2xl border transition-all ${
+                    gatewaySettings.nagad_merchant_enabled
+                      ? "border-[#F7941D]/40 bg-amber-50/20 dark:bg-amber-950/10 shadow-sm"
+                      : "border-slate-200 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-850/40 opacity-80"
+                  }`}>
+                    <div className="flex items-center justify-between pb-3 border-b border-amber-500/10 dark:border-slate-800 mb-4">
+                      <div className="flex items-center gap-2.5">
+                        <div className="h-9 w-9 rounded-xl bg-[#F7941D] text-white flex items-center justify-center font-black text-sm shadow-sm shadow-[#F7941D]/20">
+                          ন
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-bold text-sm text-slate-900 dark:text-white">
+                              Nagad Merchant Gateway
+                            </h3>
+                            <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full ${
+                              gatewaySettings.nagad_is_live
+                                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+                                : "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
+                            }`}>
+                              {gatewaySettings.nagad_is_live ? "Live" : "Sandbox"}
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-[#F7941D] font-semibold">
+                            Official Nagad Direct Checkout (RSA PGW)
+                          </span>
+                        </div>
+                      </div>
+
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(gatewaySettings.nagad_merchant_enabled)}
+                          onChange={(e) =>
+                            setGatewaySettings((prev: any) => ({
+                              ...prev,
+                              nagad_merchant_enabled: e.target.checked,
+                            }))
+                          }
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-slate-200 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#F7941D]"></div>
+                      </label>
+                    </div>
+
+                    <div className="space-y-3.5">
+                      <div className="flex items-center justify-between p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                        <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Environment Mode</span>
+                        <div className="flex items-center gap-2">
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(gatewaySettings.nagad_is_live)}
+                              onChange={(e) =>
+                                setGatewaySettings((prev: any) => ({
+                                  ...prev,
+                                  nagad_is_live: e.target.checked,
+                                }))
+                              }
+                              className="sr-only peer"
+                            />
+                            <div className="w-9 h-5 bg-slate-300 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                          </label>
+                          <span className="text-xs font-bold font-mono">
+                            {gatewaySettings.nagad_is_live ? "Production (Live)" : "Sandbox (Test)"}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                            Merchant ID *
+                          </label>
+                          <input
+                            type="text"
+                            value={gatewaySettings.nagad_merchant_id || ""}
+                            onChange={(e) =>
+                              setGatewaySettings((prev: any) => ({
+                                ...prev,
+                                nagad_merchant_id: e.target.value,
+                              }))
+                            }
+                            placeholder="e.g. 68300200..."
+                            className="w-full h-9 px-3 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-mono focus:outline-none focus:border-[#F7941D]"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                            Merchant Phone Number
+                          </label>
+                          <input
+                            type="text"
+                            value={gatewaySettings.nagad_merchant_phone || ""}
+                            onChange={(e) =>
+                              setGatewaySettings((prev: any) => ({
+                                ...prev,
+                                nagad_merchant_phone: e.target.value,
+                              }))
+                            }
+                            placeholder="01XXXXXXXXX"
+                            className="w-full h-9 px-3 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-mono focus:outline-none focus:border-[#F7941D]"
+                          />
+                        </div>
+
+                        <div className="sm:col-span-2">
+                          <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                            Nagad Public Key (PGW)
+                          </label>
+                          <textarea
+                            rows={2}
+                            value={gatewaySettings.nagad_public_key || ""}
+                            onChange={(e) =>
+                              setGatewaySettings((prev: any) => ({
+                                ...prev,
+                                nagad_public_key: e.target.value,
+                              }))
+                            }
+                            placeholder="-----BEGIN PUBLIC KEY-----..."
+                            className="w-full p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-[11px] font-mono focus:outline-none focus:border-[#F7941D]"
+                          />
+                        </div>
+
+                        <div className="sm:col-span-2">
+                          <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                            Merchant Private Key
+                          </label>
+                          <textarea
+                            rows={2}
+                            value={gatewaySettings.nagad_private_key || ""}
+                            onChange={(e) =>
+                              setGatewaySettings((prev: any) => ({
+                                ...prev,
+                                nagad_private_key: e.target.value,
+                              }))
+                            }
+                            placeholder="••••••••••••••••"
+                            className="w-full p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-[11px] font-mono focus:outline-none focus:border-[#F7941D]"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* GATEWAY 3: EPS Payment Gateway */}
+                  <div className={`p-5 rounded-2xl border transition-all ${
+                    gatewaySettings.eps_merchant_enabled
+                      ? "border-[#0D6EFD]/40 bg-blue-50/20 dark:bg-blue-950/10 shadow-sm"
+                      : "border-slate-200 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-850/40 opacity-80"
+                  }`}>
+                    <div className="flex items-center justify-between pb-3 border-b border-blue-500/10 dark:border-slate-800 mb-4">
+                      <div className="flex items-center gap-2.5">
+                        <div className="h-9 w-9 rounded-xl bg-[#0D6EFD] text-white flex items-center justify-center font-black text-sm shadow-sm shadow-[#0D6EFD]/20">
+                          EPS
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-bold text-sm text-slate-900 dark:text-white">
+                              EPS Payment Gateway
+                            </h3>
+                            <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full ${
+                              gatewaySettings.eps_is_live
+                                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+                                : "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
+                            }`}>
+                              {gatewaySettings.eps_is_live ? "Live" : "Sandbox"}
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-[#0D6EFD] font-semibold">
+                            Cards & Multi-Bank Internet Banking
+                          </span>
+                        </div>
+                      </div>
+
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(gatewaySettings.eps_merchant_enabled)}
+                          onChange={(e) =>
+                            setGatewaySettings((prev: any) => ({
+                              ...prev,
+                              eps_merchant_enabled: e.target.checked,
+                            }))
+                          }
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-slate-200 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#0D6EFD]"></div>
+                      </label>
+                    </div>
+
+                    <div className="space-y-3.5">
+                      <div className="flex items-center justify-between p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                        <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Environment Mode</span>
+                        <div className="flex items-center gap-2">
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(gatewaySettings.eps_is_live)}
+                              onChange={(e) =>
+                                setGatewaySettings((prev: any) => ({
+                                  ...prev,
+                                  eps_is_live: e.target.checked,
+                                }))
+                              }
+                              className="sr-only peer"
+                            />
+                            <div className="w-9 h-5 bg-slate-300 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                          </label>
+                          <span className="text-xs font-bold font-mono">
+                            {gatewaySettings.eps_is_live ? "Production (Live)" : "Sandbox (Test)"}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                            Merchant ID
+                          </label>
+                          <input
+                            type="text"
+                            value={gatewaySettings.eps_merchant_id || ""}
+                            onChange={(e) =>
+                              setGatewaySettings((prev: any) => ({
+                                ...prev,
+                                eps_merchant_id: e.target.value,
+                              }))
+                            }
+                            placeholder="EPS Merchant ID"
+                            className="w-full h-9 px-3 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-mono focus:outline-none focus:border-[#0D6EFD]"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                            Store ID
+                          </label>
+                          <input
+                            type="text"
+                            value={gatewaySettings.eps_store_id || ""}
+                            onChange={(e) =>
+                              setGatewaySettings((prev: any) => ({
+                                ...prev,
+                                eps_store_id: e.target.value,
+                              }))
+                            }
+                            placeholder="EPS Store ID"
+                            className="w-full h-9 px-3 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-mono focus:outline-none focus:border-[#0D6EFD]"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                            Username
+                          </label>
+                          <input
+                            type="text"
+                            value={gatewaySettings.eps_username || ""}
+                            onChange={(e) =>
+                              setGatewaySettings((prev: any) => ({
+                                ...prev,
+                                eps_username: e.target.value,
+                              }))
+                            }
+                            placeholder="API Username"
+                            className="w-full h-9 px-3 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-mono focus:outline-none focus:border-[#0D6EFD]"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                            Password
+                          </label>
+                          <input
+                            type="password"
+                            value={gatewaySettings.eps_password || ""}
+                            onChange={(e) =>
+                              setGatewaySettings((prev: any) => ({
+                                ...prev,
+                                eps_password: e.target.value,
+                              }))
+                            }
+                            placeholder="••••••••••••••••"
+                            className="w-full h-9 px-3 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-mono focus:outline-none focus:border-[#0D6EFD]"
+                          />
+                        </div>
+
+                        <div className="sm:col-span-2">
+                          <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                            EPS Hash / Secret Key
+                          </label>
+                          <input
+                            type="password"
+                            value={gatewaySettings.eps_hash_key || ""}
+                            onChange={(e) =>
+                              setGatewaySettings((prev: any) => ({
+                                ...prev,
+                                eps_hash_key: e.target.value,
+                              }))
+                            }
+                            placeholder="••••••••••••••••"
+                            className="w-full h-9 px-3 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-mono focus:outline-none focus:border-[#0D6EFD]"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* GATEWAY 4: Fallback Manual MFS (bKash & Nagad) */}
+                  <div className={`p-5 rounded-2xl border transition-all ${
+                    gatewaySettings.manual_payment_active
+                      ? "border-emerald-500/40 bg-emerald-50/20 dark:bg-emerald-950/10 shadow-sm"
+                      : "border-slate-200 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-850/40 opacity-80"
+                  }`}>
+                    <div className="flex items-center justify-between pb-3 border-b border-emerald-500/10 dark:border-slate-800 mb-4">
+                      <div className="flex items-center gap-2.5">
+                        <div className="h-9 w-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-black text-sm shadow-sm shadow-emerald-600/20">
+                          MFS
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-bold text-sm text-slate-900 dark:text-white">
+                              Fallback Manual MFS
+                            </h3>
+                            <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+                              Send Money
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-emerald-600 font-semibold">
                             Manual TrxID & Screenshot Verification
                           </span>
                         </div>
@@ -1286,219 +1764,62 @@ export function SettingsTab() {
                       <label className="relative inline-flex items-center cursor-pointer">
                         <input
                           type="checkbox"
-                          checked={Boolean(gatewaySettings.manualBkash?.enabled)}
+                          checked={Boolean(gatewaySettings.manual_payment_active)}
                           onChange={(e) =>
                             setGatewaySettings((prev: any) => ({
                               ...prev,
-                              manualBkash: {
-                                ...prev.manualBkash,
-                                enabled: e.target.checked,
-                              },
+                              manual_payment_active: e.target.checked,
                             }))
                           }
                           className="sr-only peer"
                         />
-                        <div className="w-11 h-6 bg-slate-200 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-pink-600"></div>
+                        <div className="w-11 h-6 bg-slate-200 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
                       </label>
                     </div>
 
-                    <div className="space-y-4">
+                    <div className="space-y-3.5">
                       <div>
-                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                          bKash Number (Recieving Account) *
+                        <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          bKash Send Money Number *
                         </label>
                         <input
                           type="text"
-                          value={gatewaySettings.manualBkash?.number || ""}
+                          value={gatewaySettings.bkash_number || ""}
                           onChange={(e) =>
                             setGatewaySettings((prev: any) => ({
                               ...prev,
-                              manualBkash: {
-                                ...prev.manualBkash,
-                                number: e.target.value,
-                              },
+                              bkash_number: e.target.value,
                             }))
                           }
-                          placeholder="e.g. 01700-000000"
-                          className="w-full h-10 px-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-mono focus:outline-none focus:border-pink-500 font-bold"
-                        />
-                        <p className="text-[10px] text-slate-400 mt-1">
-                          The bKash phone number displayed to pharmacy owners for Send Money.
-                        </p>
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                          Account Type
-                        </label>
-                        <select
-                          value={gatewaySettings.manualBkash?.type || "PERSONAL"}
-                          onChange={(e) =>
-                            setGatewaySettings((prev: any) => ({
-                              ...prev,
-                              manualBkash: {
-                                ...prev.manualBkash,
-                                type: e.target.value,
-                              },
-                            }))
-                          }
-                          className="w-full h-10 px-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold focus:outline-none focus:border-pink-500"
-                        >
-                          <option value="PERSONAL">Personal Account (Send Money)</option>
-                          <option value="AGENT">Agent Account (Cash Out)</option>
-                          <option value="MERCHANT">Merchant Account (Payment)</option>
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                          Instructions for Applicant
-                        </label>
-                        <textarea
-                          rows={3}
-                          value={gatewaySettings.manualBkash?.instructions || ""}
-                          onChange={(e) =>
-                            setGatewaySettings((prev: any) => ({
-                              ...prev,
-                              manualBkash: {
-                                ...prev.manualBkash,
-                                instructions: e.target.value,
-                              },
-                            }))
-                          }
-                          placeholder="যেকোনো বিকাশ একাউন্ট থেকে উপরে দেওয়া নম্বরে নির্ধারিত ফি Send Money করুন..."
-                          className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs focus:outline-none focus:border-pink-500"
+                          placeholder="e.g. 01750000000"
+                          className="w-full h-9 px-3 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-mono font-bold focus:outline-none focus:border-emerald-500"
                         />
                       </div>
 
-                      {/* Live Customer Preview */}
-                      <div className="p-3 bg-white dark:bg-slate-900 border border-pink-500/20 rounded-none space-y-1.5">
-                        <div className="text-[10px] uppercase font-bold text-slate-400 flex items-center justify-between">
-                          <span>Live Customer Preview</span>
-                          <span className="text-pink-600 font-bold">
-                            {gatewaySettings.manualBkash?.enabled ? "Active on Portal" : "Disabled"}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between font-mono text-xs">
-                          <span className="text-slate-500">Send Money To:</span>
-                          <strong className="text-pink-600 font-bold">
-                            {gatewaySettings.manualBkash?.number || "Not Set"} ({gatewaySettings.manualBkash?.type || "PERSONAL"})
-                          </strong>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Gateway 2: Automated SSLCommerz */}
-                  <div className={`p-5 border transition-all ${
-                    gatewaySettings.sslcommerz?.enabled
-                      ? "border-sky-500/40 bg-sky-50/20 dark:bg-sky-950/10 shadow-xs"
-                      : "border-slate-200 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-850/40 opacity-80"
-                  }`}>
-                    <div className="flex items-center justify-between pb-3 border-b border-sky-500/10 dark:border-slate-800 mb-4">
-                      <div className="flex items-center gap-2.5">
-                        <div className="h-8 w-8 rounded-lg bg-sky-600 text-white flex items-center justify-center font-black text-sm">
-                          <CreditCard className="h-4 w-4" />
-                        </div>
-                        <div>
-                          <h3 className="font-bold text-sm text-slate-900 dark:text-white">
-                            SSLCommerz Automated Gateway
-                          </h3>
-                          <span className="text-[10px] text-sky-600 dark:text-sky-400 font-bold">
-                            Instant Credit Card / Internet Banking / MFS
-                          </span>
-                        </div>
-                      </div>
-
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={Boolean(gatewaySettings.sslcommerz?.enabled)}
-                          onChange={(e) =>
-                            setGatewaySettings((prev: any) => ({
-                              ...prev,
-                              sslcommerz: {
-                                ...prev.sslcommerz,
-                                enabled: e.target.checked,
-                              },
-                            }))
-                          }
-                          className="sr-only peer"
-                        />
-                        <div className="w-11 h-6 bg-slate-200 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-sky-600"></div>
-                      </label>
-                    </div>
-
-                    <div className="space-y-4">
                       <div>
-                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                          Store ID
+                        <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          Nagad Send Money Number *
                         </label>
                         <input
                           type="text"
-                          value={gatewaySettings.sslcommerz?.storeId || ""}
+                          value={gatewaySettings.nagad_number || ""}
                           onChange={(e) =>
                             setGatewaySettings((prev: any) => ({
                               ...prev,
-                              sslcommerz: {
-                                ...prev.sslcommerz,
-                                storeId: e.target.value,
-                              },
+                              nagad_number: e.target.value,
                             }))
                           }
-                          placeholder="e.g. testbox_live"
-                          className="w-full h-10 px-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-mono focus:outline-none focus:border-sky-500 font-bold"
+                          placeholder="e.g. 01850000000"
+                          className="w-full h-9 px-3 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-mono font-bold focus:outline-none focus:border-emerald-500"
                         />
                       </div>
 
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                          Store Password
-                        </label>
-                        <input
-                          type="password"
-                          value={gatewaySettings.sslcommerz?.storePassword || ""}
-                          onChange={(e) =>
-                            setGatewaySettings((prev: any) => ({
-                              ...prev,
-                              sslcommerz: {
-                                ...prev.sslcommerz,
-                                storePassword: e.target.value,
-                              },
-                            }))
-                          }
-                          placeholder="••••••••••••"
-                          className="w-full h-10 px-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-mono focus:outline-none focus:border-sky-500"
-                        />
-                      </div>
-
-                      <div className="flex items-center gap-2 pt-1">
-                        <input
-                          type="checkbox"
-                          id="ssl-sandbox"
-                          checked={Boolean(gatewaySettings.sslcommerz?.isSandbox)}
-                          onChange={(e) =>
-                            setGatewaySettings((prev: any) => ({
-                              ...prev,
-                              sslcommerz: {
-                                ...prev.sslcommerz,
-                                isSandbox: e.target.checked,
-                              },
-                            }))
-                          }
-                          className="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500"
-                        />
-                        <label htmlFor="ssl-sandbox" className="text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer">
-                          Sandbox / Test Mode (Use sandbox.sslcommerz.com)
-                        </label>
-                      </div>
-
-                      <div className="p-3 bg-white dark:bg-slate-900 border border-sky-500/20 rounded-none text-xs text-slate-500 space-y-1">
-                        <div className="font-bold text-slate-700 dark:text-slate-300">
-                          {gatewaySettings.sslcommerz?.enabled ? "Online Gateway Active" : "Online Gateway Disabled"}
+                      <div className="p-3 bg-white dark:bg-slate-900 border border-emerald-500/20 rounded-xl space-y-1">
+                        <div className="text-[10px] uppercase font-bold text-slate-400">
+                          Applicant Instructions:
                         </div>
-                        <p className="text-[11px] leading-relaxed">
-                          Requires active merchant credentials from SSLCommerz. If disabled, all payments route through manual bKash Send Money.
+                        <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
+                          Applicants can send funds to either number, copy the transaction ID, and upload their payment screenshot during registration or subscription upgrade.
                         </p>
                       </div>
                     </div>

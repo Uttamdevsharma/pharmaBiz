@@ -12,8 +12,10 @@ export const createPlanSchema = z.object({
   trialDays: z.number().int().min(0).optional(),
   isTrial: z.boolean().optional(),
   isCustom: z.boolean().optional(),
+  isPopular: z.boolean().optional(),
   whatsappNumber: z.string().optional(),
   customMessage: z.string().optional(),
+  featureList: z.array(z.string()).optional(),
   features: z.record(z.string(), z.any()).optional(),
   isActive: z.boolean().default(true),
 });
@@ -29,8 +31,10 @@ export const updatePlanSchema = z.object({
   trialDays: z.number().int().min(0).optional(),
   isTrial: z.boolean().optional(),
   isCustom: z.boolean().optional(),
+  isPopular: z.boolean().optional(),
   whatsappNumber: z.string().optional(),
   customMessage: z.string().optional(),
+  featureList: z.array(z.string()).optional(),
   features: z.record(z.string(), z.any()).optional(),
   isActive: z.boolean().optional(),
 });
@@ -109,4 +113,3 @@ export type UpdateRoleInput = z.infer<typeof updateRoleSchema>;
 export type CreatePlatformStaffInput = z.infer<typeof createPlatformStaffSchema>;
 export type UpdatePlatformStaffInput = z.infer<typeof updatePlatformStaffSchema>;
 export type UpdatePlatformRolePermissionsInput = z.infer<typeof updatePlatformRolePermissionsSchema>;
-

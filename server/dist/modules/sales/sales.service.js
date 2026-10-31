@@ -88,21 +88,11 @@ class SalesService {
                 }
                 if (item.inventoryLocationId) {
                     targetLocation = (targetBatch.locations || []).find((l) => l.id === item.inventoryLocationId);
-                    if (!targetLocation || targetLocation.quantity < totalBaseUnitsNeeded) {
-                        throw new Error(`Selected physical location for "${prod.name}" has insufficient stock (${targetLocation?.quantity || 0} available, ${totalBaseUnitsNeeded} needed).`);
-                    }
                 }
-                else {
-                    // Find first location with enough stock (FEFO within batch)
-                    const sortedLocations = (targetBatch.locations || []).sort((a, b) => a.quantity - b.quantity);
-                    targetLocation = sortedLocations.find((l) => l.quantity >= totalBaseUnitsNeeded);
-                    if (!targetLocation && (targetBatch.locations || []).length > 0) {
-                        // Try to combine from locations
-                        targetLocation = (targetBatch.locations || [])[0];
-                        if (targetLocation && targetLocation.quantity < totalBaseUnitsNeeded) {
-                            throw new Error(`No single physical location has enough stock for "${prod.name}". Please select a specific location with sufficient quantity.`);
-                        }
-                    }
+                if (!targetLocation && (targetBatch.locations || []).length > 0) {
+                    // Find location with highest stock in this batch
+                    const sortedLocations = (targetBatch.locations || []).sort((a, b) => b.quantity - a.quantity);
+                    targetLocation = sortedLocations.find((l) => l.quantity >= totalBaseUnitsNeeded) || sortedLocations[0];
                 }
             }
             else {
@@ -156,15 +146,6 @@ class SalesService {
                 purchasePrice: targetBatch.purchasePrice || null,
                 subTotal: itemSubTotal,
             });
-        }
-        // Validate all locations have enough stock before proceeding
-        for (const deduction of stockDeductions) {
-            if (deduction.inventoryLocationId && deduction.inventoryLocationData) {
-                const loc = deduction.inventoryLocationData;
-                if (loc.quantity < deduction.quantityToDeduct) {
-                    throw new Error(`Insufficient stock at physical location for this sale. Location has ${loc.quantity}, need ${deduction.quantityToDeduct}.`);
-                }
-            }
         }
         // 6. Discount & Tax calculations (Auto-rounded to integer)
         let discountAmount = 0;
@@ -243,10 +224,13 @@ class SalesService {
                     data: { quantity: { decrement: deduction.quantityToDeduct } },
                 });
                 if (deduction.inventoryLocationId && locData) {
-                    await tx.inventoryLocation.update({
-                        where: { id: deduction.inventoryLocationId },
-                        data: { quantity: { decrement: deduction.quantityToDeduct } },
-                    });
+                    const locDeduct = Math.min(Number(locData.quantity) || 0, deduction.quantityToDeduct);
+                    if (locDeduct > 0) {
+                        await tx.inventoryLocation.update({
+                            where: { id: deduction.inventoryLocationId },
+                            data: { quantity: { decrement: locDeduct } },
+                        });
+                    }
                 }
                 await tx.stockMovement.create({
                     data: {
@@ -275,12 +259,12 @@ class SalesService {
                     if (!financialAccount) {
                         throw new Error("Selected financial account is invalid or inactive.");
                     }
-                    if (financialAccount.branchId && financialAccount.branchId !== data.branchId) {
-                        throw new Error("Selected financial account does not belong to the active branch.");
+                    if (financialAccount.type === "CASH" && financialAccount.branchId && financialAccount.branchId !== data.branchId) {
+                        throw new Error("Selected cash account does not belong to the active branch.");
                     }
                 }
                 else {
-                    // 2. If not explicitly passed, resolve matching account for this specific branch
+                    // 2. If not explicitly passed, resolve matching account for this specific branch or central
                     const pMethod = String(data.paymentMethod).toUpperCase();
                     const notesLower = (data.notes || "").toLowerCase();
                     if (pMethod === "BKASH" || (pMethod === "MOBILE" && notesLower.includes("bkash"))) {
@@ -295,6 +279,20 @@ class SalesService {
                                 ],
                             },
                         });
+                        // Fallback to central/owner bKash account
+                        if (!financialAccount) {
+                            financialAccount = await tx.financialAccount.findFirst({
+                                where: {
+                                    tenantId,
+                                    isActive: true,
+                                    OR: [
+                                        { type: "BKASH" },
+                                        { name: { contains: "bkash", mode: "insensitive" } },
+                                    ],
+                                },
+                                orderBy: { isDefault: "desc" },
+                            });
+                        }
                     }
                     else if (pMethod === "NAGAD" || (pMethod === "MOBILE" && notesLower.includes("nagad"))) {
                         financialAccount = await tx.financialAccount.findFirst({
@@ -308,6 +306,20 @@ class SalesService {
                                 ],
                             },
                         });
+                        // Fallback to central/owner Nagad account
+                        if (!financialAccount) {
+                            financialAccount = await tx.financialAccount.findFirst({
+                                where: {
+                                    tenantId,
+                                    isActive: true,
+                                    OR: [
+                                        { type: "NAGAD" },
+                                        { name: { contains: "nagad", mode: "insensitive" } },
+                                    ],
+                                },
+                                orderBy: { isDefault: "desc" },
+                            });
+                        }
                     }
                     else if (pMethod === "BANK" || pMethod === "CARD") {
                         if (data.bankName) {
@@ -329,6 +341,17 @@ class SalesService {
                                 where: {
                                     tenantId,
                                     branchId: data.branchId,
+                                    type: "BANK",
+                                    isActive: true,
+                                },
+                                orderBy: { isDefault: "desc" },
+                            });
+                        }
+                        // Fallback to central/owner Bank account
+                        if (!financialAccount) {
+                            financialAccount = await tx.financialAccount.findFirst({
+                                where: {
+                                    tenantId,
                                     type: "BANK",
                                     isActive: true,
                                 },

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { fetchApi } from "@/lib/api";
 import { OwnerModule } from "./DashboardSidebar";
 import {
@@ -12,7 +12,7 @@ import {
   ArrowLeft,
   Loader2,
   AlertCircle,
-  CheckCircle2,
+  Store,
 } from "lucide-react";
 import Swal from "sweetalert2";
 
@@ -55,6 +55,13 @@ export function CreateFinancialAccountView({ onNavigate }: CreateFinancialAccoun
   // Category Tab: CASH | BANK | MFS
   const [accountCategory, setAccountCategory] = useState<"CASH" | "BANK" | "MFS">("BANK");
 
+  // Branches list
+  const [branches, setBranches] = useState<{ id: string; name: string }[]>([]);
+  const [selectedBranchId, setSelectedBranchId] = useState<string>("");
+
+  // Scope for digital/bank: CENTRAL (All branches) vs BRANCH
+  const [accountScope, setAccountScope] = useState<"CENTRAL" | "BRANCH">("CENTRAL");
+
   // Form fields
   const [accountName, setAccountName] = useState("");
   const [selectedBank, setSelectedBank] = useState(BANGLADESH_BANKS[0]);
@@ -72,6 +79,41 @@ export function CreateFinancialAccountView({ onNavigate }: CreateFinancialAccoun
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Load branches
+  useEffect(() => {
+    fetchApi<any>("/branches")
+      .then((res) => {
+        if (res.success && Array.isArray(res.data)) {
+          setBranches(res.data);
+          if (res.data.length > 0) {
+            setSelectedBranchId(res.data[0].id);
+          }
+        }
+      })
+      .catch((err) => console.error("Failed to load branches", err));
+  }, []);
+
+  // Update default name when branch changes if CASH
+  const handleBranchChange = (branchId: string) => {
+    setSelectedBranchId(branchId);
+    if (accountCategory === "CASH") {
+      const b = branches.find((item) => item.id === branchId);
+      if (b) {
+        setAccountName(`Cash Drawer - ${b.name}`);
+      }
+    }
+  };
+
+  const handleCategorySwitch = (cat: "CASH" | "BANK" | "MFS") => {
+    setAccountCategory(cat);
+    if (cat === "CASH") {
+      const b = branches.find((item) => item.id === selectedBranchId) || branches[0];
+      setAccountName(b ? `Cash Drawer - ${b.name}` : "Cash Drawer");
+    } else {
+      setAccountName("");
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -82,11 +124,17 @@ export function CreateFinancialAccountView({ onNavigate }: CreateFinancialAccoun
     let finalAccountNumber: string | null = null;
     let finalRoutingNumber: string | null = null;
     let finalBranchName: string | null = null;
+    let finalBranchId = selectedBranchId;
 
     if (accountCategory === "CASH") {
       finalType = "CASH";
+      if (!finalBranchId) {
+        setError("Please select the specific branch for this cash drawer.");
+        return;
+      }
       if (!finalName) {
-        finalName = "Main Cash Register";
+        const b = branches.find((item) => item.id === finalBranchId);
+        finalName = b ? `Cash Drawer - ${b.name}` : "Branch Cash Drawer";
       }
     } else if (accountCategory === "BANK") {
       finalType = "BANK";
@@ -105,6 +153,10 @@ export function CreateFinancialAccountView({ onNavigate }: CreateFinancialAccoun
       if (!finalName) {
         finalName = `${finalBankName} - ${finalAccountNumber.slice(-4)}`;
       }
+      // If Central, branchId defaults to the first branch (head branch) for relation constraints
+      if (accountScope === "CENTRAL" && branches.length > 0) {
+        finalBranchId = branches[0].id;
+      }
     } else if (accountCategory === "MFS") {
       finalType = mfsProvider === "BKASH" ? "BKASH" : mfsProvider === "NAGAD" ? "NAGAD" : "MOBILE";
       if (!walletNumber.trim()) {
@@ -116,6 +168,9 @@ export function CreateFinancialAccountView({ onNavigate }: CreateFinancialAccoun
       if (!finalName) {
         finalName = `${provName} ${mfsType === "MERCHANT" ? "Merchant" : mfsType === "AGENT" ? "Agent" : "Personal"} (${walletNumber.slice(-4)})`;
       }
+      if (accountScope === "CENTRAL" && branches.length > 0) {
+        finalBranchId = branches[0].id;
+      }
     }
 
     const balanceNum = parseFloat(initialBalance) || 0;
@@ -125,6 +180,7 @@ export function CreateFinancialAccountView({ onNavigate }: CreateFinancialAccoun
       const res = await fetchApi<any>("/accounting/accounts", {
         method: "POST",
         body: JSON.stringify({
+          branchId: finalBranchId,
           name: finalName,
           type: finalType,
           bankName: finalBankName,
@@ -164,10 +220,10 @@ export function CreateFinancialAccountView({ onNavigate }: CreateFinancialAccoun
 
   return (
     <div className="space-y-4 w-full mx-auto">
-      {/* Header - Prominent Bold Heading, Balanced Actions */}
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
         <h1 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-          <PlusCircle className="h-5 w-5 text-brand-primary" />
+          <PlusCircle className="h-5 w-5 text-emerald-600" />
           Create Financial Account
         </h1>
 
@@ -183,15 +239,15 @@ export function CreateFinancialAccountView({ onNavigate }: CreateFinancialAccoun
         )}
       </div>
 
-      {/* Account Type Selector Tabs - Clean, Compact, Sharp */}
+      {/* Account Type Selector Tabs - Sharp, Rounded None */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-2 rounded-none">
         <div className="grid grid-cols-3 gap-2">
           <button
             type="button"
-            onClick={() => setAccountCategory("BANK")}
+            onClick={() => handleCategorySwitch("BANK")}
             className={`flex items-center justify-center gap-2 py-2 px-3 text-xs sm:text-sm font-semibold rounded-none transition border ${
               accountCategory === "BANK"
-                ? "bg-brand-primary text-white border-brand-primary"
+                ? "bg-emerald-600 text-white border-emerald-600"
                 : "bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700"
             }`}
           >
@@ -201,28 +257,28 @@ export function CreateFinancialAccountView({ onNavigate }: CreateFinancialAccoun
 
           <button
             type="button"
-            onClick={() => setAccountCategory("CASH")}
+            onClick={() => handleCategorySwitch("CASH")}
             className={`flex items-center justify-center gap-2 py-2 px-3 text-xs sm:text-sm font-semibold rounded-none transition border ${
               accountCategory === "CASH"
-                ? "bg-brand-primary text-white border-brand-primary"
+                ? "bg-emerald-600 text-white border-emerald-600"
                 : "bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700"
             }`}
           >
             <Banknote className="h-4 w-4" />
-            <span>Cash Drawer</span>
+            <span>Branch Cash Drawer</span>
           </button>
 
           <button
             type="button"
-            onClick={() => setAccountCategory("MFS")}
+            onClick={() => handleCategorySwitch("MFS")}
             className={`flex items-center justify-center gap-2 py-2 px-3 text-xs sm:text-sm font-semibold rounded-none transition border ${
               accountCategory === "MFS"
-                ? "bg-brand-primary text-white border-brand-primary"
+                ? "bg-emerald-600 text-white border-emerald-600"
                 : "bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700"
             }`}
           >
             <Smartphone className="h-4 w-4" />
-            <span>MFS (bKash / Nagad)</span>
+            <span>Mobile Banking (bKash/Nagad)</span>
           </button>
         </div>
       </div>
@@ -237,112 +293,180 @@ export function CreateFinancialAccountView({ onNavigate }: CreateFinancialAccoun
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-5">
-          {/* 1. BANK ACCOUNT FIELDS */}
-          {accountCategory === "BANK" && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                  Bank Name <span className="text-rose-500">*</span>
-                </label>
-                <select
-                  value={selectedBank}
-                  onChange={(e) => setSelectedBank(e.target.value)}
-                  className="w-full h-9 sm:h-10 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-none text-xs sm:text-sm font-medium text-slate-900 dark:text-white outline-none focus:border-brand-primary"
-                >
-                  {BANGLADESH_BANKS.map((b) => (
-                    <option key={b} value={b}>
-                      {b}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {selectedBank === "Other Commercial Bank" && (
+          {/* 1. CASH DRAWER FIELDS (Branch Selection Mandatory) */}
+          {accountCategory === "CASH" && (
+            <div className="p-4 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/60 rounded-none space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                    Custom Bank Name <span className="text-rose-500">*</span>
+                  <label className="block text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5 flex items-center gap-1.5">
+                    <Store className="h-4 w-4 text-emerald-600" />
+                    Select Branch (শাখা) <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    value={selectedBranchId}
+                    onChange={(e) => handleBranchChange(e.target.value)}
+                    className="w-full h-9 sm:h-10 px-3 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-none text-xs sm:text-sm font-semibold text-slate-900 dark:text-white outline-none focus:border-emerald-600"
+                    required
+                  >
+                    {branches.length === 0 && <option value="">No branches found</option>}
+                    {branches.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
+                    Cash Drawer Name <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="text"
-                    placeholder="e.g. Standard Bank Limited"
-                    value={customBankName}
-                    onChange={(e) => setCustomBankName(e.target.value)}
-                    className="w-full h-9 sm:h-10 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-none text-xs sm:text-sm outline-none focus:border-brand-primary dark:text-white"
+                    placeholder="e.g. Cash Drawer - Dhanmondi"
+                    value={accountName}
+                    onChange={(e) => setAccountName(e.target.value)}
+                    className="w-full h-9 sm:h-10 px-3 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-none text-xs sm:text-sm outline-none focus:border-emerald-600 dark:text-white font-medium"
                     required
                   />
                 </div>
-              )}
-
-              <div>
-                <label className="block text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                  Bank Account Number <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. 1501203456789001"
-                  value={accountNumber}
-                  onChange={(e) => setAccountNumber(e.target.value)}
-                  className="w-full h-9 sm:h-10 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-none text-xs sm:text-sm font-mono text-slate-900 dark:text-white outline-none focus:border-brand-primary"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                  Account Display Name / Title
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. City Bank - Corporate Current"
-                  value={accountName}
-                  onChange={(e) => setAccountName(e.target.value)}
-                  className="w-full h-9 sm:h-10 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-none text-xs sm:text-sm outline-none focus:border-brand-primary dark:text-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                  Bank Branch Name <span className="text-xs font-normal text-slate-400">(Optional)</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Dhanmondi Branch"
-                  value={bankBranchName}
-                  onChange={(e) => setBankBranchName(e.target.value)}
-                  className="w-full h-9 sm:h-10 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-none text-xs sm:text-sm outline-none focus:border-brand-primary dark:text-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                  Routing Number <span className="text-xs font-normal text-slate-400">(Optional)</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. 090271234"
-                  value={routingNumber}
-                  onChange={(e) => setRoutingNumber(e.target.value)}
-                  className="w-full h-9 sm:h-10 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-none text-xs sm:text-sm font-mono outline-none focus:border-brand-primary dark:text-white"
-                />
               </div>
             </div>
           )}
 
-          {/* 2. CASH DRAWER FIELDS */}
-          {accountCategory === "CASH" && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                  Cash Register Name <span className="text-rose-500">*</span>
+          {/* 2. BANK ACCOUNT FIELDS */}
+          {accountCategory === "BANK" && (
+            <div className="space-y-4">
+              {/* Account Scope Toggle */}
+              <div className="flex items-center gap-4 p-3 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-none text-xs sm:text-sm">
+                <span className="font-bold text-slate-700 dark:text-slate-300">Account Scope:</span>
+                <label className="flex items-center gap-1.5 cursor-pointer font-medium text-slate-800 dark:text-slate-200">
+                  <input
+                    type="radio"
+                    name="bankScope"
+                    checked={accountScope === "CENTRAL"}
+                    onChange={() => setAccountScope("CENTRAL")}
+                    className="rounded-none text-emerald-600"
+                  />
+                  <span>Central / All Branches (Owner Account)</span>
                 </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Main Cash Drawer / Counter 1"
-                  value={accountName}
-                  onChange={(e) => setAccountName(e.target.value)}
-                  className="w-full h-9 sm:h-10 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-none text-xs sm:text-sm outline-none focus:border-brand-primary dark:text-white"
-                  required
-                />
+                <label className="flex items-center gap-1.5 cursor-pointer font-medium text-slate-800 dark:text-slate-200">
+                  <input
+                    type="radio"
+                    name="bankScope"
+                    checked={accountScope === "BRANCH"}
+                    onChange={() => setAccountScope("BRANCH")}
+                    className="rounded-none text-emerald-600"
+                  />
+                  <span>Specific Branch Only</span>
+                </label>
+              </div>
+
+              {accountScope === "BRANCH" && (
+                <div>
+                  <label className="block text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Select Branch <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    value={selectedBranchId}
+                    onChange={(e) => setSelectedBranchId(e.target.value)}
+                    className="w-full h-9 sm:h-10 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-none text-xs sm:text-sm font-medium text-slate-900 dark:text-white outline-none focus:border-emerald-600"
+                  >
+                    {branches.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Bank Name <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    value={selectedBank}
+                    onChange={(e) => setSelectedBank(e.target.value)}
+                    className="w-full h-9 sm:h-10 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-none text-xs sm:text-sm font-medium text-slate-900 dark:text-white outline-none focus:border-emerald-600"
+                  >
+                    {BANGLADESH_BANKS.map((b) => (
+                      <option key={b} value={b}>
+                        {b}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {selectedBank === "Other Commercial Bank" && (
+                  <div>
+                    <label className="block text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                      Custom Bank Name <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Standard Bank Limited"
+                      value={customBankName}
+                      onChange={(e) => setCustomBankName(e.target.value)}
+                      className="w-full h-9 sm:h-10 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-none text-xs sm:text-sm outline-none focus:border-emerald-600 dark:text-white"
+                      required
+                    />
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Bank Account Number <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 1501203456789001"
+                    value={accountNumber}
+                    onChange={(e) => setAccountNumber(e.target.value)}
+                    className="w-full h-9 sm:h-10 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-none text-xs sm:text-sm font-mono text-slate-900 dark:text-white outline-none focus:border-emerald-600"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Account Display Name / Title
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. City Bank - Corporate Current"
+                    value={accountName}
+                    onChange={(e) => setAccountName(e.target.value)}
+                    className="w-full h-9 sm:h-10 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-none text-xs sm:text-sm outline-none focus:border-emerald-600 dark:text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Bank Branch Name <span className="text-xs font-normal text-slate-400">(Optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Principal Branch"
+                    value={bankBranchName}
+                    onChange={(e) => setBankBranchName(e.target.value)}
+                    className="w-full h-9 sm:h-10 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-none text-xs sm:text-sm outline-none focus:border-emerald-600 dark:text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Routing Number <span className="text-xs font-normal text-slate-400">(Optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 090271234"
+                    value={routingNumber}
+                    onChange={(e) => setRoutingNumber(e.target.value)}
+                    className="w-full h-9 sm:h-10 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-none text-xs sm:text-sm font-mono outline-none focus:border-emerald-600 dark:text-white"
+                  />
+                </div>
               </div>
             </div>
           )}
@@ -350,6 +474,50 @@ export function CreateFinancialAccountView({ onNavigate }: CreateFinancialAccoun
           {/* 3. MFS FIELDS */}
           {accountCategory === "MFS" && (
             <div className="space-y-4">
+              {/* Account Scope Toggle */}
+              <div className="flex items-center gap-4 p-3 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-none text-xs sm:text-sm">
+                <span className="font-bold text-slate-700 dark:text-slate-300">Wallet Scope:</span>
+                <label className="flex items-center gap-1.5 cursor-pointer font-medium text-slate-800 dark:text-slate-200">
+                  <input
+                    type="radio"
+                    name="mfsScope"
+                    checked={accountScope === "CENTRAL"}
+                    onChange={() => setAccountScope("CENTRAL")}
+                    className="rounded-none text-emerald-600"
+                  />
+                  <span>Central / All Branches (Owner Wallet)</span>
+                </label>
+                <label className="flex items-center gap-1.5 cursor-pointer font-medium text-slate-800 dark:text-slate-200">
+                  <input
+                    type="radio"
+                    name="mfsScope"
+                    checked={accountScope === "BRANCH"}
+                    onChange={() => setAccountScope("BRANCH")}
+                    className="rounded-none text-emerald-600"
+                  />
+                  <span>Specific Branch Only</span>
+                </label>
+              </div>
+
+              {accountScope === "BRANCH" && (
+                <div>
+                  <label className="block text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Select Branch <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    value={selectedBranchId}
+                    onChange={(e) => setSelectedBranchId(e.target.value)}
+                    className="w-full h-9 sm:h-10 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-none text-xs sm:text-sm font-medium text-slate-900 dark:text-white outline-none focus:border-emerald-600"
+                  >
+                    {branches.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
@@ -358,7 +526,7 @@ export function CreateFinancialAccountView({ onNavigate }: CreateFinancialAccoun
                   <select
                     value={mfsProvider}
                     onChange={(e) => setMfsProvider(e.target.value)}
-                    className="w-full h-9 sm:h-10 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-none text-xs sm:text-sm outline-none focus:border-brand-primary dark:text-white"
+                    className="w-full h-9 sm:h-10 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-none text-xs sm:text-sm outline-none focus:border-emerald-600 dark:text-white"
                   >
                     {MFS_PROVIDERS.map((p) => (
                       <option key={p.id} value={p.id}>
@@ -375,7 +543,7 @@ export function CreateFinancialAccountView({ onNavigate }: CreateFinancialAccoun
                   <select
                     value={mfsType}
                     onChange={(e) => setMfsType(e.target.value as any)}
-                    className="w-full h-9 sm:h-10 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-none text-xs sm:text-sm outline-none focus:border-brand-primary dark:text-white"
+                    className="w-full h-9 sm:h-10 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-none text-xs sm:text-sm outline-none focus:border-emerald-600 dark:text-white"
                   >
                     <option value="MERCHANT">Merchant Account</option>
                     <option value="PERSONAL">Personal Wallet</option>
@@ -392,7 +560,7 @@ export function CreateFinancialAccountView({ onNavigate }: CreateFinancialAccoun
                     placeholder="e.g. 017XXXXXXXX"
                     value={walletNumber}
                     onChange={(e) => setWalletNumber(e.target.value)}
-                    className="w-full h-9 sm:h-10 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-none text-xs sm:text-sm font-mono outline-none focus:border-brand-primary dark:text-white"
+                    className="w-full h-9 sm:h-10 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-none text-xs sm:text-sm font-mono outline-none focus:border-emerald-600 dark:text-white"
                     required
                   />
                 </div>
@@ -404,10 +572,10 @@ export function CreateFinancialAccountView({ onNavigate }: CreateFinancialAccoun
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. bKash Counter 1 / Nagad Payment"
+                  placeholder="e.g. bKash Merchant (All Branches)"
                   value={accountName}
                   onChange={(e) => setAccountName(e.target.value)}
-                  className="w-full h-9 sm:h-10 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-none text-xs sm:text-sm outline-none focus:border-brand-primary dark:text-white"
+                  className="w-full h-9 sm:h-10 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-none text-xs sm:text-sm outline-none focus:border-emerald-600 dark:text-white"
                 />
               </div>
             </div>
@@ -430,7 +598,7 @@ export function CreateFinancialAccountView({ onNavigate }: CreateFinancialAccoun
                   placeholder="0.00"
                   value={initialBalance}
                   onChange={(e) => setInitialBalance(e.target.value)}
-                  className="w-full h-9 sm:h-10 pl-8 pr-3 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-none text-xs sm:text-sm font-bold font-mono outline-none focus:border-brand-primary dark:text-white"
+                  className="w-full h-9 sm:h-10 pl-8 pr-3 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-none text-xs sm:text-sm font-bold font-mono outline-none focus:border-emerald-600 dark:text-white"
                 />
               </div>
             </div>
@@ -441,10 +609,10 @@ export function CreateFinancialAccountView({ onNavigate }: CreateFinancialAccoun
               </label>
               <input
                 type="text"
-                placeholder="e.g. Primary POS vault / supplier clearing account"
+                placeholder="e.g. Counter cash / primary settlement"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                className="w-full h-9 sm:h-10 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-none text-xs sm:text-sm outline-none focus:border-brand-primary dark:text-white"
+                className="w-full h-9 sm:h-10 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-none text-xs sm:text-sm outline-none focus:border-emerald-600 dark:text-white"
               />
             </div>
           </div>
@@ -456,13 +624,13 @@ export function CreateFinancialAccountView({ onNavigate }: CreateFinancialAccoun
               id="isDefaultAccount"
               checked={isDefault}
               onChange={(e) => setIsDefault(e.target.checked)}
-              className="h-4 w-4 rounded-none border-slate-300 text-brand-primary focus:ring-0 cursor-pointer"
+              className="h-4 w-4 rounded-none border-slate-300 text-emerald-600 focus:ring-0 cursor-pointer"
             />
             <label
               htmlFor="isDefaultAccount"
               className="text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300 cursor-pointer select-none"
             >
-              Set as Default Financial Account for POS Transactions
+              Set as Default Financial Account
             </label>
           </div>
 
@@ -471,7 +639,7 @@ export function CreateFinancialAccountView({ onNavigate }: CreateFinancialAccoun
             <button
               type="submit"
               disabled={submitting}
-              className="w-full py-2.5 sm:py-3 bg-brand-primary text-white text-xs sm:text-sm font-bold hover:opacity-95 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 rounded-none"
+              className="w-full py-2.5 sm:py-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-bold transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 rounded-none cursor-pointer"
             >
               {submitting ? (
                 <>

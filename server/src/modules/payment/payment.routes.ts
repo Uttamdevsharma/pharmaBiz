@@ -36,6 +36,21 @@ router.post(
   PaymentController.initiate
 );
 
+// bKash Merchant Tokenized Checkout
+router.post("/bkash/initiate", optionalAuthenticate, PaymentController.initiateBkash);
+router.get("/bkash/callback", PaymentController.handleBkashCallback);
+router.post("/bkash/callback", PaymentController.handleBkashCallback);
+
+// Nagad Merchant Checkout
+router.post("/nagad/initiate", optionalAuthenticate, PaymentController.initiateNagad);
+router.get("/nagad/callback", PaymentController.handleNagadCallback);
+router.post("/nagad/callback", PaymentController.handleNagadCallback);
+
+// EPS Gateway Checkout
+router.post("/eps/initiate", optionalAuthenticate, PaymentController.initiateEps);
+router.get("/eps/callback", PaymentController.handleEpsCallback);
+router.post("/eps/callback", PaymentController.handleEpsCallback);
+
 router.get("/history", authenticate, PaymentController.getHistory);
 router.get("/:id/validate", authenticate, PaymentController.validatePayment);
 

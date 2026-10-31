@@ -13,10 +13,17 @@ exports.reportRoutes = router;
 router.use(authenticate_1.authenticate, planLimiter_1.requireActiveSubscription);
 // Owner / Manager Dashboard Metrics
 router.get("/dashboard", report_controller_1.ReportController.getDashboardMetrics);
-// Sales Reports
+// Branch Report Summary
+router.get("/branch-summary", report_controller_1.ReportController.getBranchReportSummary);
+// Sales Reports & Summaries
 router.get("/sales/daily", (0, validate_1.validateRequest)({ query: report_validation_1.reportDateRangeSchema }), report_controller_1.ReportController.getDailySales);
 router.get("/sales/weekly", (0, validate_1.validateRequest)({ query: report_validation_1.reportDateRangeSchema }), report_controller_1.ReportController.getWeeklySales);
 router.get("/sales/monthly", (0, validate_1.validateRequest)({ query: report_validation_1.reportDateRangeSchema }), report_controller_1.ReportController.getMonthlySales);
+router.get("/sales/monthly-summary", report_controller_1.ReportController.getMonthlySalesSummary);
+// Procurement & Purchase Report
+router.get("/purchases", report_controller_1.ReportController.getPurchaseReport);
+// Products & Stock Inventory Report
+router.get("/products", report_controller_1.ReportController.getProductStockReport);
 router.get("/sales/branch-wise", (0, authorize_1.authorize)(["COMPANY_OWNER", "REGIONAL_ADMIN", "AUDITOR", "ACCOUNTS", "SUPER_ADMIN", "CTO", "PROJECT_MANAGER"]), (0, validate_1.validateRequest)({ query: report_validation_1.reportDateRangeSchema }), report_controller_1.ReportController.getBranchWiseSales);
 router.get("/sales/region-wise", (0, authorize_1.authorize)(["COMPANY_OWNER", "REGIONAL_ADMIN", "AUDITOR", "ACCOUNTS", "SUPER_ADMIN", "CTO", "PROJECT_MANAGER"]), (0, planLimiter_1.requireTier)("GROWTH"), (0, validate_1.validateRequest)({ query: report_validation_1.reportDateRangeSchema }), report_controller_1.ReportController.getRegionWiseSales);
 router.get("/sales/company-wide", (0, authorize_1.authorize)(["COMPANY_OWNER", "AUDITOR", "ACCOUNTS", "SUPER_ADMIN", "CTO", "PROJECT_MANAGER"]), (0, validate_1.validateRequest)({ query: report_validation_1.reportDateRangeSchema }), report_controller_1.ReportController.getCompanyWideSales);

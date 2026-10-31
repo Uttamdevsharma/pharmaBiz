@@ -17,7 +17,6 @@ export class SubscriptionService {
     const plans = await (prisma as any).subscriptionPlan.findMany({
       where: {
         isActive: true,
-        tier: { in: ["STARTER", "GROWTH", "ENTERPRISE"] },
       },
       orderBy: { price: "asc" },
     });
@@ -25,11 +24,20 @@ export class SubscriptionService {
     return plans.map((p: any) => {
       const feat = (typeof p.features === "object" && p.features !== null) ? p.features : {};
       const fallback: any = (CENTRAL_PLAN_DEFINITIONS as any)[p.tier] || CENTRAL_PLAN_DEFINITIONS.STARTER;
+      const isTrial = Boolean(feat.isTrial || p.tier === "TRIAL");
+      const isCustom = Boolean(feat.isCustom);
+      const trialDays = Number(p.trialDays ?? feat.trialDays ?? (isTrial ? 7 : 0));
+      const featureList = Array.isArray(feat.featureList) ? feat.featureList : [];
       return {
         ...p,
+        isTrial,
+        isCustom,
+        trialDays,
+        featureList,
+        whatsappNumber: feat.whatsappNumber || "",
+        customMessage: feat.customMessage || "",
         maxStaffPerBranch: feat.maxStaffPerBranch ?? fallback.maxStaffPerBranch ?? 1,
         maxTotalStaff: feat.maxTotalStaff ?? fallback.maxTotalStaff ?? (p.maxBranches * (feat.maxStaffPerBranch ?? 1)),
-        trialDays: 0,
         yearlyDiscountPercent: feat.yearlyDiscountPercent ?? fallback.yearlyDiscountPercent ?? (p.tier === "STARTER" ? 5 : p.tier === "GROWTH" ? 10 : p.tier === "ENTERPRISE" ? 15 : 0),
       };
     });
@@ -88,10 +96,15 @@ export class SubscriptionService {
     }
     const planConfig = getPlanConfig(tier);
 
-    const isTrial = false;
-    const isExpired = currentSub ? isSubscriptionExpired(currentSub) : true;
-    const trialDaysRemaining = 0;
-    const isTrialExpired = false;
+    const isDemo = Boolean(tenant.isDemo || tier === "TRIAL" || (currentSub && currentSub.plan?.tier === "TRIAL"));
+    const demoExpiresAt = tenant.demoExpiresAt || (currentSub ? currentSub.endDate : null);
+    const now = new Date();
+    const isDemoExpired = isDemo ? (demoExpiresAt ? now.getTime() >= new Date(demoExpiresAt).getTime() : false) : false;
+    const trialDaysRemaining = (isDemo && demoExpiresAt && !isDemoExpired)
+      ? Math.max(0, Math.ceil((new Date(demoExpiresAt).getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
+      : 0;
+
+    const isExpired = isDemo ? isDemoExpired : (currentSub ? isSubscriptionExpired(currentSub) : true);
 
     const planFeatures = (typeof dbPlan?.features === "object" && dbPlan?.features !== null)
       ? dbPlan.features
@@ -117,9 +130,12 @@ export class SubscriptionService {
       tenantName: tenant.name,
       tier,
       subscription: currentSub || null,
-      isTrial,
-      isTrialExpired,
+      isDemo,
+      isTrial: isDemo,
+      isTrialExpired: isDemoExpired,
       trialDaysRemaining,
+      demoExpiresAt,
+      demoApprovedAt: tenant.demoApprovedAt,
       isExpired,
       planConfig: {
         ...planConfig,

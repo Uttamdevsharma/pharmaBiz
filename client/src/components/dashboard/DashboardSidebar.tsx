@@ -1272,7 +1272,7 @@ export function DashboardSidebar({
                     <button
                       key={item.id}
                       onClick={() => handleModuleSelect(item.id)}
-                      className={`w-full flex items-center gap-2.5 xl:gap-3 px-3 py-2 xl:px-3.5 xl:py-2.5 2xl:px-4 2xl:py-3 rounded-xl xl:rounded-2xl text-xs xl:text-sm 2xl:text-base font-bold transition-all cursor-pointer ${
+                      className={`w-full flex items-center gap-2.5 xl:gap-3 px-3 py-2 xl:px-3.5 xl:py-2.5 2xl:px-4 2xl:py-3 rounded-none text-xs xl:text-sm 2xl:text-base font-bold transition-all cursor-pointer ${
                         isActive
                           ? "bg-brand-primary text-white shadow-sm"
                           : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white"
@@ -1298,7 +1298,7 @@ export function DashboardSidebar({
                   <button
                     type="button"
                     onClick={() => handleModuleSelect("pos")}
-                    className={`w-full flex items-center gap-2.5 xl:gap-3 px-3 py-2 xl:px-3.5 xl:py-2.5 2xl:px-4 2xl:py-3 rounded-xl xl:rounded-2xl text-xs xl:text-sm 2xl:text-base font-bold transition-all cursor-pointer ${
+                    className={`w-full flex items-center gap-2.5 xl:gap-3 px-3 py-2 xl:px-3.5 xl:py-2.5 2xl:px-4 2xl:py-3 rounded-none text-xs xl:text-sm 2xl:text-base font-bold transition-all cursor-pointer ${
                       activeModule === "pos"
                         ? "bg-brand-primary text-white shadow-sm font-black"
                         : "text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white"
@@ -1325,7 +1325,7 @@ export function DashboardSidebar({
                   const isOpen = openParents[section.id] ?? isParentActive;
 
                   return (
-                    <div key={section.id} className="rounded-xl xl:rounded-2xl overflow-hidden">
+                    <div key={section.id} className="rounded-none overflow-hidden">
                       <button
                         onClick={() => {
                           if (section.moduleId) {
@@ -1333,7 +1333,7 @@ export function DashboardSidebar({
                           }
                           toggleParent(section.id);
                         }}
-                        className={`w-full flex items-center justify-between px-3 py-2 xl:px-3.5 xl:py-2.5 2xl:px-4 2xl:py-3 rounded-xl xl:rounded-2xl text-xs xl:text-sm 2xl:text-base font-black transition-all cursor-pointer ${
+                        className={`w-full flex items-center justify-between px-3 py-2 xl:px-3.5 xl:py-2.5 2xl:px-4 2xl:py-3 rounded-none text-xs xl:text-sm 2xl:text-base font-black transition-all cursor-pointer ${
                           isParentActive && !isOpen
                             ? "bg-brand-primary/10 text-brand-primary dark:bg-brand-primary/20"
                             : isParentActive && isOpen
@@ -1379,7 +1379,7 @@ export function DashboardSidebar({
                                 <div key={child.id} className="space-y-0.5 pt-0.5">
                                   <button
                                     onClick={() => toggleSubgroup(child.id)}
-                                    className={`w-full flex items-center justify-between px-2.5 py-1.5 xl:px-3 xl:py-2 2xl:px-3.5 2xl:py-2.5 rounded-lg xl:rounded-xl text-[11px] xl:text-xs 2xl:text-sm font-bold transition-all cursor-pointer ${
+                                    className={`w-full flex items-center justify-between px-2.5 py-1.5 xl:px-3 xl:py-2 2xl:px-3.5 2xl:py-2.5 rounded-none text-[11px] xl:text-xs 2xl:text-sm font-bold transition-all cursor-pointer ${
                                       hasActiveGrandchild
                                         ? "text-brand-primary bg-slate-100/70 dark:bg-slate-800/80 font-black"
                                         : "text-slate-600 dark:text-slate-400 hover:bg-slate-100/50 dark:hover:bg-slate-800/40 hover:text-slate-900 dark:hover:text-white"
@@ -1407,7 +1407,7 @@ export function DashboardSidebar({
                                             onClick={() =>
                                               handleModuleSelect(grandchild.id as OwnerModule)
                                             }
-                                            className={`w-full flex items-center gap-2 xl:gap-2.5 px-2.5 py-1.5 xl:px-3 xl:py-2 2xl:px-3.5 2xl:py-2.5 rounded-lg xl:rounded-xl text-[11px] xl:text-xs 2xl:text-sm font-bold transition-all cursor-pointer ${
+                                            className={`w-full flex items-center gap-2 xl:gap-2.5 px-2.5 py-1.5 xl:px-3 xl:py-2 2xl:px-3.5 2xl:py-2.5 rounded-none text-[11px] xl:text-xs 2xl:text-sm font-bold transition-all cursor-pointer ${
                                               isGrandActive
                                                 ? "bg-brand-primary text-white shadow-xs"
                                                 : "text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white"
@@ -1429,7 +1429,7 @@ export function DashboardSidebar({
                               <button
                                 key={child.id}
                                 onClick={() => handleModuleSelect(child.id as OwnerModule)}
-                                className={`w-full flex items-center justify-between gap-2 px-2.5 py-1.5 xl:px-3 xl:py-2 2xl:px-3.5 2xl:py-2.5 rounded-lg xl:rounded-xl text-[11px] xl:text-xs 2xl:text-sm font-bold transition-all cursor-pointer ${
+                                className={`w-full flex items-center justify-between gap-2 px-2.5 py-1.5 xl:px-3 xl:py-2 2xl:px-3.5 2xl:py-2.5 rounded-none text-[11px] xl:text-xs 2xl:text-sm font-bold transition-all cursor-pointer ${
                                   isChildActive
                                     ? "bg-brand-primary text-white shadow-xs"
                                     : "text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white"
@@ -1472,7 +1472,7 @@ export function DashboardSidebar({
                     <button
                       key={item.id}
                       onClick={() => handleModuleSelect(item.id)}
-                      className={`w-full flex items-center justify-between px-3 py-2 xl:px-3.5 xl:py-2.5 2xl:px-4 2xl:py-3 rounded-xl xl:rounded-2xl text-xs xl:text-sm 2xl:text-base font-bold transition-all cursor-pointer ${
+                      className={`w-full flex items-center justify-between px-3 py-2 xl:px-3.5 xl:py-2.5 2xl:px-4 2xl:py-3 rounded-none text-xs xl:text-sm 2xl:text-base font-bold transition-all cursor-pointer ${
                         isActive
                           ? "bg-brand-primary text-white shadow-sm"
                           : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white"
@@ -1483,7 +1483,7 @@ export function DashboardSidebar({
                         <span className="truncate">{item.label}</span>
                       </div>
                       {item.badge !== undefined && (
-                        <span className="px-1.5 py-0.5 bg-rose-500 text-white text-[10px] font-bold rounded-full animate-pulse shadow-sm">
+                        <span className="px-1.5 py-0.5 bg-rose-500 text-white text-[10px] font-bold rounded-none animate-pulse shadow-sm">
                           {item.badge}
                         </span>
                       )}

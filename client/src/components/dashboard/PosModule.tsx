@@ -4032,8 +4032,13 @@ export function PosModule({ selectedBranchId: propBranchId, onNavigate, onBack }
                           }`}>
                             {acct.name}
                           </div>
-                          <div className="text-[10px] font-mono text-slate-400 uppercase font-semibold">
-                            {acct.type || "CASH"}
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-mono text-slate-400 uppercase font-semibold">
+                              {acct.type || "CASH"}
+                            </span>
+                            <span className="text-[10px] font-mono font-bold text-emerald-700 dark:text-emerald-400">
+                              ৳{Number(acct.balance || 0).toLocaleString("en-BD", { minimumFractionDigits: 0 })}
+                            </span>
                           </div>
                         </div>
                       </div>

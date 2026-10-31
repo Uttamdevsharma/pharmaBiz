@@ -123,16 +123,31 @@ function getComparisonPeriodInfo(
   };
 }
 
-let cachedDashboardData: any = null;
+interface CachedDashboard {
+  period: string;
+  branchId: string;
+  data: any;
+}
+let cachedDashboardEntry: CachedDashboard | null = null;
 
 export function OverviewModule({ onNavigate, selectedBranchId: propBranchId }: OverviewModuleProps) {
   const { user } = useAuth();
   const { selectedBranchId: contextBranchId, currentBranch } = useBranchContext();
   const effectiveBranchId = propBranchId !== undefined ? propBranchId : contextBranchId;
 
-  const [loading, setLoading] = useState(() => !cachedDashboardData);
+  // Date filter states - default to "30d" (Last 30 Days) for dashboard overview
+  const [period, setPeriod] = useState<PeriodFilter>("30d");
+
+  const isCacheMatch =
+    cachedDashboardEntry !== null &&
+    cachedDashboardEntry.period === "30d" &&
+    cachedDashboardEntry.branchId === (effectiveBranchId || "all");
+
+  const [loading, setLoading] = useState(() => !isCacheMatch);
   const [refreshing, setRefreshing] = useState(false);
-  const [dashboardData, setDashboardData] = useState<any>(() => cachedDashboardData);
+  const [dashboardData, setDashboardData] = useState<any>(() =>
+    isCacheMatch ? cachedDashboardEntry!.data : null
+  );
   const [showTodayProfitModal, setShowTodayProfitModal] = useState(false);
 
   // Comparison mode states
@@ -142,8 +157,6 @@ export function OverviewModule({ onNavigate, selectedBranchId: propBranchId }: O
   const [compareMetric, setCompareMetric] = useState<"profit" | "revenue">("profit");
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
 
-  // Date filter states
-  const [period, setPeriod] = useState<PeriodFilter>("today");
   const [customStartDate, setCustomStartDate] = useState<string>(() => {
     const d = new Date();
     d.setDate(d.getDate() - 30);
@@ -185,7 +198,12 @@ export function OverviewModule({ onNavigate, selectedBranchId: propBranchId }: O
 
   const loadDashboard = async (showFullSpinner = false) => {
     try {
-      if (showFullSpinner && !cachedDashboardData) setLoading(true);
+      const isCurrentCached =
+        cachedDashboardEntry !== null &&
+        cachedDashboardEntry.period === period &&
+        cachedDashboardEntry.branchId === (effectiveBranchId || "all");
+
+      if (showFullSpinner && !isCurrentCached) setLoading(true);
       else setRefreshing(true);
 
       const params = new URLSearchParams();
@@ -202,7 +220,11 @@ export function OverviewModule({ onNavigate, selectedBranchId: propBranchId }: O
 
       const dashRes = await fetchApi<any>(`/reports/dashboard?${params.toString()}`);
       if (dashRes.success && dashRes.data) {
-        cachedDashboardData = dashRes.data;
+        cachedDashboardEntry = {
+          period,
+          branchId: effectiveBranchId || "all",
+          data: dashRes.data,
+        };
         setDashboardData(dashRes.data);
       }
     } catch (err) {
@@ -761,7 +783,7 @@ export function OverviewModule({ onNavigate, selectedBranchId: propBranchId }: O
             <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">
               {compareMode
                 ? `Timeline Comparison (${compInfo.currentLabel} vs ${compInfo.label})`
-                : `Sales & Profit Trajectory (${period.toUpperCase()})`}
+                : `Sales & Profit Trajectory (${compInfo.currentLabel})`}
             </h3>
           </div>
 

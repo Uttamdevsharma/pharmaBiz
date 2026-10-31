@@ -17,17 +17,11 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 const STORAGE_KEY = "pharmabiz-theme";
 
-function getSystemTheme(): ResolvedTheme {
-  if (typeof window === "undefined") return "light";
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-}
-
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<Theme>("light");
   const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>("light");
   const [mounted, setMounted] = useState(false);
 
-  // Apply theme to DOM
   const applyTheme = useCallback((resolved: ResolvedTheme) => {
     if (typeof document === "undefined") return;
     const root = document.documentElement;
@@ -40,86 +34,30 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // Initialize on mount
   useEffect(() => {
     setMounted(true);
+    // User requested default light mode without toggle
+    setThemeState("light");
+    setResolvedTheme("light");
+    applyTheme("light");
     try {
-      const savedTheme = localStorage.getItem(STORAGE_KEY) as Theme | null;
-      const initialTheme: Theme = savedTheme && ["light", "dark", "system"].includes(savedTheme)
-        ? savedTheme
-        : "light";
-      
-      setThemeState(initialTheme);
-      const initialResolved = initialTheme === "system" ? getSystemTheme() : initialTheme;
-      setResolvedTheme(initialResolved);
-      applyTheme(initialResolved);
-    } catch (e) {
-      console.warn("Could not read theme from localStorage", e);
-    }
+      localStorage.setItem(STORAGE_KEY, "light");
+    } catch (e) {}
   }, [applyTheme]);
 
-  // Handle system theme changes
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-    const handleSystemChange = () => {
-      if (theme === "system") {
-        const newResolved = mediaQuery.matches ? "dark" : "light";
-        setResolvedTheme(newResolved);
-        applyTheme(newResolved);
-      }
-    };
-
-    if (mediaQuery.addEventListener) {
-      mediaQuery.addEventListener("change", handleSystemChange);
-      return () => mediaQuery.removeEventListener("change", handleSystemChange);
-    } else {
-      // Legacy fallback
-      mediaQuery.addListener(handleSystemChange);
-      return () => mediaQuery.removeListener(handleSystemChange);
-    }
-  }, [theme, applyTheme]);
-
-  // Set theme handler
   const setTheme = useCallback(
     (newTheme: Theme) => {
       setThemeState(newTheme);
-      try {
-        localStorage.setItem(STORAGE_KEY, newTheme);
-      } catch (e) {
-        console.warn("Could not write theme to localStorage", e);
-      }
-
-      const newResolved = newTheme === "system" ? getSystemTheme() : newTheme;
-      setResolvedTheme(newResolved);
-      applyTheme(newResolved);
+      const res = newTheme === "dark" ? "dark" : "light";
+      setResolvedTheme(res);
+      applyTheme(res);
     },
     [applyTheme]
   );
 
-  // Toggle theme between light and dark
   const toggleTheme = useCallback(() => {
-    const next = resolvedTheme === "dark" ? "light" : "dark";
-    setTheme(next);
+    setTheme(resolvedTheme === "dark" ? "light" : "dark");
   }, [resolvedTheme, setTheme]);
-
-  // Keyboard shortcut: Alt+T to toggle theme
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.altKey && (e.key === "t" || e.key === "T")) {
-        const target = e.target as HTMLElement | null;
-        if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) {
-          return;
-        }
-        e.preventDefault();
-        toggleTheme();
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [toggleTheme]);
 
   return (
     <ThemeContext.Provider
@@ -128,7 +66,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         resolvedTheme: mounted ? resolvedTheme : "light",
         setTheme,
         toggleTheme,
-        isDark: mounted ? resolvedTheme === "dark" : false,
+        isDark: false,
       }}
     >
       {children}

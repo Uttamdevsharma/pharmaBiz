@@ -28,7 +28,11 @@ export class AccountingService {
   static async listAccounts(tenantId: string, branchId?: string) {
     const where: any = { tenantId, isActive: true };
     if (branchId) {
-      where.branchId = branchId;
+      // Cash is strictly branch-specific: return cash of this branch, plus any non-cash (Bank, bKash, Nagad, etc.)
+      where.OR = [
+        { branchId, type: "CASH" },
+        { type: { not: "CASH" } },
+      ];
     }
 
     const accounts = await (prisma as any).financialAccount.findMany({
@@ -274,9 +278,27 @@ export class AccountingService {
           userId,
         },
         include: {
-          sourceAccount: { select: { id: true, name: true, type: true } },
-          destinationAccount: { select: { id: true, name: true, type: true } },
-          user: { select: { id: true, name: true, username: true } },
+          sourceAccount: {
+            select: {
+              id: true,
+              name: true,
+              type: true,
+              branchId: true,
+              branch: { select: { id: true, name: true } },
+            },
+          },
+          destinationAccount: {
+            select: {
+              id: true,
+              name: true,
+              type: true,
+              branchId: true,
+              branch: { select: { id: true, name: true } },
+            },
+          },
+          user: { select: { id: true, name: true, username: true, role: true } },
+          branch: { select: { id: true, name: true } },
+          tenant: { select: { id: true, name: true, address: true, phone: true } },
         },
       });
 
@@ -698,10 +720,27 @@ export class AccountingService {
         take: limit,
         orderBy: { createdAt: "desc" },
         include: {
-          sourceAccount: { select: { id: true, name: true, type: true } },
-          destinationAccount: { select: { id: true, name: true, type: true } },
-          user: { select: { id: true, name: true, username: true } },
+          sourceAccount: {
+            select: {
+              id: true,
+              name: true,
+              type: true,
+              branchId: true,
+              branch: { select: { id: true, name: true } },
+            },
+          },
+          destinationAccount: {
+            select: {
+              id: true,
+              name: true,
+              type: true,
+              branchId: true,
+              branch: { select: { id: true, name: true } },
+            },
+          },
+          user: { select: { id: true, name: true, username: true, role: true } },
           branch: { select: { id: true, name: true } },
+          tenant: { select: { id: true, name: true, address: true, phone: true } },
         },
       }),
     ]);

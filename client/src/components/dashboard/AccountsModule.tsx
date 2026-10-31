@@ -345,9 +345,9 @@ export function AccountsModule({ onNavigate }: AccountsModuleProps = {}) {
                   <button
                     key={item.id}
                     onClick={() => onNavigate(item.id)}
-                    className="p-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-emerald-500 dark:hover:border-emerald-500 transition flex flex-col items-center gap-1.5 text-center group shadow-2xs"
+                    className="p-3 rounded-none bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-emerald-500 dark:hover:border-emerald-500 transition flex flex-col items-center gap-1.5 text-center group shadow-2xs"
                   >
-                    <div className={`p-2 rounded-xl ${item.color} group-hover:scale-110 transition-transform`}>
+                    <div className={`p-2 rounded-none ${item.color} group-hover:scale-110 transition-transform`}>
                       <Icon className="h-4 w-4" />
                     </div>
                     <span className="text-[11px] font-extrabold text-slate-700 dark:text-slate-200 truncate w-full">
@@ -359,10 +359,10 @@ export function AccountsModule({ onNavigate }: AccountsModuleProps = {}) {
             </div>
           )}
 
-          {/* 5 EXECUTIVE SUMMARY KPI CARDS */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+          {/* 5 EXECUTIVE SUMMARY KPI CARDS - Sharp & Clean */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
             {/* Total Liquid Funds */}
-            <div className="p-5 rounded-3xl bg-gradient-to-br from-emerald-600 to-teal-700 text-white shadow-lg space-y-1 relative overflow-hidden">
+            <div className="p-4 rounded-none bg-emerald-600 text-white shadow-sm space-y-1">
               <div className="flex items-center justify-between opacity-80 text-[10px] font-black uppercase tracking-wider">
                 <span>Total Liquid Funds</span>
                 <Wallet className="h-4 w-4" />
@@ -370,23 +370,21 @@ export function AccountsModule({ onNavigate }: AccountsModuleProps = {}) {
               <div className="text-xl font-black font-mono">
                 ৳{(summary.totalLiquidity || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
-              <div className="text-[10px] opacity-85 font-medium">Drawer + Banks + Wallets</div>
             </div>
 
             {/* Cash in Drawer */}
-            <div className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
+            <div className="p-4 rounded-none bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs space-y-1">
               <div className="flex items-center justify-between text-slate-400 text-[10px] font-black uppercase tracking-wider">
-                <span>Cash in Hand</span>
+                <span>Cash in Drawers</span>
                 <Banknote className="h-4 w-4 text-emerald-500" />
               </div>
               <div className="text-xl font-black text-emerald-600 dark:text-emerald-400 font-mono">
                 ৳{(summary.currentCashBalance || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
-              <div className="text-[10px] text-slate-400 font-medium">Physical till cash</div>
             </div>
 
             {/* Bank Accounts Total */}
-            <div className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
+            <div className="p-4 rounded-none bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs space-y-1">
               <div className="flex items-center justify-between text-slate-400 text-[10px] font-black uppercase tracking-wider">
                 <span>Bank Accounts</span>
                 <Building2 className="h-4 w-4 text-blue-500" />
@@ -394,11 +392,10 @@ export function AccountsModule({ onNavigate }: AccountsModuleProps = {}) {
               <div className="text-xl font-black text-blue-600 dark:text-blue-400 font-mono">
                 ৳{(summary.currentBankBalance || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
-              <div className="text-[10px] text-slate-400 font-medium">DBBL, City, BRAC, etc.</div>
             </div>
 
             {/* Digital Wallets Total */}
-            <div className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
+            <div className="p-4 rounded-none bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs space-y-1">
               <div className="flex items-center justify-between text-slate-400 text-[10px] font-black uppercase tracking-wider">
                 <span>bKash & Nagad</span>
                 <Smartphone className="h-4 w-4 text-pink-500" />
@@ -406,11 +403,10 @@ export function AccountsModule({ onNavigate }: AccountsModuleProps = {}) {
               <div className="text-xl font-black text-pink-600 dark:text-pink-400 font-mono">
                 ৳{((summary.currentBkashBalance || 0) + (summary.currentNagadBalance || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
-              <div className="text-[10px] text-slate-400 font-medium">Merchant wallets</div>
             </div>
 
             {/* Supplier Payables */}
-            <div className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-rose-200 dark:border-rose-950 shadow-sm space-y-1">
+            <div className="p-4 rounded-none bg-white dark:bg-slate-900 border border-rose-200 dark:border-rose-950 shadow-2xs space-y-1">
               <div className="flex items-center justify-between text-rose-500 text-[10px] font-black uppercase tracking-wider">
                 <span>Supplier Payables</span>
                 <TrendingDown className="h-4 w-4 text-rose-500" />
@@ -418,106 +414,142 @@ export function AccountsModule({ onNavigate }: AccountsModuleProps = {}) {
               <div className="text-xl font-black text-rose-600 dark:text-rose-400 font-mono">
                 ৳{(summary.totalSupplierDues || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
-              <div className="text-[10px] text-slate-400 font-medium">Pending supplier dues</div>
             </div>
           </div>
 
-          {/* REAL CREATED FINANCIAL ACCOUNTS LIVE BALANCES */}
-          <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
-                  <Wallet className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-                  Pharmacy Financial Accounts & Balances
+          {/* REAL CREATED FINANCIAL ACCOUNTS LIVE BALANCES - Branch Cash vs Central Bank */}
+          <div className="space-y-4">
+            {/* Panel 1: Branch Cash Drawers */}
+            <div className="p-4 rounded-none bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
+                <h3 className="text-sm font-black text-slate-900 dark:text-white flex items-center gap-2 uppercase tracking-wider">
+                  <Banknote className="h-4 w-4 text-emerald-600" />
+                  Branch Cash Drawers (কাউন্টার ক্যাশ)
                 </h3>
-                <p className="text-xs text-slate-400">
-                  Real-time balances across all accounts created by your pharmacy.
-                </p>
-              </div>
-
-              {onNavigate && (
-                <button
-                  onClick={() => onNavigate("acc_financial_accounts")}
-                  className="text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1"
-                >
-                  Manage Accounts &rarr;
-                </button>
-              )}
-            </div>
-
-            {rawAccounts.length === 0 ? (
-              <div className="p-8 text-center bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700">
-                <p className="text-xs text-slate-500 font-medium">No financial accounts have been created yet.</p>
                 {onNavigate && (
                   <button
-                    onClick={() => onNavigate("acc_financial_accounts")}
-                    className="mt-2 text-xs font-bold text-emerald-600 hover:underline"
+                    onClick={() => onNavigate("acc_create_account")}
+                    className="text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline"
                   >
-                    + Create your first account
+                    + Add Drawer
                   </button>
                 )}
               </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-                {rawAccounts.map((acc: any) => {
-                  const isBank = acc.type === "BANK" || acc.type === "CARD_SETTLEMENT";
-                  const isBkash = acc.type === "BKASH" || acc.name.toLowerCase().includes("bkash");
-                  const isNagad = acc.type === "NAGAD" || acc.name.toLowerCase().includes("nagad");
 
-                  return (
+              {rawAccounts.filter((a: any) => a.type === "CASH").length === 0 ? (
+                <div className="p-4 text-center bg-slate-50 dark:bg-slate-800/40 rounded-none border border-dashed border-slate-200 dark:border-slate-700">
+                  <p className="text-xs text-slate-500 font-medium">No branch cash drawers configured yet.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  {rawAccounts.filter((a: any) => a.type === "CASH").map((acc: any) => (
                     <div
                       key={acc.id}
-                      className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 flex flex-col justify-between space-y-3 hover:border-emerald-500/50 transition shadow-2xs"
+                      className="p-3.5 rounded-none bg-slate-50 dark:bg-slate-800/60 border border-emerald-200 dark:border-emerald-800/60 flex flex-col justify-between space-y-2.5 shadow-2xs"
                     >
                       <div className="flex items-start justify-between">
-                        <div className="flex items-center gap-2.5">
-                          <div
-                            className={`p-2.5 rounded-xl ${
-                              isBank
-                                ? "bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-400"
-                                : isBkash
-                                ? "bg-pink-100 text-pink-700 dark:bg-pink-950/60 dark:text-pink-400"
-                                : isNagad
-                                ? "bg-orange-100 text-orange-700 dark:bg-orange-950/60 dark:text-orange-400"
-                                : "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400"
-                            }`}
-                          >
-                            {isBank ? (
-                              <Building2 className="h-4 w-4" />
-                            ) : isBkash || isNagad ? (
-                              <Smartphone className="h-4 w-4" />
-                            ) : (
-                              <Banknote className="h-4 w-4" />
-                            )}
+                        <div className="flex items-center gap-2">
+                          <div className="p-1.5 rounded-none bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400">
+                            <Store className="h-4 w-4" />
                           </div>
                           <div>
-                            <div className="font-extrabold text-xs text-slate-900 dark:text-white truncate max-w-[140px]">
+                            <div className="font-bold text-xs text-slate-900 dark:text-white truncate">
                               {acc.name}
                             </div>
-                            <div className="text-[10px] text-slate-400 font-mono">
-                              {acc.accountNumber || acc.bankName || acc.type}
+                            <div className="text-[10px] text-emerald-700 dark:text-emerald-400 font-semibold">
+                              {acc.branch?.name || "Branch Cash"}
                             </div>
                           </div>
                         </div>
-
-                        {acc.isDefault && (
-                          <span className="text-[9px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold px-1.5 py-0.5 rounded">
-                            Default
-                          </span>
-                        )}
                       </div>
 
                       <div className="pt-2 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase">Balance</span>
-                        <span className="font-black text-sm font-mono text-slate-900 dark:text-white">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase">Cash</span>
+                        <span className="font-black text-sm font-mono text-emerald-600 dark:text-emerald-400">
                           ৳{Number(acc.balance || 0).toLocaleString("en-BD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </span>
                       </div>
                     </div>
-                  );
-                })}
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Panel 2: Central Bank & Mobile Banking */}
+            <div className="p-4 rounded-none bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
+                <h3 className="text-sm font-black text-slate-900 dark:text-white flex items-center gap-2 uppercase tracking-wider">
+                  <Building2 className="h-4 w-4 text-blue-600" />
+                  Central Bank & Mobile Banking (মালিকের অ্যাকাউন্ট)
+                </h3>
+                {onNavigate && (
+                  <button
+                    onClick={() => onNavigate("acc_financial_accounts")}
+                    className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline"
+                  >
+                    Manage Accounts &rarr;
+                  </button>
+                )}
               </div>
-            )}
+
+              {rawAccounts.filter((a: any) => a.type !== "CASH").length === 0 ? (
+                <div className="p-4 text-center bg-slate-50 dark:bg-slate-800/40 rounded-none border border-dashed border-slate-200 dark:border-slate-700">
+                  <p className="text-xs text-slate-500 font-medium">No central bank or mobile accounts created yet.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  {rawAccounts.filter((a: any) => a.type !== "CASH").map((acc: any) => {
+                    const isBank = acc.type === "BANK" || acc.type === "CARD_SETTLEMENT";
+                    const isBkash = acc.type === "BKASH" || acc.name.toLowerCase().includes("bkash");
+                    const isNagad = acc.type === "NAGAD" || acc.name.toLowerCase().includes("nagad");
+
+                    return (
+                      <div
+                        key={acc.id}
+                        className="p-3.5 rounded-none bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 flex flex-col justify-between space-y-2.5 shadow-2xs"
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-center gap-2">
+                            <div
+                              className={`p-1.5 rounded-none ${
+                                isBank
+                                  ? "bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-400"
+                                  : isBkash
+                                  ? "bg-pink-100 text-pink-700 dark:bg-pink-950/60 dark:text-pink-400"
+                                  : isNagad
+                                  ? "bg-orange-100 text-orange-700 dark:bg-orange-950/60 dark:text-orange-400"
+                                  : "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400"
+                              }`}
+                            >
+                              {isBank ? (
+                                <Building2 className="h-4 w-4" />
+                              ) : (
+                                <Smartphone className="h-4 w-4" />
+                              )}
+                            </div>
+                            <div>
+                              <div className="font-bold text-xs text-slate-900 dark:text-white truncate max-w-[140px]">
+                                {acc.name}
+                              </div>
+                              <div className="text-[10px] text-slate-400 font-mono">
+                                {acc.accountNumber || acc.type}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="pt-2 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase">Balance</span>
+                          <span className="font-black text-sm font-mono text-slate-900 dark:text-white">
+                            ৳{Number(acc.balance || 0).toLocaleString("en-BD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* DYNAMIC REAL-DATA CHARTS SECTION */}

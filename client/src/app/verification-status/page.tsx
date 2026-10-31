@@ -76,8 +76,15 @@ function VerificationStatusContent() {
   const [otpVerifying, setOtpVerifying] = useState(false);
   const [otpMessage, setOtpMessage] = useState<string | null>(null);
 
-  // Payment initiate
+  // Payment initiate & dynamic gateway state
   const [paymentInitiating, setPaymentInitiating] = useState(false);
+  const [platformSettings, setPlatformSettings] = useState<any>({
+    bkash_merchant_active: false,
+    nagad_merchant_active: false,
+    eps_merchant_active: false,
+    manual_payment_active: true,
+  });
+  const [selectedGateway, setSelectedGateway] = useState<"BKASH_DIRECT" | "NAGAD_DIRECT" | "EPS" | "SSLCOMMERZ">("BKASH_DIRECT");
 
   const loadStatus = async () => {
     const identifier = tenantIdParam || emailParam;
@@ -104,11 +111,23 @@ function VerificationStatusContent() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetchApi<any>(`/auth/verification-status?identifier=${encodeURIComponent(identifier)}`);
+      const [res, gwRes] = await Promise.all([
+        fetchApi<any>(`/auth/verification-status?identifier=${encodeURIComponent(identifier)}`),
+        fetchApi<any>("/public/platform-settings"),
+      ]);
+
       if (res.success && res.data) {
         setData(res.data);
       } else {
         throw new Error(res.message || "Application not found");
+      }
+
+      if (gwRes.success && gwRes.data) {
+        setPlatformSettings(gwRes.data);
+        if (gwRes.data.bkash_merchant_active) setSelectedGateway("BKASH_DIRECT");
+        else if (gwRes.data.nagad_merchant_active) setSelectedGateway("NAGAD_DIRECT");
+        else if (gwRes.data.eps_merchant_active) setSelectedGateway("EPS");
+        else setSelectedGateway("SSLCOMMERZ");
       }
     } catch (err: any) {
       setError(err.message || "Failed to load application status.");
@@ -151,15 +170,39 @@ function VerificationStatusContent() {
   };
 
   const handleProceedPayment = async () => {
-    if (!data?.subscriptionId) {
-      setError("No subscription record found. Please contact support.");
-      return;
-    }
-
     setPaymentInitiating(true);
     setError(null);
 
     try {
+      if (selectedGateway === "BKASH_DIRECT" || selectedGateway === "NAGAD_DIRECT" || selectedGateway === "EPS") {
+        let endpoint = "/payments/bkash/initiate";
+        if (selectedGateway === "NAGAD_DIRECT") endpoint = "/payments/nagad/initiate";
+        else if (selectedGateway === "EPS") endpoint = "/payments/eps/initiate";
+
+        const payRes = await fetchApi<any>(endpoint, {
+          method: "POST",
+          body: JSON.stringify({
+            pharmacyId: data?.tenantId,
+            planId: data?.plan?.id,
+            billingCycle: data?.billingCycle || "MONTHLY",
+            isUpgrade: false,
+          }),
+        });
+
+        const resAny = payRes as any;
+        const targetUrl = resAny.data?.bkashURL || resAny.data?.nagadURL || resAny.data?.epsURL || resAny.bkashURL || resAny.nagadURL || resAny.epsURL;
+        if (payRes.success && targetUrl) {
+          window.location.href = targetUrl;
+          return;
+        } else {
+          throw new Error(payRes.message || resAny.error || "Could not launch official payment portal.");
+        }
+      }
+
+      if (!data?.subscriptionId) {
+        throw new Error("No subscription record found. Please contact support.");
+      }
+
       const payRes = await fetchApi<any>("/payments/initiate", {
         method: "POST",
         body: JSON.stringify({
@@ -202,13 +245,13 @@ function VerificationStatusContent() {
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-slate-950 py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
       {/* Glow */}
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[550px] h-[550px] rounded-full brand-glow -z-10 opacity-20 blur-3xl pointer-events-none" />
+      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[550px] h-[550px] rounded-none brand-glow -z-10 opacity-20 blur-3xl pointer-events-none" />
 
       <div className="max-w-3xl mx-auto space-y-6">
         {/* Top Header */}
         <div className="flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg bg-brand-primary flex items-center justify-center text-white shadow-sm">
+            <div className="h-8 w-8 rounded-none bg-brand-primary flex items-center justify-center text-white shadow-sm">
               <Pill className="h-4 w-4 transform -rotate-45" />
             </div>
             <span className="font-bold text-slate-900 dark:text-white">PharmaBiz</span>
@@ -216,7 +259,7 @@ function VerificationStatusContent() {
 
           <button
             onClick={loadStatus}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-none border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition cursor-pointer"
           >
             <RefreshCw className="h-3.5 w-3.5" />
             <span>Refresh Status</span>
@@ -224,21 +267,21 @@ function VerificationStatusContent() {
         </div>
 
         {error && (
-          <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-semibold flex items-center gap-3">
+          <div className="p-4 rounded-none bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-semibold flex items-center gap-3">
             <AlertTriangle className="h-5 w-5 shrink-0" />
             <span>{error}</span>
           </div>
         )}
 
         {otpMessage && (
-          <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-semibold flex items-center gap-3">
+          <div className="p-4 rounded-none bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-semibold flex items-center gap-3">
             <CheckCircle2 className="h-5 w-5 shrink-0" />
             <span>{otpMessage}</span>
           </div>
         )}
 
         {/* ================= STATUS BANNER CARD ================= */}
-        <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xl overflow-hidden backdrop-blur-xl">
+        <div className="rounded-none bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xl overflow-hidden backdrop-blur-xl">
           {/* Header Colored Ribbon */}
           <div
             className={`p-6 text-white ${
@@ -253,7 +296,7 @@ function VerificationStatusContent() {
           >
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
-                <span className="inline-block px-2.5 py-0.5 rounded-full bg-white/20 text-white font-bold text-[10px] uppercase tracking-wider mb-2">
+                <span className="inline-block px-2.5 py-0.5 rounded-none bg-white/20 text-white font-bold text-[10px] uppercase tracking-wider mb-2">
                   Application Status
                 </span>
                 <h1 className="text-2xl font-black">
@@ -278,7 +321,7 @@ function VerificationStatusContent() {
               {isActive && (
                 <Link
                   href="/dashboard"
-                  className="px-5 py-3 rounded-2xl bg-white text-emerald-800 font-bold text-xs shadow-lg hover:bg-slate-50 transition flex items-center gap-2 shrink-0"
+                  className="px-5 py-3 rounded-none bg-white text-emerald-800 font-bold text-xs shadow-lg hover:bg-slate-50 transition flex items-center gap-2 shrink-0"
                 >
                   <span>Enter Dashboard</span>
                   <ArrowRight className="h-4 w-4" />
@@ -291,8 +334,8 @@ function VerificationStatusContent() {
           <div className="p-8 space-y-6">
             {/* 1. PENDING OTP STATE */}
             {isPendingOtp && (
-              <div className="p-6 rounded-2xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/60 space-y-4 text-center">
-                <div className="h-12 w-12 rounded-2xl bg-amber-500/10 text-amber-600 mx-auto flex items-center justify-center">
+              <div className="p-6 rounded-none bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/60 space-y-4 text-center">
+                <div className="h-12 w-12 rounded-none bg-amber-500/10 text-amber-600 mx-auto flex items-center justify-center">
                   <KeyRound className="h-6 w-6" />
                 </div>
                 <div>
@@ -313,12 +356,12 @@ function VerificationStatusContent() {
                     placeholder="Enter 6-Digit OTP"
                     value={otpCode}
                     onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ""))}
-                    className="w-full text-center tracking-widest font-mono text-xl font-black py-2.5 rounded-xl border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-none"
+                    className="w-full text-center tracking-widest font-mono text-xl font-black py-2.5 rounded-none border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-none"
                   />
                   <button
                     type="submit"
                     disabled={otpVerifying || otpCode.length < 4}
-                    className="w-full py-3 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-md transition cursor-pointer disabled:opacity-50"
+                    className="w-full py-3 rounded-none bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-md transition cursor-pointer disabled:opacity-50"
                   >
                     {otpVerifying ? "Verifying..." : "Confirm OTP Code"}
                   </button>
@@ -329,9 +372,9 @@ function VerificationStatusContent() {
             {/* 2. PENDING APPROVAL (UNDER REVIEW) STATE */}
             {isPendingApproval && (
               <div className="space-y-6">
-                <div className="p-5 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/60 space-y-3">
+                <div className="p-5 rounded-none bg-emerald-50/70 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/60 space-y-3">
                   <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center shrink-0">
+                    <div className="h-10 w-10 rounded-none bg-emerald-500/10 text-emerald-600 flex items-center justify-center shrink-0">
                       <CheckCircle2 className="h-5 w-5" />
                     </div>
                     <div>
@@ -344,7 +387,7 @@ function VerificationStatusContent() {
                     </div>
                   </div>
 
-                  <div className="p-3.5 rounded-xl bg-white dark:bg-slate-800 border border-emerald-100 dark:border-emerald-800 text-xs text-slate-600 dark:text-slate-400 space-y-1">
+                  <div className="p-3.5 rounded-none bg-white dark:bg-slate-800 border border-emerald-100 dark:border-emerald-800 text-xs text-slate-600 dark:text-slate-400 space-y-1">
                     <div>
                       &bull; <strong>Compliance Status:</strong> National ID, Trade License, and Drug License are queued for verification.
                     </div>
@@ -359,9 +402,9 @@ function VerificationStatusContent() {
             {/* 3. APPROVED PENDING PAYMENT STATE */}
             {isApproved && (
               <div className="space-y-6">
-                <div className="p-6 rounded-2xl bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/80 space-y-4">
+                <div className="p-6 rounded-none bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/80 space-y-4">
                   <div className="flex items-center gap-3">
-                    <div className="h-12 w-12 rounded-2xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center shrink-0">
+                    <div className="h-12 w-12 rounded-none bg-emerald-500/10 text-emerald-600 flex items-center justify-center shrink-0">
                       <CheckCircle2 className="h-6 w-6" />
                     </div>
                     <div>
@@ -375,7 +418,7 @@ function VerificationStatusContent() {
                   </div>
 
                   {data?.approvalNotes && (
-                    <div className="p-3 rounded-xl bg-white dark:bg-slate-800 text-xs text-slate-600 dark:text-slate-400 italic">
+                    <div className="p-3 rounded-none bg-white dark:bg-slate-800 text-xs text-slate-600 dark:text-slate-400 italic">
                       Admin Notes: "{data.approvalNotes}"
                     </div>
                   )}
@@ -389,7 +432,7 @@ function VerificationStatusContent() {
                     const totalPayable = basePlanPrice + licenseFee;
 
                     return (
-                      <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-800 border border-emerald-200 dark:border-emerald-700/60 space-y-3">
+                      <div className="p-4 sm:p-5 rounded-none bg-white dark:bg-slate-800 border border-emerald-200 dark:border-emerald-700/60 space-y-3">
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-700 pb-3">
                           <div>
                             <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-600">
@@ -426,25 +469,111 @@ function VerificationStatusContent() {
                     );
                   })()}
 
+                  {/* Payment Gateway Options */}
+                  <div className="space-y-2.5">
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                      Select Payment Gateway:
+                    </label>
+
+                    {/* bKash Official */}
+                    {platformSettings.bkash_merchant_active && (
+                      <div
+                        onClick={() => setSelectedGateway("BKASH_DIRECT")}
+                        className={`p-3.5 rounded-none border flex items-center justify-between cursor-pointer transition ${
+                          selectedGateway === "BKASH_DIRECT"
+                            ? "border-[#E2136E] bg-pink-50/40 dark:bg-pink-950/20 ring-2 ring-[#E2136E]/40"
+                            : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-none bg-[#E2136E] text-white flex items-center justify-center font-bold text-sm shrink-0">
+                            ৳
+                          </div>
+                          <div>
+                            <p className="font-bold text-xs text-slate-900 dark:text-white">bKash Official Checkout</p>
+                            <p className="text-[10px] text-slate-500">Official bKash OTP & PIN portal</p>
+                          </div>
+                        </div>
+                        <span className="font-bold text-xs text-[#E2136E]">Instant</span>
+                      </div>
+                    )}
+
+                    {/* Nagad Official */}
+                    {platformSettings.nagad_merchant_active && (
+                      <div
+                        onClick={() => setSelectedGateway("NAGAD_DIRECT")}
+                        className={`p-3.5 rounded-none border flex items-center justify-between cursor-pointer transition ${
+                          selectedGateway === "NAGAD_DIRECT"
+                            ? "border-[#F7941D] bg-orange-50/40 dark:bg-orange-950/20 ring-2 ring-[#F7941D]/40"
+                            : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-none bg-[#F7941D] text-white flex items-center justify-center font-bold text-sm shrink-0">
+                            ন
+                          </div>
+                          <div>
+                            <p className="font-bold text-xs text-slate-900 dark:text-white">Nagad Merchant Gateway</p>
+                            <p className="text-[10px] text-slate-500">Official Nagad Merchant Checkout</p>
+                          </div>
+                        </div>
+                        <span className="font-bold text-xs text-[#F7941D]">Official</span>
+                      </div>
+                    )}
+
+                    {/* EPS Gateway */}
+                    {platformSettings.eps_merchant_active && (
+                      <div
+                        onClick={() => setSelectedGateway("EPS")}
+                        className={`p-3.5 rounded-none border flex items-center justify-between cursor-pointer transition ${
+                          selectedGateway === "EPS"
+                            ? "border-[#0D6EFD] bg-blue-50/40 dark:bg-blue-950/20 ring-2 ring-[#0D6EFD]/40"
+                            : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-none bg-[#0D6EFD] text-white flex items-center justify-center font-bold text-xs shrink-0">
+                            EPS
+                          </div>
+                          <div>
+                            <p className="font-bold text-xs text-slate-900 dark:text-white">EPS Multi-Banking Gateway</p>
+                            <p className="text-[10px] text-slate-500">Cards, Net Banking & MFS</p>
+                          </div>
+                        </div>
+                        <span className="font-bold text-xs text-[#0D6EFD]">Multi-Bank</span>
+                      </div>
+                    )}
+                  </div>
+
                   <button
                     onClick={handleProceedPayment}
                     disabled={paymentInitiating}
-                    className="w-full py-4 rounded-2xl bg-brand-primary hover:opacity-95 text-white font-bold text-sm shadow-xl transition flex items-center justify-center gap-3 cursor-pointer disabled:opacity-50"
+                    className={`w-full py-4 rounded-none text-white font-bold text-sm shadow-xl transition flex items-center justify-center gap-3 cursor-pointer disabled:opacity-50 ${
+                      selectedGateway === "BKASH_DIRECT"
+                        ? "bg-[#E2136E] hover:opacity-95 shadow-[#E2136E]/25"
+                        : selectedGateway === "NAGAD_DIRECT"
+                        ? "bg-[#F7941D] hover:opacity-95 shadow-[#F7941D]/25"
+                        : selectedGateway === "EPS"
+                        ? "bg-[#0D6EFD] hover:opacity-95 shadow-[#0D6EFD]/25"
+                        : "bg-brand-primary hover:opacity-95 shadow-brand-primary/25"
+                    }`}
                   >
                     {paymentInitiating ? (
                       <>
                         <Loader2 className="h-5 w-5 animate-spin" />
-                        <span>Launching SSLCOMMERZ Secure Gateway...</span>
+                        <span>Redirecting to Official Gateway...</span>
                       </>
                     ) : (
                       <>
                         <CreditCard className="h-5 w-5" />
-                        <span>Proceed to SSLCOMMERZ Payment &rarr;</span>
+                        <span>
+                          Proceed to {selectedGateway === "BKASH_DIRECT" ? "bKash" : selectedGateway === "NAGAD_DIRECT" ? "Nagad" : selectedGateway === "EPS" ? "EPS" : "SSLCOMMERZ"} Payment &rarr;
+                        </span>
                       </>
                     )}
                   </button>
                   <p className="text-[11px] text-center text-slate-400">
-                    Supports bKash, Nagad, Rocket, Visa, Mastercard, and all Bangladeshi Bank Portals.
+                    Supports official PIN & OTP verification, Mobile Banking, and Visa/Mastercard.
                   </p>
                   <div className="text-center pt-1">
                     <span className="text-xs text-slate-500">Already have your account credentials? </span>
@@ -458,9 +587,9 @@ function VerificationStatusContent() {
 
             {/* 4. REJECTED STATE */}
             {isRejected && (
-              <div className="p-6 rounded-2xl bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-800 space-y-4">
+              <div className="p-6 rounded-none bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-800 space-y-4">
                 <div className="flex items-center gap-3">
-                  <div className="h-12 w-12 rounded-2xl bg-rose-500/10 text-rose-600 flex items-center justify-center shrink-0">
+                  <div className="h-12 w-12 rounded-none bg-rose-500/10 text-rose-600 flex items-center justify-center shrink-0">
                     <XCircle className="h-6 w-6" />
                   </div>
                   <div>
@@ -473,20 +602,20 @@ function VerificationStatusContent() {
                   </div>
                 </div>
 
-                <div className="p-4 rounded-xl bg-white dark:bg-slate-800 border border-rose-200 dark:border-rose-900/60 text-xs text-rose-700 dark:text-rose-300 font-medium">
+                <div className="p-4 rounded-none bg-white dark:bg-slate-800 border border-rose-200 dark:border-rose-900/60 text-xs text-rose-700 dark:text-rose-300 font-medium">
                   <strong>Rejection Reason:</strong> {data?.rejectionReason || "Documents were incomplete or illegible."}
                 </div>
 
                 <div className="flex flex-col sm:flex-row gap-3 pt-2">
                   <Link
                     href="/register"
-                    className="flex-1 py-3 text-center rounded-xl bg-brand-primary text-white font-bold text-xs shadow-md hover:opacity-90 transition"
+                    className="flex-1 py-3 text-center rounded-none bg-brand-primary text-white font-bold text-xs shadow-md hover:opacity-90 transition"
                   >
                     Submit New Application
                   </Link>
                   <a
                     href="mailto:support@pharmabiz.com"
-                    className="flex-1 py-3 text-center rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs hover:bg-slate-50 transition"
+                    className="flex-1 py-3 text-center rounded-none border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs hover:bg-slate-50 transition"
                   >
                     Contact Compliance Support
                   </a>
@@ -501,12 +630,12 @@ function VerificationStatusContent() {
                   Submitted Application Details & Compliance Documents
                 </h4>
                 <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="h-1.5 w-1.5 rounded-none bg-emerald-500 animate-pulse" />
                   Archived on Cloudinary CDN
                 </span>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 text-slate-600 dark:text-slate-400 border border-slate-100 dark:border-slate-800">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 rounded-none bg-slate-50 dark:bg-slate-800/40 text-slate-600 dark:text-slate-400 border border-slate-100 dark:border-slate-800">
                 <div><strong>Owner:</strong> {data?.ownerName}</div>
                 <div><strong>Phone:</strong> {data?.phone}</div>
                 <div><strong>Address:</strong> {data?.address}</div>
@@ -572,10 +701,10 @@ function VerificationStatusContent() {
                     return (
                       <div
                         key={doc.id}
-                        className="p-3.5 rounded-2xl bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 flex items-center justify-between gap-3 shadow-xs"
+                        className="p-3.5 rounded-none bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 flex items-center justify-between gap-3 shadow-xs"
                       >
                         <div className="flex items-center gap-3 min-w-0">
-                          <div className={`h-9 w-9 rounded-xl ${doc.bg} ${doc.color} flex items-center justify-center shrink-0`}>
+                          <div className={`h-9 w-9 rounded-none ${doc.bg} ${doc.color} flex items-center justify-center shrink-0`}>
                             <doc.icon className="h-4 w-4" />
                           </div>
                           <div className="min-w-0">
@@ -599,7 +728,7 @@ function VerificationStatusContent() {
                             <button
                               type="button"
                               onClick={() => setViewingDoc({ title: doc.title, url: doc.url!, number: doc.number })}
-                              className="px-2.5 py-1.5 rounded-xl bg-brand-primary/10 hover:bg-brand-primary/20 text-brand-primary font-bold text-[11px] transition flex items-center gap-1 cursor-pointer"
+                              className="px-2.5 py-1.5 rounded-none bg-brand-primary/10 hover:bg-brand-primary/20 text-brand-primary font-bold text-[11px] transition flex items-center gap-1 cursor-pointer"
                             >
                               <Maximize2 className="h-3 w-3" />
                               <span>View</span>
@@ -608,7 +737,7 @@ function VerificationStatusContent() {
                               href={doc.url}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="p-1.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500 transition"
+                              className="p-1.5 rounded-none border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500 transition"
                               title="Open in new tab"
                             >
                               <ExternalLink className="h-3.5 w-3.5" />
@@ -628,7 +757,7 @@ function VerificationStatusContent() {
       {/* Standalone Document Preview Modal */}
       {viewingDoc && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-4xl w-full max-h-[90vh] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-none max-w-4xl w-full max-h-[90vh] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
             <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
               <div>
                 <h3 className="font-extrabold text-sm text-slate-900 dark:text-white">
@@ -643,7 +772,7 @@ function VerificationStatusContent() {
                   href={viewingDoc.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold transition flex items-center gap-1.5"
+                  className="px-3 py-1.5 rounded-none bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold transition flex items-center gap-1.5"
                   title="Open in new tab"
                 >
                   <ExternalLink className="h-3.5 w-3.5" />
@@ -652,7 +781,7 @@ function VerificationStatusContent() {
                 <button
                   type="button"
                   onClick={() => setViewingDoc(null)}
-                  className="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 transition cursor-pointer"
+                  className="p-1.5 rounded-none hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 transition cursor-pointer"
                 >
                   <X className="h-5 w-5" />
                 </button>
@@ -663,14 +792,14 @@ function VerificationStatusContent() {
               {isPdf(viewingDoc.url) ? (
                 <iframe
                   src={viewingDoc.url}
-                  className="w-full h-[360px] sm:h-[580px] rounded-2xl border border-slate-200 dark:border-slate-800 bg-white"
+                  className="w-full h-[360px] sm:h-[580px] rounded-none border border-slate-200 dark:border-slate-800 bg-white"
                   title={viewingDoc.title}
                 />
               ) : (
                 <img
                   src={viewingDoc.url}
                   alt={viewingDoc.title}
-                  className="max-h-[360px] sm:max-h-[580px] max-w-full object-contain rounded-2xl shadow-lg"
+                  className="max-h-[360px] sm:max-h-[580px] max-w-full object-contain rounded-none shadow-lg"
                 />
               )}
             </div>
