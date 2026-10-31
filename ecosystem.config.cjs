@@ -14,11 +14,11 @@ module.exports = {
       node_args: "--max-old-space-size=2048",
       env: {
         NODE_ENV: "production",
-        PORT: 3000,
+        PORT: 4001,
       },
       env_production: {
         NODE_ENV: "production",
-        PORT: 3000,
+        PORT: 4001,
       },
       error_file: path.join(__dirname, "logs", "server-error.log"),
       out_file: path.join(__dirname, "logs", "server-out.log"),
@@ -29,7 +29,7 @@ module.exports = {
       name: "bizpharma-client",
       cwd: path.join(__dirname, "client"),
       script: "node_modules/next/dist/bin/next",
-      args: "start -p 3001",
+      args: "start -p 4000",
       instances: 1,
       exec_mode: "fork",
       autorestart: true,
@@ -38,11 +38,11 @@ module.exports = {
       node_args: "--max-old-space-size=2048",
       env: {
         NODE_ENV: "production",
-        PORT: 3001,
+        PORT: 4000,
       },
       env_production: {
         NODE_ENV: "production",
-        PORT: 3001,
+        PORT: 4000,
       },
       error_file: path.join(__dirname, "logs", "client-error.log"),
       out_file: path.join(__dirname, "logs", "client-out.log"),

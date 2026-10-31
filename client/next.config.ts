@@ -9,7 +9,7 @@ const nextConfig: NextConfig = {
     return [
       {
         source: "/api/:path*",
-        destination: `${process.env.SERVER_URL || "http://localhost:3000"}/api/:path*`,
+        destination: `${process.env.SERVER_URL || "http://localhost:4001"}/api/:path*`,
       },
     ];
   },

@@ -73,7 +73,7 @@ if [ ! -f "$PROJECT_DIR/client/.env" ]; then
     if [ -f "$PROJECT_DIR/client/.env.example" ]; then
         cp "$PROJECT_DIR/client/.env.example" "$PROJECT_DIR/client/.env"
     else
-        echo "NEXT_PUBLIC_API_URL=https://bizpos-api.okobiz.com/api" > "$PROJECT_DIR/client/.env"
+        echo "NEXT_PUBLIC_API_URL=https://bizpharma-api.okobiz.com/api" > "$PROJECT_DIR/client/.env"
     fi
 fi
 
@@ -153,16 +153,16 @@ sleep 4
 echo -e "${GREEN}PM2 Process Status:${NC}"
 pm2 status
 
-# Verify Server Port 3000
-if curl -sf http://127.0.0.1:3000/ > /dev/null 2>&1; then
-    echo -e "${GREEN}✅ Backend API is healthy on http://127.0.0.1:3000${NC}"
+# Verify Server Port 4001
+if curl -sf http://127.0.0.1:4001/ > /dev/null 2>&1; then
+    echo -e "${GREEN}✅ Backend API is healthy on http://127.0.0.1:4001${NC}"
 else
     echo -e "${YELLOW}⚠️  Backend API did not respond to root ping. Check logs with: pm2 logs bizpharma-server${NC}"
 fi
 
-# Verify Client Port 3001
-if curl -sf http://127.0.0.1:3001/ > /dev/null 2>&1; then
-    echo -e "${GREEN}✅ Frontend Client is healthy on http://127.0.0.1:3001${NC}"
+# Verify Client Port 4000
+if curl -sf http://127.0.0.1:4000/ > /dev/null 2>&1; then
+    echo -e "${GREEN}✅ Frontend Client is healthy on http://127.0.0.1:4000${NC}"
 else
     echo -e "${YELLOW}⚠️  Frontend did not respond immediately. Check logs with: pm2 logs bizpharma-client${NC}"
 fi
