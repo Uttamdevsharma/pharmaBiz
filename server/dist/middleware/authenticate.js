@@ -5,7 +5,6 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.optionalAuthenticate = exports.authenticate = void 0;
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
-const JWT_SECRET_FALLBACK = "super_secret_jwt_key_pharmacy_2026";
 const authenticate = (req, res, next) => {
     try {
         const authHeader = req.headers.authorization;
@@ -14,7 +13,7 @@ const authenticate = (req, res, next) => {
             return;
         }
         const token = authHeader.split(" ")[1];
-        const secret = process.env.JWT_SECRET || JWT_SECRET_FALLBACK;
+        const secret = process.env.JWT_SECRET || "default_secret";
         const decoded = jsonwebtoken_1.default.verify(token, secret);
         // Attach user to request
         req.user = decoded;
@@ -30,7 +29,7 @@ const optionalAuthenticate = (req, _res, next) => {
         const authHeader = req.headers.authorization;
         if (authHeader && authHeader.startsWith("Bearer ")) {
             const token = authHeader.split(" ")[1];
-            const secret = process.env.JWT_SECRET || JWT_SECRET_FALLBACK;
+            const secret = process.env.JWT_SECRET || "default_secret";
             const decoded = jsonwebtoken_1.default.verify(token, secret);
             req.user = decoded;
         }

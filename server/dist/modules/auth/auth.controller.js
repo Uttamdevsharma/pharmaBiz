@@ -25,40 +25,16 @@ class AuthController {
                 });
                 return;
             }
-            console.error("[Auth:Login Error Details]", {
-                message: error.message,
-                name: error.name,
-                code: error.code,
-                meta: error.meta,
-                stack: error.stack,
-            });
-            const msg = error.message || "Authentication failed";
-            const isDbError = msg.includes("Invalid `prisma.") ||
-                msg.includes("ETIMEDOUT") ||
-                msg.includes("connection") ||
-                msg.includes("queryable") ||
-                msg.includes("timeout") ||
-                error.code === "P1001" ||
-                error.code === "P1002" ||
-                error.code === "ETIMEDOUT";
-            if (isDbError) {
-                res.status(500).json({
-                    success: false,
-                    message: "Database Error: Database connection unreachable. Please check backend logs or try again shortly.",
-                    detail: msg,
-                });
-                return;
-            }
-            if (msg.includes("deactivated")) {
-                res.status(403).json({
-                    success: false,
-                    message: msg,
-                });
-                return;
-            }
             res.status(401).json({
                 success: false,
-                message: msg,
+                message: (() => {
+                    let msg = error.message || "Authentication failed";
+                    if (typeof msg === "string" && (msg.includes("Invalid `prisma.") || msg.trim() === "")) {
+                        const detail = error.meta?.message || error.meta?.cause || error.cause?.message || error.code || "";
+                        return "Database Error: " + (detail ? "[" + detail + "] " : "") + (error.message ? error.message.replace(/\n+/g, " ").trim() : "Database connection unreachable");
+                    }
+                    return msg;
+                })(),
             });
         }
     }

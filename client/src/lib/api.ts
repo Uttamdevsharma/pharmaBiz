@@ -76,15 +76,7 @@ export async function fetchApi<T = any>(
       body: finalBody,
     });
 
-    let data: any;
-    try {
-      data = await response.json();
-    } catch {
-      data = {
-        success: false,
-        message: `HTTP ${response.status}: ${response.statusText || "Server response error"}`,
-      };
-    }
+    const data = await response.json();
 
     if (method === "GET" && data && data.success) {
       apiGetCache.set(cacheKey, { data, timestamp: Date.now() });

@@ -1,60 +1,60 @@
+
 import bcrypt from "bcryptjs";
 import { prisma } from "./prisma";
 import { DEFAULT_SETTINGS } from "../../modules/settings/settings.service";
 import { CENTRAL_PLAN_DEFINITIONS, PricingTierType } from "./planLimits";
 
 export async function seedSuperAdmin(): Promise<void> {
-  console.log("🚀 [Seed] Beginning database seed sequence...");
-  const adminEmail = "admin@gmail.com";
-  const adminPassword = "admin1234";
-
-  // 0. Ensure schema columns exist in PostgreSQL
   try {
-    await (prisma as any).$executeRawUnsafe(`ALTER TABLE "Tenant" ADD COLUMN IF NOT EXISTS "paymentMethod" TEXT DEFAULT 'MANUAL_BKASH';`);
-    await (prisma as any).$executeRawUnsafe(`ALTER TABLE "Tenant" ADD COLUMN IF NOT EXISTS "manualPaymentNumber" TEXT;`);
-    await (prisma as any).$executeRawUnsafe(`ALTER TABLE "Tenant" ADD COLUMN IF NOT EXISTS "manualPaymentTrxId" TEXT;`);
-    await (prisma as any).$executeRawUnsafe(`ALTER TABLE "Tenant" ADD COLUMN IF NOT EXISTS "manualPaymentDocUrl" TEXT;`);
-    await (prisma as any).$executeRawUnsafe(`ALTER TABLE "Tenant" ADD COLUMN IF NOT EXISTS "manualPaymentDocPublicId" TEXT;`);
-    await (prisma as any).$executeRawUnsafe(`ALTER TABLE "Tenant" ADD COLUMN IF NOT EXISTS "manualPaymentAmount" DECIMAL(12, 2);`);
-    await (prisma as any).$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "resetPasswordOtp" TEXT;`);
-    await (prisma as any).$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "resetPasswordOtpExpires" TIMESTAMP;`);
-    await (prisma as any).$executeRawUnsafe(`ALTER TABLE "Payment" ADD COLUMN IF NOT EXISTS "senderNumber" TEXT;`);
-    await (prisma as any).$executeRawUnsafe(`ALTER TABLE "Payment" ADD COLUMN IF NOT EXISTS "screenshotUrl" TEXT;`);
-    await (prisma as any).$executeRawUnsafe(`ALTER TABLE "Payment" ADD COLUMN IF NOT EXISTS "type" TEXT DEFAULT 'SUBSCRIPTION';`);
-    await (prisma as any).$executeRawUnsafe(`ALTER TABLE "Payment" ADD COLUMN IF NOT EXISTS "notes" TEXT;`);
-    await (prisma as any).$executeRawUnsafe(`ALTER TABLE "Tenant" ADD COLUMN IF NOT EXISTS "isDemo" BOOLEAN DEFAULT false;`);
-    await (prisma as any).$executeRawUnsafe(`ALTER TABLE "Tenant" ADD COLUMN IF NOT EXISTS "demoApprovedAt" TIMESTAMP;`);
-    await (prisma as any).$executeRawUnsafe(`ALTER TABLE "Tenant" ADD COLUMN IF NOT EXISTS "demoExpiresAt" TIMESTAMP;`);
-    await (prisma as any).$executeRawUnsafe(`ALTER TABLE "SubscriptionPlan" ADD COLUMN IF NOT EXISTS "trialDays" INTEGER DEFAULT 0;`);
-    await (prisma as any).$executeRawUnsafe(`ALTER TABLE "Subscription" ADD COLUMN IF NOT EXISTS "expiryReminderSentAt" TIMESTAMP;`);
-    await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "bkash_merchant_enabled" BOOLEAN DEFAULT false;`);
-    await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "bkash_is_live" BOOLEAN DEFAULT false;`);
-    await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "bkash_app_key" VARCHAR(255);`);
-    await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "bkash_app_secret" TEXT;`);
-    await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "bkash_username" VARCHAR(100);`);
-    await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "bkash_password" TEXT;`);
-    await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "nagad_merchant_enabled" BOOLEAN DEFAULT false;`);
-    await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "nagad_is_live" BOOLEAN DEFAULT false;`);
-    await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "nagad_merchant_id" VARCHAR(100);`);
-    await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "nagad_merchant_phone" VARCHAR(50);`);
-    await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "nagad_public_key" TEXT;`);
-    await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "nagad_private_key" TEXT;`);
-    await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "eps_merchant_enabled" BOOLEAN DEFAULT false;`);
-    await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "eps_is_live" BOOLEAN DEFAULT false;`);
-    await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "eps_merchant_id" VARCHAR(255);`);
-    await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "eps_store_id" VARCHAR(255);`);
-    await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "eps_username" VARCHAR(255);`);
-    await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "eps_password" TEXT;`);
-    await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "eps_hash_key" TEXT;`);
-    await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "manual_payment_active" BOOLEAN DEFAULT true;`);
-    await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "bkash_number" VARCHAR(50);`);
-    await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "nagad_number" VARCHAR(50);`);
-  } catch (colErr: any) {
-    console.warn("[Seed] Column verification note:", colErr?.message || colErr);
-  }
+    const adminEmail = "admin@gmail.com";
+    const adminPassword = "admin1234";
 
-  // 1. Seed Platform Settings if not present
-  try {
+    // 0. Ensure schema columns exist in PostgreSQL
+    try {
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "Tenant" ADD COLUMN IF NOT EXISTS "paymentMethod" TEXT DEFAULT 'MANUAL_BKASH';`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "Tenant" ADD COLUMN IF NOT EXISTS "manualPaymentNumber" TEXT;`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "Tenant" ADD COLUMN IF NOT EXISTS "manualPaymentTrxId" TEXT;`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "Tenant" ADD COLUMN IF NOT EXISTS "manualPaymentDocUrl" TEXT;`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "Tenant" ADD COLUMN IF NOT EXISTS "manualPaymentDocPublicId" TEXT;`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "Tenant" ADD COLUMN IF NOT EXISTS "manualPaymentAmount" DECIMAL(12, 2);`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "resetPasswordOtp" TEXT;`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "resetPasswordOtpExpires" TIMESTAMP;`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "Payment" ADD COLUMN IF NOT EXISTS "senderNumber" TEXT;`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "Payment" ADD COLUMN IF NOT EXISTS "screenshotUrl" TEXT;`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "Payment" ADD COLUMN IF NOT EXISTS "type" TEXT DEFAULT 'SUBSCRIPTION';`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "Payment" ADD COLUMN IF NOT EXISTS "notes" TEXT;`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "Tenant" ADD COLUMN IF NOT EXISTS "isDemo" BOOLEAN DEFAULT false;`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "Tenant" ADD COLUMN IF NOT EXISTS "demoApprovedAt" TIMESTAMP;`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "Tenant" ADD COLUMN IF NOT EXISTS "demoExpiresAt" TIMESTAMP;`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "SubscriptionPlan" ADD COLUMN IF NOT EXISTS "trialDays" INTEGER DEFAULT 0;`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "Subscription" ADD COLUMN IF NOT EXISTS "expiryReminderSentAt" TIMESTAMP;`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "bkash_merchant_enabled" BOOLEAN DEFAULT false;`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "bkash_is_live" BOOLEAN DEFAULT false;`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "bkash_app_key" VARCHAR(255);`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "bkash_app_secret" TEXT;`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "bkash_username" VARCHAR(100);`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "bkash_password" TEXT;`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "nagad_merchant_enabled" BOOLEAN DEFAULT false;`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "nagad_is_live" BOOLEAN DEFAULT false;`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "nagad_merchant_id" VARCHAR(100);`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "nagad_merchant_phone" VARCHAR(50);`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "nagad_public_key" TEXT;`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "nagad_private_key" TEXT;`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "eps_merchant_enabled" BOOLEAN DEFAULT false;`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "eps_is_live" BOOLEAN DEFAULT false;`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "eps_merchant_id" VARCHAR(255);`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "eps_store_id" VARCHAR(255);`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "eps_username" VARCHAR(255);`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "eps_password" TEXT;`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "eps_hash_key" TEXT;`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "manual_payment_active" BOOLEAN DEFAULT true;`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "bkash_number" VARCHAR(50);`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "nagad_number" VARCHAR(50);`);
+    } catch (colErr: any) {
+      console.warn("[Seed] Column verification note:", colErr.message);
+    }
+
+    // 1. Seed Platform Settings if not present
     const existingSettings = await (prisma as any).platformSetting.findUnique({
       where: { key: "landing_page_config" },
     });
@@ -68,12 +68,8 @@ export async function seedSuperAdmin(): Promise<void> {
       });
       console.log("[Seed] Platform Landing Page and Theme Settings seeded.");
     }
-  } catch (err: any) {
-    console.warn("[Seed] Platform Settings note:", err?.message || err);
-  }
 
-  // 2. Seed Payment Gateway Settings if not present
-  try {
+    // Seed Payment Gateway Settings if not present
     const existingPaymentSettings = await (prisma as any).platformSetting.findUnique({
       where: { key: "payment_gateway_settings" },
     });
@@ -100,13 +96,8 @@ export async function seedSuperAdmin(): Promise<void> {
       });
       console.log("[Seed] Payment Gateway Settings seeded.");
     }
-  } catch (err: any) {
-    console.warn("[Seed] Payment Gateway Settings note:", err?.message || err);
-  }
 
-  // 3. Guarantee Super Admin existence and credentials
-  try {
-    const passwordHash = await bcrypt.hash(adminPassword, 10);
+    // 2. Check if Super Admin already exists
     const existingAdmin = await (prisma as any).user.findFirst({
       where: {
         OR: [
@@ -118,6 +109,7 @@ export async function seedSuperAdmin(): Promise<void> {
     });
 
     if (!existingAdmin) {
+      // 3. Find or create Platform HQ System Tenant for Super Admin
       let systemTenant = await (prisma as any).tenant.findFirst({
         where: { name: "Platform HQ" },
       });
@@ -136,6 +128,9 @@ export async function seedSuperAdmin(): Promise<void> {
         console.log("[Seed] Created Platform HQ system tenant.");
       }
 
+      // 4. Hash password and create Super Admin user
+      const passwordHash = await bcrypt.hash(adminPassword, 10);
+
       const superAdmin = await (prisma as any).user.create({
         data: {
           tenantId: systemTenant.id,
@@ -148,25 +143,22 @@ export async function seedSuperAdmin(): Promise<void> {
         },
       });
 
-      console.log(`[Seed] Super Admin user created: ${superAdmin.email} (${superAdmin.role})`);
+      console.log(`[Seed] Super Admin successfully seeded!`);
+      console.log(`-----------------------------------------------`);
+      console.log(` Email / Username : ${superAdmin.email}`);
+      console.log(` Password         : ${adminPassword}`);
+      console.log(` Role             : ${superAdmin.role}`);
+      console.log(`-----------------------------------------------`);
     } else {
-      // Ensure super admin password and active status are always up to date
+      // Ensure super admin password is up to date
+      const passwordHash = await bcrypt.hash(adminPassword, 10);
       await (prisma as any).user.update({
         where: { id: existingAdmin.id },
-        data: {
-          passwordHash,
-          isActive: true,
-          role: "SUPER_ADMIN",
-        },
+        data: { passwordHash, isActive: true },
       });
-      console.log(`[Seed] Super Admin credentials verified & updated: ${existingAdmin.email} (active: true)`);
     }
-  } catch (err: any) {
-    console.error("[Seed Error] Failed to verify/seed Super Admin user:", err?.message || err);
-  }
 
-  // 4. Seed Demo Tenant & Demo Staff Accounts
-  try {
+    // 4b. Seed Demo Tenant & Demo Staff Accounts
     let demoTenant = await (prisma as any).tenant.findFirst({
       where: { email: "uttam23412@gmail.com" },
     });
@@ -290,33 +282,36 @@ export async function seedSuperAdmin(): Promise<void> {
         });
       }
     }
-  } catch (err: any) {
-    console.error("[Seed Error] Demo accounts note:", err?.message || err);
-  }
 
-  // 5. Seed / Upsert the 3 paid subscription plans
-  try {
+    // 5. Seed / Upsert the 3 paid subscription plans: Plan 1 (Starter), Plan 2 (Growth), Plan 3 (Enterprise)
+    // Delete/Purge any legacy Free / Trial plan from the system
     try {
       const trialPlan = await (prisma as any).subscriptionPlan.findUnique({
         where: { tier: "TRIAL" },
       });
       if (trialPlan) {
+        // Migrate any tenants referencing TRIAL to STARTER
         await (prisma as any).tenant.updateMany({
           where: { tier: "TRIAL" },
           data: { tier: "STARTER" },
         });
+        // Delete or deactivate the trial plan
         try {
           await (prisma as any).subscriptionPlan.delete({
             where: { id: trialPlan.id },
           });
+          console.log("[Seed] Successfully purged Free Trial subscription plan from database.");
         } catch {
           await (prisma as any).subscriptionPlan.update({
             where: { id: trialPlan.id },
             data: { isActive: false },
           });
+          console.log("[Seed] Deactivated legacy Free Trial subscription plan.");
         }
       }
-    } catch {}
+    } catch (e: any) {
+      console.warn("[Seed] Note during trial purge:", e.message);
+    }
 
     const tiers: Array<"STARTER" | "GROWTH" | "ENTERPRISE"> = ["STARTER", "GROWTH", "ENTERPRISE"];
     for (const tier of tiers) {
@@ -344,6 +339,7 @@ export async function seedSuperAdmin(): Promise<void> {
         });
         console.log(`[Seed] Created ${planDef.name} (${tier}).`);
       } else {
+        // Backfill features without overwriting super-admin customized name, price, maxBranches, or features
         const currentFeat = (typeof existingPlan.features === "object" && existingPlan.features !== null) ? existingPlan.features : {};
         if (currentFeat.maxStaffPerBranch === undefined) {
           await (prisma as any).subscriptionPlan.update({
@@ -361,108 +357,107 @@ export async function seedSuperAdmin(): Promise<void> {
       }
     }
     console.log("[Seed] All 3 subscription plans (Plan 1 Starter, Plan 2 Growth, Plan 3 Enterprise) verified.");
-  } catch (err: any) {
-    console.error("[Seed Error] Subscription plans note:", err?.message || err);
-  }
 
-  // 6. Ensure PlatformRole table and seed dynamic roles
-  try {
-    await (prisma as any).$executeRawUnsafe(`
-      CREATE TABLE IF NOT EXISTS "PlatformRole" (
-        "id" TEXT NOT NULL PRIMARY KEY,
-        "name" TEXT NOT NULL UNIQUE,
-        "description" TEXT,
-        "permissions" TEXT[] DEFAULT ARRAY[]::TEXT[],
-        "isSystem" BOOLEAN NOT NULL DEFAULT false,
-        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
-      );
+    // 6. Ensure PlatformRole table and seed default dynamic roles
+    try {
+      await (prisma as any).$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS "PlatformRole" (
+          "id" TEXT NOT NULL PRIMARY KEY,
+          "name" TEXT NOT NULL UNIQUE,
+          "description" TEXT,
+          "permissions" TEXT[] DEFAULT ARRAY[]::TEXT[],
+          "isSystem" BOOLEAN NOT NULL DEFAULT false,
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
 
-      DO $$
-      BEGIN
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='User' AND column_name='customRoleId') THEN
-          ALTER TABLE "User" ADD COLUMN "customRoleId" TEXT;
-        END IF;
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='User' AND column_name='customRoleName') THEN
-          ALTER TABLE "User" ADD COLUMN "customRoleName" TEXT;
-        END IF;
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='User' AND column_name='permissions') THEN
-          ALTER TABLE "User" ADD COLUMN "permissions" TEXT[] DEFAULT ARRAY[]::TEXT[];
-        END IF;
-      END $$;
-    `);
+        DO $$
+        BEGIN
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='User' AND column_name='customRoleId') THEN
+            ALTER TABLE "User" ADD COLUMN "customRoleId" TEXT;
+          END IF;
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='User' AND column_name='customRoleName') THEN
+            ALTER TABLE "User" ADD COLUMN "customRoleName" TEXT;
+          END IF;
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='User' AND column_name='permissions') THEN
+            ALTER TABLE "User" ADD COLUMN "permissions" TEXT[] DEFAULT ARRAY[]::TEXT[];
+          END IF;
+        END $$;
+      `);
 
-    const defaultRoles = [
-      {
-        name: "CTO",
-        description: "Chief Technology Officer - Full platform telemetry, tenant management, plans, payments, and system controls.",
-        permissions: [
-          "pharmacies.manage",
-          "subscriptions.manage",
-          "plans.manage",
-          "payments.view",
-          "reports.view",
-          "staff.create",
-          "staff.manage",
-          "roles.manage",
-          "settings.manage",
-          "platform.data",
-        ],
-        isSystem: false,
-      },
-      {
-        name: "Project Manager",
-        description: "Platform Operations - Pharmacy onboarding, subscription management, plan modifications, payments, and reports.",
-        permissions: [
-          "pharmacies.manage",
-          "subscriptions.manage",
-          "plans.manage",
-          "payments.view",
-          "reports.view",
-        ],
-        isSystem: false,
-      },
-      {
-        name: "Support Lead",
-        description: "Customer Support & Success - Managing pharmacies, inspecting subscriptions, and verifying payments.",
-        permissions: [
-          "pharmacies.manage",
-          "subscriptions.manage",
-          "payments.view",
-        ],
-        isSystem: false,
-      },
-      {
-        name: "Financial Auditor",
-        description: "Financial Oversight - Payment transaction inspection and revenue analytics reports.",
-        permissions: [
-          "payments.view",
-          "reports.view",
-        ],
-        isSystem: false,
-      },
-    ];
+      const defaultRoles = [
+        {
+          name: "CTO",
+          description: "Chief Technology Officer - Full platform telemetry, tenant management, plans, payments, and system controls.",
+          permissions: [
+            "pharmacies.manage",
+            "subscriptions.manage",
+            "plans.manage",
+            "payments.view",
+            "reports.view",
+            "staff.create",
+            "staff.manage",
+            "roles.manage",
+            "settings.manage",
+            "platform.data",
+          ],
+          isSystem: false,
+        },
+        {
+          name: "Project Manager",
+          description: "Platform Operations - Pharmacy onboarding, subscription management, plan modifications, payments, and reports.",
+          permissions: [
+            "pharmacies.manage",
+            "subscriptions.manage",
+            "plans.manage",
+            "payments.view",
+            "reports.view",
+          ],
+          isSystem: false,
+        },
+        {
+          name: "Support Lead",
+          description: "Customer Support & Success - Managing pharmacies, inspecting subscriptions, and verifying payments.",
+          permissions: [
+            "pharmacies.manage",
+            "subscriptions.manage",
+            "payments.view",
+          ],
+          isSystem: false,
+        },
+        {
+          name: "Financial Auditor",
+          description: "Financial Oversight - Payment transaction inspection and revenue analytics reports.",
+          permissions: [
+            "payments.view",
+            "reports.view",
+          ],
+          isSystem: false,
+        },
+      ];
 
-    for (const roleDef of defaultRoles) {
-      const existing = await (prisma as any).platformRole.findUnique({
-        where: { name: roleDef.name },
-      });
-      if (!existing) {
-        await (prisma as any).platformRole.create({
-          data: {
-            id: roleDef.name.toLowerCase().replace(/\s+/g, "-"),
-            name: roleDef.name,
-            description: roleDef.description,
-            permissions: roleDef.permissions,
-            isSystem: roleDef.isSystem,
-          },
+      for (const roleDef of defaultRoles) {
+        const existing = await (prisma as any).platformRole.findUnique({
+          where: { name: roleDef.name },
         });
-        console.log(`[Seed] Created dynamic role: ${roleDef.name}`);
+        if (!existing) {
+          await (prisma as any).platformRole.create({
+            data: {
+              id: roleDef.name.toLowerCase().replace(/\s+/g, "-"),
+              name: roleDef.name,
+              description: roleDef.description,
+              permissions: roleDef.permissions,
+              isSystem: roleDef.isSystem,
+            },
+          });
+          console.log(`[Seed] Created dynamic role: ${roleDef.name}`);
+        }
       }
+    } catch (err: any) {
+      console.error("[Seed Error] Failed to ensure dynamic roles:", err.message);
     }
-  } catch (err: any) {
-    console.error("[Seed Error] Failed to ensure dynamic roles:", err?.message || err);
+  } catch (error: any) {
+    console.error("[Seed Error] Failed to seed Super Admin / Settings:", error.message);
   }
-
-  console.log("✅ [Seed] Database seed sequence completed.\n");
 }
+

@@ -20,20 +20,12 @@ if (fs.existsSync(serverEnvFile) && dotenv) {
   }
 }
 
-const NEON_DB_URL =
-  "postgresql://neondb_owner:npg_uFyoipQ7END0@ep-tiny-star-aywpbgfb-pooler.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require";
-
-if (
-  !parsedServerEnv.DATABASE_URL ||
-  parsedServerEnv.DATABASE_URL.includes("localhost") ||
-  parsedServerEnv.DATABASE_URL.includes("127.0.0.1") ||
-  !parsedServerEnv.DATABASE_URL.startsWith("postgres")
-) {
-  parsedServerEnv.DATABASE_URL = NEON_DB_URL;
+if (!parsedServerEnv.DATABASE_URL) {
+  parsedServerEnv.DATABASE_URL = process.env.DATABASE_URL || "";
 }
 
 if (!parsedServerEnv.JWT_SECRET) {
-  parsedServerEnv.JWT_SECRET = "super_secret_jwt_key_pharmacy_2026";
+  parsedServerEnv.JWT_SECRET = process.env.JWT_SECRET || "super_secret_jwt_key_pharmacy_2026";
 }
 
 module.exports = {

@@ -1,3 +1,4 @@
+
 import dotenv from "dotenv";
 import path from "path";
 import fs from "fs";
@@ -16,10 +17,7 @@ import { defineConfig } from "prisma/config";
 });
 dotenv.config();
 
-const DEFAULT_DATABASE_URL =
-  "postgresql://neondb_owner:npg_uFyoipQ7END0@ep-tiny-star-aywpbgfb-pooler.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require";
-
-let dbUrl = (process.env.DATABASE_URL || DEFAULT_DATABASE_URL).trim();
+let dbUrl = (process.env.DATABASE_URL || process.env.DIRECT_URL || "").trim();
 dbUrl = dbUrl.replace(/[?&]channel_binding=require/g, "");
 if (!dbUrl.includes("?") && dbUrl.includes("&")) {
   dbUrl = dbUrl.replace("&", "?");

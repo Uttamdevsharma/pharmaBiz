@@ -6,16 +6,11 @@ try {
 import dotenv from "dotenv";
 import path from "path";
 import fs from "fs";
-import ws from "ws";
-import { neonConfig, Pool } from "@neondatabase/serverless";
-import { PrismaNeon } from "@prisma/adapter-neon";
+import { Pool } from "pg";
+import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 
-// Enforce WebSockets via port 443 (HTTPS) for Neon Postgres to bypass VPS port 5432 firewall blocking
-neonConfig.webSocketConstructor = (ws as any).default || ws;
-neonConfig.pipelineConnect = false;
-
-// Candidate paths to search for .env
+// Search candidate .env paths
 const candidateEnvPaths = [
   path.resolve(__dirname, "../../.env"),
   path.resolve(__dirname, "../../../.env"),
@@ -27,46 +22,37 @@ const candidateEnvPaths = [
 
 for (const envPath of candidateEnvPaths) {
   try {
-    if (fs.existsSync(envPath)) {
-      dotenv.config({ path: envPath });
-    }
-  } catch {
-    // Ignore read errors
-  }
+    if (fs.existsSync(envPath)) dotenv.config({ path: envPath });
+  } catch {}
 }
 
-// Fallback database URL if environment variable is missing or invalid
-const DEFAULT_DATABASE_URL =
-  "postgresql://neondb_owner:npg_uFyoipQ7END0@ep-tiny-star-aywpbgfb-pooler.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require";
-
-let raw = (process.env.DATABASE_URL || "").trim();
-if (!raw || raw.includes("localhost") || raw.includes("127.0.0.1") || !raw.startsWith("postgres")) {
-  raw = DEFAULT_DATABASE_URL;
+const raw = (process.env.DATABASE_URL || "").trim();
+if (!raw) {
+  throw new Error("DATABASE_URL environment variable is required.");
 }
 
-let connectionString = raw;
-
-// Strip channel_binding=require for node-postgres compatibility
-connectionString = connectionString.replace(/[?&]channel_binding=require/g, "");
+// Strip channel_binding for node-postgres compatibility
+let connectionString = raw.replace(/[?&]channel_binding=require/g, "");
 if (!connectionString.includes("?") && connectionString.includes("&")) {
   connectionString = connectionString.replace("&", "?");
 }
 
-// Neon Serverless Pool communicates via WebSockets on port 443
 const pool = new Pool({
   connectionString,
   max: 20,
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 20000,
+  connectionTimeoutMillis: 10000,
+  ssl: {
+    rejectUnauthorized: false,
+  },
 });
 
 pool.on("error", (err) => {
-  console.error("[Neon Serverless Pool Error]", err);
+  console.error("[PostgreSQL Pool Error]", err);
 });
 
-// Prisma Neon driver adapter connects directly through port 443 WSS
-const adapter = new PrismaNeon({ connectionString });
-const prisma = new PrismaClient({
+const adapter = new PrismaPg(pool);
+export const prisma = new PrismaClient({
   adapter,
   transactionOptions: {
     maxWait: 15000,
@@ -74,4 +60,4 @@ const prisma = new PrismaClient({
   },
 });
 
-export { prisma, pool };
+export { pool };
