@@ -72,6 +72,8 @@ if [ "$(id -u)" -eq 0 ]; then
     command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --permanent --add-port=443/tcp 2>/dev/null || true
     command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --reload 2>/dev/null || true
     command -v setenforce >/dev/null 2>&1 && setenforce 0 2>/dev/null || true
+    sysctl -w net.ipv6.conf.all.disable_ipv6=1 2>/dev/null || true
+    sysctl -w net.ipv6.conf.default.disable_ipv6=1 2>/dev/null || true
 fi
 
 # Ensure server/.env exists and has valid DATABASE_URL and JWT_SECRET

@@ -112,7 +112,7 @@ function serializeErr(err: any) {
   return out;
 }
 
-function probeTcpPort(host: string, port: number, timeoutMs = 2500): Promise<{ open: boolean; latencyMs?: number; error?: string }> {
+function probeTcpPort(host: string, port: number, timeoutMs = 4000, family = 4): Promise<{ open: boolean; latencyMs?: number; error?: string; code?: string; address?: string }> {
   return new Promise((resolve) => {
     const start = Date.now();
     const socket = new net.Socket();
@@ -124,7 +124,7 @@ function probeTcpPort(host: string, port: number, timeoutMs = 2500): Promise<{ o
         settled = true;
         const latencyMs = Date.now() - start;
         socket.destroy();
-        resolve({ open: true, latencyMs });
+        resolve({ open: true, latencyMs, address: socket.remoteAddress });
       }
     });
 
@@ -132,7 +132,7 @@ function probeTcpPort(host: string, port: number, timeoutMs = 2500): Promise<{ o
       if (!settled) {
         settled = true;
         socket.destroy();
-        resolve({ open: false, error: "Connection timed out" });
+        resolve({ open: false, error: "Connection timed out", code: "ETIMEDOUT" });
       }
     });
 
@@ -140,11 +140,16 @@ function probeTcpPort(host: string, port: number, timeoutMs = 2500): Promise<{ o
       if (!settled) {
         settled = true;
         socket.destroy();
-        resolve({ open: false, error: err?.message || "TCP connection error" });
+        resolve({
+          open: false,
+          error: err?.message || "TCP connection error",
+          code: err?.code || null,
+          address: err?.address || null,
+        });
       }
     });
 
-    socket.connect(port, host);
+    socket.connect({ host, port, family });
   });
 }
 
@@ -178,8 +183,19 @@ app.get("/api/health/db", async (req: Request, res: Response) => {
     diagnostic.dns = { host: dbHost, error: serializeErr(dnsErr) };
   }
 
-  diagnostic.port443 = await probeTcpPort(dbHost, 443);
-  diagnostic.port5432 = await probeTcpPort(dbHost, 5432);
+  diagnostic.port443 = await probeTcpPort(dbHost, 443, 4000, 4);
+  diagnostic.port5432 = await probeTcpPort(dbHost, 5432, 4000, 4);
+
+  // System CLI connectivity probe
+  try {
+    const cp = require("child_process");
+    diagnostic.sysNet = {
+      ping4: cp.execSync("ping -c 2 -W 2 18.226.144.228 2>&1 || true", { timeout: 3000 }).toString().trim(),
+      curl4: cp.execSync("curl -4 -s -o /dev/null -w '%{http_code}' --connect-timeout 3 https://ep-tiny-star-aywpbgfb-pooler.c-5.us-east-2.aws.neon.tech/sql 2>&1 || true", { timeout: 4000 }).toString().trim(),
+    };
+  } catch (sysErr: any) {
+    diagnostic.sysNet = { error: sysErr?.message };
+  }
 
   let anySuccess = false;
 
@@ -198,6 +214,7 @@ app.get("/api/health/db", async (req: Request, res: Response) => {
     diagnostic.neonHttp = {
       success: false,
       error: serializeErr(httpErr),
+      cause: serializeErr((httpErr as any)?.cause || (httpErr as any)?.sourceError),
     };
   }
 
