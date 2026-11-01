@@ -73,10 +73,14 @@ module.exports = {
       env: {
         NODE_ENV: "production",
         PORT: 4000,
+        NEXT_PUBLIC_API_URL: "https://bizpharma-api.okobiz.com/api",
+        SERVER_URL: "https://bizpharma-api.okobiz.com",
       },
       env_production: {
         NODE_ENV: "production",
         PORT: 4000,
+        NEXT_PUBLIC_API_URL: "https://bizpharma-api.okobiz.com/api",
+        SERVER_URL: "https://bizpharma-api.okobiz.com",
       },
       error_file: path.join(__dirname, "logs", "client-error.log"),
       out_file: path.join(__dirname, "logs", "client-out.log"),

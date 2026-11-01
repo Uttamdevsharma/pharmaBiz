@@ -85,6 +85,7 @@ fi
 
 # Always enforce production API URL on client/.env before building
 echo "NEXT_PUBLIC_API_URL=https://bizpharma-api.okobiz.com/api" > "$PROJECT_DIR/client/.env"
+echo "SERVER_URL=https://bizpharma-api.okobiz.com" >> "$PROJECT_DIR/client/.env"
 echo -e "${GREEN}[*] client/.env configured with NEXT_PUBLIC_API_URL=https://bizpharma-api.okobiz.com/api${NC}"
 
 # 6. Build and Configure Server (Express + Prisma)
