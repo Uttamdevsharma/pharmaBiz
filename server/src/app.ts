@@ -83,6 +83,60 @@ app.get("/", (req: Request, res: Response) => {
   });
 });
 
+import { prisma, pool } from "./app/lib/prisma";
+
+// Comprehensive Database Health & Diagnostic Check
+app.get("/api/health/db", async (req: Request, res: Response) => {
+  const diagnostic: any = {
+    timestamp: new Date().toISOString(),
+    nodeEnv: process.env.NODE_ENV,
+    port: process.env.PORT,
+    databaseConfigured: Boolean(process.env.DATABASE_URL),
+  };
+
+  try {
+    const rawUrl = process.env.DATABASE_URL || "";
+    diagnostic.databaseHostMasked = rawUrl.replace(/:([^:@]+)@/, ":****@");
+
+    // 1. Direct pg Pool probe
+    const pgStart = Date.now();
+    const pgRes = await pool.query("SELECT 1 AS connected, NOW() AS db_now, current_database() AS db_name");
+    diagnostic.pgConnected = true;
+    diagnostic.pgLatencyMs = Date.now() - pgStart;
+    diagnostic.pgResult = pgRes.rows[0];
+
+    // 2. Prisma raw query probe
+    const prismaRawStart = Date.now();
+    await (prisma as any).$queryRawUnsafe("SELECT 1 AS ok");
+    diagnostic.prismaRawConnected = true;
+    diagnostic.prismaRawLatencyMs = Date.now() - prismaRawStart;
+
+    // 3. Prisma model probe
+    const userCount = await (prisma as any).user.count();
+    diagnostic.prismaModelConnected = true;
+    diagnostic.userCount = userCount;
+
+    res.json({
+      success: true,
+      message: "Database connection is fully operational",
+      diagnostic,
+    });
+  } catch (error: any) {
+    diagnostic.error = {
+      message: error.message,
+      code: error.code,
+      name: error.name,
+      meta: error.meta,
+      stack: error.stack,
+    };
+    res.status(500).json({
+      success: false,
+      message: "Database connection failed",
+      diagnostic,
+    });
+  }
+});
+
 // Mount Module Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/super-admin", superAdminRoutes);

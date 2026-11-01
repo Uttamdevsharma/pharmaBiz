@@ -27,7 +27,14 @@ class AuthController {
             }
             res.status(401).json({
                 success: false,
-                message: error.message || "Authentication failed",
+                message: (() => {
+                    let msg = error.message || "Authentication failed";
+                    if (typeof msg === "string" && (msg.includes("Invalid `prisma.") || msg.trim() === "")) {
+                        const detail = error.meta?.message || error.meta?.cause || error.cause?.message || error.code || "";
+                        return "Database Error: " + (detail ? "[" + detail + "] " : "") + (error.message ? error.message.replace(/\n+/g, " ").trim() : "Database connection unreachable");
+                    }
+                    return msg;
+                })(),
             });
         }
     }

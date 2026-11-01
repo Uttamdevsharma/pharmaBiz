@@ -20,9 +20,16 @@ if (fs.existsSync(serverEnvFile) && dotenv) {
   }
 }
 
-if (!parsedServerEnv.DATABASE_URL) {
-  parsedServerEnv.DATABASE_URL =
-    "postgresql://neondb_owner:npg_uFyoipQ7END0@ep-tiny-star-aywpbgfb-pooler.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require";
+const NEON_DB_URL =
+  "postgresql://neondb_owner:npg_uFyoipQ7END0@ep-tiny-star-aywpbgfb-pooler.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require";
+
+if (
+  !parsedServerEnv.DATABASE_URL ||
+  parsedServerEnv.DATABASE_URL.includes("localhost") ||
+  parsedServerEnv.DATABASE_URL.includes("127.0.0.1") ||
+  !parsedServerEnv.DATABASE_URL.startsWith("postgres")
+) {
+  parsedServerEnv.DATABASE_URL = NEON_DB_URL;
 }
 
 module.exports = {

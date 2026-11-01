@@ -80,6 +80,54 @@ app.get("/", (req, res) => {
         timestamp: new Date(),
     });
 });
+const prisma_1 = require("./app/lib/prisma");
+// Comprehensive Database Health & Diagnostic Check
+app.get("/api/health/db", async (req, res) => {
+    const diagnostic = {
+        timestamp: new Date().toISOString(),
+        nodeEnv: process.env.NODE_ENV,
+        port: process.env.PORT,
+        databaseConfigured: Boolean(process.env.DATABASE_URL),
+    };
+    try {
+        const rawUrl = process.env.DATABASE_URL || "";
+        diagnostic.databaseHostMasked = rawUrl.replace(/:([^:@]+)@/, ":****@");
+        // 1. Direct pg Pool probe
+        const pgStart = Date.now();
+        const pgRes = await prisma_1.pool.query("SELECT 1 AS connected, NOW() AS db_now, current_database() AS db_name");
+        diagnostic.pgConnected = true;
+        diagnostic.pgLatencyMs = Date.now() - pgStart;
+        diagnostic.pgResult = pgRes.rows[0];
+        // 2. Prisma raw query probe
+        const prismaRawStart = Date.now();
+        await prisma_1.prisma.$queryRawUnsafe("SELECT 1 AS ok");
+        diagnostic.prismaRawConnected = true;
+        diagnostic.prismaRawLatencyMs = Date.now() - prismaRawStart;
+        // 3. Prisma model probe
+        const userCount = await prisma_1.prisma.user.count();
+        diagnostic.prismaModelConnected = true;
+        diagnostic.userCount = userCount;
+        res.json({
+            success: true,
+            message: "Database connection is fully operational",
+            diagnostic,
+        });
+    }
+    catch (error) {
+        diagnostic.error = {
+            message: error.message,
+            code: error.code,
+            name: error.name,
+            meta: error.meta,
+            stack: error.stack,
+        };
+        res.status(500).json({
+            success: false,
+            message: "Database connection failed",
+            diagnostic,
+        });
+    }
+});
 // Mount Module Routes
 app.use("/api/auth", auth_routes_1.authRoutes);
 app.use("/api/super-admin", super_admin_routes_1.superAdminRoutes);

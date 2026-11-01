@@ -60,11 +60,24 @@ mkdir -p "$PROJECT_DIR/server/public/uploads"
 mkdir -p /var/www/certbot
 
 # 5. Check and configure environment files
+NEON_DATABASE_URL="postgresql://neondb_owner:npg_uFyoipQ7END0@ep-tiny-star-aywpbgfb-pooler.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require"
+
 if [ ! -f "$PROJECT_DIR/server/.env" ]; then
     echo -e "${YELLOW}[!] $PROJECT_DIR/server/.env not found! Creating from example...${NC}"
     if [ -f "$PROJECT_DIR/server/.env.example" ]; then
         cp "$PROJECT_DIR/server/.env.example" "$PROJECT_DIR/server/.env"
     fi
+fi
+
+# Ensure server/.env has valid DATABASE_URL pointing to Neon
+if [ -f "$PROJECT_DIR/server/.env" ]; then
+    if ! grep -q "ep-tiny-star-aywpbgfb-pooler" "$PROJECT_DIR/server/.env" 2>/dev/null; then
+        echo -e "${YELLOW}[!] Updating server/.env with production Neon DATABASE_URL...${NC}"
+        sed -i '/DATABASE_URL=/d' "$PROJECT_DIR/server/.env" 2>/dev/null || true
+        echo "DATABASE_URL=\"$NEON_DATABASE_URL\"" >> "$PROJECT_DIR/server/.env"
+    fi
+else
+    echo "DATABASE_URL=\"$NEON_DATABASE_URL\"" > "$PROJECT_DIR/server/.env"
 fi
 
 # Keep root .env and server/.env in sync
@@ -156,6 +169,9 @@ pm2 status
 # Verify Server Port 4001
 if curl -sf http://127.0.0.1:4001/ > /dev/null 2>&1; then
     echo -e "${GREEN}[OK] Backend API is healthy on http://127.0.0.1:4001${NC}"
+    echo -e "${GREEN}[*] Checking Database Health Probe...${NC}"
+    curl -s http://127.0.0.1:4001/api/health/db || true
+    echo ""
 else
     echo -e "${YELLOW}[!] Backend API did not respond to root ping. Check logs with: pm2 logs bizpharma-server${NC}"
 fi
