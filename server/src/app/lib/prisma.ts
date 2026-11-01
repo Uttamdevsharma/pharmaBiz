@@ -6,9 +6,13 @@ try {
 import dotenv from "dotenv";
 import path from "path";
 import fs from "fs";
-import { Pool } from "pg";
-import { PrismaPg } from "@prisma/adapter-pg";
+import ws from "ws";
+import { neonConfig, Pool } from "@neondatabase/serverless";
+import { PrismaNeon } from "@prisma/adapter-neon";
 import { PrismaClient } from "@prisma/client";
+
+// Enforce WebSockets via port 443 (HTTPS) for Neon Postgres to bypass VPS port 5432 firewall blocking
+neonConfig.webSocketConstructor = ws;
 
 // Candidate paths to search for .env
 const candidateEnvPaths = [
@@ -47,23 +51,20 @@ if (!connectionString.includes("?") && connectionString.includes("&")) {
   connectionString = connectionString.replace("&", "?");
 }
 
+// Neon Serverless Pool communicates via WebSockets on port 443
 const pool = new Pool({
   connectionString,
-  ssl: {
-    rejectUnauthorized: false,
-  },
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 20000,
-  keepAlive: true,
-  keepAliveInitialDelayMillis: 10000,
 });
 
 pool.on("error", (err) => {
-  console.error("[PrismaPg Pool Error]", err);
+  console.error("[Neon Serverless Pool Error]", err);
 });
 
-const adapter = new PrismaPg(pool);
+// Prisma Neon driver adapter connects directly through port 443 WSS
+const adapter = new PrismaNeon({ connectionString });
 const prisma = new PrismaClient({
   adapter,
   transactionOptions: {
