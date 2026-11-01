@@ -86,6 +86,7 @@ fi
 # Always enforce production API URL on client/.env before building
 echo "NEXT_PUBLIC_API_URL=https://bizpharma-api.okobiz.com/api" > "$PROJECT_DIR/client/.env"
 echo "SERVER_URL=https://bizpharma-api.okobiz.com" >> "$PROJECT_DIR/client/.env"
+echo "NEXT_SERVER_ACTIONS_ENCRYPTION_KEY=c0d8f58b87df6e982c7a52f4e0c451db432a9e871e98d9e2646b3f54cb29107a" >> "$PROJECT_DIR/client/.env"
 echo -e "${GREEN}[*] client/.env configured with NEXT_PUBLIC_API_URL=https://bizpharma-api.okobiz.com/api${NC}"
 
 # 6. Build and Configure Server (Express + Prisma)
@@ -133,6 +134,9 @@ npm install
 if [ -d "$PROJECT_DIR/client/node_modules/.bin" ]; then
     chmod -R +x "$PROJECT_DIR/client/node_modules/.bin" 2>/dev/null || true
 fi
+
+# Ensure no legacy or deprecated next.config files exist on the VPS
+rm -f "$PROJECT_DIR/client/next.config.mjs" "$PROJECT_DIR/client/next.config.js" 2>/dev/null || true
 
 echo -e "${GREEN}[*] Building Next.js production bundle with fresh cache...${NC}"
 rm -rf .next .next_dev 2>/dev/null || true

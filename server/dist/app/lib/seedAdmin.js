@@ -30,6 +30,7 @@ async function seedSuperAdmin() {
             await prisma_1.prisma.$executeRawUnsafe(`ALTER TABLE "Tenant" ADD COLUMN IF NOT EXISTS "demoApprovedAt" TIMESTAMP;`);
             await prisma_1.prisma.$executeRawUnsafe(`ALTER TABLE "Tenant" ADD COLUMN IF NOT EXISTS "demoExpiresAt" TIMESTAMP;`);
             await prisma_1.prisma.$executeRawUnsafe(`ALTER TABLE "SubscriptionPlan" ADD COLUMN IF NOT EXISTS "trialDays" INTEGER DEFAULT 0;`);
+            await prisma_1.prisma.$executeRawUnsafe(`ALTER TABLE "Subscription" ADD COLUMN IF NOT EXISTS "expiryReminderSentAt" TIMESTAMP;`);
             await prisma_1.prisma.$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "bkash_merchant_enabled" BOOLEAN DEFAULT false;`);
             await prisma_1.prisma.$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "bkash_is_live" BOOLEAN DEFAULT false;`);
             await prisma_1.prisma.$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "bkash_app_key" VARCHAR(255);`);

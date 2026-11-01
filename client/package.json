@@ -9,7 +9,7 @@
     "predev": "npm run clean:dev",
     "dev": "next dev -p 4000",
     "prebuild": "npm run clean:build",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start -p 4000",
     "lint": "next lint"
   },
