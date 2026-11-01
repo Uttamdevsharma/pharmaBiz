@@ -20,6 +20,7 @@ class AuthService {
         if (!identifier) {
             throw new Error("Username or email is required");
         }
+        console.log(`[Auth:Login] Login attempt received for identifier: "${identifier}"`);
         const user = await prisma_1.prisma.user.findFirst({
             where: {
                 OR: [
@@ -44,12 +45,16 @@ class AuthService {
             },
         });
         if (!user) {
+            console.warn(`[Auth:Login] User NOT found in database for identifier: "${identifier}"`);
             throw new Error("Invalid username/email or password");
         }
+        console.log(`[Auth:Login] User record located: ID=${user.id}, email=${user.email}, role=${user.role}, isActive=${user.isActive}`);
         if (!user.isActive) {
+            console.warn(`[Auth:Login] User account is deactivated: ${user.email}`);
             throw new Error("Your user account has been deactivated. Please contact support.");
         }
         const isPasswordValid = await bcryptjs_1.default.compare(data.password, user.passwordHash);
+        console.log(`[Auth:Login] Password check for ${user.email}: ${isPasswordValid ? "PASSED (match)" : "FAILED (mismatch)"}`);
         if (!isPasswordValid) {
             throw new Error("Invalid username/email or password");
         }
@@ -127,14 +132,23 @@ class AuthService {
                 }
                 : null,
         };
-        const secret = process.env.JWT_SECRET || "default_secret";
+        const secret = process.env.JWT_SECRET || "super_secret_jwt_key_pharmacy_2026";
         const expiresIn = process.env.JWT_EXPIRES_IN || "7d";
         const token = jsonwebtoken_1.default.sign(payload, secret, { expiresIn: expiresIn });
+        console.log(`[Auth:Login] JWT issued successfully for user ${user.email} (role: ${user.role})`);
         // Find pending or active subscription for checkout if needed
-        const pendingSub = await prisma_1.prisma.subscription.findFirst({
-            where: { tenantId: user.tenantId },
-            orderBy: { createdAt: "desc" },
-        });
+        let pendingSub = null;
+        if (user.tenantId) {
+            try {
+                pendingSub = await prisma_1.prisma.subscription.findFirst({
+                    where: { tenantId: user.tenantId },
+                    orderBy: { createdAt: "desc" },
+                });
+            }
+            catch (subErr) {
+                console.warn(`[Auth:Login] Non-critical subscription lookup note for tenant ${user.tenantId}:`, subErr?.message || subErr);
+            }
+        }
         return {
             token,
             user: payload,

@@ -55,7 +55,13 @@ const port = process.env.PORT || 3000;
 
 // CORS middleware
 app.use((req: Request, res: Response, next: NextFunction) => {
-  res.header("Access-Control-Allow-Origin", "*");
+  const origin = req.headers.origin;
+  if (origin) {
+    res.header("Access-Control-Allow-Origin", origin);
+    res.header("Access-Control-Allow-Credentials", "true");
+  } else {
+    res.header("Access-Control-Allow-Origin", "*");
+  }
   res.header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
   res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization, x-branch-id, X-Branch-Id");
   
@@ -89,54 +95,172 @@ app.get("/", (req: Request, res: Response) => {
 });
 
 import { prisma, pool } from "./app/lib/prisma";
+import { neon } from "@neondatabase/serverless";
+import net from "net";
 
-// Comprehensive Database Health & Diagnostic Check
+function serializeErr(err: any) {
+  if (!err) return null;
+  const out: Record<string, any> = {
+    message: err.message || "",
+    name: err.name || "Error",
+    code: err.code || null,
+    stack: err.stack || null,
+  };
+  for (const k of Object.getOwnPropertyNames(err)) {
+    if (!(k in out)) out[k] = err[k];
+  }
+  return out;
+}
+
+function probeTcpPort(host: string, port: number, timeoutMs = 2500): Promise<{ open: boolean; latencyMs?: number; error?: string }> {
+  return new Promise((resolve) => {
+    const start = Date.now();
+    const socket = new net.Socket();
+    let settled = false;
+
+    socket.setTimeout(timeoutMs);
+    socket.once("connect", () => {
+      if (!settled) {
+        settled = true;
+        const latencyMs = Date.now() - start;
+        socket.destroy();
+        resolve({ open: true, latencyMs });
+      }
+    });
+
+    socket.once("timeout", () => {
+      if (!settled) {
+        settled = true;
+        socket.destroy();
+        resolve({ open: false, error: "Connection timed out" });
+      }
+    });
+
+    socket.once("error", (err: any) => {
+      if (!settled) {
+        settled = true;
+        socket.destroy();
+        resolve({ open: false, error: err?.message || "TCP connection error" });
+      }
+    });
+
+    socket.connect(port, host);
+  });
+}
+
+// Comprehensive Multi-Probe Database Health & Diagnostic Check
 app.get("/api/health/db", async (req: Request, res: Response) => {
   const diagnostic: any = {
     timestamp: new Date().toISOString(),
     nodeEnv: process.env.NODE_ENV,
+    nodeVersion: process.version,
+    platform: process.platform,
     port: process.env.PORT,
     databaseConfigured: Boolean(process.env.DATABASE_URL),
+    jwtSecretConfigured: Boolean(process.env.JWT_SECRET),
   };
 
-  try {
-    const rawUrl = process.env.DATABASE_URL || "";
-    diagnostic.databaseHostMasked = rawUrl.replace(/:([^:@]+)@/, ":****@");
+  const rawUrl = process.env.DATABASE_URL || "postgresql://neondb_owner:npg_uFyoipQ7END0@ep-tiny-star-aywpbgfb-pooler.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require";
+  diagnostic.databaseHostMasked = rawUrl.replace(/:([^:@]+)@/, ":****@");
 
-    // 1. Direct pg Pool probe
+  // Extract hostname for network probes
+  let dbHost = "ep-tiny-star-aywpbgfb-pooler.c-5.us-east-2.aws.neon.tech";
+  try {
+    const urlMatch = rawUrl.match(/@([^:\/?#]+)/);
+    if (urlMatch && urlMatch[1]) dbHost = urlMatch[1];
+  } catch {}
+
+  // Network Probes
+  try {
+    const dnsLookup = await dns.promises.lookup(dbHost, { all: true });
+    diagnostic.dns = { host: dbHost, addresses: dnsLookup };
+  } catch (dnsErr: any) {
+    diagnostic.dns = { host: dbHost, error: serializeErr(dnsErr) };
+  }
+
+  diagnostic.port443 = await probeTcpPort(dbHost, 443);
+  diagnostic.port5432 = await probeTcpPort(dbHost, 5432);
+
+  let anySuccess = false;
+
+  // Probe 1: Neon HTTP SQL (REST over HTTPS port 443)
+  try {
+    const sql = neon(rawUrl);
+    const httpStart = Date.now();
+    const httpRes = await sql`SELECT 1 AS connected, NOW() AS db_now, current_database() AS db_name`;
+    diagnostic.neonHttp = {
+      success: true,
+      latencyMs: Date.now() - httpStart,
+      result: httpRes[0],
+    };
+    anySuccess = true;
+  } catch (httpErr: any) {
+    diagnostic.neonHttp = {
+      success: false,
+      error: serializeErr(httpErr),
+    };
+  }
+
+  // Probe 2: Direct Pool probe (WebSocket tunnel over port 443)
+  try {
     const pgStart = Date.now();
     const pgRes = await pool.query("SELECT 1 AS connected, NOW() AS db_now, current_database() AS db_name");
-    diagnostic.pgConnected = true;
-    diagnostic.pgLatencyMs = Date.now() - pgStart;
-    diagnostic.pgResult = pgRes.rows[0];
+    diagnostic.pool = {
+      success: true,
+      latencyMs: Date.now() - pgStart,
+      result: pgRes.rows[0],
+    };
+    anySuccess = true;
+  } catch (poolErr: any) {
+    diagnostic.pool = {
+      success: false,
+      error: serializeErr(poolErr),
+    };
+  }
 
-    // 2. Prisma raw query probe
+  // Probe 3: Prisma Raw Query
+  try {
     const prismaRawStart = Date.now();
     await (prisma as any).$queryRawUnsafe("SELECT 1 AS ok");
-    diagnostic.prismaRawConnected = true;
-    diagnostic.prismaRawLatencyMs = Date.now() - prismaRawStart;
-
-    // 3. Prisma model probe
-    const userCount = await (prisma as any).user.count();
-    diagnostic.prismaModelConnected = true;
-    diagnostic.userCount = userCount;
-
-    res.json({
+    diagnostic.prismaRaw = {
       success: true,
-      message: "Database connection is fully operational",
+      latencyMs: Date.now() - prismaRawStart,
+    };
+    anySuccess = true;
+  } catch (prismaRawErr: any) {
+    diagnostic.prismaRaw = {
+      success: false,
+      error: serializeErr(prismaRawErr),
+    };
+  }
+
+  // Probe 4: Prisma Model Query (User Count)
+  try {
+    const prismaModelStart = Date.now();
+    const userCount = await (prisma as any).user.count();
+    diagnostic.prismaModel = {
+      success: true,
+      latencyMs: Date.now() - prismaModelStart,
+      userCount,
+    };
+    anySuccess = true;
+  } catch (prismaModelErr: any) {
+    diagnostic.prismaModel = {
+      success: false,
+      error: serializeErr(prismaModelErr),
+    };
+  }
+
+  if (anySuccess) {
+    res.status(200).json({
+      success: true,
+      message: "Database connectivity verified",
       diagnostic,
     });
-  } catch (error: any) {
-    diagnostic.error = {
-      message: error.message,
-      code: error.code,
-      name: error.name,
-      meta: error.meta,
-      stack: error.stack,
-    };
+  } else {
     res.status(500).json({
       success: false,
-      message: "Database connection failed",
+      message: "All database probes failed to connect",
       diagnostic,
     });
   }
@@ -207,8 +331,17 @@ import { SubscriptionExpiryService } from "./modules/subscription/subscription-e
 // Start Server and trigger Admin seeding & automated subscription expiry scheduler (skip in Vercel serverless)
 if (!process.env.VERCEL) {
   app.listen(port, async () => {
-    console.log(`Pharmacy Management SaaS API listening on port ${port}`);
-    await seedSuperAdmin();
+    console.log(`\n======================================================`);
+    console.log(` Pharmacy Management SaaS API listening on port ${port}`);
+    console.log(` Node Version: ${process.version} | Platform: ${process.platform}`);
+    console.log(` DATABASE_URL configured: ${Boolean(process.env.DATABASE_URL)}`);
+    console.log(` JWT_SECRET configured: ${Boolean(process.env.JWT_SECRET)}`);
+    console.log(`======================================================\n`);
+    try {
+      await seedSuperAdmin();
+    } catch (seedErr: any) {
+      console.error("[Seed Startup Error]", seedErr?.message || seedErr);
+    }
     SubscriptionExpiryService.initAutomatedScheduler();
   });
 }

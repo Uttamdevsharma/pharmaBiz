@@ -17,7 +17,8 @@ const serverless_1 = require("@neondatabase/serverless");
 const adapter_neon_1 = require("@prisma/adapter-neon");
 const client_1 = require("@prisma/client");
 // Enforce WebSockets via port 443 (HTTPS) for Neon Postgres to bypass VPS port 5432 firewall blocking
-serverless_1.neonConfig.webSocketConstructor = ws_1.default;
+serverless_1.neonConfig.webSocketConstructor = ws_1.default.default || ws_1.default;
+serverless_1.neonConfig.pipelineConnect = false;
 // Candidate paths to search for .env
 const candidateEnvPaths = [
     path_1.default.resolve(__dirname, "../../.env"),

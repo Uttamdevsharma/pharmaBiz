@@ -12,7 +12,8 @@ import { PrismaNeon } from "@prisma/adapter-neon";
 import { PrismaClient } from "@prisma/client";
 
 // Enforce WebSockets via port 443 (HTTPS) for Neon Postgres to bypass VPS port 5432 firewall blocking
-neonConfig.webSocketConstructor = ws;
+neonConfig.webSocketConstructor = (ws as any).default || ws;
+neonConfig.pipelineConnect = false;
 
 // Candidate paths to search for .env
 const candidateEnvPaths = [

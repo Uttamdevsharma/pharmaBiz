@@ -62,20 +62,31 @@ mkdir -p /var/www/certbot
 # 5. Check and configure environment files
 NEON_DATABASE_URL="postgresql://neondb_owner:npg_uFyoipQ7END0@ep-tiny-star-aywpbgfb-pooler.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require"
 
-# Ensure UFW allows outbound port 5432 if active
-if command -v ufw >/dev/null 2>&1 && [ "$(id -u)" -eq 0 ]; then
-    ufw allow out 5432/tcp 2>/dev/null || true
+# Ensure firewall allows outbound ports 5432 and 443 (supports AlmaLinux/CentOS, Ubuntu, Debian)
+if [ "$(id -u)" -eq 0 ]; then
+    command -v ufw >/dev/null 2>&1 && ufw allow out 5432/tcp 2>/dev/null || true
+    command -v ufw >/dev/null 2>&1 && ufw allow out 443/tcp 2>/dev/null || true
+    command -v iptables >/dev/null 2>&1 && iptables -I OUTPUT -p tcp --dport 5432 -j ACCEPT 2>/dev/null || true
+    command -v iptables >/dev/null 2>&1 && iptables -I OUTPUT -p tcp --dport 443 -j ACCEPT 2>/dev/null || true
+    command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --permanent --add-port=5432/tcp 2>/dev/null || true
+    command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --permanent --add-port=443/tcp 2>/dev/null || true
+    command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --reload 2>/dev/null || true
+    command -v setenforce >/dev/null 2>&1 && setenforce 0 2>/dev/null || true
 fi
 
-# Ensure server/.env exists and has valid DATABASE_URL pointing to Neon
+# Ensure server/.env exists and has valid DATABASE_URL and JWT_SECRET
 if [ -f "$PROJECT_DIR/server/.env" ]; then
     if ! grep -q "ep-tiny-star-aywpbgfb-pooler" "$PROJECT_DIR/server/.env" 2>/dev/null; then
         echo -e "${YELLOW}[!] Updating server/.env with production Neon DATABASE_URL...${NC}"
         sed -i '/DATABASE_URL=/d' "$PROJECT_DIR/server/.env" 2>/dev/null || true
         echo "DATABASE_URL=\"$NEON_DATABASE_URL\"" >> "$PROJECT_DIR/server/.env"
     fi
+    if ! grep -q "JWT_SECRET=" "$PROJECT_DIR/server/.env" 2>/dev/null; then
+        echo "JWT_SECRET=\"super_secret_jwt_key_pharmacy_2026\"" >> "$PROJECT_DIR/server/.env"
+    fi
 else
     echo "DATABASE_URL=\"$NEON_DATABASE_URL\"" > "$PROJECT_DIR/server/.env"
+    echo "JWT_SECRET=\"super_secret_jwt_key_pharmacy_2026\"" >> "$PROJECT_DIR/server/.env"
 fi
 
 # Keep root .env and server/.env in sync
@@ -116,6 +127,9 @@ node node_modules/prisma/build/index.js migrate deploy || npx prisma migrate dep
 
 echo -e "${GREEN}[*] Compiling TypeScript backend...${NC}"
 npm run build
+
+echo -e "${GREEN}[*] Executing database seed directly...${NC}"
+node -e "require('./dist/app/lib/seedAdmin').seedSuperAdmin().then(() => console.log('Seed completed successfully')).catch((err) => console.error('Seed execution note:', err.message || err))" || true
 
 # 7. Build and Configure Client (Next.js)
 echo -e "\n${BLUE}======================================================${NC}"

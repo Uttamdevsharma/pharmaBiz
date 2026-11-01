@@ -32,6 +32,10 @@ if (
   parsedServerEnv.DATABASE_URL = NEON_DB_URL;
 }
 
+if (!parsedServerEnv.JWT_SECRET) {
+  parsedServerEnv.JWT_SECRET = "super_secret_jwt_key_pharmacy_2026";
+}
+
 module.exports = {
   apps: [
     {

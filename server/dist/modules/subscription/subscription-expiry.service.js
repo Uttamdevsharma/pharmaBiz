@@ -104,16 +104,18 @@ class SubscriptionExpiryService {
      * Runs immediately on boot and sets up a recurring 1-hour interval check.
      */
     static initAutomatedScheduler() {
-        console.log(`⚡ [EXPIRY SCHEDULER] Initializing background subscription expiry notification service...`);
-        // Initial run on boot
-        this.checkAndSendExpiryReminders().catch((err) => {
-            console.error("Initial expiry reminder check failed", err);
-        });
+        console.log(`⚡ [EXPIRY SCHEDULER] Initializing background subscription expiry notification service (delayed initial run in 10s)...`);
+        // Initial run on boot with 10s delay to allow seed and db warmup to complete
+        setTimeout(() => {
+            this.checkAndSendExpiryReminders().catch((err) => {
+                console.error("Initial expiry reminder check note:", err?.message || err);
+            });
+        }, 10000);
         // Schedule recurring check every 1 hour (3,600,000 ms)
         const ONE_HOUR = 60 * 60 * 1000;
         setInterval(() => {
             this.checkAndSendExpiryReminders().catch((err) => {
-                console.error("Scheduled expiry reminder check failed", err);
+                console.error("Scheduled expiry reminder check note:", err?.message || err);
             });
         }, ONE_HOUR);
     }

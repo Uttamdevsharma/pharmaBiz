@@ -2,6 +2,8 @@ import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { AuthenticatedUser } from "../modules/auth/auth.types";
 
+const JWT_SECRET_FALLBACK = "super_secret_jwt_key_pharmacy_2026";
+
 export const authenticate = (req: Request, res: Response, next: NextFunction): void => {
   try {
     const authHeader = req.headers.authorization;
@@ -12,7 +14,7 @@ export const authenticate = (req: Request, res: Response, next: NextFunction): v
     }
 
     const token = authHeader.split(" ")[1];
-    const secret = process.env.JWT_SECRET || "default_secret";
+    const secret = process.env.JWT_SECRET || JWT_SECRET_FALLBACK;
 
     const decoded = jwt.verify(token, secret) as AuthenticatedUser;
     // Attach user to request
@@ -29,7 +31,7 @@ export const optionalAuthenticate = (req: Request, _res: Response, next: NextFun
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith("Bearer ")) {
       const token = authHeader.split(" ")[1];
-      const secret = process.env.JWT_SECRET || "default_secret";
+      const secret = process.env.JWT_SECRET || JWT_SECRET_FALLBACK;
       const decoded = jwt.verify(token, secret) as AuthenticatedUser;
       req.user = decoded;
     }
@@ -38,5 +40,3 @@ export const optionalAuthenticate = (req: Request, _res: Response, next: NextFun
   }
   next();
 };
-
-
