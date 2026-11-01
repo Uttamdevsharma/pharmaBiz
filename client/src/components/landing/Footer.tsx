@@ -131,7 +131,7 @@ export function Footer() {
         {/* Bottom Bar matching Image 2 */}
         <div className="pt-6 border-t border-slate-200 text-xs sm:text-sm flex flex-col sm:flex-row items-center justify-between gap-3 text-slate-500">
           <div>
-            © {new Date().getFullYear()} {settings.siteName || "PharmaBiz"}. {t("allRightsReserved")}
+            © {new Date().getFullYear()} {settings.siteName && !settings.siteName.toLowerCase().includes("pharmabiz") ? settings.siteName : "BizPharma"}. {t("allRightsReserved")}
           </div>
           <div className="flex items-center gap-1.5 font-medium">
             <span>{t("craftedWith")}</span>

@@ -11,6 +11,9 @@ import { Product } from "@/types";
 import { calculateLocationPackaging } from "@/lib/packaging";
 import { Barcode128 } from "@/components/common/Barcode128";
 import { offlineDb } from "@/lib/offlineDb";
+import { playBeep } from "@/lib/audioBeep";
+import { triggerCashDrawer, pairCashDrawerPort, isWebSerialSupported } from "@/lib/cashDrawer";
+import { printThermalReceipt80mm } from "@/lib/printReceipt";
 import { syncEngine, SyncState } from "@/lib/syncEngine";
 import {
   Search, Plus, Minus, Trash2, Receipt,
@@ -156,8 +159,8 @@ function getProductUnitPrice(p?: any, batch?: any): number {
   if (eff > 0) return eff;
   const base = Number(p?.basePrice || 0);
   if (base > 0) return base;
-  if (p?.batches && p.batches.length > 0) {
-    const bPrice = Number(p.batches[0].sellingPrice || p.batches[0].boxSellingPrice || 0);
+  if (p?.batches && (p as any).batches.length > 0) {
+    const bPrice = Number((p as any).batches[0].sellingPrice || (p as any).batches[0].boxSellingPrice || 0);
     if (bPrice > 0) return bPrice;
   }
   return 0;
@@ -361,6 +364,31 @@ export function PosModule({ selectedBranchId: propBranchId, onNavigate, onBack }
     window.addEventListener('afterprint', handleAfterPrint);
     return () => window.removeEventListener('afterprint', handleAfterPrint);
   }, []);
+
+  
+  // Manual Cash Drawer Open
+  const handleManualDrawerKick = async () => {
+    try {
+      const res = await triggerCashDrawer();
+      if (res.method === "serial" && res.success) {
+        showToast("Cash Drawer opened via Serial port!", "success");
+      } else {
+        if (isWebSerialSupported()) {
+          const paired = await pairCashDrawerPort();
+          if (paired) {
+            const kicked = await triggerCashDrawer();
+            if (kicked.success) {
+              showToast("Cash Drawer paired & opened!", "success");
+              return;
+            }
+          }
+        }
+        showToast("Cash drawer kick pulse sent to thermal printer.", "info");
+      }
+    } catch {
+      showToast("Triggered cash drawer pulse.", "info");
+    }
+  };
 
   // Fullscreen toggle handler
   const toggleFullscreen = () => {
@@ -841,7 +869,7 @@ export function PosModule({ selectedBranchId: propBranchId, onNavigate, onBack }
   const handleCardClick = (prod: any) => {
     if (!prod) return;
 
-    const availableBatches = (prod.batches || []).filter((b: any) => {
+    const availableBatches = ((prod as any).batches || []).filter((b: any) => {
       const qty = Number(b.quantity ?? 0);
       const isExp = b.expiryDate ? new Date(b.expiryDate) <= new Date() : false;
       return qty > 0 && !isExp;
@@ -849,13 +877,13 @@ export function PosModule({ selectedBranchId: propBranchId, onNavigate, onBack }
 
     if (availableBatches.length > 0) {
       handleSelectProduct(prod, availableBatches[0]);
-    } else if (prod.batches && prod.batches.length > 0) {
-      const allExpired = prod.batches.every((b: any) => b.expiryDate && new Date(b.expiryDate) <= new Date());
+    } else if ((prod as any).batches && (prod as any).batches.length > 0) {
+      const allExpired = (prod as any).batches.every((b: any) => b.expiryDate && new Date(b.expiryDate) <= new Date());
       if (allExpired) {
         showToast(`Cannot sell "${prod.name}" - all batches are expired.`, "error");
         return;
       }
-      handleSelectProduct(prod, prod.batches[0]);
+      handleSelectProduct(prod, (prod as any).batches[0]);
     } else {
       const stock = Number(prod.currentStock ?? prod.stock ?? 0);
       if (stock <= 0) {
@@ -864,6 +892,205 @@ export function PosModule({ selectedBranchId: propBranchId, onNavigate, onBack }
       }
       handleSelectProduct(prod, null);
     }
+  };
+
+  
+  // Barcode Scanner Product Handler (Direct scan anywhere on POS screen)
+  const handleScannedBarcode = async (rawCode: string) => {
+    const code = rawCode.trim().toLowerCase();
+    if (!code) return;
+
+    // 1. Check local in-memory products catalog
+    let matchedProduct: any = null;
+    let matchedBatch: any = null;
+
+    for (const prod of products) {
+      if ((prod.barcode || "").trim().toLowerCase() === code) {
+        matchedProduct = prod;
+        break;
+      }
+      if ((prod.sku || "").trim().toLowerCase() === code) {
+        matchedProduct = prod;
+        break;
+      }
+      if ((prod as any).batches && Array.isArray((prod as any).batches)) {
+        const b = (prod as any).batches.find((batch: any) => (batch.barcode || "").trim().toLowerCase() === code);
+        if (b) {
+          matchedProduct = prod;
+          matchedBatch = b;
+          break;
+        }
+      }
+    }
+
+    // 2. If not found locally in memory, query server endpoint
+    if (!matchedProduct && typeof navigator !== "undefined" && navigator.onLine) {
+      try {
+        const res = await fetchApi<any>(`/products/barcode/${encodeURIComponent(code)}`);
+        if (res?.success && res.data) {
+          matchedProduct = res.data;
+          if (res.data.batches && Array.isArray(res.data.batches)) {
+            const b = res.data.batches.find((batch: any) => (batch.barcode || "").trim().toLowerCase() === code);
+            if (b) matchedBatch = b;
+          }
+        }
+      } catch (err) {
+        console.warn("[POS Scan] API barcode lookup failed:", err);
+      }
+    }
+
+    // 3. If product not found at all
+    if (!matchedProduct) {
+      playBeep("error");
+      showToast(`No product found for barcode: "${rawCode}"`, "warning");
+      return;
+    }
+
+    // 4. Resolve batch if not yet selected (FEFO: earliest non-expired batch)
+    if (!matchedBatch) {
+      const availableBatches = (matchedProduct.batches || []).filter((b: any) => {
+        const qty = Number(b.quantity ?? 0);
+        const isExp = b.expiryDate ? new Date(b.expiryDate) <= new Date() : false;
+        return qty > 0 && !isExp;
+      });
+
+      if (availableBatches.length > 0) {
+        matchedBatch = availableBatches[0];
+      } else if (matchedProduct.batches && matchedProduct.batches.length > 0) {
+        const allExpired = matchedProduct.batches.every((b: any) => b.expiryDate && new Date(b.expiryDate) <= new Date());
+        if (allExpired) {
+          playBeep("error");
+          showToast(`Cannot sell "${matchedProduct.name}" - all batches are expired.`, "error");
+          return;
+        }
+        matchedBatch = matchedProduct.batches[0];
+      }
+    }
+
+    // 5. Add or increment in cart with quantity >= 1
+    const model = getProductPackagingModel(matchedProduct);
+    const isMed = model === "MEDICINE";
+    const baseSellingPrice = getProductUnitPrice(matchedProduct, matchedBatch);
+    const stripsPerBox = Number(matchedProduct.stripsPerBox) || 10;
+    const tabletsPerStrip = Number(matchedProduct.tabletsPerStrip) || 10;
+    const tabletsPerBox = stripsPerBox * tabletsPerStrip;
+    const stock = matchedBatch?.quantity ?? (matchedProduct.currentStock !== undefined && matchedProduct.currentStock !== null ? Number(matchedProduct.currentStock) : Number(matchedProduct.stock || 0));
+
+    let addedDescription = "1 unit";
+
+    setCart((prev) => {
+      const existingIdx = prev.findIndex(
+        (item) => item.productId === matchedProduct.id && item.inventoryId === (matchedBatch?.id || null)
+      );
+
+      if (existingIdx >= 0) {
+        const existing = prev[existingIdx];
+        const isMedicine = existing.productType === "MEDICINE";
+
+        if (isMedicine) {
+          const currentStrips = (existing.stripCount || 0) + 1;
+          const totalUnits = ((existing.boxCount || 0) * tabletsPerBox) + (currentStrips * tabletsPerStrip) + (existing.tabletCount || 0);
+          if (totalUnits > existing.availableBaseStock) {
+            showToast(`Stock limit reached (${existing.availableBaseStock} max available).`, "warning");
+            return prev;
+          }
+          addedDescription = `${currentStrips} Strips`;
+          const copy = [...prev];
+          copy[existingIdx] = {
+            ...existing,
+            stripCount: currentStrips,
+            quantity: totalUnits,
+          };
+          setActiveCartRowIndex(existingIdx);
+          return copy;
+        } else {
+          const newQty = existing.quantity + 1;
+          if (newQty > existing.availableBaseStock) {
+            showToast(`Stock limit reached (${existing.availableBaseStock} max available).`, "warning");
+            return prev;
+          }
+          addedDescription = `${newQty} Qty`;
+          const copy = [...prev];
+          copy[existingIdx] = {
+            ...existing,
+            quantity: newQty,
+          };
+          setActiveCartRowIndex(existingIdx);
+          return copy;
+        }
+      } else {
+        const locs = (matchedBatch?.locations || matchedProduct?.locations || []) as any[];
+        const primaryLoc = locs.find((l) => (Number(l.quantity) || 0) > 0) || locs[0];
+        let locLabel = "";
+        let rName = "";
+        let sName = "";
+        let bName = "";
+        if (primaryLoc) {
+          rName = primaryLoc.rack?.name || primaryLoc.rackName || "";
+          sName = primaryLoc.shelf?.name || primaryLoc.shelfName || "";
+          bName = primaryLoc.bin?.name || primaryLoc.binName || "";
+          if (rName && sName && bName && bName !== "B01" && bName !== "Bin 1") {
+            locLabel = `${rName} › ${sName} › ${bName}`;
+          } else if (rName && sName && sName !== "S01") {
+            locLabel = `${rName} › ${sName}`;
+          } else if (rName) {
+            locLabel = rName;
+          }
+        }
+
+        const initialStripCount = isMed ? 1 : 0;
+        const initialTotalUnits = isMed ? tabletsPerStrip : 1;
+        addedDescription = isMed ? "1 Strip" : "1 unit";
+
+        const newItem: CartItem = {
+          productId: matchedProduct.id,
+          name: matchedProduct.name,
+          genericName: matchedProduct.genericName || null,
+          sku: matchedProduct.sku,
+          barcode: matchedProduct.barcode || matchedBatch?.barcode || rawCode,
+          size: matchedProduct.size,
+          productType: model,
+          unitType: isMed ? "TABLET" : (model === "BOTTLE" ? "BOTTLE" : model === "VIAL" ? "VIAL" : "PIECE"),
+          unitMultiplier: 1,
+          quantity: initialTotalUnits,
+          boxCount: 0,
+          stripCount: initialStripCount,
+          tabletCount: 0,
+          unitPrice: baseSellingPrice,
+          basePrice: baseSellingPrice,
+          stripsPerBox,
+          tabletsPerStrip,
+          tabletsPerBox,
+          availableBaseStock: stock > 0 ? stock : 99999,
+          batchNumber: matchedBatch?.batchNumber || "Default",
+          expiryDate: matchedBatch?.expiryDate || null,
+          inventoryId: matchedBatch?.id || null,
+          inventoryLocationId: primaryLoc?.id || null,
+          shelfLocation: locLabel || null,
+          locationLabel: locLabel || undefined,
+          rackName: rName || undefined,
+          shelfName: sName || undefined,
+          binName: bName || undefined,
+          isControlled: matchedProduct.isControlled,
+          requiresPrescription: matchedProduct.requiresPrescription,
+          purchasePrice: matchedBatch?.purchasePrice || null,
+        };
+
+        setActiveCartRowIndex(prev.length);
+        return [...prev, newItem];
+      }
+    });
+
+    // 6. Confirmation Beep & Success Toast
+    playBeep("success");
+    showToast(`Scanned: ${matchedProduct.name} (${addedDescription})`, "success");
+
+    // Clear search and refocus
+    setSearch("");
+    setSearchFocused(false);
+    setTimeout(() => {
+      searchInputRef.current?.focus();
+    }, 60);
   };
 
   // Update Medicine Packaging Qty (Box, Strip, Tablet)
@@ -1970,10 +2197,18 @@ export function PosModule({ selectedBranchId: propBranchId, onNavigate, onBack }
       // Track whether the cashier was in fullscreen before print preview opens
       wasFullscreenRef.current = typeof document !== 'undefined' && !!document.fullscreenElement;
 
-      // Clean browser print dialog trigger after receipt portal renders
+      // Standard POS Cash Drawer Trigger (Serial pulse + thermal driver kick)
+      triggerCashDrawer().catch(() => {});
+
+      // Dedicated 80mm Thermal Receipt Print (via isolated iframe with exact 80mm roll formatting)
       setTimeout(() => {
-        window.print();
-      }, 250);
+        const receiptEl = document.querySelector(".print-portal .print-invoice-card") as HTMLElement;
+        if (receiptEl) {
+          printThermalReceipt80mm(receiptEl, `Receipt-${receiptNumber}`);
+        } else {
+          window.print();
+        }
+      }, 200);
 
       // Reset cart and customer inputs
       setCart([]);
@@ -2008,6 +2243,97 @@ export function PosModule({ selectedBranchId: propBranchId, onNavigate, onBack }
       setCheckingOut(false);
     }
   };
+
+  
+  // Global Hardware POS Barcode Scanner Listener (Captures anywhere on the screen)
+  useEffect(() => {
+    let scanBuffer = "";
+    let lastKeyTime = 0;
+    let strokeTimes: number[] = [];
+
+    const handleGlobalScanKeyDown = async (e: KeyboardEvent) => {
+      const now = performance.now();
+      const elapsed = now - lastKeyTime;
+      lastKeyTime = now;
+
+      // Ignore special modifier keys
+      if (e.key.length > 1 && e.key !== "Enter") {
+        return;
+      }
+
+      const activeEl = document.activeElement;
+      const isInput =
+        activeEl?.tagName === "INPUT" ||
+        activeEl?.tagName === "TEXTAREA" ||
+        activeEl?.tagName === "SELECT";
+      const isSearchInput = activeEl === searchInputRef.current;
+
+      // When Enter is pressed
+      if (e.key === "Enter") {
+        const trimmedBuf = scanBuffer.trim();
+        const searchVal = search.trim();
+        const candidateBarcode =
+          trimmedBuf.length >= 2 ? trimmedBuf : isSearchInput && searchVal.length >= 2 ? searchVal : "";
+
+        // Check if barcode scanner characteristics are present:
+        // A) High-speed hardware scanner: average keystroke interval <= 65ms
+        const avgInterval =
+          strokeTimes.length > 1 ? (strokeTimes[strokeTimes.length - 1] - strokeTimes[0]) / (strokeTimes.length - 1) : 999;
+        const isScannerFast = strokeTimes.length >= 3 && avgInterval <= 65;
+
+        // B) No input focused: any 2+ character sequence followed by Enter is a scan / manual barcode
+        const isUnfocusedScan = !isInput && trimmedBuf.length >= 2;
+
+        // C) In search box, exact match with a known barcode or SKU
+        const matchesBarcode =
+          candidateBarcode.length >= 2 &&
+          products.some(
+            (p) =>
+              (p.barcode || "").toLowerCase() === candidateBarcode.toLowerCase() ||
+              (p.sku || "").toLowerCase() === candidateBarcode.toLowerCase() ||
+              (p as any).batches?.some((b: any) => (b.barcode || "").toLowerCase() === candidateBarcode.toLowerCase())
+          );
+
+        if (isScannerFast || isUnfocusedScan || (isSearchInput && matchesBarcode)) {
+          e.preventDefault();
+          e.stopPropagation();
+
+          scanBuffer = "";
+          strokeTimes = [];
+
+          setSearch("");
+          setSearchFocused(false);
+
+          await handleScannedBarcode(candidateBarcode);
+          return;
+        }
+
+        scanBuffer = "";
+        strokeTimes = [];
+        return;
+      }
+
+      // Printable single character
+      if (e.key.length === 1) {
+        if (elapsed > 90) {
+          scanBuffer = e.key;
+          strokeTimes = [now];
+        } else {
+          scanBuffer += e.key;
+          strokeTimes.push(now);
+          // If rapid burst detected, prevent other handlers from interpreting as hotkeys
+          if (strokeTimes.length >= 2 && !isSearchInput) {
+            e.stopPropagation();
+          }
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleGlobalScanKeyDown, true);
+    return () => {
+      window.removeEventListener("keydown", handleGlobalScanKeyDown, true);
+    };
+  }, [products, search]);
 
   // Keyboard Shortcuts & Cart Navigation
   useEffect(() => {
@@ -2615,9 +2941,9 @@ export function PosModule({ selectedBranchId: propBranchId, onNavigate, onBack }
                 {gridProducts.map((prod: any) => {
                   const stock = prod.currentStock !== undefined && prod.currentStock !== null ? Number(prod.currentStock) : Number(prod.stock || 0);
                   const isOutOfStock = stock <= 0;
-                  const price = getProductUnitPrice(prod, prod.batches?.[0]);
+                  const price = getProductUnitPrice(prod, (prod as any).batches?.[0]);
                   const unitLabel = prod.unit ? `(${prod.unit})` : "";
-                  const batchCount = Array.isArray(prod.batches) ? prod.batches.length : 0;
+                  const batchCount = Array.isArray((prod as any).batches) ? (prod as any).batches.length : 0;
 
                   return (
                     <div

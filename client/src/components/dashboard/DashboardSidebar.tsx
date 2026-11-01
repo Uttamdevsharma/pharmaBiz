@@ -26,6 +26,7 @@ import {
   ChevronDown,
   ChevronRight,
   PlusCircle,
+  Printer,
   BadgeAlert,
   List,
   FolderTree,
@@ -110,6 +111,7 @@ export type OwnerModule =
   | "inv_product_list"
   | "inv_variants"
   | "inv_expired_products"
+  | "inv_print_labels"
   | "cat_create"
   | "cat_list"
   | "stock_add_stock"
@@ -546,6 +548,12 @@ export function DashboardSidebar({
       label: "Product List",
       icon: List,
       visible: isOwner || hasPermission("inventory.product_list"),
+    },
+    {
+      id: "inv_print_labels" as OwnerModule,
+      label: "Print Labels",
+      icon: Printer,
+      visible: isOwner || hasPermission("inventory.product_list") || hasPermission("inventory.view"),
     },
   ].filter((item) => item.visible);
 

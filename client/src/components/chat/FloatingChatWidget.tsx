@@ -335,7 +335,7 @@ export function FloatingChatWidget() {
               </div>
               <div className="min-w-0">
                 <h3 className="font-bold text-sm tracking-wide flex items-center gap-2 text-white">
-                  PharmaBiz Live Support
+                  BizPharma Live Support
                 </h3>
                 <div className="flex items-center gap-1.5 text-[11px] text-slate-300 flex-wrap">
                   <span className="flex items-center gap-1 text-emerald-400 font-semibold">

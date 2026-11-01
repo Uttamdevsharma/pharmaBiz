@@ -42,6 +42,7 @@ import { AddProductView } from "@/components/dashboard/AddProductView";
 import { ProductListView } from "@/components/dashboard/ProductListView";
 import { VariantsView } from "@/components/dashboard/VariantsView";
 import { ExpiredProductsView } from "@/components/dashboard/ExpiredProductsView";
+import { PrintBarcodeLabelsView } from "@/components/dashboard/PrintBarcodeLabelsView";
 import { AddStockView } from "@/components/dashboard/AddStockView";
 import { StockListView } from "@/components/dashboard/StockListView";
 import { StockAllocationView } from "@/components/dashboard/StockAllocationView";
@@ -1222,6 +1223,9 @@ export default function RoleBasedDashboard() {
           return <TenantAccessRestricted moduleName="Categories & Variants" requiredPerm="inventory.product_list" />;
         }
         return <VariantsView />;
+
+      case "inv_print_labels":
+        return <PrintBarcodeLabelsView onNavigate={handleNavigate} />;
 
       case "inv_expired_products":
         if (!isOwner && !hasPermission("inventory.product_list")) {

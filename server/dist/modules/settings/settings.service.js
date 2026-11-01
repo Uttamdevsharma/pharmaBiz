@@ -5,7 +5,7 @@ const prisma_1 = require("../../app/lib/prisma");
 const payment_security_1 = require("../../app/lib/payment-security");
 const SETTINGS_KEY = "landing_page_config";
 exports.DEFAULT_SETTINGS = {
-    siteName: "PharmaBiz SaaS",
+    siteName: "BizPharma SaaS",
     logoUrl: "",
     logoPublicId: "",
     primaryColor: "#059669", // Emerald Green default
@@ -79,7 +79,7 @@ exports.DEFAULT_SETTINGS = {
     },
     about: {
         headline: "Built for Modern Pharmacy Enterprises",
-        description: "PharmaBiz provides a complete operating system for retail pharmacies and hospital chains, offering bulletproof reliability and multi-tenant data isolation.",
+        description: "BizPharma provides a complete operating system for retail pharmacies and hospital chains, offering bulletproof reliability and multi-tenant data isolation.",
         stats: [
             { label: "Uptime Guaranteed", value: "99.99%" },
             { label: "Offline Resilience", value: "72+ Hours" },
@@ -97,6 +97,9 @@ class SettingsService {
             where: { key: SETTINGS_KEY },
         });
         let config = setting ? setting.value : exports.DEFAULT_SETTINGS;
+        if (config && (!config.siteName || config.siteName.toLowerCase().includes("pharmabiz"))) {
+            config = { ...config, siteName: "BizPharma SaaS" };
+        }
         // Fetch active subscription plans dynamically
         const rawPlans = await prisma_1.prisma.subscriptionPlan.findMany({
             where: { isActive: true },

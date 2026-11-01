@@ -28,7 +28,7 @@ export function AboutContact() {
         {/* Section Heading */}
         <div className="text-center max-w-3xl mx-auto mb-12">
           <h2 className="text-3xl sm:text-4xl 2xl:text-5xl font-extrabold text-slate-900 dark:text-white tracking-tight">
-            {about.headline || "About PharmaBiz"}
+            {about.headline || "About BizPharma"}
           </h2>
         </div>
 

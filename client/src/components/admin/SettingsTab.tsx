@@ -70,7 +70,7 @@ export function SettingsTab() {
   });
 
   // Local form state
-  const [siteName, setSiteName] = useState(settings.siteName || "PharmaBiz SaaS");
+  const [siteName, setSiteName] = useState(settings.siteName && !settings.siteName.toLowerCase().includes("pharmabiz") ? settings.siteName : "BizPharma SaaS");
   const [logoUrl, setLogoUrl] = useState(settings.logoUrl || "");
   const [logoPublicId, setLogoPublicId] = useState((settings as any).logoPublicId || "");
   const [primaryColor, setPrimaryColor] = useState(settings.primaryColor || "#059669");
@@ -168,7 +168,7 @@ export function SettingsTab() {
   // Sync state when settings update from context
   useEffect(() => {
     if (settings) {
-      setSiteName(settings.siteName || "PharmaBiz SaaS");
+      setSiteName(settings.siteName && !settings.siteName.toLowerCase().includes("pharmabiz") ? settings.siteName : "BizPharma SaaS");
       setLogoUrl(settings.logoUrl || "");
       setLogoPublicId((settings as any).logoPublicId || "");
       setPrimaryColor(settings.primaryColor || "#059669");
@@ -537,7 +537,7 @@ export function SettingsTab() {
                         required
                         value={siteName}
                         onChange={(e) => setSiteName(e.target.value)}
-                        placeholder="e.g. PharmaBiz SaaS"
+                        placeholder="e.g. BizPharma SaaS"
                         className="w-full h-11 px-3.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-none text-sm font-semibold focus:outline-none focus:border-brand-primary"
                       />
                       <p className="text-[11px] text-slate-400 mt-1">

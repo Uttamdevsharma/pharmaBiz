@@ -8,8 +8,19 @@ import type { SiteSettings } from "@/context/SettingsContext";
 import { hexToRgb } from "@/lib/colorUtils";
 
 export const metadata: Metadata = {
-  title: "PharmaBiz - Multi-Tenant Pharmacy Management SaaS",
+  title: {
+    default: "BizPharma - Multi-Tenant Pharmacy Management SaaS",
+    template: "%s | BizPharma",
+  },
   description: "Next-gen offline-first pharmacy management platform for single and multi-branch pharmacy chains.",
+  icons: {
+    icon: [
+      { url: "/favicon.svg", type: "image/svg+xml" },
+      { url: "/favicon.ico", sizes: "any" },
+    ],
+    shortcut: "/favicon.ico",
+    apple: "/apple-touch-icon.png",
+  },
 };
 
 async function getInitialSettings(): Promise<SiteSettings | null> {
@@ -48,6 +59,9 @@ export default async function RootLayout({
       suppressHydrationWarning
     >
       <head>
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+        <link rel="alternate icon" href="/favicon.ico" />
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         {initialColor && initialRgb ? (
           <style
             id="brand-primary-vars"
@@ -110,7 +124,7 @@ export default async function RootLayout({
                 } catch (e) {}
 
                 try {
-                  var stored = localStorage.getItem('pharmabiz-theme');
+                  var stored = (localStorage.getItem('bizpharma-theme') || localStorage.getItem('pharmabiz-theme'));
                   var isDark = stored === 'dark';
                   if (isDark) {
                     document.documentElement.classList.add('dark');
@@ -122,7 +136,7 @@ export default async function RootLayout({
                 } catch (e) {}
 
                 try {
-                  var cached = localStorage.getItem('pharmabiz_site_settings');
+                  var cached = (localStorage.getItem('bizpharma_site_settings') || localStorage.getItem('pharmabiz_site_settings'));
                   if (cached) {
                     var parsed = JSON.parse(cached);
                     if (parsed && parsed.primaryColor) {

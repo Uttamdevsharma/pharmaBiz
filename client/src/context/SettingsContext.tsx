@@ -52,7 +52,7 @@ export interface SiteSettings {
 }
 
 export const DEFAULT_SETTINGS: SiteSettings = {
-  siteName: "PharmaBiz SaaS",
+  siteName: "BizPharma SaaS",
   logoUrl: "",
   primaryColor: "#059669",
   hero: {
@@ -126,7 +126,7 @@ export const DEFAULT_SETTINGS: SiteSettings = {
   },
   about: {
     headline: "Built for Modern Pharmacy Enterprises",
-    description: "PharmaBiz provides a complete operating system for retail pharmacies and hospital chains.",
+    description: "BizPharma provides a complete operating system for retail pharmacies and hospital chains.",
     stats: [
       { label: "Uptime Guaranteed", value: "99.99%" },
       { label: "Offline Resilience", value: "72+ Hours" },
@@ -175,7 +175,11 @@ export function SettingsProvider({
     try {
       const res = await fetchApi<SiteSettings>("/settings/public");
       if (res.success && res.data) {
-        setSettings(res.data);
+        const sanitized = {
+          ...res.data,
+          siteName: (!res.data.siteName || res.data.siteName.toLowerCase().includes("pharmabiz")) ? "BizPharma SaaS" : res.data.siteName,
+        };
+        setSettings(sanitized);
         if (res.data.primaryColor) {
           applyThemeColor(res.data.primaryColor);
         }
@@ -194,7 +198,11 @@ export function SettingsProvider({
 
   useEffect(() => {
     if (initialSettings) {
-      setSettings(initialSettings);
+      const sanitized = {
+        ...initialSettings,
+        siteName: (!initialSettings.siteName || initialSettings.siteName.toLowerCase().includes("pharmabiz")) ? "BizPharma SaaS" : initialSettings.siteName,
+      };
+      setSettings(sanitized);
       if (initialSettings.primaryColor) {
         applyThemeColor(initialSettings.primaryColor);
       }
@@ -206,7 +214,7 @@ export function SettingsProvider({
     } else {
       if (typeof window !== "undefined") {
         try {
-          const cached = localStorage.getItem("pharmabiz_site_settings");
+          const cached = localStorage.getItem("bizpharma_site_settings") || localStorage.getItem("pharmabiz_site_settings");
           if (cached) {
             const parsed = JSON.parse(cached);
             if (parsed && typeof parsed === "object") {

@@ -24,6 +24,7 @@ import {
   CheckCircle2,
   AlertTriangle,
   FileUp,
+  Printer,
 } from "lucide-react";
 
 interface ProductListViewProps {
@@ -764,6 +765,15 @@ export function ProductListView({ onNavigate, onEditProduct }: ProductListViewPr
           >
             <Upload className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
             <span>Import CSV</span>
+          </button>
+
+          <button
+            onClick={() => onNavigate("inv_print_labels")}
+            className="h-11 px-4 bg-white dark:bg-slate-850 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold transition flex items-center gap-2 shadow-2xs cursor-pointer active:scale-95"
+            title="Print barcode stickers for medicines"
+          >
+            <Printer className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+            <span>Print Labels</span>
           </button>
 
           <button

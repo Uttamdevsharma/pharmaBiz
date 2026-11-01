@@ -131,7 +131,7 @@ function LoginFormContent() {
 
             {/* 2. Welcome Subtitle */}
             <h2 className="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-200 mt-6 sm:mt-8 mb-6">
-              Welcome to {settings.siteName ? "PharmaBiz" : "PharmaBiz"}
+              Welcome to {settings.siteName && !settings.siteName.toLowerCase().includes("pharmabiz") ? settings.siteName.replace(/\s+SaaS$/i, "") : "BizPharma"}
             </h2>
 
             {/* Approval Notification Banner */}
@@ -308,7 +308,7 @@ function LoginFormContent() {
           <div className="relative w-full max-w-md flex items-center justify-center z-0 animate-gentle-float transition-transform duration-700 hover:scale-[1.03]">
             <img
               src="/login-right.jpg"
-              alt="PharmaBiz Counter Illustration"
+              alt="BizPharma Counter Illustration"
               className="w-full max-h-[460px] object-contain drop-shadow-lg rounded-2xl"
             />
           </div>

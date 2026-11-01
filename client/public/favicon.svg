@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Background Gradient: Medical Emerald to Teal -->
+    <linearGradient id="bp-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10b981" />
+      <stop offset="55%" stop-color="#059669" />
+      <stop offset="100%" stop-color="#047857" />
+    </linearGradient>
+
+    <!-- Pill Gradient: Fresh Mint to Deep Emerald -->
+    <linearGradient id="pill-green" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#34d399" />
+      <stop offset="100%" stop-color="#059669" />
+    </linearGradient>
+
+    <!-- Drop Shadows for depth -->
+    <filter id="bp-cross-shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#022c22" flood-opacity="0.25" />
+    </filter>
+
+    <filter id="bp-pill-shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#022c22" flood-opacity="0.32" />
+    </filter>
+  </defs>
+
+  <!-- Squircle Base with smooth rounded corners -->
+  <rect width="512" height="512" rx="120" fill="url(#bp-bg)" />
+
+  <!-- Inner Soft Border Ring -->
+  <rect x="12" y="12" width="488" height="488" rx="110" fill="none" stroke="#a7f3d0" stroke-width="6" stroke-opacity="0.4" />
+
+  <!-- Universal Pharmacy Medical Cross (Crisp White) -->
+  <g filter="url(#bp-cross-shadow)">
+    <!-- Vertical Cross Arm -->
+    <rect x="206" y="80" width="100" height="352" rx="30" fill="#ffffff" />
+    <!-- Horizontal Cross Arm -->
+    <rect x="80" y="206" width="352" height="100" rx="30" fill="#ffffff" />
+  </g>
+
+  <!-- Overlaid Diagonal Medicine Capsule Pill (Pharmacy Identity) -->
+  <g transform="translate(256, 256) rotate(-45)" filter="url(#bp-pill-shadow)">
+    <!-- Pill Base Container -->
+    <rect x="-42" y="-105" width="84" height="210" rx="42" fill="#ffffff" stroke="#e2e8f0" stroke-width="3" />
+    
+    <!-- Top Half of Capsule (Pure Clean White) -->
+    <path d="M -42,0 L -42,-63 A 42,42 0 0,1 42,-63 L 42,0 Z" fill="#ffffff" />
+    
+    <!-- Bottom Half of Capsule (Medical Emerald Gradient) -->
+    <path d="M -42,0 L -42,63 A 42,42 0 0,0 42,63 L 42,0 Z" fill="url(#pill-green)" />
+    
+    <!-- Pill Center Joint Band -->
+    <line x1="-42" y1="0" x2="42" y2="0" stroke="#047857" stroke-width="4" stroke-opacity="0.45" />
+    
+    <!-- Glossy Reflection Highlight -->
+    <path d="M -24,-84 A 15,15 0 0,1 -6,-95 L -6,-16 A 15,15 0 0,1 -24,-5 Z" fill="#ffffff" opacity="0.65" />
+  </g>
+</svg>

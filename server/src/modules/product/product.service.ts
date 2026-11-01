@@ -804,7 +804,14 @@ export class ProductService {
     }
 
     const product = await (prisma as any).product.findFirst({
-      where: { barcode, tenantId },
+      where: {
+        tenantId,
+        OR: [
+          { barcode: { equals: barcode, mode: "insensitive" } },
+          { sku: { equals: barcode, mode: "insensitive" } },
+          { inventories: { some: { barcode: { equals: barcode, mode: "insensitive" } } } },
+        ],
+      },
       include: includeOptions,
     });
 

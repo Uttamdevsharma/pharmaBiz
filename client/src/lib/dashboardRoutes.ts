@@ -52,6 +52,7 @@ export const MODULE_TO_PATH: Record<OwnerModule, string> = {
   inv_product_list: "/dashboard/inventory/products",
   inv_variants: "/dashboard/inventory/variants",
   inv_expired_products: "/dashboard/inventory/expired",
+  inv_print_labels: "/dashboard/inventory/print-labels",
 
   // Categories
   cat_create: "/dashboard/categories/create",
@@ -135,6 +136,7 @@ for (const [moduleKey, path] of Object.entries(MODULE_TO_PATH)) {
 // Add canonical aliases so both /dashboard/pos and /dashboard/pos_sale work
 PATH_TO_MODULE_MAP["/dashboard/overview"] = "overview";
 PATH_TO_MODULE_MAP["/dashboard/inventory"] = "inv_product_list";
+PATH_TO_MODULE_MAP["/dashboard/inventory/print-labels"] = "inv_print_labels";
 PATH_TO_MODULE_MAP["/dashboard/sales"] = "pos";
 PATH_TO_MODULE_MAP["/dashboard/locations"] = "loc_group_list";
 PATH_TO_MODULE_MAP["/dashboard/locations/groups"] = "loc_group_list";

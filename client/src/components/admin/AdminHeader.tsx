@@ -115,7 +115,7 @@ export function AdminHeader({
               </div>
             )}
             <span className="font-bold text-slate-900 dark:text-white hidden sm:inline">
-              {settings.siteName || "PharmaBiz"}
+              {settings.siteName && !settings.siteName.toLowerCase().includes("pharmabiz") ? settings.siteName : "BizPharma"}
             </span>
           </Link>
           <span className="text-slate-300 dark:text-slate-700 hidden sm:inline">/</span>

@@ -254,7 +254,7 @@ function VerificationStatusContent() {
             <div className="h-8 w-8 rounded-none bg-brand-primary flex items-center justify-center text-white shadow-sm">
               <Pill className="h-4 w-4 transform -rotate-45" />
             </div>
-            <span className="font-bold text-slate-900 dark:text-white">PharmaBiz</span>
+            <span className="font-bold text-slate-900 dark:text-white">BizPharma</span>
           </Link>
 
           <button

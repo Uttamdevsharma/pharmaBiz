@@ -5,7 +5,7 @@ import { encryptSecret, decryptSecret, maskSecret, isMasked } from "../../app/li
 const SETTINGS_KEY = "landing_page_config";
 
 export const DEFAULT_SETTINGS = {
-  siteName: "PharmaBiz SaaS",
+  siteName: "BizPharma SaaS",
   logoUrl: "",
   logoPublicId: "",
   primaryColor: "#059669", // Emerald Green default
@@ -80,7 +80,7 @@ export const DEFAULT_SETTINGS = {
   },
   about: {
     headline: "Built for Modern Pharmacy Enterprises",
-    description: "PharmaBiz provides a complete operating system for retail pharmacies and hospital chains, offering bulletproof reliability and multi-tenant data isolation.",
+    description: "BizPharma provides a complete operating system for retail pharmacies and hospital chains, offering bulletproof reliability and multi-tenant data isolation.",
     stats: [
       { label: "Uptime Guaranteed", value: "99.99%" },
       { label: "Offline Resilience", value: "72+ Hours" },
@@ -100,6 +100,9 @@ export class SettingsService {
     });
 
     let config = setting ? setting.value : DEFAULT_SETTINGS;
+    if (config && (!config.siteName || config.siteName.toLowerCase().includes("pharmabiz"))) {
+      config = { ...config, siteName: "BizPharma SaaS" };
+    }
 
     // Fetch active subscription plans dynamically
     const rawPlans = await (prisma as any).subscriptionPlan.findMany({

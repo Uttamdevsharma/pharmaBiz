@@ -43,7 +43,7 @@ export function Navbar() {
               </div>
             )}
             <span className="text-xl sm:text-2xl 2xl:text-[26px] font-black tracking-tight text-[#102c28]">
-              {settings.siteName?.replace(/\s+SaaS$/i, "") || "BizPharma"}
+              {settings.siteName && !settings.siteName.toLowerCase().includes("pharmabiz") ? settings.siteName.replace(/\s+SaaS$/i, "") : "BizPharma"}
             </span>
           </Link>
 

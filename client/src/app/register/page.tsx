@@ -710,7 +710,7 @@ function RegisterContent() {
                 </div>
               )}
               <span className="text-base sm:text-lg font-bold tracking-tight text-slate-900 group-hover:text-brand-primary transition-colors">
-                {settings.siteName?.replace(/\s+SaaS$/i, "") || "PharmaBiz"}
+                {settings.siteName && !settings.siteName.toLowerCase().includes("pharmabiz") ? settings.siteName.replace(/\s+SaaS$/i, "") : "BizPharma"}
               </span>
             </Link>
           </div>
@@ -2313,7 +2313,7 @@ function RegisterContent() {
                     Terms & Conditions & Data Retention Policy
                   </h3>
                   <p className="text-xs text-slate-500">
-                    PharmaBiz Software Licensing, Cloud Hosting & Expiration Terms
+                    BizPharma Software Licensing, Cloud Hosting & Expiration Terms
                   </p>
                 </div>
               </div>
