@@ -61,9 +61,8 @@ mkdir -p /var/www/certbot
 
 # 5. Check and configure environment files
 if [ ! -f "$PROJECT_DIR/server/.env" ]; then
-    echo -e "${YELLOW}[!] $PROJECT_DIR/server/.env not found!${NC}"
+    echo -e "${YELLOW}[!] $PROJECT_DIR/server/.env not found! Creating from example...${NC}"
     if [ -f "$PROJECT_DIR/server/.env.example" ]; then
-        echo -e "${GREEN}[*] Copying server/.env.example to server/.env...${NC}"
         cp "$PROJECT_DIR/server/.env.example" "$PROJECT_DIR/server/.env"
     fi
 fi
@@ -73,14 +72,9 @@ if [ -f "$PROJECT_DIR/server/.env" ]; then
     cp -f "$PROJECT_DIR/server/.env" "$PROJECT_DIR/.env" 2>/dev/null || true
 fi
 
-if [ ! -f "$PROJECT_DIR/client/.env" ]; then
-    echo -e "${YELLOW}[!] $PROJECT_DIR/client/.env not found. Creating default production client/.env...${NC}"
-    if [ -f "$PROJECT_DIR/client/.env.example" ]; then
-        cp "$PROJECT_DIR/client/.env.example" "$PROJECT_DIR/client/.env"
-    else
-        echo "NEXT_PUBLIC_API_URL=https://bizpharma-api.okobiz.com/api" > "$PROJECT_DIR/client/.env"
-    fi
-fi
+# Always enforce production API URL on client/.env before building
+echo "NEXT_PUBLIC_API_URL=https://bizpharma-api.okobiz.com/api" > "$PROJECT_DIR/client/.env"
+echo -e "${GREEN}[*] client/.env configured with NEXT_PUBLIC_API_URL=https://bizpharma-api.okobiz.com/api${NC}"
 
 # 6. Build and Configure Server (Express + Prisma)
 echo -e "\n${BLUE}======================================================${NC}"
@@ -128,7 +122,8 @@ if [ -d "$PROJECT_DIR/client/node_modules/.bin" ]; then
     chmod -R +x "$PROJECT_DIR/client/node_modules/.bin" 2>/dev/null || true
 fi
 
-echo -e "${GREEN}[*] Building Next.js production bundle...${NC}"
+echo -e "${GREEN}[*] Building Next.js production bundle with fresh cache...${NC}"
+rm -rf .next .next_dev 2>/dev/null || true
 npm run build
 
 # 8. Start / Reload PM2 Processes
