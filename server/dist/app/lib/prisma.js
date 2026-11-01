@@ -4,6 +4,11 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.pool = exports.prisma = void 0;
+const dns_1 = __importDefault(require("dns"));
+try {
+    dns_1.default.setDefaultResultOrder("ipv4first");
+}
+catch { }
 const dotenv_1 = __importDefault(require("dotenv"));
 const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
@@ -48,7 +53,9 @@ const pool = new pg_1.Pool({
     },
     max: 20,
     idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 15000,
+    connectionTimeoutMillis: 20000,
+    keepAlive: true,
+    keepAliveInitialDelayMillis: 10000,
 });
 exports.pool = pool;
 pool.on("error", (err) => {

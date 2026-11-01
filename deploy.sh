@@ -62,14 +62,12 @@ mkdir -p /var/www/certbot
 # 5. Check and configure environment files
 NEON_DATABASE_URL="postgresql://neondb_owner:npg_uFyoipQ7END0@ep-tiny-star-aywpbgfb-pooler.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require"
 
-if [ ! -f "$PROJECT_DIR/server/.env" ]; then
-    echo -e "${YELLOW}[!] $PROJECT_DIR/server/.env not found! Creating from example...${NC}"
-    if [ -f "$PROJECT_DIR/server/.env.example" ]; then
-        cp "$PROJECT_DIR/server/.env.example" "$PROJECT_DIR/server/.env"
-    fi
+# Ensure UFW allows outbound port 5432 if active
+if command -v ufw >/dev/null 2>&1 && [ "$(id -u)" -eq 0 ]; then
+    ufw allow out 5432/tcp 2>/dev/null || true
 fi
 
-# Ensure server/.env has valid DATABASE_URL pointing to Neon
+# Ensure server/.env exists and has valid DATABASE_URL pointing to Neon
 if [ -f "$PROJECT_DIR/server/.env" ]; then
     if ! grep -q "ep-tiny-star-aywpbgfb-pooler" "$PROJECT_DIR/server/.env" 2>/dev/null; then
         echo -e "${YELLOW}[!] Updating server/.env with production Neon DATABASE_URL...${NC}"

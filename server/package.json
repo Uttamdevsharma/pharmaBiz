@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node dist/app.js",
+    "start": "node --dns-result-order=ipv4first dist/app.js",
     "build": "tsc",
     "postinstall": "node node_modules/prisma/build/index.js generate || npx prisma generate",
     "vercel-build": "prisma generate && tsup src/index.ts --format esm --platform node --target node20 --outDir api --no-treeshake",

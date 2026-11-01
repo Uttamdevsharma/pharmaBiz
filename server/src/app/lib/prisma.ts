@@ -1,3 +1,8 @@
+import dns from "dns";
+try {
+  dns.setDefaultResultOrder("ipv4first");
+} catch {}
+
 import dotenv from "dotenv";
 import path from "path";
 import fs from "fs";
@@ -49,7 +54,9 @@ const pool = new Pool({
   },
   max: 20,
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 15000,
+  connectionTimeoutMillis: 20000,
+  keepAlive: true,
+  keepAliveInitialDelayMillis: 10000,
 });
 
 pool.on("error", (err) => {

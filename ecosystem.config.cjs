@@ -43,7 +43,7 @@ module.exports = {
       autorestart: true,
       watch: false,
       max_memory_restart: "1G",
-      node_args: "--max-old-space-size=2048",
+      node_args: "--dns-result-order=ipv4first --max-old-space-size=2048",
       env: {
         NODE_ENV: "production",
         PORT: 4001,
@@ -69,7 +69,7 @@ module.exports = {
       autorestart: true,
       watch: false,
       max_memory_restart: "1G",
-      node_args: "--max-old-space-size=2048",
+      node_args: "--dns-result-order=ipv4first --max-old-space-size=2048",
       env: {
         NODE_ENV: "production",
         PORT: 4000,
