@@ -1,4 +1,20 @@
-import "dotenv/config";
+import dotenv from "dotenv";
+import path from "path";
+import fs from "fs";
+
+// Load .env from multiple candidate paths
+[
+  path.resolve(__dirname, "../.env"),
+  path.resolve(__dirname, "../../.env"),
+  path.resolve(process.cwd(), "server/.env"),
+  path.resolve(process.cwd(), ".env"),
+  "/var/www/bizpharma/server/.env",
+].forEach((p) => {
+  try {
+    if (fs.existsSync(p)) dotenv.config({ path: p });
+  } catch {}
+});
+dotenv.config();
 import express, { Request, Response, NextFunction, response } from "express";
 import { seedSuperAdmin } from "./app/lib/seedAdmin";
 
@@ -50,7 +66,6 @@ app.use(express.json({ limit: "25mb" }));
 app.use(express.urlencoded({ limit: "25mb", extended: true }));
 
 // Serve uploaded images statically
-import path from "path";
 app.use("/uploads", express.static(path.join(process.cwd(), "public", "uploads")));
 
 // Mount Swagger Documentation & Testing UI

@@ -22,6 +22,32 @@ export async function seedSuperAdmin(): Promise<void> {
       await (prisma as any).$executeRawUnsafe(`ALTER TABLE "Payment" ADD COLUMN IF NOT EXISTS "screenshotUrl" TEXT;`);
       await (prisma as any).$executeRawUnsafe(`ALTER TABLE "Payment" ADD COLUMN IF NOT EXISTS "type" TEXT DEFAULT 'SUBSCRIPTION';`);
       await (prisma as any).$executeRawUnsafe(`ALTER TABLE "Payment" ADD COLUMN IF NOT EXISTS "notes" TEXT;`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "Tenant" ADD COLUMN IF NOT EXISTS "isDemo" BOOLEAN DEFAULT false;`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "Tenant" ADD COLUMN IF NOT EXISTS "demoApprovedAt" TIMESTAMP;`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "Tenant" ADD COLUMN IF NOT EXISTS "demoExpiresAt" TIMESTAMP;`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "SubscriptionPlan" ADD COLUMN IF NOT EXISTS "trialDays" INTEGER DEFAULT 0;`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "bkash_merchant_enabled" BOOLEAN DEFAULT false;`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "bkash_is_live" BOOLEAN DEFAULT false;`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "bkash_app_key" VARCHAR(255);`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "bkash_app_secret" TEXT;`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "bkash_username" VARCHAR(100);`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "bkash_password" TEXT;`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "nagad_merchant_enabled" BOOLEAN DEFAULT false;`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "nagad_is_live" BOOLEAN DEFAULT false;`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "nagad_merchant_id" VARCHAR(100);`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "nagad_merchant_phone" VARCHAR(50);`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "nagad_public_key" TEXT;`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "nagad_private_key" TEXT;`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "eps_merchant_enabled" BOOLEAN DEFAULT false;`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "eps_is_live" BOOLEAN DEFAULT false;`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "eps_merchant_id" VARCHAR(255);`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "eps_store_id" VARCHAR(255);`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "eps_username" VARCHAR(255);`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "eps_password" TEXT;`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "eps_hash_key" TEXT;`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "manual_payment_active" BOOLEAN DEFAULT true;`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "bkash_number" VARCHAR(50);`);
+      await (prisma as any).$executeRawUnsafe(`ALTER TABLE "platform_settings" ADD COLUMN IF NOT EXISTS "nagad_number" VARCHAR(50);`);
     } catch (colErr: any) {
       console.warn("[Seed] Column verification note:", colErr.message);
     }

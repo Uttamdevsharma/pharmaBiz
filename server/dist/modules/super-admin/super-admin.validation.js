@@ -14,8 +14,10 @@ exports.createPlanSchema = zod_1.z.object({
     trialDays: zod_1.z.number().int().min(0).optional(),
     isTrial: zod_1.z.boolean().optional(),
     isCustom: zod_1.z.boolean().optional(),
+    isPopular: zod_1.z.boolean().optional(),
     whatsappNumber: zod_1.z.string().optional(),
     customMessage: zod_1.z.string().optional(),
+    featureList: zod_1.z.array(zod_1.z.string()).optional(),
     features: zod_1.z.record(zod_1.z.string(), zod_1.z.any()).optional(),
     isActive: zod_1.z.boolean().default(true),
 });
@@ -30,8 +32,10 @@ exports.updatePlanSchema = zod_1.z.object({
     trialDays: zod_1.z.number().int().min(0).optional(),
     isTrial: zod_1.z.boolean().optional(),
     isCustom: zod_1.z.boolean().optional(),
+    isPopular: zod_1.z.boolean().optional(),
     whatsappNumber: zod_1.z.string().optional(),
     customMessage: zod_1.z.string().optional(),
+    featureList: zod_1.z.array(zod_1.z.string()).optional(),
     features: zod_1.z.record(zod_1.z.string(), zod_1.z.any()).optional(),
     isActive: zod_1.z.boolean().optional(),
 });

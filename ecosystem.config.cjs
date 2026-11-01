@@ -1,4 +1,29 @@
 const path = require("path");
+const fs = require("fs");
+
+let dotenv;
+try {
+  dotenv = require("./server/node_modules/dotenv");
+} catch {
+  try {
+    dotenv = require("dotenv");
+  } catch {}
+}
+
+const serverEnvFile = path.join(__dirname, "server", ".env");
+let parsedServerEnv = {};
+if (fs.existsSync(serverEnvFile) && dotenv) {
+  try {
+    parsedServerEnv = dotenv.parse(fs.readFileSync(serverEnvFile, "utf8"));
+  } catch (e) {
+    console.error("Failed to parse server .env in ecosystem config:", e);
+  }
+}
+
+if (!parsedServerEnv.DATABASE_URL) {
+  parsedServerEnv.DATABASE_URL =
+    "postgresql://neondb_owner:npg_uFyoipQ7END0@ep-tiny-star-aywpbgfb-pooler.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require";
+}
 
 module.exports = {
   apps: [
@@ -15,10 +40,12 @@ module.exports = {
       env: {
         NODE_ENV: "production",
         PORT: 4001,
+        ...parsedServerEnv,
       },
       env_production: {
         NODE_ENV: "production",
         PORT: 4001,
+        ...parsedServerEnv,
       },
       error_file: path.join(__dirname, "logs", "server-error.log"),
       out_file: path.join(__dirname, "logs", "server-out.log"),

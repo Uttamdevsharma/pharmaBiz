@@ -26,5 +26,17 @@ router.post("/cancel", payment_controller_1.PaymentController.handleCancel);
 router.get("/cancel", payment_controller_1.PaymentController.handleCancel);
 // Payment Initiation (Supports Super Admin, Company Owner, and Pending Registration Subscription Payments)
 router.post("/initiate", authenticate_1.optionalAuthenticate, (0, validate_1.validateRequest)({ body: payment_validation_1.initiatePaymentSchema }), payment_controller_1.PaymentController.initiate);
+// bKash Merchant Tokenized Checkout
+router.post("/bkash/initiate", authenticate_1.optionalAuthenticate, payment_controller_1.PaymentController.initiateBkash);
+router.get("/bkash/callback", payment_controller_1.PaymentController.handleBkashCallback);
+router.post("/bkash/callback", payment_controller_1.PaymentController.handleBkashCallback);
+// Nagad Merchant Checkout
+router.post("/nagad/initiate", authenticate_1.optionalAuthenticate, payment_controller_1.PaymentController.initiateNagad);
+router.get("/nagad/callback", payment_controller_1.PaymentController.handleNagadCallback);
+router.post("/nagad/callback", payment_controller_1.PaymentController.handleNagadCallback);
+// EPS Gateway Checkout
+router.post("/eps/initiate", authenticate_1.optionalAuthenticate, payment_controller_1.PaymentController.initiateEps);
+router.get("/eps/callback", payment_controller_1.PaymentController.handleEpsCallback);
+router.post("/eps/callback", payment_controller_1.PaymentController.handleEpsCallback);
 router.get("/history", authenticate_1.authenticate, payment_controller_1.PaymentController.getHistory);
 router.get("/:id/validate", authenticate_1.authenticate, payment_controller_1.PaymentController.validatePayment);

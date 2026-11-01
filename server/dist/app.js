@@ -3,7 +3,24 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-require("dotenv/config");
+const dotenv_1 = __importDefault(require("dotenv"));
+const path_1 = __importDefault(require("path"));
+const fs_1 = __importDefault(require("fs"));
+// Load .env from multiple candidate paths
+[
+    path_1.default.resolve(__dirname, "../.env"),
+    path_1.default.resolve(__dirname, "../../.env"),
+    path_1.default.resolve(process.cwd(), "server/.env"),
+    path_1.default.resolve(process.cwd(), ".env"),
+    "/var/www/bizpharma/server/.env",
+].forEach((p) => {
+    try {
+        if (fs_1.default.existsSync(p))
+            dotenv_1.default.config({ path: p });
+    }
+    catch { }
+});
+dotenv_1.default.config();
 const express_1 = __importDefault(require("express"));
 const seedAdmin_1 = require("./app/lib/seedAdmin");
 // Route imports
@@ -49,7 +66,6 @@ app.use((req, res, next) => {
 app.use(express_1.default.json({ limit: "25mb" }));
 app.use(express_1.default.urlencoded({ limit: "25mb", extended: true }));
 // Serve uploaded images statically
-const path_1 = __importDefault(require("path"));
 app.use("/uploads", express_1.default.static(path_1.default.join(process.cwd(), "public", "uploads")));
 // Mount Swagger Documentation & Testing UI
 const docs_1 = require("./docs");
@@ -94,7 +110,10 @@ app.use("/api/super-admin/support-tickets", support_ticket_routes_1.superAdminSu
 app.use("/api/super-admin/notices", notices_routes_1.superAdminNoticeRoutes);
 app.use("/api/tenant/notices", notices_routes_1.tenantNoticeRoutes);
 const quotation_controller_1 = require("./modules/super-admin/quotation.controller");
+const settings_controller_1 = require("./modules/settings/settings.controller");
 app.get("/api/public/quotations/:id", quotation_controller_1.QuotationController.getById);
+app.get("/api/public/platform-settings", settings_controller_1.SettingsController.getPublicPaymentGateways);
+app.get("/api/public/payment-gateways", settings_controller_1.SettingsController.getPublicPaymentGateways);
 // Fallback & direct gateway callbacks on root /payment/* (Supports both GET and POST)
 app.all("/payment/success", payment_controller_1.PaymentController.handleSuccess);
 app.all("/payment/fail", payment_controller_1.PaymentController.handleFail);
