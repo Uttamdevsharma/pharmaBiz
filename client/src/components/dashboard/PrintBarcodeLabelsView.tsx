@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useBranchContext } from "@/context/BranchContext";
 import { fetchApi } from "@/lib/api";
@@ -10,16 +10,10 @@ import {
   Printer,
   Search,
   CheckSquare,
-  Square,
   Plus,
   Minus,
   RotateCcw,
-  Sparkles,
-  Tag,
-  Store,
-  Layers,
   CheckCircle2,
-  AlertCircle,
   Eye,
   Settings2,
 } from "lucide-react";
@@ -30,19 +24,30 @@ interface ProductItem {
   genericName?: string | null;
   sku: string;
   barcode?: string | null;
-  sellingPrice: number | string;
+  basePrice?: number | string | null;
+  effectivePrice?: number | string | null;
+  sellingPrice?: number | string | null;
   currentStock?: number;
   stock?: number;
   category?: string | null;
-  categoryRef?: { name: string } | null;
+  categoryRef?: { name: string; productType?: string } | null;
+  productType?: string | null;
+  defaultPackType?: string | null;
+  unit?: string | null;
   brand?: string | null;
   size?: string | null;
   strength?: string | null;
+  stripsPerBox?: number | null;
+  tabletsPerStrip?: number | null;
   batches?: Array<{
     id: string;
     batchNumber?: string;
     barcode?: string | null;
     quantity: number;
+    sellingPrice?: number | string | null;
+    boxSellingPrice?: number | string | null;
+    stripsPerBox?: number | null;
+    tabletsPerStrip?: number | null;
   }>;
 }
 
@@ -53,6 +58,125 @@ interface SelectedLabelItem {
 
 interface PrintBarcodeLabelsViewProps {
   onNavigate?: (module: any) => void;
+}
+
+type PriceCalculationMode = "AUTO" | "BOX_ONLY" | "UNIT_ONLY";
+
+/**
+ * Format barcode string to eliminate scientific notation (e.g. 6.40343E+11 -> 640343000000).
+ */
+export function formatBarcodeString(raw?: string | null): string {
+  if (!raw) return "";
+  const str = String(raw).trim();
+  // Check if string is in scientific notation e.g. 6.40343E+11 or 1.55959e+11
+  if (/^[+-]?\d+(\.\d+)?[eE][+-]?\d+$/.test(str)) {
+    try {
+      const num = Number(str);
+      if (!isNaN(num)) {
+        return BigInt(Math.round(num)).toString();
+      }
+    } catch {}
+  }
+  return str;
+}
+
+/**
+ * Calculate display price:
+ * - Medicines (tablets, capsules): Total Box Price
+ * - Unit pieces (lifestyle like Pepsodent, syrup bottles): Unit piece price
+ */
+export function getProductDisplayPrice(
+  p: ProductItem,
+  mode: PriceCalculationMode = "AUTO"
+): {
+  amount: number;
+  unitLabel: string;
+  isBox: boolean;
+} {
+  const latestBatch = p.batches && p.batches.length > 0 ? p.batches[0] : null;
+
+  const cat = (p.categoryRef?.name || p.category || "").toLowerCase();
+  const prodType = (p.productType || "").toUpperCase();
+  const defaultPack = (p.defaultPackType || "").toUpperCase();
+  const unit = (p.unit || "").toLowerCase();
+
+  const isLifestyleOrPiece =
+    cat.includes("life style") ||
+    cat.includes("lifestyle") ||
+    cat.includes("syrup") ||
+    cat.includes("cosmetic") ||
+    cat.includes("personal") ||
+    cat.includes("oral") ||
+    cat.includes("device") ||
+    cat.includes("equipment") ||
+    cat.includes("baby") ||
+    prodType === "SYRUP" ||
+    prodType === "EQUIPMENT" ||
+    prodType === "OTHER" ||
+    defaultPack === "BOTTLE" ||
+    defaultPack === "PIECE" ||
+    unit.includes("bottle") ||
+    unit.includes("piece") ||
+    unit.includes("pcs");
+
+  const isMedicine =
+    !isLifestyleOrPiece &&
+    (prodType === "MEDICINE" ||
+      cat.includes("medicine") ||
+      cat.includes("pharma") ||
+      defaultPack === "BOX" ||
+      defaultPack === "STRIP" ||
+      defaultPack === "TABLET" ||
+      unit.includes("tab") ||
+      unit.includes("cap") ||
+      unit.includes("strip"));
+
+  // 1. Check batch sellingPrice or boxSellingPrice
+  const batchBoxSelling = Number(latestBatch?.boxSellingPrice || 0);
+  const batchUnitSelling = Number(latestBatch?.sellingPrice || 0);
+
+  // 2. Base unit price (per tablet or per piece)
+  const baseUnitPrice =
+    batchUnitSelling > 0
+      ? batchUnitSelling
+      : Number(p.effectivePrice || 0) > 0
+      ? Number(p.effectivePrice)
+      : Number(p.basePrice || 0) > 0
+      ? Number(p.basePrice)
+      : Number(p.sellingPrice || 0);
+
+  const strips = Number(p.stripsPerBox || latestBatch?.stripsPerBox || 10);
+  const tabs = Number(p.tabletsPerStrip || latestBatch?.tabletsPerStrip || 10);
+  const totalUnitsPerBox = strips * tabs;
+
+  if (mode === "BOX_ONLY") {
+    if (batchBoxSelling > 0) return { amount: batchBoxSelling, unitLabel: "Box", isBox: true };
+    const boxAmt = baseUnitPrice * Math.max(1, totalUnitsPerBox);
+    return { amount: Math.round(boxAmt * 100) / 100, unitLabel: "Box", isBox: true };
+  }
+
+  if (mode === "UNIT_ONLY") {
+    return { amount: baseUnitPrice, unitLabel: "Unit", isBox: false };
+  }
+
+  // AUTO mode: Box price for medicines, Unit price for lifestyle/syrups
+  if (isMedicine) {
+    if (batchBoxSelling > 0) {
+      return { amount: batchBoxSelling, unitLabel: "Box", isBox: true };
+    }
+    if (baseUnitPrice > 0 && totalUnitsPerBox > 1) {
+      const boxAmt = baseUnitPrice * totalUnitsPerBox;
+      return {
+        amount: Math.round(boxAmt * 100) / 100,
+        unitLabel: "Box",
+        isBox: true,
+      };
+    }
+    return { amount: baseUnitPrice, unitLabel: "Box", isBox: true };
+  }
+
+  // Lifestyle / Unit piece
+  return { amount: baseUnitPrice, unitLabel: "Piece", isBox: false };
 }
 
 export function PrintBarcodeLabelsView({ onNavigate }: PrintBarcodeLabelsViewProps) {
@@ -74,6 +198,7 @@ export function PrintBarcodeLabelsView({ onNavigate }: PrintBarcodeLabelsViewPro
   const [showPharmacyName, setShowPharmacyName] = useState(true);
   const [showMedicineName, setShowMedicineName] = useState(true);
   const [showPrice, setShowPrice] = useState(true);
+  const [priceMode, setPriceMode] = useState<PriceCalculationMode>("AUTO");
   const [showBarcodeText, setShowBarcodeText] = useState(true);
   const [currencySymbol, setCurrencySymbol] = useState("৳");
 
@@ -93,13 +218,13 @@ export function PrintBarcodeLabelsView({ onNavigate }: PrintBarcodeLabelsViewPro
     try {
       setLoading(true);
 
-      // Fast load from offline IndexedDB first
+      // 1. Fast load from offline IndexedDB first
       const cached = await offlineDb.getProducts(selectedBranchId || undefined);
       if (cached && cached.length > 0) {
         setProducts(cached as ProductItem[]);
       }
 
-      // Fetch fresh catalog from API
+      // 2. Fetch fresh catalog from API
       const res = await fetchApi<any>(`/products?limit=500${selectedBranchId ? `&branchId=${selectedBranchId}` : ""}`);
       if (res?.success && Array.isArray(res.data)) {
         setProducts(res.data);
@@ -134,7 +259,7 @@ export function PrintBarcodeLabelsView({ onNavigate }: PrintBarcodeLabelsViewPro
       const name = (p.name || "").toLowerCase();
       const generic = (p.genericName || "").toLowerCase();
       const sku = (p.sku || "").toLowerCase();
-      const barcode = (p.barcode || "").toLowerCase();
+      const barcode = formatBarcodeString(p.barcode).toLowerCase();
       const brand = (p.brand || "").toLowerCase();
       const cat = (p.categoryRef?.name || p.category || "").toLowerCase();
 
@@ -164,7 +289,6 @@ export function PrintBarcodeLabelsView({ onNavigate }: PrintBarcodeLabelsViewPro
       if (next.has(product.id)) {
         next.delete(product.id);
       } else {
-        // Default to 1 sticker
         next.set(product.id, 1);
       }
       return next;
@@ -256,18 +380,22 @@ export function PrintBarcodeLabelsView({ onNavigate }: PrintBarcodeLabelsViewPro
     return null;
   }, [selectedProductsList, filteredProducts]);
 
-  // Resolve scannable barcode string for a product
+  // Resolve scannable barcode string for a product (cleaned from scientific notation)
   const getProductBarcodeValue = (p: ProductItem): string => {
-    if (p.barcode && p.barcode.trim().length > 0) {
-      return p.barcode.trim();
-    }
+    const cleanRaw = formatBarcodeString(p.barcode);
+    if (cleanRaw.length > 0) return cleanRaw;
+
     if (p.batches && p.batches.length > 0) {
       const batchWithCode = p.batches.find((b) => b.barcode && b.barcode.trim().length > 0);
-      if (batchWithCode?.barcode) return batchWithCode.barcode.trim();
+      if (batchWithCode?.barcode) {
+        return formatBarcodeString(batchWithCode.barcode);
+      }
     }
+
     if (p.sku && p.sku.trim().length > 0) {
-      return p.sku.trim();
+      return formatBarcodeString(p.sku.trim());
     }
+
     return `MED-${p.id.slice(-8).toUpperCase()}`;
   };
 
@@ -311,7 +439,9 @@ export function PrintBarcodeLabelsView({ onNavigate }: PrintBarcodeLabelsViewPro
 
     selectedProductsList.forEach(({ product, quantity }) => {
       const code = getProductBarcodeValue(product);
-      const priceFormatted = `${currencySymbol} ${Number(product.sellingPrice || 0).toFixed(2)}`;
+      const priceInfo = getProductDisplayPrice(product, priceMode);
+      const priceFormatted = `${currencySymbol}${priceInfo.amount.toFixed(2)}`;
+
       for (let i = 0; i < quantity; i++) {
         stickersToPrint.push({
           pharmacy: pharmacyName.trim() || "Pharmacy",
@@ -394,7 +524,6 @@ export function PrintBarcodeLabelsView({ onNavigate }: PrintBarcodeLabelsViewPro
 
     // Generate barcodes SVG using Code 128 algorithm
     const generateBarcodeSvg = (value: string, heightPx = 28) => {
-      // Code 128 Pattern tables (Subset B)
       const CODE128_PATTERNS: Record<number, string> = {
         0: "212222", 1: "222122", 2: "222221", 3: "121223", 4: "121322",
         5: "131222", 6: "122213", 7: "122312", 8: "132212", 9: "221213",
@@ -596,24 +725,19 @@ export function PrintBarcodeLabelsView({ onNavigate }: PrintBarcodeLabelsViewPro
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-slate-50 dark:bg-slate-950">
-      {/* Top Banner Header */}
-      <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 sm:px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="p-2 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 rounded-none">
-              <Printer className="h-5 w-5" />
-            </span>
-            <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-              Barcode Label Printing
-            </h1>
-          </div>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Search medicines, select sticker quantities, and print scannable barcode labels for pharmacy shelves and packaging.
-          </p>
+      {/* Top Clean Header (No short description) */}
+      <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 sm:px-6 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <span className="p-2 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 rounded-none">
+            <Printer className="h-5 w-5" />
+          </span>
+          <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+            Barcode Label Printing
+          </h1>
         </div>
 
         {/* Action Controls */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
           <button
             type="button"
             onClick={loadProducts}
@@ -638,9 +762,9 @@ export function PrintBarcodeLabelsView({ onNavigate }: PrintBarcodeLabelsViewPro
         </div>
       </div>
 
-      {/* Main Content: Two Columns (Left: Medicines Selection Table, Right: Layout Settings & Live Preview) */}
+      {/* Main Content: Two Columns (Left: Clean Medicines Table, Right: Layout Settings & Live Preview) */}
       <div className="flex-1 flex flex-col lg:flex-row min-h-0 overflow-hidden">
-        {/* LEFT COLUMN: Search, Filters & Medicines Table */}
+        {/* LEFT COLUMN: Search, Filters & Clean Medicines Table */}
         <div className="flex-1 flex flex-col min-h-0 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
           {/* Search & Filters Bar */}
           <div className="p-3 sm:p-4 border-b border-slate-200 dark:border-slate-800 space-y-3 bg-slate-50/50 dark:bg-slate-900/50">
@@ -738,7 +862,7 @@ export function PrintBarcodeLabelsView({ onNavigate }: PrintBarcodeLabelsViewPro
             </div>
           </div>
 
-          {/* Medicines Selection List Table */}
+          {/* Clean Medicines Selection List Table (No short description lines) */}
           <div className="flex-1 min-h-0 overflow-y-auto">
             {loading ? (
               <div className="p-8 text-center text-slate-400 text-sm">
@@ -767,8 +891,8 @@ export function PrintBarcodeLabelsView({ onNavigate }: PrintBarcodeLabelsViewPro
                       />
                     </th>
                     <th className="py-2.5 px-3">Medicine Information</th>
-                    <th className="py-2.5 px-3 w-28">Barcode / SKU</th>
-                    <th className="py-2.5 px-3 w-24 text-right">Price</th>
+                    <th className="py-2.5 px-3 w-36">Barcode / SKU</th>
+                    <th className="py-2.5 px-3 w-28 text-right">Price</th>
                     <th className="py-2.5 px-3 w-20 text-center">Stock</th>
                     <th className="py-2.5 px-3 w-32 text-center">Sticker Qty</th>
                   </tr>
@@ -779,6 +903,7 @@ export function PrintBarcodeLabelsView({ onNavigate }: PrintBarcodeLabelsViewPro
                     const qty = selectedItems.get(p.id) || 1;
                     const barcodeVal = getProductBarcodeValue(p);
                     const stockVal = Number(p.currentStock ?? p.stock ?? 0);
+                    const priceInfo = getProductDisplayPrice(p, priceMode);
 
                     return (
                       <tr
@@ -796,22 +921,25 @@ export function PrintBarcodeLabelsView({ onNavigate }: PrintBarcodeLabelsViewPro
                             className="rounded-none text-emerald-600 focus:ring-emerald-500 cursor-pointer"
                           />
                         </td>
+                        {/* Clean Medicine Name only (no short description) */}
                         <td className="py-2.5 px-3">
-                          <div className="font-bold text-slate-900 dark:text-white">
+                          <span className="font-bold text-slate-900 dark:text-white text-sm">
                             {p.name}
-                          </div>
-                          <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                            {p.genericName ? `${p.genericName} • ` : ""}
-                            {p.categoryRef?.name || p.category || "General"}
-                          </div>
+                          </span>
                         </td>
                         <td className="py-2.5 px-3 font-mono text-[11px]">
                           <span className="font-semibold text-slate-700 dark:text-slate-300">
                             {barcodeVal}
                           </span>
                         </td>
-                        <td className="py-2.5 px-3 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                          {currencySymbol}{Number(p.sellingPrice || 0).toFixed(2)}
+                        {/* Price with Box/Piece Indicator */}
+                        <td className="py-2.5 px-3 text-right">
+                          <div className="font-mono font-bold text-emerald-600 dark:text-emerald-400 text-xs">
+                            {currencySymbol}{priceInfo.amount.toFixed(2)}
+                          </div>
+                          <div className="text-[10px] text-slate-400 font-semibold">
+                            {priceInfo.unitLabel}
+                          </div>
                         </td>
                         <td className="py-2.5 px-3 text-center">
                           <span
@@ -881,9 +1009,9 @@ export function PrintBarcodeLabelsView({ onNavigate }: PrintBarcodeLabelsViewPro
         </div>
 
         {/* RIGHT COLUMN: Sticker Layout Options & Live Preview (~35% Width) */}
-        <div className="w-full lg:w-[380px] xl:w-[420px] bg-slate-50 dark:bg-slate-900/50 p-4 sm:p-5 flex flex-col space-y-5 overflow-y-auto shrink-0 select-none">
+        <div className="w-full lg:w-[380px] xl:w-[420px] bg-slate-50 dark:bg-slate-900/50 p-4 sm:p-5 flex flex-col space-y-4 overflow-y-auto shrink-0 select-none">
           {/* Configuration Card */}
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 space-y-4 shadow-2xs">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 space-y-3.5 shadow-2xs">
             <div className="flex items-center gap-2 font-bold text-sm text-slate-900 dark:text-white border-b border-slate-100 dark:border-slate-800 pb-2">
               <Settings2 className="h-4 w-4 text-emerald-600" />
               <span>Label Paper & Design Settings</span>
@@ -950,7 +1078,23 @@ export function PrintBarcodeLabelsView({ onNavigate }: PrintBarcodeLabelsViewPro
               />
             </div>
 
-            {/* Elements Toggles */}
+            {/* Price Calculation Mode */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                Price Display Mode:
+              </label>
+              <select
+                value={priceMode}
+                onChange={(e) => setPriceMode(e.target.value as PriceCalculationMode)}
+                className="w-full px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-none text-xs font-semibold text-slate-900 dark:text-white outline-none focus:border-emerald-500"
+              >
+                <option value="AUTO">Auto (Box for Medicines, Unit for Lifestyle)</option>
+                <option value="BOX_ONLY">Total Box Price for All</option>
+                <option value="UNIT_ONLY">Unit / Piece Price Only</option>
+              </select>
+            </div>
+
+            {/* Elements Toggles (Includes Checkbox to Show/Hide Price) */}
             <div className="space-y-2 pt-1 border-t border-slate-100 dark:border-slate-800">
               <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
                 Include on Label:
@@ -974,6 +1118,7 @@ export function PrintBarcodeLabelsView({ onNavigate }: PrintBarcodeLabelsViewPro
                   />
                   <span>Medicine Name</span>
                 </label>
+                {/* Price Checkbox: uncheck if user doesn't want price on label */}
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
@@ -981,7 +1126,7 @@ export function PrintBarcodeLabelsView({ onNavigate }: PrintBarcodeLabelsViewPro
                     onChange={(e) => setShowPrice(e.target.checked)}
                     className="rounded-none text-emerald-600 focus:ring-emerald-500"
                   />
-                  <span>MRP Price</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">MRP Price</span>
                 </label>
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
@@ -996,7 +1141,7 @@ export function PrintBarcodeLabelsView({ onNavigate }: PrintBarcodeLabelsViewPro
             </div>
           </div>
 
-          {/* LIVE STICKER PREVIEW CARD */}
+          {/* LIVE STICKER PREVIEW CARD (Clean preview with no extra description text) */}
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 space-y-3 shadow-2xs">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
               <div className="flex items-center gap-1.5 font-bold text-sm text-slate-900 dark:text-white">
@@ -1009,13 +1154,13 @@ export function PrintBarcodeLabelsView({ onNavigate }: PrintBarcodeLabelsViewPro
             </div>
 
             {/* Visual Representation of the Physical Sticker */}
-            <div className="flex items-center justify-center p-4 bg-slate-100 dark:bg-slate-950/80 border border-dashed border-slate-300 dark:border-slate-700 min-h-[160px]">
+            <div className="flex items-center justify-center p-3 bg-slate-100 dark:bg-slate-950/80 border border-dashed border-slate-300 dark:border-slate-700 min-h-[140px]">
               {previewProduct ? (
                 <div
                   className="bg-white text-black p-2 shadow-md border border-slate-300 flex flex-col items-center justify-between text-center select-text"
                   style={{
                     width: labelSize === "38x25" ? "170px" : labelSize === "50x30" ? "210px" : "190px",
-                    minHeight: labelSize === "38x25" ? "110px" : labelSize === "50x30" ? "130px" : "120px",
+                    minHeight: labelSize === "38x25" ? "105px" : labelSize === "50x30" ? "125px" : "115px",
                   }}
                 >
                   {showPharmacyName && (
@@ -1042,7 +1187,8 @@ export function PrintBarcodeLabelsView({ onNavigate }: PrintBarcodeLabelsViewPro
 
                   {showPrice && (
                     <div className="text-xs font-black text-black">
-                      MRP: {currencySymbol}{Number(previewProduct.sellingPrice || 0).toFixed(2)}
+                      MRP: {currencySymbol}
+                      {getProductDisplayPrice(previewProduct, priceMode).amount.toFixed(2)}
                     </div>
                   )}
                 </div>
@@ -1051,10 +1197,6 @@ export function PrintBarcodeLabelsView({ onNavigate }: PrintBarcodeLabelsViewPro
                   Select a medicine to preview sticker
                 </div>
               )}
-            </div>
-
-            <div className="text-[11px] text-slate-500 text-center">
-              Scales automatically to 100% vector sharpness during thermal sticker printing.
             </div>
           </div>
 
